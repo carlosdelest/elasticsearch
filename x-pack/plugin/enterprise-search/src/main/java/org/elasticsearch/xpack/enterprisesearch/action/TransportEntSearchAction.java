@@ -19,6 +19,8 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.xpack.enterprisesearch.search.EntSearchQueryBuilder;
 
+import java.util.Map;
+
 public class TransportEntSearchAction extends HandledTransportAction<EntSearchRequest, EntSearchResponse> {
 
     private final NodeClient client;
@@ -29,29 +31,32 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
         this.client = client;
     }
 
-    @Override
-    protected void doExecute(Task task, EntSearchRequest request, ActionListener<EntSearchResponse> listener) {
+    private static void retrieveSettings(
+        EntSearchRequest request,
+        NodeClient client,
+        EntSearchRequest entSearchRequest,
+        EntSearchResponse entSearchResponse,
+        ActionListener<EntSearchResponse> listener
+    ) {
 
-        final EntSearchResponse response = new EntSearchResponse();
+        client.prepareGet(".engine-settings", request.getIndex()).execute(listener.delegateFailure((l, getResponse) -> {
+            try {
+                final Map<String, Object> settingFields = getResponse.getSource();
+                entSearchRequest.setEngineSettings(settingFields);
+                performQuery(request, client, entSearchResponse, listener);
+            } catch (Exception t) {
+                l.onFailure(t);
+            }
 
-        final GetMappingsRequest getMappingsRequest = new GetMappingsRequest();
-        getMappingsRequest.indices(request.getIndex());
-
-        client
-            .admin()
-            .indices()
-            .getMappings(getMappingsRequest, listener.delegateFailure((l, mappingResponse) -> {
-                try {
-                    request.setFieldsFromFieldMapping(mappingResponse.mappings().values());
-                    performQuery(request, client, response, listener);
-                } catch (Exception t) {
-                    l.onFailure(t);
-                }
-            }));
-
+        }));
     }
 
-    private static void performQuery(EntSearchRequest request, NodeClient client, EntSearchResponse entSearchResponse, ActionListener<EntSearchResponse> listener) {
+    private static void performQuery(
+        EntSearchRequest request,
+        NodeClient client,
+        EntSearchResponse entSearchResponse,
+        ActionListener<EntSearchResponse> listener
+    ) {
         final QueryBuilder queryBuilder = EntSearchQueryBuilder.getQueryBuilder(request);
 
         SearchRequest searchRequest = client.prepareSearch(request.getIndex())
@@ -64,6 +69,24 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
             try {
                 entSearchResponse.setSearchResponse(searchResponse);
                 l.onResponse(entSearchResponse);
+            } catch (Exception t) {
+                l.onFailure(t);
+            }
+        }));
+    }
+
+    @Override
+    protected void doExecute(Task task, EntSearchRequest request, ActionListener<EntSearchResponse> listener) {
+
+        final EntSearchResponse response = new EntSearchResponse();
+
+        final GetMappingsRequest getMappingsRequest = new GetMappingsRequest();
+        getMappingsRequest.indices(request.getIndex());
+
+        client.admin().indices().getMappings(getMappingsRequest, listener.delegateFailure((l, mappingResponse) -> {
+            try {
+                request.setFieldsFromFieldMapping(mappingResponse.mappings().values());
+                retrieveSettings(request, client, request, response, listener);
             } catch (Exception t) {
                 l.onFailure(t);
             }

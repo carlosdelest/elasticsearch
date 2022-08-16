@@ -16,6 +16,8 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xpack.enterprisesearch.settings.EngineSettings;
+import org.elasticsearch.xpack.enterprisesearch.settings.Relevance;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -29,7 +31,9 @@ import static org.elasticsearch.action.ValidateActions.addValidationError;
 
 public class EntSearchRequest extends ActionRequest implements IndicesRequest, ToXContentObject {
 
-    private final static Map<String, Float> DEFAULT_FIELD_WEIGHTS = new HashMap<>();
+    private static final Map<String, Float> DEFAULT_FIELD_WEIGHTS = new HashMap<>();
+
+    private EngineSettings engineSettings = new EngineSettings();
 
     static {
         DEFAULT_FIELD_WEIGHTS.put(".stem", 0.95f);
@@ -150,10 +154,18 @@ public class EntSearchRequest extends ActionRequest implements IndicesRequest, T
     }
 
     public Float getBoostForField(String field) {
+
         int index = field.lastIndexOf('.');
         if (index != -1) {
+            String rootField = field.substring(0, index);
+            float weight = 1.0f;
+            final Relevance.SearchFieldSettings fieldSettings = engineSettings.getRelevance().getSearchFields().getFieldSettings(rootField);
+            if (fieldSettings != null) {
+                weight = fieldSettings.getWeight();
+            }
+
             String suffix = field.substring(index);
-            return DEFAULT_FIELD_WEIGHTS.getOrDefault(suffix, 1.0f);
+            return DEFAULT_FIELD_WEIGHTS.getOrDefault(suffix, 1.0f) * weight;
         }
 
         return 1.0f;
@@ -167,5 +179,32 @@ public class EntSearchRequest extends ActionRequest implements IndicesRequest, T
     @Override
     public IndicesOptions indicesOptions() {
         return IndicesOptions.STRICT_EXPAND_OPEN_CLOSED_HIDDEN;
+    }
+
+    public void setEngineSettings(Map<String, Object> settingFields) {
+
+        // TODO Can we use a parser here instead of iterating over the field structure?
+        @SuppressWarnings("unchecked")
+        final Map<String, Object> relevanceSettings = (Map<String, Object>) settingFields.get("relevance");
+        @SuppressWarnings("unchecked")
+        final Map<String, Object> searchFields = (Map<String, Object>) relevanceSettings.get("searchFields");
+        Map<String, Relevance.SearchFieldSettings> searchFieldSettingsMap = new HashMap<>();
+        for (Map.Entry<String, Object> searchFieldsEntry : searchFields.entrySet()) {
+            Relevance.SearchFieldSettings fieldSettings = new Relevance.SearchFieldSettings();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> fieldSettingsValue = (Map<String, Object>) searchFieldsEntry.getValue();
+            @SuppressWarnings("unchecked")
+            final Double weight = (Double) fieldSettingsValue.get("weight");
+            fieldSettings.setWeight(weight.floatValue());
+            searchFieldSettingsMap.put(searchFieldsEntry.getKey(), fieldSettings);
+        }
+
+        Relevance.SearchFields relevanceSearchFields = new Relevance.SearchFields();
+        relevanceSearchFields.setSearchFieldSettings(searchFieldSettingsMap);
+
+        Relevance relevance = new Relevance();
+        relevance.setSearchFields(relevanceSearchFields);
+
+        engineSettings.setRelevance(relevance);
     }
 }
