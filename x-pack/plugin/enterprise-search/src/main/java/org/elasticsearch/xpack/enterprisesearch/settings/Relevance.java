@@ -7,6 +7,7 @@
 
 package org.elasticsearch.xpack.enterprisesearch.settings;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -32,6 +33,16 @@ public class Relevance {
         this.boosts = boosts;
     }
 
+    public static Relevance parseFromSource(Map<String, Object> relevanceSettings) {
+        @SuppressWarnings("unchecked")
+        final Map<String, Object> searchFields = (Map<String, Object>) relevanceSettings.get("searchFields");
+        SearchFields relevanceSearchFields = SearchFields.parseFromSource(searchFields);
+
+        Relevance relevance = new Relevance();
+        relevance.setSearchFields(relevanceSearchFields);
+        return relevance;
+    }
+
     public static class SearchFields {
 
         private Map<String, SearchFieldSettings> searchFieldSettings;
@@ -47,6 +58,21 @@ public class Relevance {
         public void setSearchFieldSettings(Map<String, SearchFieldSettings> searchFieldSettings) {
             this.searchFieldSettings = searchFieldSettings;
         }
+
+        public static SearchFields parseFromSource(Map<String, Object> searchFields) {
+            Map<String, SearchFieldSettings> searchFieldSettingsMap = new HashMap<>();
+            for (Map.Entry<String, Object> searchFieldsEntry : searchFields.entrySet()) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> fieldSettingsValue = (Map<String, Object>) searchFieldsEntry.getValue();
+                SearchFieldSettings fieldSettings = SearchFieldSettings.parseFromSource(fieldSettingsValue);
+                searchFieldSettingsMap.put(searchFieldsEntry.getKey(), fieldSettings);
+            }
+
+            SearchFields relevanceSearchFields = new SearchFields();
+            relevanceSearchFields.setSearchFieldSettings(searchFieldSettingsMap);
+            return relevanceSearchFields;
+        }
+
     }
 
     public static class SearchFieldSettings {
@@ -58,6 +84,14 @@ public class Relevance {
 
         public void setWeight(float weight) {
             this.weight = weight;
+        }
+
+        public static SearchFieldSettings parseFromSource(Map<String, Object> fieldSettingsValue) {
+            SearchFieldSettings fieldSettings = new SearchFieldSettings();
+            @SuppressWarnings("unchecked")
+            final Double weight = (Double) fieldSettingsValue.get("weight");
+            fieldSettings.setWeight(weight.floatValue());
+            return fieldSettings;
         }
     }
 

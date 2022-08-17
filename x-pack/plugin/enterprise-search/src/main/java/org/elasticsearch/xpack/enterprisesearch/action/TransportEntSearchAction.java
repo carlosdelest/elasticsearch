@@ -18,9 +18,13 @@ import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.xpack.enterprisesearch.search.EntSearchQueryBuilder;
+import org.elasticsearch.xpack.enterprisesearch.settings.EngineSettings;
 
 import java.util.Map;
 
+/**
+ * Performs the actual query action
+ */
 public class TransportEntSearchAction extends HandledTransportAction<EntSearchRequest, EntSearchResponse> {
 
     private final NodeClient client;
@@ -31,7 +35,7 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
         this.client = client;
     }
 
-    private static void retrieveSettings(
+    private static void retrieveEngineSettingsAndQuery(
         EntSearchRequest request,
         NodeClient client,
         EntSearchRequest entSearchRequest,
@@ -39,10 +43,13 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
         ActionListener<EntSearchResponse> listener
     ) {
 
+        // Retrieve from .engine-settings index, a doc with the same ID as the index name, to use as settings for the query
         client.prepareGet(".engine-settings", request.getIndex()).execute(listener.delegateFailure((l, getResponse) -> {
             try {
                 final Map<String, Object> settingFields = getResponse.getSource();
-                entSearchRequest.setEngineSettings(settingFields);
+                if (settingFields != null) {
+                    entSearchRequest.setEngineSettings(EngineSettings.parseFromSource(settingFields));
+                }
                 performQuery(request, client, entSearchResponse, listener);
             } catch (Exception t) {
                 l.onFailure(t);
@@ -57,6 +64,7 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
         EntSearchResponse entSearchResponse,
         ActionListener<EntSearchResponse> listener
     ) {
+        // Creates the _search query from the parameters stored in the request
         final QueryBuilder queryBuilder = EntSearchQueryBuilder.getQueryBuilder(request);
 
         SearchRequest searchRequest = client.prepareSearch(request.getIndex())
@@ -68,6 +76,7 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
         client.search(searchRequest, listener.delegateFailure((l, searchResponse) -> {
             try {
                 entSearchResponse.setSearchResponse(searchResponse);
+                // Uses the listener to respond using the search response
                 l.onResponse(entSearchResponse);
             } catch (Exception t) {
                 l.onFailure(t);
@@ -80,13 +89,15 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
 
         final EntSearchResponse response = new EntSearchResponse();
 
+        // Retrieves the field mappings using a GetMappingsRequest
         final GetMappingsRequest getMappingsRequest = new GetMappingsRequest();
         getMappingsRequest.indices(request.getIndex());
 
         client.admin().indices().getMappings(getMappingsRequest, listener.delegateFailure((l, mappingResponse) -> {
             try {
+                // Stores the field mappings into the request
                 request.setFieldsFromFieldMapping(mappingResponse.mappings().values());
-                retrieveSettings(request, client, request, response, listener);
+                retrieveEngineSettingsAndQuery(request, client, request, response, listener);
             } catch (Exception t) {
                 l.onFailure(t);
             }

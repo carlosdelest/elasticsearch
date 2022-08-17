@@ -155,20 +155,21 @@ public class EntSearchRequest extends ActionRequest implements IndicesRequest, T
 
     public Float getBoostForField(String field) {
 
+        String baseField = field;
+        String subfield = field;
         int index = field.lastIndexOf('.');
         if (index != -1) {
-            String rootField = field.substring(0, index);
-            float weight = 1.0f;
-            final Relevance.SearchFieldSettings fieldSettings = engineSettings.getRelevance().getSearchFields().getFieldSettings(rootField);
-            if (fieldSettings != null) {
-                weight = fieldSettings.getWeight();
-            }
-
-            String suffix = field.substring(index);
-            return DEFAULT_FIELD_WEIGHTS.getOrDefault(suffix, 1.0f) * weight;
+            baseField = field.substring(0, index);
+            subfield = field.substring(index);
         }
 
-        return 1.0f;
+        float weight = 1.0f;
+        final Relevance.SearchFieldSettings fieldSettings = engineSettings.getRelevance().getSearchFields().getFieldSettings(baseField);
+        if (fieldSettings != null) {
+            weight = fieldSettings.getWeight();
+        }
+
+        return DEFAULT_FIELD_WEIGHTS.getOrDefault(subfield, 1.0f) * weight;
     }
 
     @Override
@@ -181,30 +182,7 @@ public class EntSearchRequest extends ActionRequest implements IndicesRequest, T
         return IndicesOptions.STRICT_EXPAND_OPEN_CLOSED_HIDDEN;
     }
 
-    public void setEngineSettings(Map<String, Object> settingFields) {
-
-        // TODO Can we use a parser here instead of iterating over the field structure?
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> relevanceSettings = (Map<String, Object>) settingFields.get("relevance");
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> searchFields = (Map<String, Object>) relevanceSettings.get("searchFields");
-        Map<String, Relevance.SearchFieldSettings> searchFieldSettingsMap = new HashMap<>();
-        for (Map.Entry<String, Object> searchFieldsEntry : searchFields.entrySet()) {
-            Relevance.SearchFieldSettings fieldSettings = new Relevance.SearchFieldSettings();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> fieldSettingsValue = (Map<String, Object>) searchFieldsEntry.getValue();
-            @SuppressWarnings("unchecked")
-            final Double weight = (Double) fieldSettingsValue.get("weight");
-            fieldSettings.setWeight(weight.floatValue());
-            searchFieldSettingsMap.put(searchFieldsEntry.getKey(), fieldSettings);
-        }
-
-        Relevance.SearchFields relevanceSearchFields = new Relevance.SearchFields();
-        relevanceSearchFields.setSearchFieldSettings(searchFieldSettingsMap);
-
-        Relevance relevance = new Relevance();
-        relevance.setSearchFields(relevanceSearchFields);
-
-        engineSettings.setRelevance(relevance);
+    public void setEngineSettings(EngineSettings engineSettings) {
+        this.engineSettings = engineSettings;
     }
 }
