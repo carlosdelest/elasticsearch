@@ -88,9 +88,16 @@ public class Relevance {
 
         public static SearchFieldSettings parseFromSource(Map<String, Object> fieldSettingsValue) {
             SearchFieldSettings fieldSettings = new SearchFieldSettings();
-            @SuppressWarnings("unchecked")
-            final Double weight = (Double) fieldSettingsValue.get("weight");
-            fieldSettings.setWeight(weight.floatValue());
+            final Object weightValue = fieldSettingsValue.get("weight");
+            if (weightValue != null) {
+                Double weight;
+                try {
+                    weight = Double.valueOf(weightValue.toString());
+                } catch (NumberFormatException e) {
+                    weight = 1.0;
+                }
+                fieldSettings.setWeight(weight.floatValue());
+            }
             return fieldSettings;
         }
     }

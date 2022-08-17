@@ -27,6 +27,7 @@ import java.util.Map;
  */
 public class TransportEntSearchAction extends HandledTransportAction<EntSearchRequest, EntSearchResponse> {
 
+    public static final String ENGINE_PREFIX = "enterprise-search-engine-";
     private final NodeClient client;
 
     @Inject
@@ -44,7 +45,7 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
     ) {
 
         // Retrieve from .engine-settings index, a doc with the same ID as the index name, to use as settings for the query
-        client.prepareGet(".engine-settings", request.getIndex()).execute(listener.delegateFailure((l, getResponse) -> {
+        client.prepareGet(".engine-settings", getEngineName(request)).execute(listener.delegateFailure((l, getResponse) -> {
             try {
                 final Map<String, Object> settingFields = getResponse.getSource();
                 if (settingFields != null) {
@@ -55,6 +56,35 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
                 l.onFailure(t);
             }
 
+        }));
+    }
+
+    private static String getEngineName(EntSearchRequest request) {
+        String indexName = request.getIndex();
+        if (indexName.startsWith(ENGINE_PREFIX)) {
+            indexName = indexName.substring(ENGINE_PREFIX.length());
+        }
+
+        return indexName;
+    }
+
+    @Override
+    protected void doExecute(Task task, EntSearchRequest request, ActionListener<EntSearchResponse> listener) {
+
+        final EntSearchResponse response = new EntSearchResponse();
+
+        // Retrieves the field mappings using a GetMappingsRequest
+        final GetMappingsRequest getMappingsRequest = new GetMappingsRequest();
+        getMappingsRequest.indices(request.getIndex());
+
+        client.admin().indices().getMappings(getMappingsRequest, listener.delegateFailure((l, mappingResponse) -> {
+            try {
+                // Stores the field mappings into the request
+                request.setFieldsFromFieldMapping(mappingResponse.mappings().values());
+                retrieveEngineSettingsAndQuery(request, client, request, response, listener);
+            } catch (Exception t) {
+                l.onFailure(t);
+            }
         }));
     }
 
@@ -78,26 +108,6 @@ public class TransportEntSearchAction extends HandledTransportAction<EntSearchRe
                 entSearchResponse.setSearchResponse(searchResponse);
                 // Uses the listener to respond using the search response
                 l.onResponse(entSearchResponse);
-            } catch (Exception t) {
-                l.onFailure(t);
-            }
-        }));
-    }
-
-    @Override
-    protected void doExecute(Task task, EntSearchRequest request, ActionListener<EntSearchResponse> listener) {
-
-        final EntSearchResponse response = new EntSearchResponse();
-
-        // Retrieves the field mappings using a GetMappingsRequest
-        final GetMappingsRequest getMappingsRequest = new GetMappingsRequest();
-        getMappingsRequest.indices(request.getIndex());
-
-        client.admin().indices().getMappings(getMappingsRequest, listener.delegateFailure((l, mappingResponse) -> {
-            try {
-                // Stores the field mappings into the request
-                request.setFieldsFromFieldMapping(mappingResponse.mappings().values());
-                retrieveEngineSettingsAndQuery(request, client, request, response, listener);
             } catch (Exception t) {
                 l.onFailure(t);
             }
