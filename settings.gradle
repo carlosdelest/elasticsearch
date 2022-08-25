@@ -10,3 +10,5 @@
 rootProject.name = 'elasticsearch-cloud'
 
 includeBuild 'elasticsearch'
+
+include 'cloud-module'
