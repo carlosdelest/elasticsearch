@@ -1,3 +1,5 @@
+package co.elastic.elasticsearch.cloud;
+
 import org.elasticsearch.Build;
 
 public class CloudBuild {
