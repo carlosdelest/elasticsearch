@@ -1,0 +1,16 @@
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("com.gradle.enterprise") version ("3.8.1")
+}
+
+rootProject.name = "elasticsearch-cloud"
+
+includeBuild("elasticsearch")
+
+include(":modules:stateless")

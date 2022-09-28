@@ -1,7 +1,0 @@
-plugins {
-    id 'elasticsearch.java'
-}
-
-dependencies {
-    api 'org.elasticsearch:server'
-}
