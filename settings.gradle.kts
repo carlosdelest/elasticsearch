@@ -14,3 +14,6 @@ rootProject.name = "elasticsearch-cloud"
 includeBuild("elasticsearch")
 
 include(":modules:stateless")
+
+include(":distributions:archives:darwin-tar")
+include(":distributions:archives:darwin-aarch64-tar")
