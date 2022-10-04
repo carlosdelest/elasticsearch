@@ -7,6 +7,8 @@ plugins {
     id("elasticsearch.docker-support")
     id("elasticsearch.internal-distribution-download")
     id("elasticsearch.local-distribution")
+    id("elasticsearch.ide")
+    id("elasticsearch.cloud-ide")
     id("elasticsearch.versions")
 }
 
