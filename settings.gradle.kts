@@ -17,7 +17,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "elasticsearch-cloud"
+rootProject.name = "elasticsearch-stateless"
 
 includeBuild("cloud-build-tools")
 includeBuild("elasticsearch")
