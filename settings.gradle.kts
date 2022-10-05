@@ -23,6 +23,14 @@ includeBuild("cloud-build-tools")
 includeBuild("elasticsearch")
 
 /*
+ * Check to ensure git submodules have been initialized
+ */
+if (file("elasticsearch/.git").exists() == false) {
+    throw GradleException("The 'elasticsearch' submodule has not been initialized. " +
+            "Run 'git submodule update --init' to setup your workspace.")
+}
+
+/*
  * Modules
  */
 include(":modules:stateless")
