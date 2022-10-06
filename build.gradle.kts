@@ -3,6 +3,7 @@ import org.elasticsearch.gradle.VersionProperties
 plugins {
     id("elasticsearch.global-build-info")
     id("elasticsearch.build-scan")
+    id("elasticsearch.build-complete")
     id("elasticsearch.stateless-precommit")
     id("elasticsearch.docker-support")
     id("elasticsearch.internal-distribution-download")

@@ -1,0 +1,4 @@
+- view:
+    name: "Elasticsearch Stateless"
+    view-type: list
+    regex: '^elastic[-+]elasticsearch-stateless\+((?!multijob).)*$'
