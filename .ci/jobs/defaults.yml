@@ -58,7 +58,7 @@
       - inject:
           properties-content: |
             COMPOSE_HTTP_TIMEOUT=120
-            JOB_BRANCH=%BRANCH%
+            JOB_BRANCH=main
             HOME=$JENKINS_HOME
             GRADLEW=./gradlew --parallel --scan --build-cache --no-watch-fs -Dorg.elasticsearch.build.cache.url=https://gradle-enterprise.elastic.co/cache/
     publishers:
