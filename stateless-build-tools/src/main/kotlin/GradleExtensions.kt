@@ -1,0 +1,22 @@
+import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.ModuleDependency
+import org.gradle.api.artifacts.dsl.DependencyHandler
+
+/**
+ * Returns a dependency notation for the given x-pack plugin project.
+ *
+ * @param name The name of the x-pack project
+ */
+fun DependencyHandler.xpackModule(name: String): String = "org.elasticsearch.plugin:${name}"
+
+/**
+ * Creates a dependency on the test source set artifact for the given module dependency.
+ *
+ * @param dependency The module dependency notation
+ */
+fun DependencyHandler.testArtifact(dependency: String): Dependency {
+    val dependency = this.create(dependency) as ModuleDependency
+    dependency.capabilities { this.requireCapabilities("org.elasticsearch.gradle:${dependency}-test-artifacts") }
+
+    return dependency
+}
