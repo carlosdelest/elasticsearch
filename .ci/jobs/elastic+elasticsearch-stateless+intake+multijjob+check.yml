@@ -1,6 +1,6 @@
 ---
 - job:
-    name: elastic+elasticsearch-stateless+intake+multijjob+check
+    name: elastic+elasticsearch-stateless+intake+multijob+check
     display-name: "elastic / elasticsearch-stateless # intake check"
     description: "Running Elasticsearch Stateless 'check' task.\n"
     workspace: /dev/shm/elastic+elasticsearch-stateless+intake+multijjob+check

@@ -3,7 +3,7 @@
     name: elastic+elasticsearch-stateless+intake+multijob+publish-artifacts
     display-name: "elastic / elasticsearch-stateless # publish artifacts"
     description: "Publish snapshot development artifacts.\n"
-    workspace: /dev/shm/elastic+elasticsearch-stateless+intake+multijob+publish-artifacts.
+    workspace: /dev/shm/elastic+elasticsearch-stateless+intake+multijob+publish-artifacts
     triggers:
       - github
     builders:
