@@ -4,14 +4,23 @@
     display-name: "elastic / elasticsearch-stateless # intake"
     description: "Testing of Elasticsearch Stateless on every push.\n"
     workspace: /dev/shm/elastic+elasticsearch-stateless+intake
+    project-type: multijob
+    node: master
+    vault: []
     triggers:
       - github
     builders:
-      - inject:
-          properties-file: '.ci/java-versions.properties'
-          properties-content: |
-            JAVA_HOME=$HOME/.java/$ES_BUILD_JAVA
-            RUNTIME_JAVA_HOME=$HOME/.java/$ES_RUNTIME_JAVA
-      - shell: |
-          #!/usr/local/bin/runbld --redirect-stderr
-          $WORKSPACE/.ci/scripts/run-gradle.sh check
+      - multijob:
+          name: Check
+          projects:
+            - name: elastic+elasticsearch-stateless+intake+multijjob+check
+              kill-phase-on: NEVER
+              current-parameters: true
+              git-revision: true
+      - multijob:
+          name: Publish Artifacts
+          projects:
+            - name: elastic+elasticsearch-stateless+intake+multijob+publish-artifacts
+              kill-phase-on: NEVER
+              current-parameters: true
+              git-revision: true

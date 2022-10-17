@@ -40,7 +40,11 @@ for (architecture in Architecture.values()) {
         isNoCache = BuildParams.isCi()
         baseImages = arrayOf(DockerBase.DEFAULT.image)
         platform.set(architecture.dockerPlatform)
-        tags = arrayOf("elasticsearch-serverless:${architecture.classifier}")
+        tags = if (architecture == Architecture.current()) {
+            arrayOf("elasticsearch-stateless:${architecture.classifier}", "elasticsearch-stateless:latest")
+        } else {
+            arrayOf("elasticsearch-stateless:${architecture.classifier}")
+        }
 
         onlyIf { isArchitectureSupported(architecture) }
     }
