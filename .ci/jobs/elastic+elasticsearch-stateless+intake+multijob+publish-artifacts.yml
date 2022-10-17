@@ -4,6 +4,7 @@
     display-name: "elastic / elasticsearch-stateless # publish artifacts"
     description: "Publish snapshot development artifacts.\n"
     workspace: /dev/shm/elastic+elasticsearch-stateless+intake+multijob+publish-artifacts
+    node: "ubuntu-22.04&&immutable" # Only Debian-based images support docker buildx
     triggers:
       - github
     builders:
@@ -14,7 +15,7 @@
             RUNTIME_JAVA_HOME=$HOME/.java/$ES_RUNTIME_JAVA
       - shell: |
           #!/usr/local/bin/runbld --redirect-stderr
-          $WORKSPACE/.ci/scripts/run-gradle.sh buildDockerImage
+          $WORKSPACE/.ci/scripts/run-gradle.sh buildDockerImage buildAarch64DockerImage
       - shell: |
           #!/bin/bash
           set +x
@@ -24,8 +25,12 @@
           export DOCKER_REGISTRY_PASSWORD="$(vault read -field=password secret/elasticsearch-ci/prod_docker_registry_credentials)"
           export ES_VERSION=$(grep 'elasticsearch' elasticsearch/build-tools-internal/version.properties | awk '{print $3}')
           export DOCKER_TAG=docker.elastic.co/elasticsearch-ci/elasticsearch-stateless:${ES_VERSION}-SNAPSHOT
-          docker tag elasticsearch-stateless:x86_64 $DOCKER_TAG
+          docker tag elasticsearch-stateless:x86_64 ${DOCKER_TAG}-x86_64
+          docker tag elasticsearch-stateless:aarch64 ${DOCKER_TAG}-aarch64
           echo $DOCKER_REGISTRY_PASSWORD | docker login -u $DOCKER_REGISTRY_USERNAME --password-stdin docker.elastic.co
           unset VAULT_TOKEN DOCKER_REGISTRY_USERNAME DOCKER_REGISTRY_PASSWORD
           set -x
-          docker push $DOCKER_TAG
+          docker push ${DOCKER_TAG}-x86_64
+          docker push ${DOCKER_TAG}-aarch64
+          docker manifest create ${DOCKER_TAG} --amend ${DOCKER_TAG}-x86_64 --amend ${DOCKER_TAG}-aarch64
+          docker manifest push ${DOCKER_TAG}
