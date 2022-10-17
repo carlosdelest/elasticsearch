@@ -22,7 +22,7 @@
           export VAULT_TOKEN
           export DOCKER_REGISTRY_USERNAME="$(vault read -field=username secret/elasticsearch-ci/prod_docker_registry_credentials)"
           export DOCKER_REGISTRY_PASSWORD="$(vault read -field=password secret/elasticsearch-ci/prod_docker_registry_credentials)"
-          export ES_VERSION=$(grep 'elasticsearch' build-tools-internal/version.properties | awk '{print $3}')
+          export ES_VERSION=$(grep 'elasticsearch' elasticsearch/build-tools-internal/version.properties | awk '{print $3}')
           export DOCKER_TAG=docker.elastic.co/elasticsearch-ci/elasticsearch-stateless:${ES_VERSION}-SNAPSHOT
           docker tag elasticsearch-stateless:x86_64 $DOCKER_TAG
           echo $DOCKER_REGISTRY_PASSWORD | docker login -u $DOCKER_REGISTRY_USERNAME --password-stdin docker.elastic.co
