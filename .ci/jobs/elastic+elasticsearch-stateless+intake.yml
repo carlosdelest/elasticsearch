@@ -13,7 +13,7 @@
       - multijob:
           name: Check
           projects:
-            - name: elastic+elasticsearch-stateless+intake+multijjob+check
+            - name: elastic+elasticsearch-stateless+intake+multijob+check
               kill-phase-on: NEVER
               current-parameters: true
               git-revision: true
