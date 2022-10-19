@@ -96,7 +96,7 @@ public class Stateless extends Plugin {
             Tracer tracer,
             AllocationDeciders allocationDeciders
     ) {
-        if (DiscoveryNode.isStateless(settings)) {
+        if (isEnabled()) {
             return List.of(licenseChecker);
         } else {
             return List.of();
