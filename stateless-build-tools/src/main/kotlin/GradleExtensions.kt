@@ -12,7 +12,7 @@ fun DependencyHandler.xpackModule(name: String): String = "org.elasticsearch.plu
 /**
  * Creates a dependency on the test source set artifact for the given module dependency.
  *
- * @param dependency The module dependency notation
+ * @param dependencyNotation The module dependency notation
  */
 fun DependencyHandler.testArtifact(dependencyNotation: String): Dependency {
     val dependency = this.create(dependencyNotation) as ModuleDependency
