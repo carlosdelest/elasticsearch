@@ -14,9 +14,9 @@ fun DependencyHandler.xpackModule(name: String): String = "org.elasticsearch.plu
  *
  * @param dependency The module dependency notation
  */
-fun DependencyHandler.testArtifact(dependency: String): Dependency {
-    val dependency = this.create(dependency) as ModuleDependency
-    dependency.capabilities { this.requireCapabilities("org.elasticsearch.gradle:${dependency}-test-artifacts") }
+fun DependencyHandler.testArtifact(dependencyNotation: String): Dependency {
+    val dependency = this.create(dependencyNotation) as ModuleDependency
+    dependency.capabilities { this.requireCapability("org.elasticsearch.gradle:${dependencyNotation.split(":")[1]}-test-artifacts") }
 
     return dependency
 }
