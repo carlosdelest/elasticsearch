@@ -14,6 +14,8 @@ plugins {
 }
 
 allprojects {
+    apply(plugin = "elasticsearch.formatting")
+
     version = VersionProperties.getElasticsearch()
 
     configurations {
