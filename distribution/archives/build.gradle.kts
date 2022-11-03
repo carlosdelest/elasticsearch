@@ -42,12 +42,10 @@ distribution_archives {
             copySpec {
                 from(upstreamDistro) {
                     eachFile {
-                        if (relativePath.segments.reversed()[1] == "bin" || relativePath.segments.last() == "jspawnhelper") {
+                        if (relativePath.segments.reversed()[1] == "bin" || relativePath.segments.reversed()[1] == "MacOS" || relativePath.segments.last() == "jspawnhelper") {
                             mode = 0b111_101_101
                         }
                     }
-                    // ML is going to be deployed separately, exclude it for now
-                    exclude("*/modules/x-pack-ml")
                 }
                 into("elasticsearch-${version}") {
                     from(copyDistributionDefaults)
