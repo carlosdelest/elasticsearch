@@ -71,3 +71,25 @@ Elasticsearch today.
 
 The stateless project shares all the same IDE integration as core Elasticsearch so in terms of tooling and IntelliJ
 integration, please refer to the [Elasticsearch contributor guide](/elasticsearch/CONTRIBUTING.md).
+
+### Building and running locally
+
+Stateless Elasticsearch can be built using the command:
+
+```shell
+./gradlew buildDockerImage
+```
+
+An easy way to test the docker image locally is by deploying a 3 nodes cluster like this:
+
+```shell
+docker run --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es01 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es02,es03 -e node.roles=["master","index"] -e stateless.enabled=true -it elasticsearch-stateless:latest
+```
+
+```shell
+docker run --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es02 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es03 -e node.roles=["master","search"] -e stateless.enabled=true -it elasticsearch-stateless:latest
+```
+
+```shell
+docker run --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles=["master"] -e stateless.enabled=true -it elasticsearch-stateless:latest
+```
