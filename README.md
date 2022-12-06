@@ -83,13 +83,20 @@ Stateless Elasticsearch can be built using the command:
 An easy way to test the docker image locally is by deploying a 3 nodes cluster like this:
 
 ```shell
-docker run --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es01 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es02,es03 -e node.roles=["master","index"] -e stateless.enabled=true -it elasticsearch-stateless:latest
+# Create the Docker network that is used by the three instances
+docker network create elastic
+# Start the instances
+docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es01 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es02,es03 -e node.roles='["master","index"]' -e stateless.enabled=true elasticsearch-stateless:x86_64
+docker run --rm -d --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es02 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es03 -e node.roles='["master","search"]' -e stateless.enabled=true elasticsearch-stateless:x86_64
+docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles='["master"]' -e stateless.enabled=true elasticsearch-stateless:x86_64
 ```
 
+You can access the logs of an instance using:
 ```shell
-docker run --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es02 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es03 -e node.roles=["master","search"] -e stateless.enabled=true -it elasticsearch-stateless:latest
+docker logs -f es01
 ```
 
+You can stop an instance using:
 ```shell
-docker run --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e xpack.security.enabled=false -e cluster.name=stateless -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles=["master"] -e stateless.enabled=true -it elasticsearch-stateless:latest
+docker container stop es01
 ```
