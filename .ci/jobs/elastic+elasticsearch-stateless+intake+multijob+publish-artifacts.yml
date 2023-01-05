@@ -23,16 +23,17 @@
           export VAULT_TOKEN
           export DOCKER_REGISTRY_USERNAME="$(vault read -field=username secret/elasticsearch-ci/prod_docker_registry_credentials)"
           export DOCKER_REGISTRY_PASSWORD="$(vault read -field=password secret/elasticsearch-ci/prod_docker_registry_credentials)"
-          export ES_VERSION=$(grep 'elasticsearch' elasticsearch/build-tools-internal/version.properties | awk '{print $3}')
-          export DOCKER_TAG=docker.elastic.co/elasticsearch-ci/elasticsearch-stateless:${ES_VERSION}
-          docker tag elasticsearch-stateless:x86_64 ${DOCKER_TAG}-${GIT_COMMIT:0:7}-x86_64
-          docker tag elasticsearch-stateless:aarch64 ${DOCKER_TAG}-${GIT_COMMIT:0:7}-aarch64
+          export DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-stateless
+          export X86_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_COMMIT:0:7}-x86_64
+          export ARM_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_COMMIT:0:7}-aarch64
+          docker tag elasticsearch-stateless:x86_64 ${X86_IMAGE_TAG}
+          docker tag elasticsearch-stateless:aarch64 ${ARM_IMAGE_TAG}
           echo $DOCKER_REGISTRY_PASSWORD | docker login -u $DOCKER_REGISTRY_USERNAME --password-stdin docker.elastic.co
           unset VAULT_TOKEN DOCKER_REGISTRY_USERNAME DOCKER_REGISTRY_PASSWORD
           set -x
-          docker push ${DOCKER_TAG}-${GIT_COMMIT:0:7}-x86_64
-          docker push ${DOCKER_TAG}-${GIT_COMMIT:0:7}-aarch64
-          docker manifest create ${DOCKER_TAG}-${GIT_COMMIT:0:7} --amend ${DOCKER_TAG}-${GIT_COMMIT:0:7}-x86_64 --amend ${DOCKER_TAG}-${GIT_COMMIT:0:7}-aarch64
-          docker manifest create ${DOCKER_TAG}-SNAPSHOT --amend ${DOCKER_TAG}-${GIT_COMMIT:0:7}-x86_64 --amend ${DOCKER_TAG}-${GIT_COMMIT:0:7}-aarch64
-          docker manifest push ${DOCKER_TAG}-SNAPSHOT
-          docker manifest push ${DOCKER_TAG}-${GIT_COMMIT:0:7}
+          docker push ${X86_IMAGE_TAG}
+          docker push ${ARM_IMAGE_TAG}
+          docker manifest create ${DOCKER_IMAGE}:${GIT_COMMIT:0:7} --amend ${X86_IMAGE_TAG} --amend ${ARM_IMAGE_TAG}
+          docker manifest create ${DOCKER_IMAGE}:latest --amend ${X86_IMAGE_TAG} --amend ${ARM_IMAGE_TAG}
+          docker manifest push ${DOCKER_IMAGE}:${GIT_COMMIT:0:7}
+          docker manifest push ${DOCKER_IMAGE}:latest
