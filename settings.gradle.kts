@@ -6,7 +6,7 @@ pluginManagement {
 }
 
 plugins {
-    id("com.gradle.enterprise") version ("3.8.1")
+    id("com.gradle.enterprise") version ("3.11.4")
 }
 
 dependencyResolutionManagement {
@@ -40,7 +40,13 @@ include(":modules:stateless")
  */
 include(":distribution:archives:darwin-tar")
 include(":distribution:archives:darwin-aarch64-tar")
+include(":distribution:archives:integ-test-zip")
 include(":distribution:archives:linux-tar")
 include(":distribution:archives:linux-aarch64-tar")
 include(":distribution:archives:windows-zip")
 include(":distribution:docker")
+
+/*
+ * QA Projects
+ */
+include(":qa:core-rest-test")

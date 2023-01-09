@@ -10,6 +10,7 @@ plugins {
     id("elasticsearch.local-distribution")
     id("elasticsearch.ide")
     id("elasticsearch.stateless-ide")
+    id("elasticsearch.stateless-testing")
     id("elasticsearch.versions")
 }
 

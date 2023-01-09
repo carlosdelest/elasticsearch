@@ -10,6 +10,7 @@ val copyDistributionDefaults by tasks.registering(Sync::class) {
 project(":modules").subprojects.forEach { distro.copyModule(copyDistributionDefaults, it) }
 
 distribution_archives {
+    create("integTestZip")
     create("windowsZip") {
         setArchiveClassifier("windows-x86_64")
     }
@@ -31,7 +32,12 @@ distribution_archives {
     }
 
     all {
-        val distroDependency = dependencies.create("org.elasticsearch.distribution.default:${archiveToSubprojectName(name)}")
+        val distroDependency =
+            if (name == "integTestZip") {
+                dependencies.create("org.elasticsearch.distribution.integ-test-zip:integ-test-zip")
+            } else {
+                dependencies.create("org.elasticsearch.distribution.default:${archiveToSubprojectName(name)}")
+            }
         val upstreamDistro = configurations.detachedConfiguration(distroDependency).apply {
             attributes {
                 attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE)

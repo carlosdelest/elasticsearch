@@ -7,3 +7,5 @@ build/
 
 # Generated
 checkstyle_ide.xml
+
+.DS_Store
