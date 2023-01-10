@@ -42,7 +42,8 @@ tasks.named("yamlRestTest", Test::class) {
             "health/40_diagnosis/Diagnosis",
             "cat.nodes/10_basic/Test cat nodes output",
             "cluster.stats/10_basic/cluster stats test",
-            "cluster.stats/10_basic/get cluster stats returns cluster_uuid at the top level"
+            "cluster.stats/10_basic/get cluster stats returns cluster_uuid at the top level",
+            "cluster.desired_balance/10_basic/Test cluster_balance_stats" //This test expects different data tiers as one provided by stateless
         ).joinToString(",")
     )
 }
