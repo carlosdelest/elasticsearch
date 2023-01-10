@@ -1,0 +1,3 @@
+steps:
+  - label: ":wave: Stateless dummy pipeline"            # Label (with rich emojis https://ela.st/bk-emoji).
+    command: "echo 'Always passing for now'" # Command to run (evaluated by Bash).
