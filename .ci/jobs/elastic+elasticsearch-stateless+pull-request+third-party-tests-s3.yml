@@ -36,7 +36,7 @@
           export stateless_aws_s3_access_key=$(echo $data | jq -r .data.access_key)
           export stateless_aws_s3_secret_key=$(echo $data | jq -r .data.secret_key)      
           export stateless_aws_s3_region=us-west-2
-          export stateless_aws_s3_bucket=elasticsearch-ci
+          export stateless_aws_s3_bucket=elasticsearch-ci.us-west-2
           export stateless_aws_s3_base_path=stateless-cas-linearizability
           unset VAULT_TOKEN data
           set -x
