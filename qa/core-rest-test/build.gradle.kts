@@ -1,5 +1,3 @@
-import org.elasticsearch.gradle.internal.test.rest.CopyRestApiTask
-
 /*
  * ELASTICSEARCH CONFIDENTIAL
  * __________________
@@ -17,6 +15,8 @@ import org.elasticsearch.gradle.internal.test.rest.CopyRestApiTask
  * permission is obtained from Elasticsearch B.V.
  */
 
+import org.elasticsearch.gradle.internal.test.rest.CopyRestApiTask
+
 plugins {
     id("elasticsearch.internal-yaml-rest-test")
 }
@@ -31,7 +31,7 @@ restResources {
     }
 }
 
-tasks.withType(CopyRestApiTask::class) {
+tasks.withType(CopyRestApiTask::class).configureEach {
     // This project doesn't have any tests of its own. It's just running the core elasticsearch rest tests.
     isSkipHasRestTestCheck = true
 }
