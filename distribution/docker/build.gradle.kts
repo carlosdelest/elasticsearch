@@ -1,4 +1,5 @@
 import org.elasticsearch.gradle.Architecture
+import org.elasticsearch.gradle.VersionProperties
 import org.elasticsearch.gradle.internal.DockerBase
 import org.elasticsearch.gradle.internal.docker.DockerBuildTask
 import org.elasticsearch.gradle.internal.docker.DockerSupportPlugin
@@ -7,18 +8,37 @@ import org.elasticsearch.gradle.internal.info.BuildParams
 import org.elasticsearch.gradle.util.GradleUtils
 
 plugins {
-    id("lifecycle-base")
+    id("elasticsearch.internal-yaml-rest-test")
 }
 
 val dockerSource by configurations.creating
 val aarch64DockerSource by configurations.creating
+val versions = VersionProperties.getVersions()
 
 dependencies {
     dockerSource(project(path = ":distribution:archives:linux-tar", configuration = "default"))
     aarch64DockerSource(project(path = ":distribution:archives:linux-aarch64-tar", configuration = "default"))
+    yamlRestTestImplementation("org.testcontainers:testcontainers:1.17.6")
+    yamlRestTestImplementation("org.slf4j:slf4j-api:1.7.36")
+    yamlRestTestImplementation("org.apache.logging.log4j:log4j-slf4j-impl:2.19.0")
+    yamlRestTestImplementation("org.apache.commons:commons-compress:1.22")
+    yamlRestTestImplementation("org.rnorth.duct-tape:duct-tape:1.0.8")
+    yamlRestTestImplementation("com.github.docker-java:docker-java-api:3.2.14")
+    yamlRestTestImplementation("com.github.docker-java:docker-java-core:3.2.14")
+    yamlRestTestImplementation("com.github.docker-java:docker-java-transport:3.2.14")
+    yamlRestTestImplementation("com.github.docker-java:docker-java-transport-zerodep:3.2.14")
+    yamlRestTestImplementation("com.github.docker-java:docker-java-transport-httpclient5:3.2.14")
+    yamlRestTestImplementation("com.fasterxml.jackson.core:jackson-core:${versions["jackson"]}")
+    yamlRestTestImplementation("com.fasterxml.jackson.core:jackson-annotations:${versions["jackson"]}")
 }
 
-for (architecture in Architecture.values()) {
+restResources {
+    restTests {
+        includeCore("indices.create", "info")
+    }
+}
+
+val dockerBuildTasks = Architecture.values().associateWith { architecture ->
     val baseName = if (architecture == Architecture.AARCH64) "Aarch64" else ""
     val upstreamContext = configurations.detachedConfiguration(dependencies.create("org.elasticsearch:docker")).apply {
         attributes {
@@ -35,7 +55,7 @@ for (architecture in Architecture.values()) {
         from(if (architecture == Architecture.AARCH64) aarch64DockerSource else dockerSource)
     }
 
-    val buildTask = tasks.register<DockerBuildTask>("build${baseName}DockerImage") {
+    tasks.register<DockerBuildTask>("build${baseName}DockerImage") {
         dockerContext.fileProvider(transformTask.map { it.destinationDir })
         isNoCache = BuildParams.isCi()
         baseImages = arrayOf(DockerBase.DEFAULT.image)
@@ -48,10 +68,19 @@ for (architecture in Architecture.values()) {
 
         onlyIf { isArchitectureSupported(architecture) }
     }
+}
 
-    tasks.named("assemble") {
-        dependsOn(buildTask)
-    }
+tasks.named("assemble") {
+    dependsOn(dockerBuildTasks.values)
+}
+
+tasks.withType(org.elasticsearch.gradle.internal.test.rest.CopyRestApiTask::class) {
+    // This project doesn't have any tests of its own. It's just running the core elasticsearch rest tests.
+    isSkipHasRestTestCheck = true
+}
+
+tasks.named("yamlRestTest", Test::class) {
+    dependsOn(dockerBuildTasks[Architecture.current()])
 }
 
 fun isArchitectureSupported(architecture: Architecture): Boolean {
