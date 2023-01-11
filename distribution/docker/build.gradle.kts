@@ -70,17 +70,17 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
     }
 }
 
-tasks.named("assemble") {
-    dependsOn(dockerBuildTasks.values)
-}
-
-tasks.withType(org.elasticsearch.gradle.internal.test.rest.CopyRestApiTask::class) {
-    // This project doesn't have any tests of its own. It's just running the core elasticsearch rest tests.
-    isSkipHasRestTestCheck = true
-}
-
-tasks.named("yamlRestTest", Test::class) {
-    dependsOn(dockerBuildTasks[Architecture.current()])
+tasks {
+    assemble {
+        dependsOn(dockerBuildTasks.values)
+    }
+    copyRestApiSpecsTask {
+        // This project doesn't have any tests of its own. It's just running the core elasticsearch rest tests.
+        isSkipHasRestTestCheck = true
+    }
+    yamlRestTest {
+        dependsOn(dockerBuildTasks[Architecture.current()])
+    }
 }
 
 fun isArchitectureSupported(architecture: Architecture): Boolean {

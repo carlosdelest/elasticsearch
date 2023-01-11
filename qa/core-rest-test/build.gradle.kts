@@ -15,8 +15,6 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-import org.elasticsearch.gradle.internal.test.rest.CopyRestApiTask
-
 plugins {
     id("elasticsearch.internal-yaml-rest-test")
 }
@@ -31,19 +29,20 @@ restResources {
     }
 }
 
-tasks.withType(CopyRestApiTask::class).configureEach {
-    // This project doesn't have any tests of its own. It's just running the core elasticsearch rest tests.
-    isSkipHasRestTestCheck = true
-}
-
-tasks.named("yamlRestTest", Test::class) {
-    systemProperty(
-        "tests.rest.blacklist", listOf(
-            "health/40_diagnosis/Diagnosis",
-            "cat.nodes/10_basic/Test cat nodes output",
-            "cluster.stats/10_basic/cluster stats test",
-            "cluster.stats/10_basic/get cluster stats returns cluster_uuid at the top level",
-            "cluster.desired_balance/10_basic/Test cluster_balance_stats" //This test expects different data tiers as one provided by stateless
-        ).joinToString(",")
-    )
+tasks {
+    copyRestApiSpecsTask {
+        // This project doesn't have any tests of its own. It's just running the core elasticsearch rest tests.
+        isSkipHasRestTestCheck = true
+    }
+    yamlRestTest {
+        systemProperty(
+            "tests.rest.blacklist", listOf(
+                "health/40_diagnosis/Diagnosis",
+                "cat.nodes/10_basic/Test cat nodes output",
+                "cluster.stats/10_basic/cluster stats test",
+                "cluster.stats/10_basic/get cluster stats returns cluster_uuid at the top level",
+                "cluster.desired_balance/10_basic/Test cluster_balance_stats" //This test expects different data tiers as one provided by stateless
+            ).joinToString(",")
+        )
+    }
 }

@@ -1,3 +1,5 @@
+import groovy.lang.Closure
+import org.elasticsearch.gradle.testclusters.StandaloneRestIntegTestTask
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.dsl.DependencyHandler
@@ -19,4 +21,9 @@ fun DependencyHandler.testArtifact(dependencyNotation: String): Dependency {
     dependency.capabilities { this.requireCapability("org.elasticsearch.gradle:${dependency.name}-test-artifacts") }
 
     return dependency
+}
+
+fun StandaloneRestIntegTestTask.usesDefaultDistribution() {
+    val closure = this.extensions.extraProperties.get("usesDefaultDistribution") as Closure<*>
+    closure.call(this)
 }
