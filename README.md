@@ -141,3 +141,12 @@ You can stop the instances using:
 ```shell
 docker container stop es01 es02 es03
 ```
+
+#### Setting up AWS development environment
+
+* Install the `okta-awscli` tool according to the [docs](https://github.com/elastic/infra/blob/master/docs/aws/aws-user-access.md#apicli-access.
+* Generate the AWS credentials with the `okta-awscli --profile=okta-elastic-dev -f -s` command. The credentials will be stored in the `~/.aws/credentials` file.
+* Add the AWS profile to your environment: `export AWS_PROFILE=okta-elastic-dev`
+* Verify the credentials by running the `aws s3 ls` command.
+* Create an own bucket with `aws s3 mb s3://<<your_bucket_name>> --region <<your_region>>`
+* You can run AWS third party tests on your development machine by specifying the bucket name and region name via the `-Ds3.test.bucket` and `-Ds3.test.region` system properties.
