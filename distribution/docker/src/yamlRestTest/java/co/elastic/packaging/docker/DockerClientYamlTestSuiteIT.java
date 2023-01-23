@@ -39,6 +39,7 @@ public class DockerClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
         .withEnv("path.repo", "/usr/share/elasticsearch/repo")
         .withEnv("discovery.type", "single-node")
         .withEnv("action.destructive_requires_name", "false")
+        .withCreateContainerCmdModifier(cmd -> cmd.getHostConfig().withMemory(2 * 1024 * 1024 * 1024L))
         .withExposedPorts(9200);
 
     public DockerClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
