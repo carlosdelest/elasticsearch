@@ -12,7 +12,6 @@ import com.carrotsearch.randomizedtesting.annotations.Name;
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import com.carrotsearch.randomizedtesting.annotations.TimeoutSuite;
 
-import org.apache.lucene.tests.util.LuceneTestCase;
 import org.apache.lucene.tests.util.TimeUnits;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.FeatureFlag;
@@ -21,15 +20,24 @@ import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
 import org.junit.ClassRule;
 
 @TimeoutSuite(millis = 40 * TimeUnits.MINUTE)
-@LuceneTestCase.AwaitsFix(bugUrl = "https://elasticco.atlassian.net/browse/ES-5253")
 public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
 
     @ClassRule
     public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
-        .module("mapper-extras")
-        .setting("stateless.enabled", "true")
-        .setting("stateless.object_store.bucket", "stateless")
-        .feature(FeatureFlag.TIME_SERIES_MODE)
+        .withNode(
+            indexNodeSpec -> indexNodeSpec.module("mapper-extras")
+                .setting("stateless.enabled", "true")
+                .setting("stateless.object_store.bucket", "stateless")
+                .setting("node.roles", "[master,remote_cluster_client,index]")
+                .feature(FeatureFlag.TIME_SERIES_MODE)
+        )
+        .withNode(
+            searchNodeSpec -> searchNodeSpec.module("mapper-extras")
+                .setting("stateless.enabled", "true")
+                .setting("stateless.object_store.bucket", "stateless")
+                .setting("node.roles", "[master,remote_cluster_client,search]")
+                .feature(FeatureFlag.TIME_SERIES_MODE)
+        )
         .build();
 
     public ServerlessClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
