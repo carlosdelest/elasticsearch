@@ -91,6 +91,7 @@ tasks {
 
                 // Require "search" shards and DocWriteRequest ?refresh parameter support
                 "cat.count/10_basic/Test cat count output",
+                "cat.shards/10_basic/Test cat shards with hidden indices",
                 "create/60_refresh/refresh=wait_for waits until changes are visible in search",
                 "create/60_refresh/When refresh url parameter is an empty string that means \"refresh immediately\"",
                 "delete/50_refresh/Refresh",
