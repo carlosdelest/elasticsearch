@@ -47,6 +47,11 @@ include(":distribution:archives:windows-zip")
 include(":distribution:docker")
 
 /*
+ * Distribution tools
+ */
+include(":distribution:tools:serverless-server-cli")
+
+/*
  * QA Projects
  */
 include(":qa:core-rest-test")

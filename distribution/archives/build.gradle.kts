@@ -9,6 +9,12 @@ val copyDistributionDefaults by tasks.registering(Sync::class) {
 
 project(":modules").subprojects.forEach { distro.copyModule(copyDistributionDefaults, it) }
 
+val serverCli by configurations.creating
+
+dependencies {
+    serverCli(project(":distribution:tools:serverless-server-cli"))
+}
+
 distribution_archives {
     create("integTestZip")
     create("windowsZip") {
@@ -52,9 +58,19 @@ distribution_archives {
                             mode = 0b111_101_101
                         }
                     }
+                    exclude("*/bin/elasticsearch")
+                    exclude("*/bin/elasticsearch.bat")
                 }
                 into("elasticsearch-${version}") {
                     from(copyDistributionDefaults)
+                    into("bin") {
+                        from(if (name.contains("windows")) "src/bin/elasticsearch.bat" else "src/bin/elasticsearch") {
+                            fileMode = 0b111_101_101
+                        }
+                    }
+                    into("lib/tools/serverless-server-cli") {
+                        from(serverCli)
+                    }
                 }
             }
         }
