@@ -199,8 +199,9 @@ tasks {
                 "health/40_diagnosis/Diagnosis", // expects data tier data_content and returns 2 indicators.shards_availability.diagnosis
                 "cluster.desired_balance/10_basic/Test cluster_balance_stats", // This test expects different data tiers as one provided by stateless
 
-                // Require the "data" node role
-                "cat.nodes/10_basic/Test cat nodes output", // Probably needs to add stateless node roles in some regexp
+                // The following two tests make assertions on the number of nodes with the "data" role, which is
+                // not a valid role in stateless.
+                // TODO: We would probably require a similar test to assert node counts for "index" and "search" roles.
                 "cluster.stats/10_basic/cluster stats test",
                 "cluster.stats/10_basic/get cluster stats returns cluster_uuid at the top level",
 
