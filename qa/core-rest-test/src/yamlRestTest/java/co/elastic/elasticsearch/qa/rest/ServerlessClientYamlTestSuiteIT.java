@@ -28,7 +28,7 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
             indexNodeSpec -> indexNodeSpec.module("mapper-extras")
                 .setting("stateless.enabled", "true")
                 .setting("stateless.object_store.bucket", "stateless")
-                .setting("node.roles", "[master,remote_cluster_client,index]")
+                .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
                 .feature(FeatureFlag.TIME_SERIES_MODE)
         )
         .withNode(
