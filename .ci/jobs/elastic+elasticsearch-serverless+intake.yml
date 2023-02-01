@@ -1,9 +1,9 @@
 ---
 - job:
-    name: elastic+elasticsearch-stateless+intake
-    display-name: "elastic / elasticsearch-stateless # intake"
+    name: elastic+elasticsearch-serverless+intake
+    display-name: "elastic / elasticsearch-serverless # intake"
     description: "Testing of Elasticsearch Stateless on every push.\n"
-    workspace: /dev/shm/elastic+elasticsearch-stateless+intake
+    workspace: /dev/shm/elastic+elasticsearch-serverless+intake
     project-type: multijob
     node: master
     vault: []
@@ -13,14 +13,14 @@
       - multijob:
           name: Check
           projects:
-            - name: elastic+elasticsearch-stateless+intake+multijob+check
+            - name: elastic+elasticsearch-serverless+intake+multijob+check
               kill-phase-on: NEVER
               current-parameters: true
               git-revision: true
       - multijob:
           name: Publish Artifacts
           projects:
-            - name: elastic+elasticsearch-stateless+intake+multijob+publish-artifacts
+            - name: elastic+elasticsearch-serverless+intake+multijob+publish-artifacts
               kill-phase-on: NEVER
               current-parameters: true
               git-revision: true

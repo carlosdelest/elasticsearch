@@ -1,9 +1,9 @@
 ---
 - job:
-    name: elastic+elasticsearch-stateless+intake+multijob+publish-artifacts
-    display-name: "elastic / elasticsearch-stateless # publish artifacts"
+    name: elastic+elasticsearch-serverless+intake+multijob+publish-artifacts
+    display-name: "elastic / elasticsearch-serverless # publish artifacts"
     description: "Publish snapshot development artifacts.\n"
-    workspace: /dev/shm/elastic+elasticsearch-stateless+intake+multijob+publish-artifacts
+    workspace: /dev/shm/elastic+elasticsearch-serverless+intake+multijob+publish-artifacts
     node: "ubuntu-22.04&&immutable" # Only Debian-based images support docker buildx
     triggers:
       - github
@@ -23,11 +23,11 @@
           export VAULT_TOKEN
           export DOCKER_REGISTRY_USERNAME="$(vault read -field=username secret/elasticsearch-ci/prod_docker_registry_credentials)"
           export DOCKER_REGISTRY_PASSWORD="$(vault read -field=password secret/elasticsearch-ci/prod_docker_registry_credentials)"
-          export DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-stateless
+          export DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
           export X86_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_COMMIT:0:7}-x86_64
           export ARM_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_COMMIT:0:7}-aarch64
-          docker tag elasticsearch-stateless:x86_64 ${X86_IMAGE_TAG}
-          docker tag elasticsearch-stateless:aarch64 ${ARM_IMAGE_TAG}
+          docker tag elasticsearch-serverless:x86_64 ${X86_IMAGE_TAG}
+          docker tag elasticsearch-serverless:aarch64 ${ARM_IMAGE_TAG}
           echo $DOCKER_REGISTRY_PASSWORD | docker login -u $DOCKER_REGISTRY_USERNAME --password-stdin docker.elastic.co
           unset VAULT_TOKEN DOCKER_REGISTRY_USERNAME DOCKER_REGISTRY_PASSWORD
           set -x

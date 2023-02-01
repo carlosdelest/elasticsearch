@@ -1,19 +1,19 @@
-# Elasticsearch Stateless
+# Elasticsearch Serverless
 
-This repository is home for code specific to the "stateless" distribution of Elasticsearch.
+This repository is home for code specific to the "serverless" distribution of Elasticsearch.
 
 ## Getting started
 
 ### Cloning the repository
 
-Stateless Elasticsearch is currently build with "core" [Elasticsearch](https://github.com/elastic/elasticsearch) as a
+Serverless Elasticsearch is currently built with "core" [Elasticsearch](https://github.com/elastic/elasticsearch) as a
 baseline, with additional modules and changes as necessary. Elasticsearch is brought in as a source build dependency via
 a [Git submodule](https://www.git-scm.com/book/en/v2/Git-Tools-Submodules). As such, interacting with the code in this
-repository is a bit different, depending on whether you are modifying stateless code, or core Elasticsearch code. To 
+repository is a bit different, depending on whether you are modifying serverless code, or core Elasticsearch code. To 
 start, when doing a clone, you'll need to instruct Git to also clone any submodules, like so:
 
 ```shell
-git clone --recurse-submodules git@github.com:elastic/elasticsearch-stateless.git
+git clone --recurse-submodules git@github.com:elastic/elasticsearch-serverless.git
 ```
 
 Should you forget to do this, you'll observe that the `elasticsearch` subdirectory will be empty and the build will
@@ -69,12 +69,12 @@ Elasticsearch today.
 
 ### Importing into IntelliJ
 
-The stateless project shares all the same IDE integration as core Elasticsearch so in terms of tooling and IntelliJ
+The serverless project shares all the same IDE integration as core Elasticsearch so in terms of tooling and IntelliJ
 integration, please refer to the [Elasticsearch contributor guide](/elasticsearch/CONTRIBUTING.md).
 
 ### Building and running locally with docker
 
-Stateless Elasticsearch can be built using the command:
+Serverless Elasticsearch can be built using the command:
 
 ```shell
 ./gradlew buildDockerImage
@@ -88,7 +88,7 @@ Before running Elasticsearch with docker, the configurations for docker and Elas
 export ES_CONFIGS="--env xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true"
 ```
 
-Then, the object store configuration is required for stateless Elasticsearch to store index files. For local development, you can use a file system object store. For example, create a permissive tmpfs directory `/tmp/objectstore`:
+Then, the object store configuration is required for serverless Elasticsearch to store index files. For local development, you can use a file system object store. For example, create a permissive tmpfs directory `/tmp/objectstore`:
 
 ```shell
 mkdir /tmp/objectstore ; chmod a+rw -R /tmp/objectstore
@@ -119,17 +119,17 @@ docker network create elastic
 If you would like to run a single node cluster (where the instance has the master, index and search roles) for development purposes, you can run it with:
 
 ```shell
-docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es01 -e cluster.initial_master_nodes=es01 -e node.roles='["master","index","search"]' $ES_CONFIGS elasticsearch-stateless:x86_64
+docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es01 -e cluster.initial_master_nodes=es01 -e node.roles='["master","index","search"]' $ES_CONFIGS elasticsearch-serverless
 ```
 
-**WARNING**: Stateless is intended to run with multiple instances, as an instance should have either the index or the search role, but not both. The ability to run an instance with both roles is intended for development purposes and may break in the future.
+**WARNING**: Serverless is intended to run with multiple instances, as an instance should have either the index or the search role, but not both. The ability to run an instance with both roles is intended for development purposes and may break in the future.
 
 If you would like to run a 3-node cluster, with a separate Index and Search instance, you can run for example:
 
 ```shell
-docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es01 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es02,es03 -e node.roles='["master","index"]' $ES_CONFIGS elasticsearch-stateless:x86_64
-docker run --rm -d --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es02 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es03 -e node.roles='["master","search"]' $ES_CONFIGS elasticsearch-stateless:x86_64
-docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles='["master"]' $ES_CONFIGS elasticsearch-stateless:x86_64
+docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es01 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es02,es03 -e node.roles='["master","index"]' $ES_CONFIGS elasticsearch-serverless
+docker run --rm -d --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es02 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es03 -e node.roles='["master","search"]' $ES_CONFIGS elasticsearch-serverless
+docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles='["master"]' $ES_CONFIGS elasticsearch-serverless
 ```
 
 You can access the logs of an instance using:

@@ -61,9 +61,9 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
         baseImages = arrayOf(DockerBase.DEFAULT.image)
         platform.set(architecture.dockerPlatform)
         tags = if (architecture == Architecture.current()) {
-            arrayOf("elasticsearch-stateless:${architecture.classifier}", "elasticsearch-stateless:latest")
+            arrayOf("elasticsearch-serverless:${architecture.classifier}", "elasticsearch-serverless:latest")
         } else {
-            arrayOf("elasticsearch-stateless:${architecture.classifier}")
+            arrayOf("elasticsearch-serverless:${architecture.classifier}")
         }
 
         onlyIf { isArchitectureSupported(architecture) }

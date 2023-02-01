@@ -17,9 +17,9 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "elasticsearch-stateless"
+rootProject.name = "elasticsearch-serverless"
 
-includeBuild("stateless-build-tools")
+includeBuild("serverless-build-tools")
 includeBuild("elasticsearch")
 
 /*

@@ -4,13 +4,13 @@ plugins {
     id("elasticsearch.global-build-info")
     id("elasticsearch.build-scan")
     id("elasticsearch.build-complete")
-    id("elasticsearch.stateless-precommit")
+    id("elasticsearch.serverless-precommit")
     id("elasticsearch.docker-support")
     id("elasticsearch.internal-distribution-download")
     id("elasticsearch.local-distribution")
     id("elasticsearch.ide")
-    id("elasticsearch.stateless-ide")
-    id("elasticsearch.stateless-testing")
+    id("elasticsearch.serverless-ide")
+    id("elasticsearch.serverless-testing")
     id("elasticsearch.versions")
 }
 

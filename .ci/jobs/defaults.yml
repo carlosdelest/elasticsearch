@@ -27,10 +27,10 @@
           name: origin
           # master node jenkins user ~/.ssh
           credentials-id: f6c7695a-671e-4f4f-a331-acdce44ff9ba
-          reference-repo: "/var/lib/jenkins/.git-references/elasticsearch-stateless.git"
+          reference-repo: "/var/lib/jenkins/.git-references/elasticsearch-serverless.git"
           branches:
             - "${branch_specifier}"
-          url: "git@github.com:elastic/elasticsearch-stateless.git"
+          url: "git@github.com:elastic/elasticsearch-serverless.git"
           basedir: ""
           wipe-workspace: true
           submodule:
@@ -54,7 +54,7 @@
           mask-password-params: true
     properties:
       - github:
-          url: https://github.com/elastic/elasticsearch-stateless/
+          url: https://github.com/elastic/elasticsearch-serverless/
       - inject:
           properties-content: |
             COMPOSE_HTTP_TIMEOUT=120

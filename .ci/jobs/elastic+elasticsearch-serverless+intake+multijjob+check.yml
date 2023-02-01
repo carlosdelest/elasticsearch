@@ -1,9 +1,9 @@
 ---
 - job:
-    name: elastic+elasticsearch-stateless+intake+multijob+check
-    display-name: "elastic / elasticsearch-stateless # intake check"
+    name: elastic+elasticsearch-serverless+intake+multijob+check
+    display-name: "elastic / elasticsearch-serverless # intake check"
     description: "Running Elasticsearch Stateless 'check' task.\n"
-    workspace: /dev/shm/elastic+elasticsearch-stateless+intake+multijjob+check
+    workspace: /dev/shm/elastic+elasticsearch-serverless+intake+multijjob+check
     builders:
       - inject:
           properties-file: '.ci/java-versions.properties'

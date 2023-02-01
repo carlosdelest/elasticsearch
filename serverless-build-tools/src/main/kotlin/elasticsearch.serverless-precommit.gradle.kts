@@ -16,7 +16,7 @@ allprojects {
         tasks.named("copyCheckstyleConf") {
             doLast {
                 copy {
-                    from("${rootDir}/stateless-build-tools/src/main/resources/additional_checkstyle_suppressions.xml")
+                    from("${rootDir}/serverless-build-tools/src/main/resources/additional_checkstyle_suppressions.xml")
                     into("${buildDir}/checkstyle")
                 }
             }

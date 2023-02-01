@@ -29,7 +29,7 @@ import org.testcontainers.containers.GenericContainer;
 @ThreadLeakFilters(filters = { TestContainersThreadFilter.class })
 public class DockerClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
     @ClassRule
-    public static GenericContainer<?> dockerContainer = new GenericContainer<>("elasticsearch-stateless:latest").withEnv(
+    public static GenericContainer<?> dockerContainer = new GenericContainer<>("elasticsearch-serverless:latest").withEnv(
         "xpack.security.enabled",
         "false"
     )

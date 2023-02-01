@@ -1,10 +1,10 @@
 ---
-# TODO: Move to it to a nightly job when Stateless supports them
+# TODO: Move to it to a nightly job when Serverless supports them
 - job:
-    name: elastic+elasticsearch-stateless+pull-request+s3-third-party-tests
-    display-name: "elastic / elasticsearch-stateless - s3 third party tests"
-    description: "Testing of the Stateless Elasticsearch against S3\n"
-    workspace: /dev/shm/elastic+elasticsearch-stateless+pull-request+s3-third-party-tests
+    name: elastic+elasticsearch-serverless+pull-request+s3-third-party-tests
+    display-name: "elastic / elasticsearch-serverless - s3 third party tests"
+    description: "Testing of the Serverless Elasticsearch against S3\n"
+    workspace: /dev/shm/elastic+elasticsearch-serverless+pull-request+s3-third-party-tests
     scm:
       - git:
           refspec: "+refs/pull/${ghprbPullId}/*:refs/remotes/origin/pr/${ghprbPullId}/*"
@@ -15,9 +15,9 @@
           org-list:
             - elastic
           allow-whitelist-orgs-as-admins: true
-          trigger-phrase: '.*run\W+elasticsearch-ci/s3ThirdPartyTest.*'
+          trigger-phrase: '.*run\W+elasticsearch-ci/s3-third-party-tests.*'
           github-hooks: true
-          status-context: elasticsearch-ci/statelessS3ThirdPartyTests
+          status-context: elasticsearch-ci/s3-third-party-tests
           cancel-builds-on-update: true
     builders:
       - inject:

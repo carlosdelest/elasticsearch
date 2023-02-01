@@ -1,9 +1,9 @@
 ---
 - job:
-    name: elastic+elasticsearch-stateless+pull-request+check
-    display-name: "elastic / elasticsearch-stateless - pull request check"
+    name: elastic+elasticsearch-serverless+pull-request+check
+    display-name: "elastic / elasticsearch-serverless - pull request check"
     description: "Testing of Elasticsearch Stateless pull requests - check"
-    workspace: /dev/shm/elastic+elasticsearch-stateless+pull-request+check
+    workspace: /dev/shm/elastic+elasticsearch-serverless+pull-request+check
     scm:
       - git:
           refspec: "+refs/pull/${ghprbPullId}/*:refs/remotes/origin/pr/${ghprbPullId}/*"
