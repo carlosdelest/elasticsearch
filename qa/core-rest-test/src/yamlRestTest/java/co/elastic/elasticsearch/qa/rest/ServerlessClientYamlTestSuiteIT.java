@@ -24,20 +24,12 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
 
     @ClassRule
     public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
-        .withNode(
-            indexNodeSpec -> indexNodeSpec.module("mapper-extras")
-                .setting("stateless.enabled", "true")
-                .setting("stateless.object_store.bucket", "stateless")
-                .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
-                .feature(FeatureFlag.TIME_SERIES_MODE)
-        )
-        .withNode(
-            searchNodeSpec -> searchNodeSpec.module("mapper-extras")
-                .setting("stateless.enabled", "true")
-                .setting("stateless.object_store.bucket", "stateless")
-                .setting("node.roles", "[master,remote_cluster_client,search]")
-                .feature(FeatureFlag.TIME_SERIES_MODE)
-        )
+        .module("mapper-extras")
+        .setting("stateless.enabled", "true")
+        .setting("stateless.object_store.bucket", "stateless")
+        .feature(FeatureFlag.TIME_SERIES_MODE)
+        .withNode(indexNodeSpec -> indexNodeSpec.setting("node.roles", "[master,remote_cluster_client,ingest,index]"))
+        .withNode(searchNodeSpec -> searchNodeSpec.setting("node.roles", "[master,remote_cluster_client,search]"))
         .build();
 
     public ServerlessClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
