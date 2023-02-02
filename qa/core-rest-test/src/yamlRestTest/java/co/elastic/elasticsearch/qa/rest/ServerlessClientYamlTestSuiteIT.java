@@ -25,6 +25,7 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
     @ClassRule
     public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
         .module("mapper-extras")
+        .module("blob-cache")
         .setting("stateless.enabled", "true")
         .setting("stateless.object_store.bucket", "stateless")
         .feature(FeatureFlag.TIME_SERIES_MODE)

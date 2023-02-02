@@ -21,6 +21,7 @@ plugins {
 
 dependencies {
     clusterModules("org.elasticsearch.plugin:mapper-extras")
+    clusterModules(xpackModule("blob-cache"))
 }
 
 restResources {
