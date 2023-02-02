@@ -1,3 +1,15 @@
+agents:
+  cpu: "16"
+  memory: "16G"
+  provider: "gcp"
+  machineType: "n1-highcpu-16"
+  image: family/elasticsearch-ubuntu-2022
+
 steps:
-  - label: ":wave: Stateless dummy pipeline"            # Label (with rich emojis https://ela.st/bk-emoji).
-    command: "echo 'Always passing for now'" # Command to run (evaluated by Bash).
+  - label: ":java: Running Elasticsearch Stateless 'check' task."
+    command: "./.ci/scripts/run-gradle-buildkite.sh check"
+
+  - wait
+
+  - label: ":docker: Publish snapshot development artifacts."
+    command: "./.ci/scripts/run-gradle-buildkite.sh buildDockerImage buildAarch64DockerImage"

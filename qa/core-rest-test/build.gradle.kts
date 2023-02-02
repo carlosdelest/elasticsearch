@@ -37,7 +37,14 @@ tasks {
     yamlRestTest {
         systemProperty(
             "tests.rest.blacklist", listOf(
-
+                // Flaky after moving to buildkite vm images not running those tests in ramdisk anymore
+                "tsdb/70_dimension_types/long dimension",
+                "search/310_match_bool_prefix/operator",
+                "search/310_match_bool_prefix/multi_match multiple fields partial term",
+                "suggest/30_context/Geo suggest should work",
+                "search/330_fetch_fields/Test date formatting",
+                "search/220_total_hits_object/hits.total as an object",
+                "search/160_exists_query/Test exists query on _routing field",
                 // Require "search" shards and DocWriteRequest ?refresh parameter support
                 "cat.count/10_basic/Test cat count output",
                 "cat.shards/10_basic/Test cat shards with hidden indices",
