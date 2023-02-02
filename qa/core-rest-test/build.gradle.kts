@@ -46,6 +46,7 @@ tasks {
                 "search/330_fetch_fields/Test date formatting",
                 "search/220_total_hits_object/hits.total as an object",
                 "search/160_exists_query/Test exists query on _routing field",
+                "search/330_fetch_fields/Test nested field inside object structure",
                 // Require "search" shards and DocWriteRequest ?refresh parameter support
                 "cat.count/10_basic/Test cat count output",
                 "cat.shards/10_basic/Test cat shards with hidden indices",
