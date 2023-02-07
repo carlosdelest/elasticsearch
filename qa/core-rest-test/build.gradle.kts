@@ -38,56 +38,28 @@ tasks {
     yamlRestTest {
         systemProperty(
             "tests.rest.blacklist", listOf(
-                // Flaky after moving to buildkite vm images not running those tests in ramdisk anymore
-                "tsdb/70_dimension_types/long dimension",
-                "search/310_match_bool_prefix/operator",
-                "search/310_match_bool_prefix/multi_match multiple fields partial term",
-                "suggest/30_context/Geo suggest should work",
-                "search/330_fetch_fields/Test date formatting",
-                "search/220_total_hits_object/hits.total as an object",
-                "search/160_exists_query/Test exists query on _routing field",
-                "search/330_fetch_fields/Test nested field inside object structure",
-                // Require "search" shards and DocWriteRequest ?refresh parameter support
-                "cat.count/10_basic/Test cat count output",
-                "cat.shards/10_basic/Test cat shards with hidden indices",
-                "create/60_refresh/Refresh",
-                "create/60_refresh/refresh=wait_for waits until changes are visible in search",
-                "create/60_refresh/When refresh url parameter is an empty string that means \"refresh immediately\"",
-                "delete/50_refresh/Refresh",
-                "delete/50_refresh/refresh=wait_for waits until changes are visible in search",
-                "delete/50_refresh/When refresh url parameter is an empty string that means \"refresh immediately\"",
-                "index/60_refresh/Refresh",
-                "index/60_refresh/refresh=wait_for waits until changes are visible in search",
-                "index/60_refresh/When refresh url parameter is an empty string that means \"refresh immediately\"",
-                "search/370_profile/dfs profile for search with dfs_query_then_fetch",
-                "search/400_synthetic_source/doc values keyword with ignore_above",
-                "search/400_synthetic_source/force_synthetic_source_bad_mapping",
-                "search/400_synthetic_source/force_synthetic_source_ok",
-                "search/400_synthetic_source/keyword",
-                "search/400_synthetic_source/stored keyword",
-                "search/400_synthetic_source/stored keyword with ignore_above",
-                "search/400_synthetic_source/stored text",
-                "search/400_synthetic_source/_source filtering",
-                "search.highlight/50_synthetic_source/*",
-                "search.inner_hits/20_highlighting/*",
-                "tsdb/10_settings/check end_time boundary with data_nano",
-                "tsdb/10_settings/check start_time and end_time with data_nano",
-                "tsdb/10_settings/check start_time boundary with data_nano",
-                "tsdb/10_settings/set start_time and end_time",
-                "tsdb/15_timestamp_mapping/explicitly enable timestamp meta field",
-                "tsdb/25_id_generation/index a new document on top of an old one",
-                "tsdb/60_add_dimensions/add dimensions with put_mapping",
-                "tsdb/60_add_dimensions/add dimensions to no dims with dynamic_template over index",
-                "tsdb/60_add_dimensions/add dimensions to some dims with dynamic_template over index",
-                "update/60_refresh/Refresh", // uses number_of_replicas: 0
-                "update/60_refresh/refresh=wait_for waits until changes are visible in search",
-                "update/60_refresh/When refresh url parameter is an empty string that means \"refresh immediately\"",
 
-                // Require "search" shards
-                "cat.fielddata/10_basic/Test cat fielddata output",
-                "indices.blocks/10_basic/Basic test for index blocks", // uses number_of_replicas: 0
-                "indices.sort/10_basic/Index Sort", // uses number_of_replicas: 0 and Force Merge API
-                "indices.stats/13_fields/Completion fields - multi", // uses index.number_of_replicas: 0
+                // Those tests expect no relocations during execution and use 0 replicas for this,
+                // they need adjustments (if possible) to work in Stateless
+                "create/60_refresh/Refresh",
+                "delete/50_refresh/Refresh",
+                "index/60_refresh/Refresh",
+                "update/60_refresh/Refresh",
+
+                // Those tests expect refresh=wait_for to return a forced_refresh=false which is true in Stateless
+                "create/60_refresh/refresh=wait_for waits until changes are visible in search",
+                "delete/50_refresh/refresh=wait_for waits until changes are visible in search",
+                "index/60_refresh/refresh=wait_for waits until changes are visible in search",
+                "update/60_refresh/refresh=wait_for waits until changes are visible in search",
+
+                // Those tests expect segment to be sorted on @timestamp field which only works on indexing shards
+                // TODO ES-?
+                "search/380_sort_segments_on_timestamp/Test if segments are missing @timestamp field we don't get errors",
+                "search/380_sort_segments_on_timestamp/Test that index segments are NOT sorted on timestamp field when @timestamp field is dynamically added",
+                "search/380_sort_segments_on_timestamp/Test that index segments are sorted on timestamp field if @timestamp field is defined in mapping",
+
+                // Those tests compute stats from any shards and that don't play well with search shards
+                "indices.stats/13_fields/Completion fields - multi",
                 "indices.stats/13_fields/Completion fields - one",
                 "indices.stats/13_fields/Completion fields - star",
                 "indices.stats/13_fields/Completion - all metric",
@@ -110,39 +82,18 @@ tasks {
                 "indices.stats/13_fields/Fields - multi metric",
                 "indices.stats/13_fields/Fields - star",
                 "indices.stats/13_fields/Fields - _all metric",
-                "indices.stats/60_field_usage/Field usage stats", // uses index.number_of_replicas: 0
-                "mlt/10_basic/Basic mlt", // uses number_of_replicas: 0
-                "mlt/20_docs/Basic mlt query with docs", // uses number_of_replicas: 0
-                "mlt/30_unlike/Basic mlt query with unlike", // uses number_of_replicas: 0
-                "msearch/20_typed_keys/*", // uses number_of_replicas: 0
-                "range/10_basic/*", // uses number_of_replicas: 0
-                "scroll/12_slices/Sliced scroll", // should wait for search shards to be active
-                "scroll/12_slices/Sliced scroll with doc values", // should wait for search shards to be active
-                "search/40_indices_boost/*", // should wait for search shards to be active
-                "search/120_batch_reduce_size/batched_reduce_size 2 with 5 shards", // uses number_of_replicas: 0
+                "indices.stats/60_field_usage/Field usage stats",
+
+                // Those tests execute searches but expect a special number of shards,
+                // they need adjustments (if possible) to work in Stateless
+                "scroll/12_slices/Sliced scroll", //TODO ES-5354
+                "scroll/12_slices/Sliced scroll with doc values", //TODO ES-5354
+                "search/120_batch_reduce_size/batched_reduce_size 2 with 5 shards", // uses number_of_replicas: 0 and does not work with search shards
                 "search/140_pre_filter_search_shards/pre_filter_shard_size with shards that have no hit", // require adjustments
-                "search/160_exists_query/Test exists query on mapped *", // ?
-                "search/240_date_nanos/date histogram aggregation with date and date_nanos mapping", // uses number_of_replicas: 0
-                "search/240_date_nanos/doc value fields are working as expected across date and date_nanos fields", // uses number_of_replicas: 0
-                "search/240_date_nanos/test sorting against date_nanos only fields", // uses number_of_replicas: 0
-                "search/250_distance_feature/test distance_feature query on date_nanos type", // uses number_of_replicas: 0
-                "search/250_distance_feature/test distance_feature query on date type", // uses number_of_replicas: 0
-                "search/250_distance_feature/test distance_feature query on geo_point type", // uses number_of_replicas: 0
-                "search/380_sort_segments_on_timestamp/Test if segments are missing @timestamp field we don't get errors", // uses number_of_replicas: 0
-                "search/380_sort_segments_on_timestamp/Test that index segments are sorted on timestamp field if @timestamp field is defined in mapping", // uses number_of_replicas: 0
-                "search/380_sort_segments_on_timestamp/Test that index segments are NOT sorted on timestamp field when @timestamp field is dynamically added", // uses number_of_replicas: 0
-                "search/400_synthetic_source/_doc_count", // uses number_of_replicas: 0
-                "search.highlight/20_fvh/*", // uses number_of_replicas: 0
+                "search/160_exists_query/Test exists query *", // ? those tests failed more often
                 "search_shards/*/*", //TODO ES-5354
-                "search.vectors/*/*", // uses number_of_replicas: 0
-                "suggest/40_typed_keys/*", // uses number_of_replicas: 0
-                "tsdb/05_dimension_and_metric_in_non_tsdb_index/can't shadow dimensions",
-                "tsdb/05_dimension_and_metric_in_non_tsdb_index/can't shadow metrics",
-                "tsdb/25_id_generation/ids query", // uses number_of_replicas: 0
-                "tsdb/25_id_generation/index a new document on top of an old one over bulk", // uses number_of_replicas: 0
-                "tsdb/90_unsupported_operations/aggregate on _id", // uses number_of_replicas: 0
-                "tsdb/90_unsupported_operations/sort by _id", // uses number_of_replicas: 0
-                "tsdb/90_unsupported_operations/noop update", // uses number_of_replicas: 0
+                "search.vectors/50_dense_vector_field_usage/*", // deprecated API
+                "tsdb/30_snapshot/Create a snapshot and then restore it", // waits for green status on 0 replicas but later executes search
 
                 // Require Get API (and often DocWriteRequest ?refresh parameter support)
                 "create/10_with_id/Create with ID",
@@ -182,7 +133,7 @@ tasks {
                 "mget/15_ids/IDs",
                 "mget/12_non_existent_index/Non-existent index",
                 "mget/13_missing_metadata/Missing metadata",
-                "mget/14_alias_to_multiple_indices/Multi Get with alias that resolves to multiple indices",  // Also require bulk ?refresh
+                "mget/14_alias_to_multiple_indices/Multi Get with alias that resolves to multiple indices",
                 "mget/17_default_index/Default index/type",
                 "mget/70_source_filtering/Source filtering -  exclude field",
                 "mget/70_source_filtering/Source filtering -  ids and exclude field",
@@ -218,7 +169,7 @@ tasks {
                 "nodes.stats/11_indices_metrics/indices mappings does not exist in shards level", // Failure at [nodes.stats/11_indices_metrics:540]: field [nodes.$node_id.indices.mappings.total_count] is not greater than or equal to [2]
                 "nodes.stats/11_indices_metrics/indices mappings exact count test for indices level", // Failure at [nodes.stats/11_indices_metrics:502]: field [nodes.$node_id.indices.mappings.total_count] is not greater than or equal to [26]
 
-                // Require Get API and Search API
+                // Require Get API and Search API as well as ES-5354
                 "termvectors/10_basic/Basic tests for termvector get",
                 "mtermvectors/10_basic/Basic tests for multi termvector get",
 
@@ -229,14 +180,6 @@ tasks {
                 "tsdb/80_index_resize/clone no source index",
                 "tsdb/80_index_resize/shrink",
                 "tsdb/80_index_resize/split",
-
-                // Require Close API
-                "indices.open/10_basic/Basic test for index open/close",
-                "indices.open/20_multiple_indices/All indices",
-                "indices.open/20_multiple_indices/Only wildcard",
-                "indices.open/20_multiple_indices/Trailing wildcard",
-                "indices.stats/20_translog/Translog stats on closed indices", // Error: Global checkpoint [0] mismatches maximum sequence number [-1] on index shard [test][0]
-                "tsdb/30_snapshot/Create a snapshot and then restore it", // Close API can be changed to Delete API
 
             ).joinToString(",")
         )
