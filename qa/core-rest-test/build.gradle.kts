@@ -52,12 +52,6 @@ tasks {
                 "index/60_refresh/refresh=wait_for waits until changes are visible in search",
                 "update/60_refresh/refresh=wait_for waits until changes are visible in search",
 
-                // Those tests expect segment to be sorted on @timestamp field which only works on indexing shards
-                // TODO ES-?
-                "search/380_sort_segments_on_timestamp/Test if segments are missing @timestamp field we don't get errors",
-                "search/380_sort_segments_on_timestamp/Test that index segments are NOT sorted on timestamp field when @timestamp field is dynamically added",
-                "search/380_sort_segments_on_timestamp/Test that index segments are sorted on timestamp field if @timestamp field is defined in mapping",
-
                 // Those tests compute stats from any shards and that don't play well with search shards
                 "indices.stats/13_fields/Completion fields - multi",
                 "indices.stats/13_fields/Completion fields - one",
