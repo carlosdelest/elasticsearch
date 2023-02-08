@@ -23,4 +23,8 @@ dependencies {
     compileOnly("org.elasticsearch:server")
     compileOnly("org.elasticsearch:elasticsearch-cli")
     compileOnly("org.elasticsearch:server-cli")
+
+    testImplementation("org.elasticsearch.test:framework")
+    testImplementation("org.elasticsearch:server")
+    testImplementation("org.elasticsearch:elasticsearch-cli")
 }

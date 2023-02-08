@@ -30,4 +30,9 @@ public class ServerlessServerCli extends ServerCli {
 
         super.execute(terminal, options, env, processInfo);
     }
+
+    @Override
+    protected SecureSettingsLoader secureSettingsLoader(Environment env) {
+        return new LocallyMountedSecretsLoader();
+    }
 }
