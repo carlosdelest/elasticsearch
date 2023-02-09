@@ -1,15 +1,14 @@
 agents:
-  cpu: "16"
-  memory: "16G"
   provider: "gcp"
-  machineType: "n1-highcpu-16"
+  machineType: "n1-standard-16"
   image: family/elasticsearch-ubuntu-2022
 
 steps:
   - label: ":java: Running Elasticsearch Stateless 'check' task."
-    command: "./.ci/scripts/run-gradle-buildkite.sh check"
+    command: ".ci/scripts/run-gradle-buildkite.sh check"
 
   - wait
 
   - label: ":docker: Publish snapshot development artifacts."
-    command: "./.ci/scripts/run-gradle-buildkite.sh buildDockerImage buildAarch64DockerImage"
+    branches: main
+    command: ".ci/scripts/publish-docker-artifacts.sh"
