@@ -175,6 +175,18 @@ tasks {
                 "tsdb/80_index_resize/shrink",
                 "tsdb/80_index_resize/split",
 
+                // AssertionError: Failure at [indices.stats/50_disk_usage:50]: value of [testindex.store_size_in_bytes] is not comparable (got [null])
+                // see https://gradle-enterprise.elastic.co/s/ezssvnid7qjnm/console-log?task=:qa:core-rest-test:yamlRestTest
+                "tsdb/110_field_caps/field caps on time_series indices",
+                "field_caps/40_time_series/Get simple time series field caps",
+                "indices.validate_query/10_basic/Validate query api",
+                "tsdb/110_field_caps/field caps on standard indices",
+                "indices.stats/50_disk_usage/Dense vectors",
+                "field_caps/40_time_series/Get time series field caps with conflicts",
+                "indices.stats/50_disk_usage/Name the index",
+                "tsdb/110_field_caps/field caps on mixed indices",
+                "indices.stats/50_disk_usage/Star",
+
             ).joinToString(",")
         )
     }
