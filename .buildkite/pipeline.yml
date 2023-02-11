@@ -4,11 +4,25 @@ agents:
   image: family/elasticsearch-ubuntu-2022
 
 steps:
-  - label: ":java: Running Elasticsearch Stateless 'check' task."
+  - label: ":java: Run serverless Elasticsearch tests"
     command: ".ci/scripts/run-gradle-buildkite.sh check"
 
   - wait
 
-  - label: ":docker: Publish snapshot development artifacts."
+  - label: ":docker: Publish docker images"
     branches: main
     command: ".ci/scripts/publish-docker-artifacts.sh"
+
+  - wait
+
+  - trigger: k8s-gitops-update-image-tag
+    label: ":argo: Update gitops image tag"
+    branches: main
+    build:
+      env:
+        MODE: sed
+        TARGET_FILE: elasticsearch-controller.yaml
+        IMAGE_TAG: "${BUILDKITE_COMMIT:0:7}"
+        NAMESPACE: elasticsearch-ci
+        IMAGE_NAME: elasticsearch-serverless
+        SERVICE: elasticsearch-controller
