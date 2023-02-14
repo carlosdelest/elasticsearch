@@ -22,8 +22,8 @@ steps:
       env:
         MODE: sed
         TARGET_FILE: elasticsearch-controller.yaml
-        IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
+        IMAGE_TAG: "${BUILDKITE_COMMIT:0:7}"
         NAMESPACE: elasticsearch-ci
         IMAGE_NAME: elasticsearch-serverless
         SERVICE: elasticsearch-controller
-        COMMIT_MESSAGE: "gitops: update elasticsearch-serverless tag to elastic/elasticsearch-serverless@$BUILDKITE_COMMIT"
+        COMMIT_MESSAGE: "gitops: update elasticsearch-serverless tag to elastic/elasticsearch-serverless@${BUILDKITE_COMMIT:0:7}"
