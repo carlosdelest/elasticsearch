@@ -60,6 +60,7 @@ distribution_archives {
                     }
                     exclude("*/bin/elasticsearch")
                     exclude("*/bin/elasticsearch.bat")
+                    exclude("*/modules/searchable-snapshots")
                 }
                 into("elasticsearch-${version}") {
                     from(copyDistributionDefaults)
