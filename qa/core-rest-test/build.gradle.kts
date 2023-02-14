@@ -89,6 +89,13 @@ tasks {
                 "search.vectors/50_dense_vector_field_usage/*", // deprecated API
                 "tsdb/30_snapshot/Create a snapshot and then restore it", // waits for green status on 0 replicas but later executes search
 
+                // Tests on index sorting require the search shards to be up-to-date with index shards segments. This
+                // requires some adjustments of tests (if that's possible)
+                "indices.sort/10_basic/Index Sort",
+                "search/380_sort_segments_on_timestamp/Test that index segments are sorted on timestamp field if @timestamp field is defined in mapping",
+                "search/380_sort_segments_on_timestamp/Test that index segments are NOT sorted on timestamp field when @timestamp field is dynamically added",
+                "search/380_sort_segments_on_timestamp/Test if segments are missing @timestamp field we don't get errors",
+
                 // Require Get API (and often DocWriteRequest ?refresh parameter support)
                 "create/10_with_id/Create with ID",
                 "exists/10_basic/Basic",
