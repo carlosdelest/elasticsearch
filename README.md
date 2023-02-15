@@ -74,72 +74,60 @@ integration, please refer to the [Elasticsearch contributor guide](/elasticsearc
 
 ### Building and running locally with docker
 
-Serverless Elasticsearch can be built using the command:
+The Serverless Elasticsearch x86 image can be built using the command:
 
 ```shell
 ./gradlew buildDockerImage
 ```
 
-#### Elasticsearch configuration
-
-Before running Elasticsearch with docker, the configurations for docker and Elasticsearch needs to be defined. There are some standard configurations that should be done:
+If you need the ARM image (e.g., for Apple M1 processor), it can be built instead with:
 
 ```shell
-export ES_CONFIGS="--env xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true"
+./gradlew buildAarch64DockerImage
 ```
 
-Then, the object store configuration is required for serverless Elasticsearch to store index files. For local development, you can use a file system object store. For example, create a permissive tmpfs directory `/tmp/objectstore`:
-
-```shell
-mkdir /tmp/objectstore ; chmod a+rw -R /tmp/objectstore
-```
-
-And we can use docker to mount it in the docker containers at `/objectstore` using the following configurations:
-
-```shell
-export ES_CONFIGS="$ES_CONFIGS -v /tmp/objectstore:/objectstore:z -e stateless.object_store.type=fs -e path.repo=/objectstore -e stateless.object_store.bucket=stateless"
-```
-
-**WARNING**: Do not attempt to change the mounted host directory to an important directory on your system unless you understand the implications of the `-v` and `:z` docker configuration above.
-
-If you would like to use a S3 bucket instead of a file system object store, you can instead use the following configurations:
-
-```shell
-export ES_CONFIGS="$ES_CONFIGS -e stateless.object_store.type=s3 -e insecure.s3.client.test.access_key=... -e insecure.s3.client.test.secret_key=... -e insecure.s3.client.test.session_token=..."
-```
-
-#### Running Elasticsearch
-
-First, if you have not done it already, you need to create the docker network that will be used by the docker instances:
+Run the following command once, to create the docker network that will be used by the docker instances:
 
 ```shell
 docker network create elastic
 ```
 
-If you would like to run a single node cluster (where the instance has the master, index and search roles) for development purposes, you can run it with:
+#### Running a cluster with multiple instances
+
+If you would like to use a file system object store (see below if you would like to run with S3 instead), first create a permissive tmpfs directory `/tmp/objectstore` to use as a file system object store:
 
 ```shell
-docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es01 -e cluster.initial_master_nodes=es01 -e node.roles='["master","index","search"]' $ES_CONFIGS elasticsearch-serverless
+mkdir /tmp/objectstore ; chmod a+rw -R /tmp/objectstore
 ```
 
-**WARNING**: Serverless is intended to run with multiple instances, as an instance should have either the index or the search role, but not both. The ability to run an instance with both roles is intended for development purposes and may break in the future.
-
-If you would like to run a 3-node cluster, with a separate Index and Search instance, you can run for example:
+And then if you would like to run a cluster with 3 instances, with a separate Index and Search instance, you can run:
 
 ```shell
-docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es01 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es02,es03 -e node.roles='["master","index"]' $ES_CONFIGS elasticsearch-serverless
-docker run --rm -d --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es02 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es03 -e node.roles='["master","search"]' $ES_CONFIGS elasticsearch-serverless
-docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles='["master"]' $ES_CONFIGS elasticsearch-serverless
+docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es01 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es02,es03 -e node.roles='["master","index"]' -e xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true -e stateless.object_store.type=fs -e stateless.object_store.bucket=stateless -e path.repo=/objectstore -v /tmp/objectstore:/objectstore:z elasticsearch-serverless
+docker run --rm -d --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es02 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es03 -e node.roles='["master","search"]' -e xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true -e stateless.object_store.type=fs -e stateless.object_store.bucket=stateless -e path.repo=/objectstore -v /tmp/objectstore:/objectstore:z elasticsearch-serverless
+docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles='["master"]' -e xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true -e stateless.object_store.type=fs -e stateless.object_store.bucket=stateless -e path.repo=/objectstore -v /tmp/objectstore:/objectstore:z elasticsearch-serverless
 ```
+
+**WARNING**: Do not attempt to change the mounted host directory to an important directory on your system unless you understand the implications of the `-v` and `:z` docker configuration above.
 
 You can access the logs of an instance using:
+
 ```shell
 docker logs -f es01
 ```
 
 You can stop the instances using:
+
 ```shell
 docker container stop es01 es02 es03
+```
+
+If you would like to use a S3 bucket instead of a file system object store, you can run Elasticsearch with:
+
+```shell
+docker run --rm -d --name es01 --net elastic -p 9200:9200 -p 9300:9300 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es01 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es02,es03 -e node.roles='["master","index"]' -e xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true -e stateless.object_store.type=s3 -e stateless.object_store.client=test -e stateless.object_store.bucket=... -e insecure.s3.client.test.access_key=... -e insecure.s3.client.test.secret_key=... -e insecure.s3.client.test.session_token=... elasticsearch-serverless
+docker run --rm -d --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es02 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es03 -e node.roles='["master","search"]' -e xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true -e stateless.object_store.type=s3 -e stateless.object_store.client=test -e stateless.object_store.bucket=... -e insecure.s3.client.test.access_key=... -e insecure.s3.client.test.secret_key=... -e insecure.s3.client.test.session_token=... elasticsearch-serverless
+docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles='["master"]' -e xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true -e stateless.object_store.type=s3 -e stateless.object_store.client=test -e stateless.object_store.bucket=... -e insecure.s3.client.test.access_key=... -e insecure.s3.client.test.secret_key=... -e insecure.s3.client.test.session_token=... elasticsearch-serverless
 ```
 
 #### Setting up AWS development environment
