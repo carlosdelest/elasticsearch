@@ -7,7 +7,7 @@ source $scripts_dir/run-gradle-buildkite.sh buildDockerImage buildAarch64DockerI
 
 echo "--- Tag and push docker images and manifest"
 set +x
-export GIT_ABBREV_COMMIT=${BUILDKITE_COMMIT:0:7}
+export GIT_ABBREV_COMMIT=git-${BUILDKITE_COMMIT:0:12}
 export DOCKER_REGISTRY_USERNAME="$(vault read -field=username secret/ci/elastic-elasticsearch-serverless/prod_docker_registry_credentials)"
 export DOCKER_REGISTRY_PASSWORD="$(vault read -field=password secret/ci/elastic-elasticsearch-serverless/prod_docker_registry_credentials)"
 export DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
