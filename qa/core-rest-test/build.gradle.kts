@@ -194,6 +194,9 @@ tasks {
                 "tsdb/110_field_caps/field caps on mixed indices",
                 "indices.stats/50_disk_usage/Star",
 
+                // AwaitsFix: https://github.com/elastic/elasticsearch-serverless/issues/171
+                "indices.get_index_template/10_basic/Add data lifecycle"
+
             ).joinToString(",")
         )
     }
