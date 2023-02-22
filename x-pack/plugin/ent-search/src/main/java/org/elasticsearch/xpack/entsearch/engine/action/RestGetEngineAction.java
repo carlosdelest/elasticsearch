@@ -15,9 +15,9 @@ import org.elasticsearch.rest.action.RestToXContentListener;
 import java.util.List;
 
 import static org.elasticsearch.rest.RestRequest.Method.GET;
+import static org.elasticsearch.xpack.entsearch.EnterpriseSearch.ENDPOINT;
 
 public class RestGetEngineAction extends BaseRestHandler {
-    public static final String ENDPOINT = "_engine";
 
     @Override
     public String getName() {

@@ -55,6 +55,8 @@ import java.util.function.Supplier;
 public class EnterpriseSearch extends Plugin implements ActionPlugin, SystemIndexPlugin {
     private static final Logger logger = LogManager.getLogger(EnterpriseSearch.class);
 
+    public static final String ENDPOINT = "_engine";
+
     public static final String FEATURE_NAME = "ent_search";
 
     private final boolean enabled;

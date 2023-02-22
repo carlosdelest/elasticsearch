@@ -16,10 +16,9 @@ import java.io.IOException;
 import java.util.List;
 
 import static org.elasticsearch.rest.RestRequest.Method.PUT;
+import static org.elasticsearch.xpack.entsearch.EnterpriseSearch.ENDPOINT;
 
 public class RestPutEngineAction extends BaseRestHandler {
-
-    public static final String ENDPOINT = "_engine";
 
     @Override
     public String getName() {
