@@ -85,7 +85,6 @@ tasks {
                 "search/120_batch_reduce_size/batched_reduce_size 2 with 5 shards", // uses number_of_replicas: 0 and does not work with search shards
                 "search/140_pre_filter_search_shards/pre_filter_shard_size with shards that have no hit", // require adjustments
                 "search/160_exists_query/Test exists query *", // ? those tests failed more often
-                "search_shards/*/*", //TODO ES-5354
                 "search.vectors/50_dense_vector_field_usage/*", // deprecated API
                 "tsdb/30_snapshot/Create a snapshot and then restore it", // waits for green status on 0 replicas but later executes search
 
