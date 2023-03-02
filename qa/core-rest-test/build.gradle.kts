@@ -80,8 +80,6 @@ tasks {
 
                 // Those tests execute searches but expect a special number of shards,
                 // they need adjustments (if possible) to work in Stateless
-                "scroll/12_slices/Sliced scroll", //TODO ES-5354
-                "scroll/12_slices/Sliced scroll with doc values", //TODO ES-5354
                 "search/120_batch_reduce_size/batched_reduce_size 2 with 5 shards", // uses number_of_replicas: 0 and does not work with search shards
                 "search/140_pre_filter_search_shards/pre_filter_shard_size with shards that have no hit", // require adjustments
                 "search/160_exists_query/Test exists query *", // ? those tests failed more often
