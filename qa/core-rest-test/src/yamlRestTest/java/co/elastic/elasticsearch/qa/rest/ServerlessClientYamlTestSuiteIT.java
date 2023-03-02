@@ -38,7 +38,11 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
         .setting("stateless.object_store.base_path", "base_path")
         .feature(FeatureFlag.TIME_SERIES_MODE)
         .withNode(indexNodeSpec -> indexNodeSpec.setting("node.roles", "[master,remote_cluster_client,ingest,index]"))
-        .withNode(searchNodeSpec -> searchNodeSpec.setting("node.roles", "[master,remote_cluster_client,search]"))
+        .withNode(searchNodeSpec -> {
+            searchNodeSpec.setting("node.roles", "[master,remote_cluster_client,search]");
+            searchNodeSpec.setting("xpack.searchable.snapshot.shared_cache.size", "16MB");
+            searchNodeSpec.setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB");
+        })
         .build();
 
     public ServerlessClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
