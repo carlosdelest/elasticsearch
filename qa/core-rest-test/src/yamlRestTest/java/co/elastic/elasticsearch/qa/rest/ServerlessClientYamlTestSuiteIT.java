@@ -18,11 +18,20 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.FeatureFlag;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
+import org.elasticsearch.test.rest.yaml.ClientYamlTestResponse;
 import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
+import org.elasticsearch.test.rest.yaml.section.DoSection;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.ClassRule;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
+import static java.util.Collections.emptyMap;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 
 @TimeoutSuite(millis = 40 * TimeUnits.MINUTE)
@@ -52,6 +61,40 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
     @ParametersFactory
     public static Iterable<Object[]> parameters() throws Exception {
         return createParameters();
+    }
+
+    private void logRefresh(String logLevel) throws Exception {
+        boolean hasRefresh = Stream.concat(
+            getTestCandidate().getSetupSection().getExecutableSections().stream(),
+            getTestCandidate().getTestSection().getExecutableSections().stream()
+        ).anyMatch(executableSection -> {
+            if (executableSection instanceof DoSection doSection) {
+                if (doSection.getApiCallSection().getApi().toLowerCase().contains("refresh")) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        if (hasRefresh) {
+            Map<String, Object> persistentSettings = new HashMap<>();
+            persistentSettings.put("logger.org.elasticsearch.transport.TransportService.tracer", logLevel);
+            List<Map<String, Object>> bodies = List.of(Map.ofEntries(Map.entry("persistent", persistentSettings)));
+            ClientYamlTestResponse response = getAdminExecutionContext().callApi("cluster.put_settings", emptyMap(), bodies, emptyMap());
+            assertThat(response.evaluate("acknowledged"), is(true));
+        }
+    }
+
+    // TODO Remove the trace logging (methods @Before, @After, and logRefresh) once issue 176 is resolved
+    @Before
+    public void enableMoreLoggingForRefresh() throws Exception {
+        initClient();
+        logRefresh("TRACE");
+    }
+
+    @After
+    public void disableMoreLoggingForRefresh() throws Exception {
+        logRefresh(null);
     }
 
     @Override
