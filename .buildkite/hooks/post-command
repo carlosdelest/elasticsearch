@@ -1,3 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/bash
+set -euo pipefail
 
-.buildkite/scripts/lifecycle/post_command.sh
+find . -type d -regex ".*build/reports" -print0 | tar -cvjf build-reports.tar.bz2 --null --files-from -
+buildkite-agent artifact upload build-reports.tar.bz2

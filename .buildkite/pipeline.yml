@@ -10,14 +10,14 @@ steps:
   - wait
 
   - label: ":docker: Publish docker images"
-    branches: main
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     command: ".ci/scripts/publish-docker-artifacts.sh"
 
   - wait
 
   - trigger: k8s-gitops-update-image-tag
     label: ":argo: Update gitops image tag"
-    branches: main
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     build:
       env:
         MODE: sed
@@ -27,3 +27,7 @@ steps:
         IMAGE_NAME: elasticsearch-serverless
         SERVICE: elasticsearch-controller
         COMMIT_MESSAGE: "gitops: update elasticsearch-serverless tag to elastic/elasticsearch-serverless@${BUILDKITE_COMMIT:0:12}"
+
+  - label: ":git: Update elasticsearch submodule commit"
+    if: 'build.env("ELASTICSEARCH_SUBMODULE_COMMIT") != null'
+    command: ".ci/scripts/update-es-submodule.sh"
