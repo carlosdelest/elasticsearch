@@ -7,6 +7,9 @@ steps:
   - label: ":java: Run serverless Elasticsearch tests"
     command: ".ci/scripts/run-gradle-buildkite.sh check"
 
+  - label: ":s3: Run AWS S3 third party tests"
+    command: ".ci/scripts/run-s3-third-party-tests.sh"
+
   - wait
 
   - label: ":docker: Publish docker images"
