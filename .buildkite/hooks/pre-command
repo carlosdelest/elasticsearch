@@ -4,7 +4,7 @@ set -euo pipefail
 # buildkite ci image has issues using RYUK
 # https://www.testcontainers.org/features/configuration/#disabling-ryuk
 export TESTCONTAINERS_RYUK_DISABLED=true
-source ./.ci/java-versions.properties
+source ./.buildkite/java-versions.properties
 
 # Resolve JAVA_HOME
 export JAVA_HOME="/usr/java/${ES_BUILD_JAVA}"

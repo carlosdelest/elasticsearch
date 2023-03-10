@@ -3,7 +3,7 @@ set -e
 scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
 echo "--- Build serverless docker images"
-source $scripts_dir/run-gradle-buildkite.sh buildDockerImage buildAarch64DockerImage
+source $scripts_dir/run-gradle.sh buildDockerImage buildAarch64DockerImage
 
 echo "--- Tag and push docker images and manifest"
 set +x

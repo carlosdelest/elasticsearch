@@ -21,4 +21,4 @@ export stateless_aws_s3_base_path=stateless-cas-linearizability
 unset data
 set -x
 
-source $scripts_dir/run-gradle-buildkite.sh statelessS3ThirdPartyTests
+source $scripts_dir/run-gradle.sh statelessS3ThirdPartyTests

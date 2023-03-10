@@ -5,16 +5,16 @@ agents:
 
 steps:
   - label: ":java: Run serverless Elasticsearch tests"
-    command: ".ci/scripts/run-gradle-buildkite.sh check"
+    command: ".buildkite/scripts/run-gradle.sh check"
 
   - label: ":s3: Run AWS S3 third party tests"
-    command: ".ci/scripts/run-s3-third-party-tests.sh"
+    command: ".buildkite/scripts/run-s3-third-party-tests.sh"
 
   - wait
 
   - label: ":docker: Publish docker images"
     if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
-    command: ".ci/scripts/publish-docker-artifacts.sh"
+    command: ".buildkite/scripts/publish-docker-artifacts.sh"
 
   - wait
 
@@ -33,4 +33,4 @@ steps:
 
   - label: ":git: Update elasticsearch submodule commit"
     if: 'build.env("ELASTICSEARCH_SUBMODULE_COMMIT") != null'
-    command: ".ci/scripts/update-es-submodule.sh"
+    command: ".buildkite/scripts/update-es-submodule.sh"

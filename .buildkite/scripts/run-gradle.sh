@@ -3,7 +3,7 @@
 GRADLEW="./gradlew --parallel --build-cache --no-watch-fs -Dorg.elasticsearch.build.cache.url=https://gradle-enterprise.elastic.co/cache/"
 [[ -x /usr/local/sbin/drop-caches ]] && sudo /usr/local/sbin/drop-caches
 rm -Rfv ~/.gradle/init.d
-mkdir -p ~/.gradle/init.d && cp -v .ci/buildkite-init.gradle ~/.gradle/init.d
+mkdir -p ~/.gradle/init.d && cp -v .buildkite/init.gradle ~/.gradle/init.d
 if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
    MAX_WORKERS=16
 elif [ -f /proc/cpuinfo ]; then
