@@ -5,6 +5,9 @@
 out/
 build/
 
+# Exclude idea config that we want persisted in version control
+!.idea/runConfigurations
+
 # Generated
 checkstyle_ide.xml
 
