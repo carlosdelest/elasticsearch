@@ -55,3 +55,4 @@ include(":distribution:tools:serverless-server-cli")
  * QA Projects
  */
 include(":qa:core-rest-test")
+include(":qa:x-pack-rest-test")

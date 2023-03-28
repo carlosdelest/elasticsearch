@@ -9,6 +9,7 @@ allprojects {
         dependencies {
             add("restSpec", "org.elasticsearch:rest-api-spec")
             add("restTestConfig", "org.elasticsearch:rest-api-spec")
+            add("restXpackTestConfig", xpackModule("plugin"))
         }
     }
 }
