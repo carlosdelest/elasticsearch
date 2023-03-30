@@ -7,6 +7,7 @@
 
 package org.elasticsearch.xpack.application.search;
 
+import org.elasticsearch.common.ValidationException;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -22,6 +23,7 @@ import org.elasticsearch.xpack.application.search.action.QuerySearchApplicationA
 import org.elasticsearch.xpack.application.search.action.QuerySearchApplicationAction.Request;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Objects;
 
 import static org.elasticsearch.xcontent.ConstructingObjectParser.optionalConstructorArg;
@@ -101,6 +103,12 @@ public class SearchApplicationTemplate implements ToXContentObject, Writeable {
         if (o == null || getClass() != o.getClass()) return false;
         SearchApplicationTemplate template = (SearchApplicationTemplate) o;
         return Objects.equals(script, template.script) && Objects.equals(templateParamValidator, template.templateParamValidator);
+    }
+
+    public void validateTemplateParams(Map<String, Object> templateParams) throws ValidationException {
+        if (templateParamValidator != null) {
+            templateParamValidator.validate(templateParams);
+        }
     }
 
     public Script script() {
