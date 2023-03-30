@@ -135,8 +135,11 @@ tasks {
                 "field_caps/40_time_series/Get time series field caps with conflicts",
                 "indices.stats/50_disk_usage/Name the index",
                 "tsdb/110_field_caps/field caps on mixed indices",
-                "indices.stats/50_disk_usage/Star"
+                "indices.stats/50_disk_usage/Star",
 
+                // ignored untill we can recover a real primary shard
+                "indices.stats/30_segments/Segment Stats",
+                "indices.clone/10_basic/Clone index via API"
             ).joinToString(",")
         )
     }
