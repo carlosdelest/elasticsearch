@@ -43,8 +43,8 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
         .setting("xpack.license.self_generated.type", "trial")
         // disable ILM history, since it disturbs tests using _all
         .setting("indices.lifecycle.history_index_enabled", "false")
-        .setting("insecure.bootstrap.password", "x-pack-test-password")
-        .setting("insecure.xpack.security.transport.ssl.secure_key_passphrase", "testnode")
+        .secret("bootstrap.password", "x-pack-test-password")
+        .secret("xpack.security.transport.ssl.secure_key_passphrase", "testnode")
         .user("x_pack_rest_user", "x-pack-test-password")
         .configFile("testnode.pem", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.pem"))
         .configFile("testnode.crt", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.crt"))
