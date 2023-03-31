@@ -53,7 +53,7 @@ public class SearchApplicationTemplate implements ToXContentObject, Writeable {
 
     private final TemplateParamValidator templateParamValidator;
 
-    public SearchApplicationTemplate(StreamInput in) throws IOException {
+    public SearchApplicationTemplate(StreamInput in) throws IOException, ValidationException {
         this.script = in.readOptionalWriteable(Script::new);
         this.templateParamValidator = in.readOptionalWriteable(TemplateParamValidator::new);
     }
