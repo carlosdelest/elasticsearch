@@ -33,6 +33,7 @@ if (file("elasticsearch/.git").exists() == false) {
 /*
  * Modules
  */
+include(":modules:ml-serverless")
 include(":modules:stateless")
 
 /*

@@ -17,6 +17,7 @@ import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.FeatureFlag;
+import org.elasticsearch.test.cluster.local.distribution.DistributionType;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestResponse;
 import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
@@ -39,12 +40,17 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
 
     @ClassRule
     public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
-        .module("mapper-extras")
-        .module("blob-cache")
+        .distribution(DistributionType.DEFAULT)
         .setting("stateless.enabled", "true")
         .setting("stateless.object_store.type", "fs")
         .setting("stateless.object_store.bucket", "stateless")
         .setting("stateless.object_store.base_path", "base_path")
+        .setting("xpack.ml.enabled", "false")
+        .setting("xpack.security.enabled", "false")
+        .setting("xpack.watcher.enabled", "false")
+        // disable ILM history, since it disturbs tests using _all
+        .setting("indices.lifecycle.history_index_enabled", "false")
+        .setting("ingest.geoip.downloader.enabled", "false")
         .feature(FeatureFlag.TIME_SERIES_MODE)
         .withNode(indexNodeSpec -> indexNodeSpec.setting("node.roles", "[master,remote_cluster_client,ingest,index]"))
         .withNode(searchNodeSpec -> {

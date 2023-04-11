@@ -20,8 +20,7 @@ plugins {
 }
 
 dependencies {
-    clusterModules("org.elasticsearch.plugin:mapper-extras")
-    clusterModules(xpackModule("blob-cache"))
+    yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
 }
 
 restResources {
@@ -36,6 +35,7 @@ tasks {
         isSkipHasRestTestCheck = true
     }
     yamlRestTest {
+        usesDefaultDistribution()
         systemProperty(
             "tests.rest.blacklist", listOf(
 
