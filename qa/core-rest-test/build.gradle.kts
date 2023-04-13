@@ -46,12 +46,6 @@ tasks {
                 "index/60_refresh/Refresh",
                 "update/60_refresh/Refresh",
 
-                // Those tests expect refresh=wait_for to return a forced_refresh=false which is true in Stateless
-                "create/60_refresh/refresh=wait_for waits until changes are visible in search",
-                "delete/50_refresh/refresh=wait_for waits until changes are visible in search",
-                "index/60_refresh/refresh=wait_for waits until changes are visible in search",
-                "update/60_refresh/refresh=wait_for waits until changes are visible in search",
-
                 // Those tests compute stats from any shards and that don't play well with search shards
                 "indices.stats/13_fields/Completion fields - multi",
                 "indices.stats/13_fields/Completion fields - one",
