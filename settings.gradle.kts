@@ -35,6 +35,7 @@ if (file("elasticsearch/.git").exists() == false) {
  */
 include(":modules:ml-serverless")
 include(":modules:stateless")
+include(":modules:serverless-license")
 
 /*
  * Distribution projects

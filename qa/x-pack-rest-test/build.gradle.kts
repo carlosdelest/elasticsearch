@@ -38,6 +38,8 @@ tasks {
             "graph/*/*",
             // health expects a data_content tier
             "health/*/*",
+            // managing a license is not supported in serverless
+            "license/*/*",
             // rollup has many tests failing with "Expected: <1> but: was <0>"
             "rollup/*/*",
             // searchable_snapshots doesn't exist in serverless
@@ -51,6 +53,8 @@ tasks {
             // terms_enum has most tests failing with "field [terms] doesn't have length [1]"
             "terms_enum/*/*",
             // voting_only_node assumes data nodes
-            "voting_only_node/*/*").joinToString(","))
+            "voting_only_node/*/*",
+            // the license is fixed to "enterprise"
+            "xpack/20_info/XPack Info API").joinToString(","))
     }
 }

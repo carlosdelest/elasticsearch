@@ -1,0 +1,9 @@
+"XPack Info API":
+    - do:
+        xpack.info: {}
+
+    - match: { license.type: "enterprise" }
+    - match: { license.mode: "enterprise" }
+    - match: { license.status: "active" }
+
+
