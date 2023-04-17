@@ -18,13 +18,11 @@ steps:
 
   - wait
 
-  - trigger: k8s-gitops-update-image-tag
+  - trigger: serverless-gitops-update-stack-image-tag
     label: ":argo: Update gitops image tag"
     if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     build:
       env:
-        MODE: sed
-        TARGET_FILE: elasticsearch-controller.yaml
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
         NAMESPACE: elasticsearch-ci
         IMAGE_NAME: elasticsearch-serverless
