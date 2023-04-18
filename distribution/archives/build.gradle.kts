@@ -61,6 +61,7 @@ distribution_archives {
                     exclude("*/bin/elasticsearch")
                     exclude("*/bin/elasticsearch.bat")
                     exclude("*/modules/searchable-snapshots")
+                    exclude("*/modules/x-pack-voting-only-node")
                 }
                 into("elasticsearch-${version}") {
                     from(copyDistributionDefaults)
