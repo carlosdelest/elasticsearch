@@ -39,6 +39,7 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.security.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
+        .setting("logger.org.elasticsearch.cluster.coordination", "DEBUG") // TODO remove when we're confident that stateless masters work
         // disable ILM history, since it disturbs tests using _all
         .setting("indices.lifecycle.history_index_enabled", "false")
         .setting("ingest.geoip.downloader.enabled", "false")
