@@ -17,6 +17,7 @@ import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.FeatureFlag;
+import org.elasticsearch.test.cluster.local.LocalNodeSpecBuilder;
 import org.elasticsearch.test.cluster.local.distribution.DistributionType;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
@@ -44,13 +45,20 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
         .setting("indices.lifecycle.history_index_enabled", "false")
         .setting("ingest.geoip.downloader.enabled", "false")
         .feature(FeatureFlag.TIME_SERIES_MODE)
-        .withNode(indexNodeSpec -> indexNodeSpec.setting("node.roles", "[master,remote_cluster_client,ingest,index]"))
+        .withNode(indexNodeSpec -> {
+            indexNodeSpec.setting("node.roles", "[master,remote_cluster_client,ingest,index]");
+            addCacheSettings(indexNodeSpec);
+        })
         .withNode(searchNodeSpec -> {
             searchNodeSpec.setting("node.roles", "[master,remote_cluster_client,search]");
-            searchNodeSpec.setting("xpack.searchable.snapshot.shared_cache.size", "16MB");
-            searchNodeSpec.setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB");
+            addCacheSettings(searchNodeSpec);
         })
         .build();
+
+    private static void addCacheSettings(LocalNodeSpecBuilder nodeSpec) {
+        nodeSpec.setting("xpack.searchable.snapshot.shared_cache.size", "16MB");
+        nodeSpec.setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB");
+    }
 
     public ServerlessClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);

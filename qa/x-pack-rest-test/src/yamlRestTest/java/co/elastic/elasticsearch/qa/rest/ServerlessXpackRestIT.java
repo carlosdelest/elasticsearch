@@ -12,6 +12,7 @@ import com.carrotsearch.randomizedtesting.annotations.Name;
 
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.FeatureFlag;
+import org.elasticsearch.test.cluster.local.LocalNodeSpecBuilder;
 import org.elasticsearch.test.cluster.local.distribution.DistributionType;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
@@ -49,14 +50,21 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
         .configFile("service_tokens", Resource.fromClasspath("service_tokens"))
         .setting("ingest.geoip.downloader.enabled", "false")
         .feature(FeatureFlag.TIME_SERIES_MODE)
-        .withNode(indexNodeSpec -> indexNodeSpec.setting("node.roles", "[master,remote_cluster_client,ingest,index]"))
-        .withNode(
-            searchNodeSpec -> searchNodeSpec.setting("node.roles", "[master,remote_cluster_client,search]")
-                .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
-                .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
-        )
+        .withNode(indexNodeSpec -> {
+            indexNodeSpec.setting("node.roles", "[master,remote_cluster_client,ingest,index]");
+            addCacheSettings(indexNodeSpec);
+        })
+        .withNode(searchNodeSpec -> {
+            searchNodeSpec.setting("node.roles", "[master,remote_cluster_client,search]");
+            addCacheSettings(searchNodeSpec);
+        })
         .withNode(mlNodeSpec -> mlNodeSpec.setting("node.roles", "[master,remote_cluster_client,ml,transform]"))
         .build();
+
+    private static void addCacheSettings(LocalNodeSpecBuilder nodeSpec) {
+        nodeSpec.setting("xpack.searchable.snapshot.shared_cache.size", "16MB");
+        nodeSpec.setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB");
+    }
 
     public ServerlessXpackRestIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);

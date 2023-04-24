@@ -47,6 +47,8 @@ public class ServerlessLicenseRestIT extends AbstractXPackRestTest {
         .configFile("testnode.pem", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.pem"))
         .configFile("testnode.crt", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.crt"))
         .setting("ingest.geoip.downloader.enabled", "false")
+        .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
+        .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
         .build();
 
     public ServerlessLicenseRestIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
