@@ -27,7 +27,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 
-public class SecureSettings extends Plugin {
+public class ServerlessSecureSettingsPlugin extends Plugin {
     @Override
     public Collection<Object> createComponents(
         Client client,

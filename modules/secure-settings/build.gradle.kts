@@ -5,7 +5,7 @@ plugins {
 esplugin {
     name = "secure-settings"
     description = "Secure Settings module for Serverless Elasticsearch"
-    classname = "co.elastic.elasticsearch.settings.secure.SecureSettings"
+    classname = "co.elastic.elasticsearch.settings.secure.ServerlessSecureSettingsPlugin"
 }
 
 configurations {
