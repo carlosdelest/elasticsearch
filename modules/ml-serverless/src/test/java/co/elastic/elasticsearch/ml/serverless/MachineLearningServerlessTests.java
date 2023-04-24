@@ -30,4 +30,45 @@ public class MachineLearningServerlessTests extends ESTestCase {
         MachineLearningServerless mlServerless = new MachineLearningServerless();
         assertFalse(mlServerless.includeNodeInfo());
     }
+
+    public void testIsAnomalyDetectionEnabled() {
+        MachineLearningServerless mlServerless = new MachineLearningServerless();
+        assertTrue(mlServerless.isAnomalyDetectionEnabled());
+        /* TODO
+        mlServerless = new MachineLearningServerless(
+            Settings.builder().put(MachineLearningServerless.ANOMALY_DETECTION_ENABLED.getKey(), true).build()
+        );
+        assertTrue(mlServerless.isAnomalyDetectionEnabled());
+        mlServerless = new MachineLearningServerless(
+            Settings.builder().put(MachineLearningServerless.ANOMALY_DETECTION_ENABLED.getKey(), false).build()
+        );
+        assertFalse(mlServerless.isAnomalyDetectionEnabled());
+        */
+    }
+
+    public void testIsDataFrameAnalyticsEnabled() {
+        MachineLearningServerless mlServerless = new MachineLearningServerless();
+        assertTrue(mlServerless.isDataFrameAnalyticsEnabled());
+        /* TODO
+        mlServerless = new MachineLearningServerless(
+            Settings.builder().put(MachineLearningServerless.DATA_FRAME_ANALYTICS_ENABLED.getKey(), true).build()
+        );
+        assertTrue(mlServerless.isDataFrameAnalyticsEnabled());
+        mlServerless = new MachineLearningServerless(
+            Settings.builder().put(MachineLearningServerless.DATA_FRAME_ANALYTICS_ENABLED.getKey(), false).build()
+        );
+        assertFalse(mlServerless.isDataFrameAnalyticsEnabled());
+         */
+    }
+
+    public void testIsNlpEnabled() {
+        MachineLearningServerless mlServerless = new MachineLearningServerless();
+        assertTrue(mlServerless.isNlpEnabled());
+        /* TODO
+        mlServerless = new MachineLearningServerless(Settings.builder().put(MachineLearningServerless.NLP_ENABLED.getKey(), true).build());
+        assertTrue(mlServerless.isNlpEnabled());
+        mlServerless = new MachineLearningServerless(Settings.builder().put(MachineLearningServerless.NLP_ENABLED.getKey(), false).build());
+        assertFalse(mlServerless.isNlpEnabled());
+        */
+    }
 }
