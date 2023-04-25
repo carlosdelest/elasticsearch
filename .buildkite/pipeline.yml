@@ -22,12 +22,17 @@ steps:
     label: ":argo: Update gitops image tag"
     if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     build:
+      message: "Update image tag for Elasticsearch"
       env:
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
         NAMESPACE: elasticsearch-ci
         IMAGE_NAME: elasticsearch-serverless
         SERVICE: elasticsearch-controller
         COMMIT_MESSAGE: "gitops: update elasticsearch-serverless tag to elastic/elasticsearch-serverless@${BUILDKITE_COMMIT:0:12}"
+
+  - label: ":git: Push promoted build tags"
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
+    command: ".buildkite/scripts/tag-promoted-commit.sh"
 
   - label: ":git: Update elasticsearch submodule commit"
     if: 'build.env("ELASTICSEARCH_SUBMODULE_COMMIT") != null'
