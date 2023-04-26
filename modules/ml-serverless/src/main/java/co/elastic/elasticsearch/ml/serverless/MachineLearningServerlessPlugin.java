@@ -19,16 +19,11 @@ package co.elastic.elasticsearch.ml.serverless;
 
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
-import org.elasticsearch.logging.LogManager;
-import org.elasticsearch.logging.Logger;
 import org.elasticsearch.plugins.Plugin;
-import org.elasticsearch.xpack.ml.MachineLearningExtension;
 
 import java.util.List;
 
-public class MachineLearningServerless extends Plugin implements MachineLearningExtension {
-
-    private static final Logger logger = LogManager.getLogger(MachineLearningServerless.class);
+public class MachineLearningServerlessPlugin extends Plugin {
 
     public static final String NAME = "ml-serverless";
 
@@ -41,37 +36,10 @@ public class MachineLearningServerless extends Plugin implements MachineLearning
     );
     public static final Setting<Boolean> NLP_ENABLED = Setting.boolSetting("xpack.ml.nlp.enabled", true, Property.NodeScope);
 
-    public MachineLearningServerless() {}
+    public MachineLearningServerlessPlugin() {}
 
     @Override
     public List<Setting<?>> getSettings() {
         return List.of(ANOMALY_DETECTION_ENABLED, DATA_FRAME_ANALYTICS_ENABLED, NLP_ENABLED);
-    }
-
-    @Override
-    public boolean useIlm() {
-        logger.debug("{}::useIlm returning false.", NAME);
-        return false;
-    }
-
-    @Override
-    public boolean includeNodeInfo() {
-        logger.debug("{}::includeNodeInfo returning false.", NAME);
-        return false;
-    }
-
-    @Override
-    public boolean isAnomalyDetectionEnabled() {
-        return true; // TODO ANOMALY_DETECTION_ENABLED.get(settings);
-    }
-
-    @Override
-    public boolean isDataFrameAnalyticsEnabled() {
-        return true; // TODO DATA_FRAME_ANALYTICS_ENABLED.get(settings);
-    }
-
-    @Override
-    public boolean isNlpEnabled() {
-        return true; // TODO NLP_ENABLED.get(settings);
     }
 }

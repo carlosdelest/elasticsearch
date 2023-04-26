@@ -17,10 +17,13 @@
 
 module org.elasticsearch.ml.serverless {
     requires org.apache.logging.log4j;
+    requires org.apache.lucene.core;
 
     requires org.elasticsearch.logging;
     requires org.elasticsearch.ml;
     requires org.elasticsearch.server;
 
-    provides org.elasticsearch.xpack.ml.MachineLearningExtension with co.elastic.elasticsearch.ml.serverless.MachineLearningServerless;
+    provides org.elasticsearch.xpack.ml.MachineLearningExtension
+        with
+            co.elastic.elasticsearch.ml.serverless.MachineLearningServerlessExtension;
 }
