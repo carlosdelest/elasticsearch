@@ -30,6 +30,8 @@ steps:
         SERVICE: elasticsearch-controller
         COMMIT_MESSAGE: "gitops: update elasticsearch-serverless tag to elastic/elasticsearch-serverless@${BUILDKITE_COMMIT:0:12}"
 
+  - wait
+
   - label: ":git: Push promoted build tags"
     if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     command: ".buildkite/scripts/tag-promoted-commit.sh"
