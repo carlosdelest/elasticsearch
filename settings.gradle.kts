@@ -3,6 +3,10 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+
+    includeBuild("elasticsearch/build-conventions")
+    includeBuild("elasticsearch/build-tools")
+    includeBuild("elasticsearch/build-tools-internal")
 }
 
 plugins {
