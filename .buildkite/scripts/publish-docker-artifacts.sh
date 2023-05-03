@@ -21,6 +21,4 @@ set -x
 docker push ${X86_IMAGE_TAG}
 docker push ${ARM_IMAGE_TAG}
 docker manifest create ${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT} --amend ${X86_IMAGE_TAG} --amend ${ARM_IMAGE_TAG}
-docker manifest create ${DOCKER_IMAGE}:latest --amend ${X86_IMAGE_TAG} --amend ${ARM_IMAGE_TAG}
 docker manifest push ${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}
-docker manifest push ${DOCKER_IMAGE}:latest

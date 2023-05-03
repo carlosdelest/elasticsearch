@@ -10,10 +10,9 @@ steps:
   - label: ":s3: Run AWS S3 third party tests"
     command: ".buildkite/scripts/run-s3-third-party-tests.sh"
 
-  - wait
-
   - label: ":docker: Publish docker images"
     if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
+    cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
 
   - wait
