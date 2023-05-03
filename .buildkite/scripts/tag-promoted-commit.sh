@@ -1,6 +1,10 @@
 #!/bin/bash
 set -exuo pipefail
 
+scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+
+source $scripts_dir/utils/docker.sh
+
 echo "--- Tag git commit"
 echo "Tagging commit ${BUILDKITE_COMMIT}"
 git config user.name "elasticsearchmachine"
@@ -14,5 +18,4 @@ export GIT_ABBREV_COMMIT=git-${BUILDKITE_COMMIT:0:12}
 export DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
 export X86_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-x86_64
 export ARM_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-aarch64
-docker manifest create ${DOCKER_IMAGE}:latest --amend ${X86_IMAGE_TAG} --amend ${ARM_IMAGE_TAG}
-docker manifest push ${DOCKER_IMAGE}:latest
+push_docker_manifest ${DOCKER_IMAGE}:latest ${X86_IMAGE_TAG} ${ARM_IMAGE_TAG}
