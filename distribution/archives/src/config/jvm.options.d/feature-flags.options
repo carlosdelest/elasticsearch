@@ -1,0 +1,2 @@
+# Enable serverless transport flag which relaxes build commit consistency across nodes
+-Des.serverless_transport=true

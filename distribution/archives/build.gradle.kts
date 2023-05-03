@@ -70,6 +70,9 @@ distribution_archives {
                             fileMode = 0b111_101_101
                         }
                     }
+                    into("config") {
+                        from("src/config")
+                    }
                     into("lib/tools/serverless-server-cli") {
                         from(serverCli)
                     }
