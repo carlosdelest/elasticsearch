@@ -8,14 +8,19 @@
 
 package org.elasticsearch.synonyms;
 
+import org.elasticsearch.ElasticsearchParseException;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
 import org.elasticsearch.xcontent.ParseField;
 import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentParser;
+import org.elasticsearch.xcontent.XContentParserConfiguration;
+import org.elasticsearch.xcontent.XContentType;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -54,9 +59,22 @@ public class SynonymSet implements Writeable, ToXContentObject {
         return PARSER.apply(parser, null);
     }
 
+    public static SynonymSet fromXContentBytes(BytesReference source, XContentType xContentType) {
+        try (XContentParser parser = XContentHelper.createParser(XContentParserConfiguration.EMPTY, source, xContentType)) {
+            return SynonymSet.fromXContent(parser);
+        } catch (IOException e) {
+            throw new ElasticsearchParseException("Failed to parse: " + source.utf8ToString(), e);
+        }
+    }
+
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(SYNONYMS_FIELD.getPreferredName(), synonyms);
+        builder.startObject();
+        {
+            builder.field(SYNONYMS_FIELD.getPreferredName(), synonyms);
+        }
+        builder.endObject();
+
         return builder;
     }
 

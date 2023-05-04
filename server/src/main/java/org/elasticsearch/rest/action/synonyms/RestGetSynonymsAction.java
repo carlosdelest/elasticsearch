@@ -8,42 +8,32 @@
 
 package org.elasticsearch.rest.action.synonyms;
 
-import org.elasticsearch.action.synonyms.PutSynonymsAction;
+import org.elasticsearch.action.synonyms.GetSynonymsAction;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.RestRequest;
-import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.rest.action.RestToXContentListener;
 
 import java.io.IOException;
 import java.util.List;
 
-import static org.elasticsearch.rest.RestRequest.Method.PUT;
+import static org.elasticsearch.rest.RestRequest.Method.GET;
 
-public class RestPutSynonymsAction extends BaseRestHandler {
+public class RestGetSynonymsAction extends BaseRestHandler {
 
     @Override
     public String getName() {
-        return "synonyms_put_action";
+        return "synonyms_get_action";
     }
 
     @Override
     public List<Route> routes() {
-        return List.of(new Route(PUT, "/_synonyms/{name}"));
+        return List.of(new Route(GET, "/" + "_synonyms/{name}"));
     }
 
     @Override
     protected RestChannelConsumer prepareRequest(RestRequest restRequest, NodeClient client) throws IOException {
-        PutSynonymsAction.Request request = new PutSynonymsAction.Request(
-            restRequest.param("name"),
-            restRequest.content(),
-            restRequest.getXContentType()
-        );
-        return channel -> client.execute(PutSynonymsAction.INSTANCE, request, new RestToXContentListener<>(channel) {
-            @Override
-            protected RestStatus getStatus(PutSynonymsAction.Response response) {
-                return response.status();
-            }
-        });
+        GetSynonymsAction.Request request = new GetSynonymsAction.Request(restRequest.param("name"));
+        return channel -> client.execute(GetSynonymsAction.INSTANCE, request, new RestToXContentListener<>(channel));
     }
 }

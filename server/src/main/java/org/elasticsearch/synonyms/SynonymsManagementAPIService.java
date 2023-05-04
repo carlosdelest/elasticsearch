@@ -8,23 +8,30 @@
 
 package org.elasticsearch.synonyms;
 
+import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.DelegatingActionListener;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.FeatureFlag;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.indices.SystemIndexDescriptor;
 import org.elasticsearch.xcontent.ToXContent;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
+import org.elasticsearch.xcontent.XContentType;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.function.BiConsumer;
 
 import static org.elasticsearch.index.mapper.MapperService.SINGLE_MAPPING_NAME;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
@@ -72,6 +79,19 @@ public class SynonymsManagementAPIService {
         }
     }
 
+    public void getSynonymSet(String resourceName, ActionListener<SynonymSet> listener) {
+        final GetRequest getRequest = new GetRequest(SYNONYMS_INDEX).id(resourceName).realtime(true);
+        client.get(getRequest, new DelegatingIndexNotFoundActionListener<>(resourceName, listener, (l, getResponse) -> {
+            if (getResponse.isExists() == false) {
+                l.onFailure(new ResourceNotFoundException(resourceName));
+                return;
+            }
+            final BytesReference source = getResponse.getSourceInternal();
+            final SynonymSet result = SynonymSet.fromXContentBytes(getResponse.getSourceInternal(), XContentType.JSON);
+            l.onResponse(result);
+        }));
+    }
+
     private static XContentBuilder mappings() {
         try {
             XContentBuilder builder = jsonBuilder().startObject()
@@ -104,5 +124,31 @@ public class SynonymsManagementAPIService {
 
     public static boolean isEnabled() {
         return SYNONYMS_API_FEATURE_FLAG.isEnabled();
+    }
+
+    static class DelegatingIndexNotFoundActionListener<T, R> extends DelegatingActionListener<T, R> {
+
+        private final BiConsumer<ActionListener<R>, T> bc;
+        private final String resourceName;
+
+        DelegatingIndexNotFoundActionListener(String resourceName, ActionListener<R> delegate, BiConsumer<ActionListener<R>, T> bc) {
+            super(delegate);
+            this.bc = bc;
+            this.resourceName = resourceName;
+        }
+
+        @Override
+        public void onResponse(T t) {
+            bc.accept(delegate, t);
+        }
+
+        @Override
+        public void onFailure(Exception e) {
+            if (e instanceof IndexNotFoundException) {
+                delegate.onFailure(new ResourceNotFoundException(resourceName, e));
+                return;
+            }
+            delegate.onFailure(e);
+        }
     }
 }
