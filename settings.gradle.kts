@@ -51,6 +51,7 @@ include(":distribution:archives:integ-test-zip")
 include(":distribution:archives:linux-tar")
 include(":distribution:archives:linux-aarch64-tar")
 include(":distribution:archives:windows-zip")
+include(":distribution:bwc")
 include(":distribution:docker")
 
 /*
@@ -62,4 +63,10 @@ include(":distribution:tools:serverless-server-cli")
  * QA Projects
  */
 include(":qa:core-rest-test")
+include(":qa:rolling-upgrade")
 include(":qa:x-pack-rest-test")
+
+/*
+ * Test Framework
+ */
+include(":serverless-test-framework")

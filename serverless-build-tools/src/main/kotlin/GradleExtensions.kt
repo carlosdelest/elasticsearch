@@ -1,4 +1,5 @@
 import groovy.lang.Closure
+import org.elasticsearch.gradle.serverless.ServerlessDistributionDownloadPlugin
 import org.elasticsearch.gradle.testclusters.StandaloneRestIntegTestTask
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ModuleDependency
@@ -26,4 +27,11 @@ fun DependencyHandler.testArtifact(dependencyNotation: String, sourceSet: String
 fun StandaloneRestIntegTestTask.usesDefaultDistribution() {
     val closure = this.extensions.extraProperties.get("usesDefaultDistribution") as Closure<*>
     closure.call(this)
+}
+
+fun StandaloneRestIntegTestTask.usesBwcDistribution() {
+    val closure = this.extensions.extraProperties.get("usesBwcDistribution") as Closure<*>
+    // Use a hard-coded dummy version to indicate a BWC distribution
+    // This is handled by a custom resolver in ServerlessDistributionDownloadPlugin
+    closure.call(ServerlessDistributionDownloadPlugin.SERVERLESS_BWC_VERSION)
 }

@@ -1,0 +1,27 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
+ */
+
+package org.elasticsearch.test.cluster.serverless;
+
+import org.elasticsearch.test.cluster.ElasticsearchCluster;
+import org.elasticsearch.test.cluster.local.LocalClusterSpecBuilder;
+import org.elasticsearch.test.cluster.util.Version;
+
+public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
+    Version SERVERLESS_BWC_VERSION = Version.fromString("0.0.0");
+
+    /**
+     * Creates a new {@link ServerlessLocalClusterSpecBuilder} for defining a locally orchestrated cluster. Local clusters use a locally built
+     * Elasticsearch distribution.
+     *
+     * @return a builder for a local cluster
+     */
+    static LocalClusterSpecBuilder<ServerlessElasticsearchCluster> local() {
+        return new ServerlessLocalClusterSpecBuilder();
+    }
+}
