@@ -249,8 +249,10 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
 import org.elasticsearch.action.support.DestructiveOperations;
 import org.elasticsearch.action.support.TransportAction;
+import org.elasticsearch.action.synonyms.DeleteSynonymsAction;
 import org.elasticsearch.action.synonyms.GetSynonymsAction;
 import org.elasticsearch.action.synonyms.PutSynonymsAction;
+import org.elasticsearch.action.synonyms.TransportDeleteSynonymsAction;
 import org.elasticsearch.action.synonyms.TransportGetSynonymsAction;
 import org.elasticsearch.action.synonyms.TransportPutSynonymsAction;
 import org.elasticsearch.action.termvectors.MultiTermVectorsAction;
@@ -436,6 +438,7 @@ import org.elasticsearch.rest.action.search.RestKnnSearchAction;
 import org.elasticsearch.rest.action.search.RestMultiSearchAction;
 import org.elasticsearch.rest.action.search.RestSearchAction;
 import org.elasticsearch.rest.action.search.RestSearchScrollAction;
+import org.elasticsearch.rest.action.synonyms.RestDeleteSynonymsAction;
 import org.elasticsearch.rest.action.synonyms.RestGetSynonymsAction;
 import org.elasticsearch.rest.action.synonyms.RestPutSynonymsAction;
 import org.elasticsearch.tasks.Task;
@@ -777,6 +780,7 @@ public class ActionModule extends AbstractModule {
         // Synonyms
         actions.register(PutSynonymsAction.INSTANCE, TransportPutSynonymsAction.class);
         actions.register(GetSynonymsAction.INSTANCE, TransportGetSynonymsAction.class);
+        actions.register(DeleteSynonymsAction.INSTANCE, TransportDeleteSynonymsAction.class);
 
         return unmodifiableMap(actions.getRegistry());
     }
@@ -989,6 +993,7 @@ public class ActionModule extends AbstractModule {
         // Synonyms
         registerHandler.accept(new RestPutSynonymsAction());
         registerHandler.accept(new RestGetSynonymsAction());
+        registerHandler.accept(new RestDeleteSynonymsAction());
     }
 
     /**

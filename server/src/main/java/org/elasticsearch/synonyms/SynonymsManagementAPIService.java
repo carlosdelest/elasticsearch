@@ -13,6 +13,9 @@ import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DelegatingActionListener;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.DocWriteResponse;
+import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
@@ -63,11 +66,7 @@ public class SynonymsManagementAPIService {
     public void putSynonymSet(String resourceName, SynonymSet synonymSet, ActionListener<IndexResponse> listener) {
 
         try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
-            builder.startObject();
-            {
-                synonymSet.toXContent(builder, ToXContent.EMPTY_PARAMS);
-            }
-            builder.endObject();
+            synonymSet.toXContent(builder, ToXContent.EMPTY_PARAMS);
 
             final IndexRequest indexRequest = new IndexRequest(SYNONYMS_INDEX).opType(DocWriteRequest.OpType.INDEX)
                 .id(resourceName)
@@ -90,6 +89,22 @@ public class SynonymsManagementAPIService {
             final SynonymSet result = SynonymSet.fromXContentBytes(getResponse.getSourceInternal(), XContentType.JSON);
             l.onResponse(result);
         }));
+    }
+
+    public void deleteSynonymSet(String resourceName, ActionListener<DeleteResponse> listener) {
+        try {
+            final DeleteRequest deleteRequest = new DeleteRequest(SYNONYMS_INDEX).id(resourceName)
+                .setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+            client.delete(deleteRequest, new DelegatingIndexNotFoundActionListener<>(resourceName, listener, (l, deleteResponse) -> {
+                if (deleteResponse.getResult() == DocWriteResponse.Result.NOT_FOUND) {
+                    l.onFailure(new ResourceNotFoundException(resourceName));
+                    return;
+                }
+                l.onResponse(deleteResponse);
+            }));
+        } catch (Exception e) {
+            listener.onFailure(e);
+        }
     }
 
     private static XContentBuilder mappings() {
