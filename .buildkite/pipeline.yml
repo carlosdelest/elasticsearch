@@ -15,21 +15,23 @@ steps:
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
 
-  - wait
-
-  - trigger: serverless-gitops-update-stack-image-tag
-    label: ":argo: Update gitops image tag"
-    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
+  - label: ":rocket: Run E2E tests to check the component update"
+    trigger: service-or-stack-update-e2e-tests
+    branches: main
     build:
-      message: "Update image tag for Elasticsearch"
       env:
-        IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
-        NAMESPACE: elasticsearch-ci
         IMAGE_NAME: elasticsearch-serverless
-        SERVICE: elasticsearch-controller
-        COMMIT_MESSAGE: "gitops: update elasticsearch-serverless tag to elastic/elasticsearch-serverless@${BUILDKITE_COMMIT:0:12}"
+        IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
 
   - wait
+
+  - label: ":argo: Update Image using gpctl"
+    trigger: gpctl-promote
+    branches: main
+    build:
+      env:
+        SERVICE_REPO: $BUILDKITE_REPO
+        SERVICE_COMMIT_HASH: $BUILDKITE_COMMIT
 
   - label: ":git: Push promoted build tags"
     if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'

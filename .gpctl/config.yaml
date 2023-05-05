@@ -1,0 +1,16 @@
+name: elasticsearch-controller # this is the name of the service we would like to update, it's on purpose set to elasticsearch-controller
+image-repo: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+
+environments:
+  - qa
+  - staging
+
+ci-promotion-envs:
+  - dev
+  - qa
+
+gitops:
+  remote-url: https://github.com/elastic/serverless-gitops
+  service-path: services
+  commit-author: elastictoolingmachine
+  commit-email: cloud-sre-tooling@elastic.co
