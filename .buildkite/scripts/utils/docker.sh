@@ -3,10 +3,9 @@ set -e
 
 docker_login() {
   set +x
-  export DOCKER_REGISTRY_USERNAME="$(vault read -field=username secret/ci/elastic-elasticsearch-serverless/prod_docker_registry_credentials)"
-  export DOCKER_REGISTRY_PASSWORD="$(vault read -field=password secret/ci/elastic-elasticsearch-serverless/prod_docker_registry_credentials)"
+  DOCKER_REGISTRY_USERNAME="$(vault read -field=username secret/ci/elastic-elasticsearch-serverless/prod_docker_registry_credentials)"
+  DOCKER_REGISTRY_PASSWORD="$(vault read -field=password secret/ci/elastic-elasticsearch-serverless/prod_docker_registry_credentials)"
   echo $DOCKER_REGISTRY_PASSWORD | docker login -u $DOCKER_REGISTRY_USERNAME --password-stdin docker.elastic.co
-  unset DOCKER_REGISTRY_USERNAME DOCKER_REGISTRY_PASSWORD
   set -x
 }
 

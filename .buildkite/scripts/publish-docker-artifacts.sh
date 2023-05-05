@@ -8,10 +8,10 @@ echo "--- Build serverless docker images"
 source $scripts_dir/run-gradle.sh buildDockerImage buildAarch64DockerImage
 
 echo "--- Tag and push docker images and manifest"
-export GIT_ABBREV_COMMIT=git-${BUILDKITE_COMMIT:0:12}
-export DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
-export X86_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-x86_64
-export ARM_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-aarch64
+GIT_ABBREV_COMMIT=git-${BUILDKITE_COMMIT:0:12}
+DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+X86_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-x86_64
+ARM_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-aarch64
 
 docker tag elasticsearch-serverless:x86_64 ${X86_IMAGE_TAG}
 docker tag elasticsearch-serverless:aarch64 ${ARM_IMAGE_TAG}
