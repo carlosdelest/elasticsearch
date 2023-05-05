@@ -23,10 +23,6 @@ restResources {
 }
 
 tasks {
-    copyRestApiSpecsTask {
-        // This project doesn't have any tests of its own. It's just running the xpack elasticsearch rest tests.
-        isSkipHasRestTestCheck = true
-    }
     yamlRestTest {
         usesDefaultDistribution()
         systemProperty("tests.rest.blacklist", listOf(
