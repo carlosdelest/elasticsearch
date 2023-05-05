@@ -11,13 +11,15 @@ steps:
     command: ".buildkite/scripts/run-s3-third-party-tests.sh"
 
   - label: ":docker: Publish docker images"
+    key: docker-publish
     if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
 
   - label: ":rocket: Run E2E tests to check the component update"
     trigger: service-or-stack-update-e2e-tests
-    branches: main
+    depends_on: docker-publish
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     build:
       env:
         IMAGE_NAME: elasticsearch-serverless
