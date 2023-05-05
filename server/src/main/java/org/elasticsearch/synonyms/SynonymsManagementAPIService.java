@@ -19,6 +19,8 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
@@ -26,7 +28,10 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.FeatureFlag;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.query.MatchAllQueryBuilder;
 import org.elasticsearch.indices.SystemIndexDescriptor;
+import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.xcontent.ToXContent;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
@@ -34,6 +39,9 @@ import org.elasticsearch.xcontent.XContentType;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.BiConsumer;
 
 import static org.elasticsearch.index.mapper.MapperService.SINGLE_MAPPING_NAME;
@@ -102,6 +110,44 @@ public class SynonymsManagementAPIService {
                 }
                 l.onResponse(deleteResponse);
             }));
+        } catch (Exception e) {
+            listener.onFailure(e);
+        }
+    }
+
+    private static SynonymSetList mapSearchResponse(SearchResponse response) {
+        final List<SynonymSetListItem> listItems = Arrays.stream(response.getHits().getHits())
+            .map(SynonymsManagementAPIService::hitToSynonymSetListItem)
+            .toList();
+        return new SynonymSetList(listItems, response.getHits().getTotalHits().value);
+    }
+
+    private static SynonymSetListItem hitToSynonymSetListItem(SearchHit searchHit) {
+        @SuppressWarnings("unchecked")
+        final List<String> synonyms = (List<String>) searchHit.getSourceAsMap().get(SynonymSet.SYNONYMS_FIELD.getPreferredName());
+        return new SynonymSetListItem(searchHit.getId(), (long) synonyms.size());
+    }
+
+    public void listSynonymSets(ActionListener<SynonymSetList> listener) {
+        try {
+            final SearchSourceBuilder source = new SearchSourceBuilder().query(new MatchAllQueryBuilder())
+                .docValueField(SynonymSet.SYNONYMS_FIELD.getPreferredName());
+            final SearchRequest req = new SearchRequest(SYNONYMS_INDEX).source(source);
+            client.search(req, new ActionListener<>() {
+                @Override
+                public void onResponse(SearchResponse searchResponse) {
+                    listener.onResponse(mapSearchResponse(searchResponse));
+                }
+
+                @Override
+                public void onFailure(Exception e) {
+                    if (e instanceof IndexNotFoundException) {
+                        listener.onResponse(new SynonymSetList(Collections.emptyList(), 0L));
+                        return;
+                    }
+                    listener.onFailure(e);
+                }
+            });
         } catch (Exception e) {
             listener.onFailure(e);
         }
