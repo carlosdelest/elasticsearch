@@ -22,6 +22,7 @@ steps:
     if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     build:
       env:
+        NAMESPACE: elasticsearch-ci
         IMAGE_NAME: elasticsearch-serverless
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
 
