@@ -11,13 +11,21 @@ plugins {
     id("elasticsearch.internal-yaml-rest-test")
 }
 
-val dockerSource by configurations.creating
-val aarch64DockerSource by configurations.creating
+val dockerSource by configurations.creating {
+    attributes {
+        attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE)
+    }
+}
+val aarch64DockerSource by configurations.creating {
+    attributes {
+        attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE)
+    }
+}
 val versions = VersionProperties.getVersions()
 
 dependencies {
-    dockerSource(project(path = ":distribution:archives:linux-tar", configuration = "default"))
-    aarch64DockerSource(project(path = ":distribution:archives:linux-aarch64-tar", configuration = "default"))
+    dockerSource(project(":distribution:archives:linux-tar"))
+    aarch64DockerSource(project(":distribution:archives:linux-aarch64-tar"))
     yamlRestTestImplementation("org.testcontainers:testcontainers:1.17.6")
     yamlRestTestImplementation("org.slf4j:slf4j-api:1.7.36")
     yamlRestTestImplementation("org.apache.logging.log4j:log4j-slf4j-impl:2.19.0")
@@ -50,7 +58,7 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
     val transformTask = tasks.register<Sync>("transform${baseName}DockerContext") {
         into("${buildDir}/docker-context/${architecture.name}")
         from(upstreamContext) {
-            exclude("elasticsearch-*.tar.gz")
+            exclude("elasticsearch-${VersionProperties.getElasticsearch()}")
         }
         from(if (architecture == Architecture.AARCH64) aarch64DockerSource else dockerSource)
     }
