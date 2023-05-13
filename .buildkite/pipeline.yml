@@ -12,14 +12,14 @@ steps:
 
   - label: ":docker: Publish docker images"
     key: docker-publish
-    branches: main
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
 
   - label: ":rocket: Run E2E tests to check the component update"
     trigger: service-or-stack-update-e2e-tests
     depends_on: docker-publish
-    branches: main
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
     build:
       env:
         NAMESPACE: elasticsearch-ci
