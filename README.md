@@ -94,10 +94,10 @@ docker network create elastic
 
 #### Running a cluster with multiple instances
 
-If you would like to use a file system object store (see below if you would like to run with S3 instead), first create a permissive tmpfs directory `/tmp/objectstore` to use as a file system object store:
+If you would like to use a file system object store (see below if you would like to run with S3 instead), first create an empty permissive tmpfs directory `/tmp/objectstore` to use as a file system object store:
 
 ```shell
-mkdir /tmp/objectstore ; chmod a+rw -R /tmp/objectstore
+rm -rf /tmp/objectstore ; mkdir /tmp/objectstore ; chmod a+rw -R /tmp/objectstore
 ```
 
 And then if you would like to run a cluster with 3 instances, with a separate Index and Search instance, you can run:
