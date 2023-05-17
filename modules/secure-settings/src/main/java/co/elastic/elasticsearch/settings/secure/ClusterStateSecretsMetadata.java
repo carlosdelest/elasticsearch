@@ -1,0 +1,132 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0 and the Server Side Public License, v 1; you may not use this file except
+ * in compliance with, at your election, the Elastic License 2.0 or the Server
+ * Side Public License, v 1.
+ */
+
+package co.elastic.elasticsearch.settings.secure;
+
+import org.elasticsearch.TransportVersion;
+import org.elasticsearch.cluster.AbstractNamedDiffable;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.common.collect.Iterators;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.xcontent.ToXContent;
+
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Non-secret metadata for cluster secrets
+ *
+ * <p>This class contains public-facing information for file-based settings, such as
+ * a version number for the settings (which must be incremented for settings updates to
+ * be applied) and any errors in processing the file. This information does not need to
+ * be saved in snapshots or on disk, but it should be serialized when clients request
+ * cluster state.
+ */
+public class ClusterStateSecretsMetadata extends AbstractNamedDiffable<ClusterState.Custom> implements ClusterState.Custom {
+
+    /**
+     * The name for this data class
+     *
+     * <p>This name will be used to identify this {@link org.elasticsearch.common.io.stream.NamedWriteable} in cluster
+     * state. See {@link #getWriteableName()}.
+     */
+    public static final String TYPE = "file_secure_settings_metadata";
+
+    private final boolean success;
+    private final long version;
+    private final List<String> errorStackTrace;
+
+    private ClusterStateSecretsMetadata(boolean success, long version, List<String> errorStackTrace) {
+        this.success = success;
+        this.version = version;
+        this.errorStackTrace = errorStackTrace == null ? List.of() : errorStackTrace;
+    }
+
+    public ClusterStateSecretsMetadata(StreamInput in) throws IOException {
+        this.success = in.readBoolean();
+        this.version = in.readLong();
+        this.errorStackTrace = in.readStringList();
+    }
+
+    public static ClusterStateSecretsMetadata createSuccessful(long version) {
+        return new ClusterStateSecretsMetadata(true, version, List.of());
+    }
+
+    public static ClusterStateSecretsMetadata createError(long version, List<String> errorStackTrace) {
+        return new ClusterStateSecretsMetadata(false, version, errorStackTrace);
+    }
+
+    public boolean isSuccess() {
+        return success;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public List<String> getErrorStackTrace() {
+        return errorStackTrace;
+    }
+
+    @Override
+    public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params outerParams) {
+        return Iterators.single((builder, params) -> {
+            builder.field("success", this.success);
+            builder.field("version", this.version);
+            if (errorStackTrace.size() > 0) {
+                builder.stringListField("stack_trace", errorStackTrace);
+            }
+            return builder;
+        });
+    }
+
+    @Override
+    public String getWriteableName() {
+        return TYPE;
+    }
+
+    @Override
+    public TransportVersion getMinimalSupportedVersion() {
+        return TransportVersion.V_8_500_002;
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        out.writeBoolean(success);
+        out.writeLong(version);
+        out.writeStringCollection(errorStackTrace);
+    }
+
+    @Override
+    public String toString() {
+        return "ClusterStateSecretsMetadata{"
+            + "success="
+            + success
+            + ", version="
+            + version
+            + ", errorStackTrace="
+            + errorStackTrace
+            + '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ClusterStateSecretsMetadata that = (ClusterStateSecretsMetadata) o;
+        return success == that.success && version == that.version && Objects.equals(errorStackTrace, that.errorStackTrace);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(success, errorStackTrace, version);
+    }
+}

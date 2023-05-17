@@ -9,9 +9,11 @@
 package co.elastic.elasticsearch.settings.secure;
 
 import org.elasticsearch.client.internal.Client;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.io.stream.NamedWriteable;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
@@ -46,5 +48,17 @@ public class ServerlessSecureSettingsPlugin extends Plugin {
     ) {
         var fileSecureSettingsService = new FileSecureSettingsService(clusterService, environment);
         return List.of(fileSecureSettingsService);
+    }
+
+    /**
+     * Returns parsers for {@link NamedWriteable} this plugin will use over the transport protocol.
+     * @see NamedWriteableRegistry
+     */
+    @Override
+    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
+        return List.of(
+            new NamedWriteableRegistry.Entry(ClusterState.Custom.class, ClusterStateSecrets.TYPE, ClusterStateSecrets::new),
+            new NamedWriteableRegistry.Entry(ClusterState.Custom.class, ClusterStateSecretsMetadata.TYPE, ClusterStateSecretsMetadata::new)
+        );
     }
 }

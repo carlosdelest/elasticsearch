@@ -39,8 +39,9 @@ public class FileSecureSettingsService extends AbstractFileWatchingService {
     @Override
     protected void processFileChanges() throws InterruptedException, ExecutionException, IOException {
         try (LocallyMountedSecrets secrets = new LocallyMountedSecrets(environment)) {
+            ClusterStateSecrets clusterStateSecrets = new ClusterStateSecrets(secrets.getVersion(), secrets);
+            ClusterStateSecretsMetadata clusterStateSecretsMetadata = ClusterStateSecretsMetadata.createSuccessful(1);
             logger.info("Secure setting keys: {}", secrets.getSettingNames());
         }
-        ;
     }
 }
