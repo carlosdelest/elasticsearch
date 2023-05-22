@@ -41,6 +41,7 @@ include(":modules:ml-serverless")
 include(":modules:stateless")
 include(":modules:secure-settings")
 include(":modules:serverless-license")
+include(":modules:serverless-sigterm")
 
 /*
  * Distribution projects
