@@ -1,0 +1,23 @@
+{
+  "_internal.get_stateless_autoscaling_metrics":{
+    "documentation":{
+      "url":"TBD",
+      "description": "This is hardcoded API to integrate with ES Control Plane. Update url & this description upon API finalizing"
+    },
+    "stability":"experimental",
+    "visibility":"private",
+    "headers":{
+      "accept": [ "application/json"]
+    },
+    "url":{
+      "paths":[
+        {
+          "path":"/_internal/stateless/autoscaling",
+          "methods":[
+            "GET"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+---
+"Test get (hardcoded) stateless autoscaling metrics":
+  - do:
+      _internal.get_stateless_autoscaling_metrics: {}
+
+  - match:
+      $body: { "index-tier": { "metrics": { "load": 100 },"constraints": { "tier": { "min_num_nodes": 2,"min_heap_bytes": 2000 },"node": { "min_storage_bytes": 1000,"min_heap_bytes": 2000 } } },"search-tier": { "metrics": { "non_interactive_load": 0,"interactive_load": 10 },"constraints": { "tier": { "min_num_nodes": 2,"min_heap_bytes": 2000000 },"node": { "min_storage_bytes": 2000000,"min_heap_bytes": 2000 } } } }
+
