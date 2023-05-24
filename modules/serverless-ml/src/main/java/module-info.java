@@ -25,5 +25,5 @@ module org.elasticsearch.ml.serverless {
 
     provides org.elasticsearch.xpack.ml.MachineLearningExtension
         with
-            co.elastic.elasticsearch.ml.serverless.MachineLearningServerlessExtension;
+            co.elastic.elasticsearch.ml.serverless.ServerlessMachineLearningExtension;
 }

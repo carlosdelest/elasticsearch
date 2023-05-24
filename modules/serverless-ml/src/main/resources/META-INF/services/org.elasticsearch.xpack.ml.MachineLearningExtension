@@ -15,4 +15,4 @@
 # permission is obtained from Elasticsearch B.V.
 #
 
-co.elastic.elasticsearch.ml.serverless.MachineLearningServerlessExtension
+co.elastic.elasticsearch.ml.serverless.ServerlessMachineLearningExtension

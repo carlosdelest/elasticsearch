@@ -3,9 +3,9 @@ plugins {
 }
 
 esplugin {
-    name = "ml-serverless"
-    description = "Machine Learning Serverless module for Elasticsearch"
-    classname = "co.elastic.elasticsearch.ml.serverless.MachineLearningServerlessPlugin"
+    name = "serverless-ml"
+    description = "Serverless Machine Learning module for Elasticsearch"
+    classname = "co.elastic.elasticsearch.ml.serverless.ServerlessMachineLearningPlugin"
     extendedPlugins = listOf("x-pack-ml")
 }
 

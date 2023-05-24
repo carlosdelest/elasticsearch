@@ -23,9 +23,9 @@ import org.elasticsearch.plugins.Plugin;
 
 import java.util.List;
 
-public class MachineLearningServerlessPlugin extends Plugin {
+public class ServerlessMachineLearningPlugin extends Plugin {
 
-    public static final String NAME = "ml-serverless";
+    public static final String NAME = "serverless-ml";
 
     // These 3 settings enable parts of ML to be enabled or disabled at a more granular level than the entire plugin
     public static final Setting<Boolean> ANOMALY_DETECTION_ENABLED = Setting.boolSetting("xpack.ml.ad.enabled", true, Property.NodeScope);
@@ -36,7 +36,7 @@ public class MachineLearningServerlessPlugin extends Plugin {
     );
     public static final Setting<Boolean> NLP_ENABLED = Setting.boolSetting("xpack.ml.nlp.enabled", true, Property.NodeScope);
 
-    public MachineLearningServerlessPlugin() {}
+    public ServerlessMachineLearningPlugin() {}
 
     @Override
     public List<Setting<?>> getSettings() {

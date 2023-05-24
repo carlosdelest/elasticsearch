@@ -21,65 +21,65 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.ml.MachineLearningExtension;
 
-public class MachineLearningServerlessExtensionTests extends ESTestCase {
+public class ServerlessMachineLearningExtensionTests extends ESTestCase {
 
     public void testUseIlm() {
-        MachineLearningExtension mlServerlessExtension = new MachineLearningServerlessExtension();
+        MachineLearningExtension mlServerlessExtension = new ServerlessMachineLearningExtension();
         assertFalse(mlServerlessExtension.useIlm());
     }
 
     public void testIncludeNodeInfo() {
-        MachineLearningExtension mlServerlessExtension = new MachineLearningServerlessExtension();
+        MachineLearningExtension mlServerlessExtension = new ServerlessMachineLearningExtension();
         assertFalse(mlServerlessExtension.includeNodeInfo());
     }
 
     public void testIsAnomalyDetectionEnabled() {
-        MachineLearningExtension mlServerlessExtension = new MachineLearningServerlessExtension();
+        MachineLearningExtension mlServerlessExtension = new ServerlessMachineLearningExtension();
         expectThrows(IllegalStateException.class, mlServerlessExtension::isAnomalyDetectionEnabled);
-        mlServerlessExtension = new MachineLearningServerlessExtension();
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
         mlServerlessExtension.configure(Settings.EMPTY);
         assertTrue(mlServerlessExtension.isAnomalyDetectionEnabled());
-        mlServerlessExtension = new MachineLearningServerlessExtension();
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
         mlServerlessExtension.configure(
-            Settings.builder().put(MachineLearningServerlessPlugin.ANOMALY_DETECTION_ENABLED.getKey(), true).build()
+            Settings.builder().put(ServerlessMachineLearningPlugin.ANOMALY_DETECTION_ENABLED.getKey(), true).build()
         );
         assertTrue(mlServerlessExtension.isAnomalyDetectionEnabled());
-        mlServerlessExtension = new MachineLearningServerlessExtension();
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
         mlServerlessExtension.configure(
-            Settings.builder().put(MachineLearningServerlessPlugin.ANOMALY_DETECTION_ENABLED.getKey(), false).build()
+            Settings.builder().put(ServerlessMachineLearningPlugin.ANOMALY_DETECTION_ENABLED.getKey(), false).build()
         );
         assertFalse(mlServerlessExtension.isAnomalyDetectionEnabled());
     }
 
     public void testIsDataFrameAnalyticsEnabled() {
-        MachineLearningExtension mlServerlessExtension = new MachineLearningServerlessExtension();
+        MachineLearningExtension mlServerlessExtension = new ServerlessMachineLearningExtension();
         expectThrows(IllegalStateException.class, mlServerlessExtension::isDataFrameAnalyticsEnabled);
-        mlServerlessExtension = new MachineLearningServerlessExtension();
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
         mlServerlessExtension.configure(Settings.EMPTY);
         assertTrue(mlServerlessExtension.isDataFrameAnalyticsEnabled());
-        mlServerlessExtension = new MachineLearningServerlessExtension();
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
         mlServerlessExtension.configure(
-            Settings.builder().put(MachineLearningServerlessPlugin.DATA_FRAME_ANALYTICS_ENABLED.getKey(), true).build()
+            Settings.builder().put(ServerlessMachineLearningPlugin.DATA_FRAME_ANALYTICS_ENABLED.getKey(), true).build()
         );
         assertTrue(mlServerlessExtension.isDataFrameAnalyticsEnabled());
-        mlServerlessExtension = new MachineLearningServerlessExtension();
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
         mlServerlessExtension.configure(
-            Settings.builder().put(MachineLearningServerlessPlugin.DATA_FRAME_ANALYTICS_ENABLED.getKey(), false).build()
+            Settings.builder().put(ServerlessMachineLearningPlugin.DATA_FRAME_ANALYTICS_ENABLED.getKey(), false).build()
         );
         assertFalse(mlServerlessExtension.isDataFrameAnalyticsEnabled());
     }
 
     public void testIsNlpEnabled() {
-        MachineLearningExtension mlServerlessExtension = new MachineLearningServerlessExtension();
+        MachineLearningExtension mlServerlessExtension = new ServerlessMachineLearningExtension();
         expectThrows(IllegalStateException.class, mlServerlessExtension::isNlpEnabled);
-        mlServerlessExtension = new MachineLearningServerlessExtension();
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
         mlServerlessExtension.configure(Settings.EMPTY);
         assertTrue(mlServerlessExtension.isNlpEnabled());
-        mlServerlessExtension = new MachineLearningServerlessExtension();
-        mlServerlessExtension.configure(Settings.builder().put(MachineLearningServerlessPlugin.NLP_ENABLED.getKey(), true).build());
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
+        mlServerlessExtension.configure(Settings.builder().put(ServerlessMachineLearningPlugin.NLP_ENABLED.getKey(), true).build());
         assertTrue(mlServerlessExtension.isNlpEnabled());
-        mlServerlessExtension = new MachineLearningServerlessExtension();
-        mlServerlessExtension.configure(Settings.builder().put(MachineLearningServerlessPlugin.NLP_ENABLED.getKey(), false).build());
+        mlServerlessExtension = new ServerlessMachineLearningExtension();
+        mlServerlessExtension.configure(Settings.builder().put(ServerlessMachineLearningPlugin.NLP_ENABLED.getKey(), false).build());
         assertFalse(mlServerlessExtension.isNlpEnabled());
     }
 }

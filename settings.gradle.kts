@@ -37,10 +37,10 @@ if (file("elasticsearch/.git").exists() == false) {
 /*
  * Modules
  */
-include(":modules:ml-serverless")
 include(":modules:stateless")
 include(":modules:secure-settings")
 include(":modules:serverless-license")
+include(":modules:serverless-ml")
 include(":modules:serverless-sigterm")
 
 /*

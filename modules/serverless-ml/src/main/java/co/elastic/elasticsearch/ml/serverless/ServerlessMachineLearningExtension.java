@@ -23,9 +23,9 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.xpack.ml.MachineLearningExtension;
 
-public class MachineLearningServerlessExtension implements MachineLearningExtension {
+public class ServerlessMachineLearningExtension implements MachineLearningExtension {
 
-    private static final Logger logger = LogManager.getLogger(MachineLearningServerlessExtension.class);
+    private static final Logger logger = LogManager.getLogger(ServerlessMachineLearningExtension.class);
 
     private final SetOnce<Settings> settings = new SetOnce<>();
 
@@ -51,7 +51,7 @@ public class MachineLearningServerlessExtension implements MachineLearningExtens
         if (settings.get() == null) {
             throw new IllegalStateException("Too early to find out if anomaly detection is enabled");
         }
-        boolean isAnomalyDetectionEnabled = MachineLearningServerlessPlugin.ANOMALY_DETECTION_ENABLED.get(settings.get());
+        boolean isAnomalyDetectionEnabled = ServerlessMachineLearningPlugin.ANOMALY_DETECTION_ENABLED.get(settings.get());
         logger.debug("isAnomalyDetectionEnabled returning [{}]", isAnomalyDetectionEnabled);
         return isAnomalyDetectionEnabled;
     }
@@ -61,7 +61,7 @@ public class MachineLearningServerlessExtension implements MachineLearningExtens
         if (settings.get() == null) {
             throw new IllegalStateException("Too early to find out if data frame analytics is enabled");
         }
-        boolean isDataFrameAnalyticsEnabled = MachineLearningServerlessPlugin.DATA_FRAME_ANALYTICS_ENABLED.get(settings.get());
+        boolean isDataFrameAnalyticsEnabled = ServerlessMachineLearningPlugin.DATA_FRAME_ANALYTICS_ENABLED.get(settings.get());
         logger.debug("isDataFrameAnalyticsEnabled returning [{}]", isDataFrameAnalyticsEnabled);
         return isDataFrameAnalyticsEnabled;
     }
@@ -71,7 +71,7 @@ public class MachineLearningServerlessExtension implements MachineLearningExtens
         if (settings.get() == null) {
             throw new IllegalStateException("Too early to find out if NLP is enabled");
         }
-        boolean isNlpEnabled = MachineLearningServerlessPlugin.NLP_ENABLED.get(settings.get());
+        boolean isNlpEnabled = ServerlessMachineLearningPlugin.NLP_ENABLED.get(settings.get());
         logger.debug("isNlpEnabled returning [{}]", isNlpEnabled);
         return isNlpEnabled;
     }
