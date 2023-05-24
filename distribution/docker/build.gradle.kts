@@ -42,7 +42,7 @@ dependencies {
 
 restResources {
     restTests {
-        includeCore("indices.create", "info")
+        includeCore("indices.create")
     }
 }
 
@@ -92,6 +92,7 @@ tasks {
 }
 
 fun isArchitectureSupported(architecture: Architecture): Boolean {
-    val serviceProvider: Provider<DockerSupportService> = GradleUtils.getBuildService(project.gradle.sharedServices, DockerSupportPlugin.DOCKER_SUPPORT_SERVICE_NAME)
+    val serviceProvider: Provider<DockerSupportService> =
+        GradleUtils.getBuildService(project.gradle.sharedServices, DockerSupportPlugin.DOCKER_SUPPORT_SERVICE_NAME)
     return serviceProvider.get().dockerAvailability.supportedArchitectures().contains(architecture)
 }
