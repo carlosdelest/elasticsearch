@@ -1,0 +1,45 @@
+agents:
+  provider: "gcp"
+  machineType: "n1-standard-16"
+  image: family/elasticsearch-ubuntu-2022
+
+steps:
+  - label: ":java: Run serverless Elasticsearch tests"
+    command: ".buildkite/scripts/run-gradle.sh check"
+
+  - label: ":s3: Run AWS S3 third party tests"
+    command: ".buildkite/scripts/run-s3-third-party-tests.sh"
+
+  - label: ":docker: Publish docker images"
+    key: docker-publish
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
+    cancel_on_build_failing: true
+    command: ".buildkite/scripts/publish-docker-artifacts.sh"
+
+  - label: ":rocket: Run E2E tests to check the component update"
+    trigger: service-or-stack-update-e2e-tests
+    depends_on: docker-publish
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
+    build:
+      env:
+        NAMESPACE: elasticsearch-ci
+        IMAGE_NAME: elasticsearch-serverless
+        IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
+
+  - wait
+
+  - label: ":argo: Update Image using gpctl"
+    trigger: gpctl-promote
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
+    build:
+      env:
+        SERVICE_REPO: $BUILDKITE_REPO
+        SERVICE_COMMIT_HASH: $BUILDKITE_COMMIT
+
+  - label: ":git: Push promoted build tags"
+    if: 'build.branch == "main" && build.env("ELASTICSEARCH_SUBMODULE_COMMIT") == null'
+    command: ".buildkite/scripts/tag-promoted-commit.sh"
+
+  - label: ":git: Update elasticsearch submodule commit"
+    if: 'build.env("ELASTICSEARCH_SUBMODULE_COMMIT") != null'
+    command: ".buildkite/scripts/update-es-submodule.sh"
