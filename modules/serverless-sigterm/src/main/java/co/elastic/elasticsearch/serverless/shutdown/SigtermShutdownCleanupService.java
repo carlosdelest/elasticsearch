@@ -48,7 +48,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import static org.elasticsearch.cluster.metadata.NodesShutdownMetadata.getShutdownsOrEmpty;
 import static org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata.Type.SIGTERM;
 import static org.elasticsearch.core.Strings.format;
 
@@ -94,7 +93,7 @@ public class SigtermShutdownCleanupService implements ClusterStateListener {
         // Only fetch the time if necessary
         long now = Long.MIN_VALUE;
 
-        for (SingleNodeShutdownMetadata shutdown : eventShutdownMetadata.getAllNodeMetadataMap().values()) {
+        for (SingleNodeShutdownMetadata shutdown : eventShutdownMetadata.getAll().values()) {
             if (shutdown.getType() == SIGTERM) {
                 String nodeId = shutdown.getNodeId();
                 Scheduler.ScheduledCancellable cleanup = cleanups.get(shutdown.getNodeId());
@@ -188,7 +187,7 @@ public class SigtermShutdownCleanupService implements ClusterStateListener {
          * Remove the {@link SingleNodeShutdownMetadata} of type SIGTERM for all {@param nodeIds} that are no longer in the cluster.
          */
         static ClusterState cleanupSigtermShutdowns(Set<String> nodeIds, ClusterState initialState) {
-            var shutdownMetadata = new HashMap<>(getShutdownsOrEmpty(initialState).getAllNodeMetadataMap());
+            var shutdownMetadata = new HashMap<>(initialState.metadata().nodeShutdowns().getAll());
 
             boolean modified = false;
             for (String nodeId : nodeIds) {

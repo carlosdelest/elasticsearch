@@ -52,7 +52,6 @@ import static co.elastic.elasticsearch.serverless.shutdown.SigtermShutdownCleanu
 import static co.elastic.elasticsearch.serverless.shutdown.SigtermShutdownCleanupService.RemoveSigtermShutdownTaskExecutor;
 import static co.elastic.elasticsearch.serverless.shutdown.SigtermShutdownCleanupService.SubmitCleanupSigtermShutdown;
 import static co.elastic.elasticsearch.serverless.shutdown.SigtermShutdownCleanupService.computeDelay;
-import static org.elasticsearch.cluster.metadata.NodesShutdownMetadata.getShutdownsOrEmpty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
@@ -202,7 +201,7 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
                 withinGraceNode.getId(),
                 shutdownsMap.get(withinGraceNode.getId())
             ),
-            equalTo(update.getMetadata().nodeShutdowns())
+            equalTo(update.getMetadata().nodeShutdowns().getAll())
         );
 
         assertThat(sigtermShutdownService.cleanups.values(), hasSize(1));
@@ -308,7 +307,7 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
             Set.of(other.getId()),
             createClusterState(shutdowns, master)
         );
-        assertThat(getShutdownsOrEmpty(removedShutdown).getAllNodeMetadataMap().values(), hasSize(0));
+        assertThat(removedShutdown.metadata().nodeShutdowns().getAll().values(), hasSize(0));
 
         var shutdownAlreadyRemoved = createClusterState(new NodesShutdownMetadata(Collections.emptyMap()), master);
         assertThat(
@@ -333,8 +332,8 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
             Set.of(other.getId()),
             createClusterState(shutdowns, master)
         );
-        assertThat(getShutdownsOrEmpty(removedShutdown).getAllNodeMetadataMap().values(), hasSize(1));
-        assertThat(getShutdownsOrEmpty(removedShutdown), equalTo(shutdowns));
+        assertThat(removedShutdown.metadata().nodeShutdowns().getAll().values(), hasSize(1));
+        assertThat(removedShutdown.metadata().nodeShutdowns(), equalTo(shutdowns));
     }
 
     public void testDifferentGracePeriods() {
