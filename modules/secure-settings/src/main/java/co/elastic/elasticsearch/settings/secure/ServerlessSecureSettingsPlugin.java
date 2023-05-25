@@ -10,6 +10,7 @@ package co.elastic.elasticsearch.settings.secure;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.NamedDiff;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -18,6 +19,8 @@ import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.plugins.ReloadablePlugin;
+import org.elasticsearch.plugins.internal.ReloadAwarePlugin;
 import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -29,7 +32,10 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
 
-public class ServerlessSecureSettingsPlugin extends Plugin {
+public class ServerlessSecureSettingsPlugin extends Plugin implements ReloadAwarePlugin {
+
+    private ClusterStateSecretsListener clusterStateSecretsListener;
+
     @Override
     public Collection<Object> createComponents(
         Client client,
@@ -46,8 +52,14 @@ public class ServerlessSecureSettingsPlugin extends Plugin {
         Tracer tracer,
         AllocationService allocationService
     ) {
-        var fileSecureSettingsService = new FileSecureSettingsService(clusterService, environment);
-        return List.of(fileSecureSettingsService);
+        FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, environment);
+        this.clusterStateSecretsListener = new ClusterStateSecretsListener(clusterService, environment);
+        return List.of(fileSecureSettingsService, clusterStateSecretsListener);
+    }
+
+    @Override
+    public void setReloadCallback(ReloadablePlugin reloadablePlugin) {
+        this.clusterStateSecretsListener.setReloadCallback(reloadablePlugin);
     }
 
     /**
@@ -58,7 +70,9 @@ public class ServerlessSecureSettingsPlugin extends Plugin {
     public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
         return List.of(
             new NamedWriteableRegistry.Entry(ClusterState.Custom.class, ClusterStateSecrets.TYPE, ClusterStateSecrets::new),
-            new NamedWriteableRegistry.Entry(ClusterState.Custom.class, ClusterStateSecretsMetadata.TYPE, ClusterStateSecretsMetadata::new)
+            new NamedWriteableRegistry.Entry(NamedDiff.class, ClusterStateSecrets.TYPE, ClusterStateSecrets::readDiffFrom),
+            new NamedWriteableRegistry.Entry(ClusterState.Custom.class, ClusterStateSecretsMetadata.TYPE, ClusterStateSecretsMetadata::new),
+            new NamedWriteableRegistry.Entry(NamedDiff.class, ClusterStateSecretsMetadata.TYPE, ClusterStateSecretsMetadata::readDiffFrom)
         );
     }
 }

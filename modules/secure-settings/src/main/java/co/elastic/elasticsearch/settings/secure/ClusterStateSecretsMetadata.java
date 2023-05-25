@@ -11,6 +11,7 @@ package co.elastic.elasticsearch.settings.secure;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.cluster.AbstractNamedDiffable;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.NamedDiff;
 import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -103,6 +104,10 @@ public class ClusterStateSecretsMetadata extends AbstractNamedDiffable<ClusterSt
         out.writeBoolean(success);
         out.writeLong(version);
         out.writeStringCollection(errorStackTrace);
+    }
+
+    public static NamedDiff<ClusterState.Custom> readDiffFrom(StreamInput in) throws IOException {
+        return readDiffFrom(ClusterState.Custom.class, TYPE, in);
     }
 
     @Override

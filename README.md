@@ -131,11 +131,26 @@ file for your S3 credentials. It should look like this:
         "version": "1",
         "compatibility": "8.6.0"
     },
-    "secrets": {
+    "string_secrets": {
         "s3.client.test.access_key": "...",
         "s3.client.test.secret_key": "...",
         "s3.client.test.session_token": "..."
     }
+}
+```
+
+GCP clients take credentials in the form of a file. Since a file may have an encoding other than UTF-8,
+such secrets must be base64-encoded and put into a different section of the secrets file:
+
+```json
+{
+  "metadata": {
+    "version": "1",
+    "compatibility": "8.6.0"
+  },
+  "file_secrets": {
+    "gcs.client.test.credentials_file": "eyJtZXNzYWdlIjoibm90IHRoZSByZWFsIGdjcyBmb3JtYXQifQo="
+  }
 }
 ```
 
