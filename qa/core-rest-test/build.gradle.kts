@@ -75,6 +75,11 @@ tasks {
                 "indices.stats/90_global_ordinals/*",
                 "indices.stats/60_field_usage/Field usage stats",
 
+                // Temporarily Muted due to refresh_interval change
+                "indices.put_settings/all_path_options/put settings in prefix* index",
+                "indices.put_settings/all_path_options/put settings per index",
+                "indices.get_settings/30_defaults/Test retrieval of default settings",
+
                 // Those tests execute searches but expect a special number of shards,
                 // they need adjustments (if possible) to work in Stateless
                 "search/120_batch_reduce_size/batched_reduce_size 2 with 5 shards", // uses number_of_replicas: 0 and does not work with search shards
