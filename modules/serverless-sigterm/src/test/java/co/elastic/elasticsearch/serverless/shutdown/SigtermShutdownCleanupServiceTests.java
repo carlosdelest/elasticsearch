@@ -24,8 +24,8 @@ import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.NodesShutdownMetadata;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodeUtils;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.node.TestDiscoveryNode;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterServiceTaskQueue;
@@ -73,9 +73,9 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         when(mocks.threadPool.absoluteTimeInMillis()).thenReturn(120_000L);
         var taskQueue = newMockTaskQueue(mocks.clusterService);
         var sigtermShutdownService = new SigtermShutdownCleanupService(mocks.clusterService);
-        var master = TestDiscoveryNode.create("node1", randomNodeId());
-        var other = TestDiscoveryNode.create("node2", randomNodeId());
-        var another = TestDiscoveryNode.create("node3", randomNodeId());
+        var master = DiscoveryNodeUtils.create("node1", randomNodeId());
+        var other = DiscoveryNodeUtils.create("node2", randomNodeId());
+        var another = DiscoveryNodeUtils.create("node3", randomNodeId());
 
         sigtermShutdownService.clusterChanged(
             new ClusterChangedEvent(
@@ -105,9 +105,9 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
     public void testDontCleanIfPresent() {
         var mocks = newMocks();
         when(mocks.threadPool.absoluteTimeInMillis()).thenReturn(120_000L);
-        var master = TestDiscoveryNode.create("node1", randomNodeId());
-        var other = TestDiscoveryNode.create("node2", randomNodeId());
-        var another = TestDiscoveryNode.create("node3", randomNodeId());
+        var master = DiscoveryNodeUtils.create("node1", randomNodeId());
+        var other = DiscoveryNodeUtils.create("node2", randomNodeId());
+        var another = DiscoveryNodeUtils.create("node3", randomNodeId());
 
         var shutdowns = new NodesShutdownMetadata(
             Map.of(
@@ -145,12 +145,12 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         var sigtermShutdownService = new SigtermShutdownCleanupService(mocks.clusterService);
 
         long grace = GRACE_PERIOD;
-        var master = TestDiscoveryNode.create("master1", randomNodeId());
-        var notTermNode = TestDiscoveryNode.create("notTerm2", randomNodeId()); // not term
-        var stillExistingNode = TestDiscoveryNode.create("stillExisting3", randomNodeId()); // exists
-        var withinGraceNode = TestDiscoveryNode.create("withinGrace4", randomNodeId()); // within grace
-        var outOfGrace2XNode = TestDiscoveryNode.create("outOfGrace2X5", randomNodeId()); // out of grace
-        var justOutOfGraceNode = TestDiscoveryNode.create("justOutOfGrace6", randomNodeId()); // also out of grace
+        var master = DiscoveryNodeUtils.create("master1", randomNodeId());
+        var notTermNode = DiscoveryNodeUtils.create("notTerm2", randomNodeId()); // not term
+        var stillExistingNode = DiscoveryNodeUtils.create("stillExisting3", randomNodeId()); // exists
+        var withinGraceNode = DiscoveryNodeUtils.create("withinGrace4", randomNodeId()); // within grace
+        var outOfGrace2XNode = DiscoveryNodeUtils.create("outOfGrace2X5", randomNodeId()); // out of grace
+        var justOutOfGraceNode = DiscoveryNodeUtils.create("justOutOfGrace6", randomNodeId()); // also out of grace
 
         DiscoveryNodes.Builder nodesBuilder = DiscoveryNodes.builder();
         nodesBuilder.masterNodeId(master.getId());
@@ -215,10 +215,10 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         when(mocks.threadPool.absoluteTimeInMillis()).thenReturn(now);
         newMockTaskQueue(mocks.clusterService);
         long grace = GRACE_PERIOD;
-        var master = TestDiscoveryNode.create("master1", randomNodeId());
-        var other = TestDiscoveryNode.create("other2", randomNodeId()); // not term
-        var another = TestDiscoveryNode.create("another3", randomNodeId()); // exists
-        var yetAnother = TestDiscoveryNode.create("yetAnother4", randomNodeId()); // within grace
+        var master = DiscoveryNodeUtils.create("master1", randomNodeId());
+        var other = DiscoveryNodeUtils.create("other2", randomNodeId()); // not term
+        var another = DiscoveryNodeUtils.create("another3", randomNodeId()); // exists
+        var yetAnother = DiscoveryNodeUtils.create("yetAnother4", randomNodeId()); // within grace
 
         DiscoveryNodes.Builder nodesBuilder = DiscoveryNodes.builder();
         nodesBuilder.masterNodeId(master.getId());
@@ -265,8 +265,8 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         long now = grace * 1_000;
         when(mocks.threadPool.absoluteTimeInMillis()).thenReturn(now);
 
-        var master = TestDiscoveryNode.create("node1", randomNodeId());
-        var other = TestDiscoveryNode.create("node2", randomNodeId());
+        var master = DiscoveryNodeUtils.create("node1", randomNodeId());
+        var other = DiscoveryNodeUtils.create("node2", randomNodeId());
         var shutdowns = new NodesShutdownMetadata(Map.of(other.getId(), sigtermShutdown(other.getId(), grace, now - 10 * grace)));
         var clusterChanged = new ClusterChangedEvent(
             this.getTestName(),
@@ -300,8 +300,8 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         long now = grace * 1_000;
         when(mocks.threadPool.absoluteTimeInMillis()).thenReturn(now);
 
-        var master = TestDiscoveryNode.create("node1", randomNodeId());
-        var other = TestDiscoveryNode.create("node2", randomNodeId());
+        var master = DiscoveryNodeUtils.create("node1", randomNodeId());
+        var other = DiscoveryNodeUtils.create("node2", randomNodeId());
         var shutdowns = new NodesShutdownMetadata(Map.of(other.getId(), sigtermShutdown(other.getId(), grace, now - 10 * grace)));
         var removedShutdown = RemoveSigtermShutdownTaskExecutor.cleanupSigtermShutdowns(
             Set.of(other.getId()),
@@ -323,8 +323,8 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         long now = grace * 1_000;
         when(mocks.threadPool.absoluteTimeInMillis()).thenReturn(now);
 
-        var master = TestDiscoveryNode.create("node1", randomNodeId());
-        var other = TestDiscoveryNode.create("node2", randomNodeId());
+        var master = DiscoveryNodeUtils.create("node1", randomNodeId());
+        var other = DiscoveryNodeUtils.create("node2", randomNodeId());
         var shutdowns = new NodesShutdownMetadata(
             Map.of(other.getId(), otherShutdown(other.getId(), SingleNodeShutdownMetadata.Type.REMOVE, now - 10 * grace).build())
         );
@@ -339,13 +339,13 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
     public void testDifferentGracePeriods() {
         var mocks = newMocks();
         newMockTaskQueue(mocks.clusterService);
-        var node1 = TestDiscoveryNode.create("node1", randomNodeId());
+        var node1 = DiscoveryNodeUtils.create("node1", randomNodeId());
         long node1Grace = 93 * 60 * 1_000;
         long node1Started = 33 * 1_000;
-        var node2 = TestDiscoveryNode.create("node2", randomNodeId());
+        var node2 = DiscoveryNodeUtils.create("node2", randomNodeId());
         long node2Grace = 45 * 60 * 1_000;
         long node2Started = 6 * 60 * 1_000;
-        var node3 = TestDiscoveryNode.create("node3", randomNodeId());
+        var node3 = DiscoveryNodeUtils.create("node3", randomNodeId());
         long node3Grace = 2 * 60 * 60 * 1_000;
         long node3Started = node3Grace + 5 * 60 * 1_000;
         var shutdowns = new NodesShutdownMetadata(
