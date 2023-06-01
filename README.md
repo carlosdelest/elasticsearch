@@ -9,7 +9,7 @@ This repository is home for code specific to the "serverless" distribution of El
 Serverless Elasticsearch is currently built with "core" [Elasticsearch](https://github.com/elastic/elasticsearch) as a
 baseline, with additional modules and changes as necessary. Elasticsearch is brought in as a source build dependency via
 a [Git submodule](https://www.git-scm.com/book/en/v2/Git-Tools-Submodules). As such, interacting with the code in this
-repository is a bit different, depending on whether you are modifying serverless code, or core Elasticsearch code. To 
+repository is a bit different, depending on whether you are modifying serverless code, or core Elasticsearch code. To
 start, when doing a clone, you'll need to instruct Git to also clone any submodules, like so:
 
 ```shell
@@ -25,7 +25,7 @@ git submodule update --init
 
 ### Updating submodules
 
-As with cloning, just doing a `git pull` will not automatically update submodules unless the `--recurse-submodules` 
+As with cloning, just doing a `git pull` will not automatically update submodules unless the `--recurse-submodules`
 flag is passed. For convenience, it's recommended to set the `submodule.recurse` option so that this flag is implicitly
 passed for all supported git operations.
 
@@ -53,18 +53,18 @@ Changes not staged for commit:
 	modified:   elasticsearch (new commits)
 ```
 
-At which point the typical `git add`, `git commit` and `git push` workflow would be used to push these changes to a 
+At which point the typical `git add`, `git commit` and `git push` workflow would be used to push these changes to a
 remote branch. Similarly, you can revert uncommitted changes by simply doing `git checkout elasticsearch`.
 
 ### Working on submodule code
 
-Working on code in the submodule is for most intents and purposes no different than working directly in the 
+Working on code in the submodule is for most intents and purposes no different than working directly in the
 Elasticsearch repository. All git commands inside the `elasticsearch` directory work just as if you were working in a
 discrete clone of that repository. You can create and change branches, push upstream, and manage remotes, just as you
-would normally. The primary difference is that when pull the root repository, the `elasticsearch` directory will be 
+would normally. The primary difference is that when pull the root repository, the `elasticsearch` directory will be
 placed in a **detached HEAD** state. Before committing any changes to the submodule repository you will first need to switch
-to a branch. In general, you'll typically create a new branch, commit your change, then push that branch to your 
-personal fork from which you will create a pull request. Essentially, no different than how we work on core 
+to a branch. In general, you'll typically create a new branch, commit your change, then push that branch to your
+personal fork from which you will create a pull request. Essentially, no different than how we work on core
 Elasticsearch today.
 
 ### Importing into IntelliJ
@@ -72,7 +72,42 @@ Elasticsearch today.
 The serverless project shares all the same IDE integration as core Elasticsearch so in terms of tooling and IntelliJ
 integration, please refer to the [Elasticsearch contributor guide](/elasticsearch/CONTRIBUTING.md).
 
+### Running and debugging locally
+
+You can build a local platform-specific serverless distribution as you would with Elasticsearch via:
+
+```shell
+./gradlew localDistro
+```
+
+Serverless Elasticsearch isn't designed to be typically run in a single-node configuration. Generally, search,
+ingest and ML nodes are separated. For convenience, you can run a local 3 node cluster by just using the `run`
+task.
+
+```shell
+./gradlew :run
+```
+
+If you want to debug your running cluster you can add the `--debug-jvm` flag. Before doing so ensure you start
+three debug run configurations in IntelliJ. These are created for you on project import. You'll need to start
+"Debug Elasticsearch" as well as the matching "node 2" and "node 3" run configurations to start debuggers for
+each running node.
+
+#### Customizing the cluster
+
+If need be, you can pass additional settings to the test cluster via system properties with the `tests.es`
+prefix. For example:
+
+```shell
+./gradlew :run -Dtests.es.security.enabled=false
+```
+
+If you need to make further customizations, the cluster definition for this task [lives here](serverless-build-tools/src/main/kotlin/elasticsearch.serverless-run.gradle.kts).
+
 ### Building and running locally with docker
+
+Using the `run` Gradle task is the most convenient way to locally run serverless Elasticsearch. If you want
+you can also run via Docker if need be.
 
 The Serverless Elasticsearch x86 image can be built using the command:
 

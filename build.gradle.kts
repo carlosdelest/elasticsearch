@@ -12,6 +12,8 @@ plugins {
     id("elasticsearch.serverless-ide")
     id("elasticsearch.serverless-testing")
     id("elasticsearch.versions")
+    id("elasticsearch.internal-testclusters")
+    id("elasticsearch.serverless-run")
 }
 
 allprojects {
