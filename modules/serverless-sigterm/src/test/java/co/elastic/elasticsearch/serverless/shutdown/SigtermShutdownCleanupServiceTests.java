@@ -278,7 +278,7 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
 
         assertThat(sigtermShutdownService.cleanups.values(), hasSize(1));
         assertThat(sigtermShutdownService.cleanups, hasKey(other.getId()));
-        var cancelled = new MockScheduleCancelable(true);
+        var cancelled = new MockScheduleCancellable(true);
         sigtermShutdownService.cleanups.put(other.getId(), cancelled);
 
         sigtermShutdownService.clusterChanged(clusterChanged);
@@ -286,7 +286,7 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         assertThat(sigtermShutdownService.cleanups, hasKey(other.getId()));
         assertThat(sigtermShutdownService.cleanups.get(other.getId()), not(sameInstance(cancelled)));
 
-        var notCancelled = new MockScheduleCancelable(false);
+        var notCancelled = new MockScheduleCancellable(false);
         sigtermShutdownService.cleanups.put(other.getId(), notCancelled);
         assertThat(sigtermShutdownService.cleanups.values(), hasSize(1));
         assertThat(sigtermShutdownService.cleanups, hasKey(other.getId()));
@@ -446,7 +446,7 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         return masterServiceTaskQueue;
     }
 
-    private record MockScheduleCancelable(boolean isCancelled) implements Scheduler.ScheduledCancellable {
+    public record MockScheduleCancellable(boolean isCancelled) implements Scheduler.ScheduledCancellable {
         @Override
         public int compareTo(Delayed o) {
             return 0;

@@ -22,6 +22,12 @@ esplugin {
     name = "serverless-sigterm"
     description = "Sigterm shutdown module for serverless Elasticsearch"
     classname = "co.elastic.elasticsearch.serverless.shutdown.ServerlessSigtermPlugin"
+    extendedPlugins = listOf("x-pack-core")
+}
+
+dependencies {
+    compileOnly(xpackModule("core"))
+    implementation(xpackModule("shutdown"))
 }
 
 configurations {
