@@ -63,8 +63,8 @@ public class SigtermTerminationHandler implements TerminationHandler {
             latch.countDown();
         }));
         try {
-            boolean latchTimedOut = latch.await(timeout.millis(), TimeUnit.MILLISECONDS);
-            if (latchTimedOut && timeout.millis() != 0) {
+            boolean latchReachedZero = latch.await(timeout.millis(), TimeUnit.MILLISECONDS);
+            if (latchReachedZero == false && timeout.millis() != 0) {
                 logger.warn("timed out while waiting for shutdown to complete gracefully, shutting down anyway");
             }
         } catch (InterruptedException ex) {
@@ -94,6 +94,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
                 logger.info(format("node ready for shutdown with status %s", status.overallStatus()));
                 latch.countDown();
             } else {
+                logger.debug("polled for shutdown status: {}", status);
                 threadPool.schedule(() -> pollStatusAndLoop(latch), pollInterval, ThreadPool.Names.GENERIC);
             }
         }, ex -> {
