@@ -20,6 +20,8 @@ package co.elastic.elasticsearch.serverless.shutdown;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateAckListener;
+import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.NodesShutdownMetadata;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
@@ -30,6 +32,7 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterServiceTaskQueue;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.threadpool.Scheduler;
@@ -46,7 +49,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 
 import static co.elastic.elasticsearch.serverless.shutdown.SigtermShutdownCleanupService.CleanupSigtermShutdownTask;
 import static co.elastic.elasticsearch.serverless.shutdown.SigtermShutdownCleanupService.RemoveSigtermShutdownTaskExecutor;
@@ -57,6 +62,7 @@ import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.sameInstance;
+import static org.hamcrest.Matchers.theInstance;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -387,6 +393,80 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         assertThat(computeDelay(now, now - running, grace), equalTo(new TimeValue(grace_safety - running)));
 
         assertThat(computeDelay(now, now - 2 * grace_safety, grace), equalTo(TimeValue.ZERO));
+    }
+
+    public void testBatchesSuccess() {
+        var master = DiscoveryNodeUtils.create("master1", randomNodeId());
+        var nodeAExists = DiscoveryNodeUtils.create("nodeAExists", randomNodeId());
+        var nodeBGone = DiscoveryNodeUtils.create("nodeBGone", randomNodeId());
+
+        var state = ClusterState.builder(new ClusterName("test-cluster"))
+            .routingTable(RoutingTable.builder().build())
+            .metadata(
+                Metadata.builder()
+                    .putCustom(
+                        NodesShutdownMetadata.TYPE,
+                        new NodesShutdownMetadata(
+                            Map.of(
+                                nodeAExists.getId(),
+                                sigtermShutdown(nodeAExists.getId(), 1_000, 200),
+                                nodeBGone.getId(),
+                                sigtermShutdown(nodeBGone.getId(), 1_000, 200)
+                            )
+                        )
+                    )
+                    .build()
+            )
+            .nodes(DiscoveryNodes.builder().masterNodeId(master.getId()).localNodeId(master.getId()).add(master).add(nodeAExists))
+            .build();
+
+        var contextA = new TestCleanContext(new AtomicBoolean(false), new CleanupSigtermShutdownTask(nodeAExists.getId()));
+        var contextB = new TestCleanContext(new AtomicBoolean(false), new CleanupSigtermShutdownTask(nodeBGone.getId()));
+        ClusterState newState = null;
+        try {
+            newState = new RemoveSigtermShutdownTaskExecutor().execute(
+                new ClusterStateTaskExecutor.BatchExecutionContext<>(state, List.of(contextA, contextB), () -> null)
+            );
+        } catch (Exception e) {
+            fail(e.toString());
+        }
+        assertThat(newState, not(theInstance(state)));
+        assertNotNull(newState.metadata().nodeShutdowns().get(nodeAExists.getId()));
+        assertNull(newState.metadata().nodeShutdowns().get(nodeBGone.getId()));
+        assertTrue(contextA.successCalled.get());
+        assertTrue(contextB.successCalled.get());
+    }
+
+    private record TestCleanContext(AtomicBoolean successCalled, CleanupSigtermShutdownTask task)
+        implements
+            ClusterStateTaskExecutor.TaskContext<CleanupSigtermShutdownTask> {
+        @Override
+        public CleanupSigtermShutdownTask getTask() {
+            return task;
+        }
+
+        @Override
+        public void success(Runnable onPublicationSuccess) {
+            onPublicationSuccess.run();
+            successCalled.set(true);
+        }
+
+        @Override
+        public void success(Consumer<ClusterState> publishedStateConsumer) {}
+
+        @Override
+        public void success(Runnable onPublicationSuccess, ClusterStateAckListener clusterStateAckListener) {}
+
+        @Override
+        public void success(Consumer<ClusterState> publishedStateConsumer, ClusterStateAckListener clusterStateAckListener) {}
+
+        @Override
+        public void onFailure(Exception failure) {}
+
+        @Override
+        public Releasable captureResponseHeaders() {
+            return null;
+        }
     }
 
     static SingleNodeShutdownMetadata.Builder otherShutdown(String id, SingleNodeShutdownMetadata.Type type, long startedAt) {

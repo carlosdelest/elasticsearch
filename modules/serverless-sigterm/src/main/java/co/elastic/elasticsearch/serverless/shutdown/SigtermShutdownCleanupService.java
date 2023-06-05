@@ -173,7 +173,7 @@ public class SigtermShutdownCleanupService implements ClusterStateListener {
 
         @Override
         public ClusterState execute(BatchExecutionContext<CleanupSigtermShutdownTask> batchExecutionContext) throws Exception {
-            return cleanupSigtermShutdowns(
+            ClusterState state = cleanupSigtermShutdowns(
                 batchExecutionContext.taskContexts()
                     .stream()
                     .map(TaskContext::getTask)
@@ -181,6 +181,8 @@ public class SigtermShutdownCleanupService implements ClusterStateListener {
                     .collect(Collectors.toUnmodifiableSet()),
                 batchExecutionContext.initialState()
             );
+            batchExecutionContext.taskContexts().forEach(taskContext -> taskContext.success(() -> {}));
+            return state;
         }
 
         /**
