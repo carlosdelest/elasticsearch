@@ -4,6 +4,10 @@ agents:
   image: family/elasticsearch-ubuntu-2022
 
 steps:
+  - label: ":git: Validate elasticsearch submodule"
+    branches: main
+    command: ".buildkite/scripts/validate-submodule.sh"
+
   - label: ":java: Run serverless Elasticsearch tests"
     command: ".buildkite/scripts/run-gradle.sh check"
 
