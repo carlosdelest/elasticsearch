@@ -40,15 +40,15 @@ public class ClusterStateSecretsListener implements ClusterStateListener {
     public void clusterChanged(ClusterChangedEvent event) {
         assert reloadCallback != null : "Cluster state secrets listener has not been initialized";
 
-        ClusterStateSecrets previousMetadata = event.previousState().custom(ClusterStateSecrets.TYPE);
-        ClusterStateSecrets currentMetadata = event.state().custom(ClusterStateSecrets.TYPE);
+        ClusterStateSecrets previousSecrets = event.previousState().custom(ClusterStateSecrets.TYPE);
+        ClusterStateSecrets currentSecrets = event.state().custom(ClusterStateSecrets.TYPE);
 
-        if (currentMetadata == null) {
+        if (currentSecrets == null) {
             return;
         }
 
-        if (previousMetadata == null || currentMetadata.getVersion() > previousMetadata.getVersion()) {
-            SecureSettings secrets = currentMetadata.getSettings();
+        if (previousSecrets == null || currentSecrets.getVersion() > previousSecrets.getVersion()) {
+            SecureSettings secrets = currentSecrets.getSettings();
             try {
                 reloadCallback.reload(Settings.builder().put(environment.settings(), false).setSecureSettings(secrets).build());
             } catch (Exception e) {

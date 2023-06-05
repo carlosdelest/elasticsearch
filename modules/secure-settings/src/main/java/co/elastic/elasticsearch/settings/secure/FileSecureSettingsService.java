@@ -10,9 +10,11 @@ package co.elastic.elasticsearch.settings.secure;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.SimpleBatchedExecutor;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterServiceTaskQueue;
 import org.elasticsearch.common.Priority;
@@ -20,14 +22,14 @@ import org.elasticsearch.common.file.AbstractFileWatchingService;
 import org.elasticsearch.common.settings.LocallyMountedSecrets;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
-import java.util.stream.Stream;
+import java.util.function.Consumer;
 
 public class FileSecureSettingsService extends AbstractFileWatchingService {
 
@@ -35,12 +37,14 @@ public class FileSecureSettingsService extends AbstractFileWatchingService {
 
     private final Environment environment;
     private final ClusterService clusterService;
-    private final MasterServiceTaskQueue<UpdateTask> updateQueue;
+    private final MasterServiceTaskQueue<SecretsUpdateTask> updateQueue;
+    private final MasterServiceTaskQueue<ErrorUpdateTask> errorQueue;
 
     public FileSecureSettingsService(ClusterService clusterService, Environment environment) {
         super(clusterService, LocallyMountedSecrets.resolveSecretsFile(environment));
         this.clusterService = clusterService;
-        this.updateQueue = clusterService.createTaskQueue("secure_settings", Priority.NORMAL, new TaskExecutor());
+        this.updateQueue = clusterService.createTaskQueue("secure_settings", Priority.NORMAL, new SecretsTaskExecutor());
+        this.errorQueue = clusterService.createTaskQueue("secure_settings_errors", Priority.NORMAL, new ErrorTaskExecutor());
         this.environment = environment;
     }
 
@@ -55,8 +59,9 @@ public class FileSecureSettingsService extends AbstractFileWatchingService {
     protected void processFileChanges() throws InterruptedException, ExecutionException, IOException {
         ClusterStateSecrets settings;
         ClusterStateSecretsMetadata metadata;
+        LocallyMountedSecrets secrets = null;
         try {
-            LocallyMountedSecrets secrets = new LocallyMountedSecrets(environment);
+            secrets = new LocallyMountedSecrets(environment);
 
             clusterService.getClusterSettings().validate(Settings.builder().setSecureSettings(secrets).build(), true);
 
@@ -65,41 +70,49 @@ public class FileSecureSettingsService extends AbstractFileWatchingService {
             process(settings, metadata);
         } catch (Exception e) {
             ClusterStateSecretsMetadata previousMetadata = clusterService.state().custom(ClusterStateSecretsMetadata.TYPE);
-            metadata = ClusterStateSecretsMetadata.createError(
-                previousMetadata != null ? previousMetadata.getVersion() : -1,
-                Stream.concat(Stream.of(e.getMessage()), Arrays.stream(e.getStackTrace()).map(StackTraceElement::toString)).toList()
-            );
-            processError(metadata);
             logger.warn("Error reading secure settings:", e);
+            metadata = ClusterStateSecretsMetadata.createError(secrets == null ? -1 : secrets.getVersion(), getStackTraceAsList(e));
+
+            if (previousMetadata == null || metadata.getVersion() != previousMetadata.getVersion()) {
+                processError(metadata);
+            }
         }
     }
 
+    private static List<String> getStackTraceAsList(Exception e) {
+        return List.of(ExceptionsHelper.stackTrace(e));
+    }
+
     public void processError(ClusterStateSecretsMetadata metadata) {
-        ClusterState initialState = clusterService.state();
-        ClusterStateSecrets existingSettings = initialState.custom(ClusterStateSecrets.TYPE);
-        UpdateTask task = new UpdateTask(existingSettings, metadata);
-        updateQueue.submitTask("file-secure-settings[error]", task, TimeValue.timeValueSeconds(30L));
+        ErrorUpdateTask task = new ErrorUpdateTask(metadata);
+        errorQueue.submitTask("file-secure-settings[error]", task, TimeValue.timeValueSeconds(30L));
     }
 
     public void process(ClusterStateSecrets settings, ClusterStateSecretsMetadata metadata) {
         ClusterState initialState = clusterService.state();
-        ClusterStateSecrets existingMetadata = initialState.custom(ClusterStateSecrets.TYPE);
+        ClusterStateSecretsMetadata existingMetadata = initialState.custom(ClusterStateSecretsMetadata.TYPE);
 
         if (existingMetadata != null && metadata.getVersion() <= existingMetadata.getVersion()) {
             return;
         }
         logger.debug("Updating secure settings to version {}", metadata.getVersion());
-        UpdateTask task = new UpdateTask(settings, metadata);
+        SecretsUpdateTask task = new SecretsUpdateTask(settings, metadata, this::processError);
         updateQueue.submitTask("file-secure-settings[version=" + metadata.getVersion() + "]", task, TimeValue.timeValueSeconds(30L));
     }
 
-    private static class UpdateTask extends ClusterStateUpdateTask {
+    private static class SecretsUpdateTask extends MetadataHoldingUpdateTask {
         private final ClusterStateSecrets settings;
         private final ClusterStateSecretsMetadata metadata;
+        private final Consumer<ClusterStateSecretsMetadata> errorHandler;
 
-        UpdateTask(ClusterStateSecrets settings, ClusterStateSecretsMetadata metadata) {
+        SecretsUpdateTask(
+            ClusterStateSecrets settings,
+            ClusterStateSecretsMetadata metadata,
+            Consumer<ClusterStateSecretsMetadata> errorHandler
+        ) {
             this.settings = settings;
             this.metadata = metadata;
+            this.errorHandler = errorHandler;
         }
 
         @Override
@@ -115,23 +128,57 @@ public class FileSecureSettingsService extends AbstractFileWatchingService {
         @Override
         public void onFailure(Exception e) {
             logger.warn("Failed to update cluster state for secure settings", e);
+            errorHandler.accept(ClusterStateSecretsMetadata.createError(metadata.getVersion(), List.of(ExceptionsHelper.stackTrace(e))));
         }
 
-        private ClusterStateSecretsMetadata getMetadata() {
+        ClusterStateSecretsMetadata getMetadata() {
             return this.metadata;
         }
     }
 
-    private static class TaskExecutor implements ClusterStateTaskExecutor<UpdateTask> {
+    // package-private for testing - exposes metadata for tests
+    abstract static class MetadataHoldingUpdateTask extends ClusterStateUpdateTask {
+        abstract ClusterStateSecretsMetadata getMetadata();
+    }
+
+    private static class ErrorUpdateTask extends MetadataHoldingUpdateTask {
+        private final ClusterStateSecretsMetadata metadata;
+
+        ErrorUpdateTask(ClusterStateSecretsMetadata metadata) {
+            this.metadata = metadata;
+        }
 
         @Override
-        public ClusterState execute(BatchExecutionContext<UpdateTask> batchExecutionContext) throws Exception {
-            List<? extends TaskContext<UpdateTask>> contexts = batchExecutionContext.taskContexts();
+        public ClusterState execute(ClusterState currentState) throws Exception {
+            if (this.metadata.equals(currentState.custom(ClusterStateSecretsMetadata.TYPE)) == false) {
+                ClusterState.Builder builder = ClusterState.builder(currentState);
+                builder.putCustom(ClusterStateSecretsMetadata.TYPE, metadata);
+                return builder.build();
+            }
+            return currentState;
+        }
+
+        @Override
+        public void onFailure(Exception e) {
+            logger.warn("Failed to add error to cluster state metadata", e);
+        }
+
+        @Override
+        ClusterStateSecretsMetadata getMetadata() {
+            return this.metadata;
+        }
+    }
+
+    private static class SecretsTaskExecutor implements ClusterStateTaskExecutor<SecretsUpdateTask> {
+
+        @Override
+        public ClusterState execute(BatchExecutionContext<SecretsUpdateTask> batchExecutionContext) {
+            List<? extends TaskContext<SecretsUpdateTask>> contexts = batchExecutionContext.taskContexts();
             ClusterState initialState = batchExecutionContext.initialState();
 
             Long maxSettingsVersion = null;
-            Optional<UpdateTask> task = Optional.empty();
-            for (TaskContext<UpdateTask> context : contexts) {
+            Optional<SecretsUpdateTask> task = Optional.empty();
+            for (TaskContext<SecretsUpdateTask> context : contexts) {
                 Long version = context.getTask().getMetadata().getVersion();
                 if (maxSettingsVersion == null || version.compareTo(maxSettingsVersion) > 0) {
                     maxSettingsVersion = version;
@@ -141,9 +188,28 @@ public class FileSecureSettingsService extends AbstractFileWatchingService {
             }
 
             if (task.isPresent()) {
-                return task.get().execute(batchExecutionContext.initialState());
+                try {
+                    return task.get().execute(batchExecutionContext.initialState());
+                } catch (Exception e) {
+                    task.get().errorHandler.accept(
+                        ClusterStateSecretsMetadata.createError(task.get().metadata.getVersion(), getStackTraceAsList(e))
+                    );
+                }
             }
             return initialState;
+        }
+    }
+
+    private static class ErrorTaskExecutor extends SimpleBatchedExecutor<ErrorUpdateTask, Void> {
+
+        @Override
+        public Tuple<ClusterState, Void> executeTask(ErrorUpdateTask errorUpdateTask, ClusterState clusterState) throws Exception {
+            return Tuple.tuple(errorUpdateTask.execute(clusterState), null);
+        }
+
+        @Override
+        public void taskSucceeded(ErrorUpdateTask errorUpdateTask, Void unused) {
+            // do nothing
         }
     }
 }
