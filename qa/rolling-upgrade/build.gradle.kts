@@ -22,7 +22,7 @@ plugins {
 dependencies {
     javaRestTestImplementation(testArtifact(xpackModule("plugin")))
     javaRestTestImplementation(testArtifact(xpackModule("core")))
-    javaRestTestImplementation(testArtifact(xpackModule("service-account"), "javaRestTest"))
+    javaRestTestImplementation(testArtifact("org.elasticsearch.plugin.security.qa:service-account", "javaRestTest"))
 }
 
 tasks {

@@ -13,7 +13,7 @@ plugins {
 dependencies {
     yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
     yamlRestTestRuntimeOnly(testArtifact(xpackModule("core")))
-    yamlRestTestRuntimeOnly(testArtifact(xpackModule("service-account"), "javaRestTest"))
+    yamlRestTestRuntimeOnly(testArtifact("org.elasticsearch.plugin.security.qa:service-account", "javaRestTest"))
 }
 
 restResources {
