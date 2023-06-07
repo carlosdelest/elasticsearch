@@ -1,0 +1,78 @@
+apiVersion: k8s.elastic.co/v1
+kind: ElasticsearchAppConfig
+metadata:
+  annotations:
+    k8s.elastic.co/tracing-context: '{"parent":"00-ade1eb946d38028a65714ef31f9419c6-dc9d7b372bf2c303-01","state":"es=s:1"}'
+  labels:
+    k8s.elastic.co/application-id: es
+    k8s.elastic.co/deployment-id: ess-integtest-dev
+    k8s.elastic.co/organization-id: "1"
+    k8s.elastic.co/project-id: "ess-integtest-dev-project-id-1"
+  name: es
+spec:
+  image: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:git-ff099f2eac32-x86_64
+  components:
+    master:
+      capacityLimits:
+        memoryMax: 4G
+        memoryMin: 2G
+      compatibleAvailabilityZones: []
+      hardwareProfile: default
+      memoryCpuRatio: 0.5
+      memoryIncrements:
+        - 1Gi
+        - 2Gi
+        - 4Gi
+        - 8Gi
+      memoryStorageRatio: 10
+      storageClass: standard-elastic
+      zoneCount: 1
+    search:
+      capacityLimits:
+        memoryMax: 8G
+        memoryMin: 2G
+      compatibleAvailabilityZones: []
+      hardwareProfile: default
+      memoryCpuRatio: 0.5
+      memoryIncrements:
+        - 1Gi
+        - 2Gi
+        - 4Gi
+        - 8Gi
+      memoryStorageRatio: 10
+      storageClass: standard-elastic
+      zoneCount: 1
+    index:
+      capacityLimits:
+        memoryMax: 8G
+        memoryMin: 2G
+      compatibleAvailabilityZones: []
+      hardwareProfile: default
+      memoryCpuRatio: 0.5
+      memoryIncrements:
+        - 1Gi
+        - 2Gi
+        - 4Gi
+        - 8Gi
+      memoryStorageRatio: 10
+      storageClass: standard-elastic
+      zoneCount: 1
+  objectStore:
+    # reference the previously created secret here
+    clientSecretName: gcs-credentials
+    gcs:
+      bucket: ess-dev-test-object-store
+  users:
+    - username: elastic
+      password_hash: JDJhJDEwJHVKZVNFRHMwdXE4SlE0VS9QWjNCYy50eGR5UGRuaHh2VXBwNlFDeGpZQnZ3V0hrNUJLRXFXCg==
+      roles:
+        - superuser
+    - username: elastic-test-user
+      password_hash: JDJhJDEwJFJtNUFNdm1LVnBBSVFoZTBFVTBtUE96dnZOU1lNN3BSRHdzNWloZjVZNjV0eG9rRDg4UWxl
+      roles:
+        - superuser
+    - username: elastic-internal-kibana-system
+      password_hash: JDJhJDEwJFBnNkkzeDZzZk5hVTMvcS8yQ29hcC4xUVZFSW1lUmpOTDI0UXFCdXhRR0M2NzBWSnVGQVRHCg==
+      roles:
+        - kibana_system
+  network: {}

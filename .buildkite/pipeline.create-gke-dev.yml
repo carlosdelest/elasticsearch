@@ -1,0 +1,35 @@
+agents:
+  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.4"
+  memory: "4G"
+
+env:
+  BUILDKITE_DIR: ".buildkite"
+  GCLOUD_PROJECT: "${GCLOUD_PROJECT:-elastic-cloud-dev}"
+  GCLOUD_REGION: "${GCLOUD_REGION:-us-central1}"
+  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-ess-integtest-dev-ci}"
+  GCLOUD_SERVICE_ACCOUNT_VAULT_PATH: "secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-sa"
+  COSMOSDB_ACCOUNT_NAME: "${COSMOSDB_ACCOUNT_NAME:-es-serverless-integtest-dev-ci}"
+  ENV_UNIQUE_NAME: "${ENV_UNIQUE_NAME}"
+  GITOPS_PR_COMMIT: ${GITOPS_PR_COMMIT:-HEAD}
+  GITOPS_PR_BRANCH: ${GITOPS_PR_BRANCH:-main}
+  USER: es-delivery
+
+steps:
+  # Deploy CI dev env from the pipeline defined in the gitops repo (HEAD)
+  - label: ":k8s: :argocd: Create CI dev environment & deploy services"
+    trigger: k8s-gitops-create-devenv
+    key: create-devenv
+    build:
+      message: "${BUILDKITE_MESSAGE}"
+      commit: "${GITOPS_PR_COMMIT}"
+      branch: "${GITOPS_PR_BRANCH}"
+      env:
+        GCLOUD_PROJECT: "${GCLOUD_PROJECT}"
+        GCLOUD_REGION: "${GCLOUD_REGION}"
+        GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME}"
+        COSMOSDB_ACCOUNT_NAME: "${COSMOSDB_ACCOUNT_NAME}"
+        ENV_UNIQUE_NAME: "${ENV_UNIQUE_NAME}"
+        USER: "${USER}"
+  - wait: ~
+  - label: ":k8s: Setup ess http proxy"
+    command: "$BUILDKITE_DIR/scripts/setup-ess-proxy.sh"

@@ -104,6 +104,73 @@ prefix. For example:
 
 If you need to make further customizations, the cluster definition for this task [lives here](serverless-build-tools/src/main/kotlin/elasticsearch.serverless-run.gradle.kts).
 
+### Running in a kubernetes based serverless platform dev environment
+
+To run Serverless Elasticsearch in a kubernetes cluster environment you can use predifined buildkite pipelines. The main
+branch and working branches are supported.
+
+To deploy a branch into a kubernetes cluster 
+
+1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev
+   This deploys the selected branch into a kubernetes based dev environment (see https://docs.elastic.dev/serverless/dev-env)
+   by publishing a docker snapshot into our internal docker registry and then using kubernetes to apply 
+   a elasticsearchappconfig with that docker snapshot as ess image. 
+   
+   The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/53#annotation-ess-public-url
+
+
+   Alternatively you can use the buildkite commandline interface (https://github.com/buildkite/cli) to trigger a deployment   
+   ```
+   > bk build create --pipeline elastic/elasticsearch-serverless-deploy-dev --branch buildkite-dev-deploy-pipeline-setup
+   Triggering a build on pipeline elastic/elasticsearch-serverless-deploy-dev: Created #56 ✅
+   Check out your build at https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/56 🚀
+
+   # Resolve ess url from commandline using curl, jq, htmlq
+   > curl --silent -H "Authorization: Bearer bkua_a64eb34866110c2d205ff1e0bb37040c4b9c392b" "https://api.buildkite.com/v2/organizations/elastic/pipelines/elasticsearch-serverless-deploy-dev/builds/55/annotations" | jq '. | .[] | select(.context=="ess-public-url") | .body_html' | htmlq -t a
+
+   https://ess-dev-integtest-git-b150520767e3-project.es.34.29.251.82.ip.es.io
+   ```
+2. To access that elasticsearch instance the username and password can be resolved from vault
+
+   ```
+   ESS_USERNAME=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
+
+   ESS_PASSWORD=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
+
+   curl -k -u $ESS_USERNAME:$ESS_PASSWORD https://ess-dev-integtest-git-b150520767e3-project.es.34.29.251.82.ip.es.io
+   {
+      "name" : "es-es-search-656774785c-5gbqh",
+      "cluster_name" : "es",
+      "cluster_uuid" : "A3YYSejwTNWSABdAMbboDw",
+      "version" : {
+        "number" : "8.9.0-SNAPSHOT",
+        "build_flavor" : "default",
+        "build_type" : "docker",
+        "build_hash" : "9a89ea7405f295a1f55a3e483b11a6d2f9fd5dee",
+        "build_date" : "2023-06-06T12:46:41.749764546Z",
+        "build_snapshot" : true,
+        "lucene_version" : "9.7.0",
+        "minimum_wire_compatibility_version" : "7.17.0",
+        "minimum_index_compatibility_version" : "7.0.0"
+      },
+      "tagline" : "You Know, for Search"
+    }
+    ```
+   
+After its usage cleanup the ess deployment by triggering the undeploy-dev pipeline at https://buildkite.com/elastic/elasticsearch-serverless-undeploy-dev. Choose the same branch and commit you've created the deployment earlier. Alternatively you can use the buildkite commandline interface and run 
+
+```
+# for deleting a deployment from the head of this branch
+> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch 
+```
+
+or 
+
+```
+# for deleting a deployment of a certain commit 
+> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch --commit b150520767e3 
+```
+
 ### Building and running locally with docker
 
 Using the `run` Gradle task is the most convenient way to locally run serverless Elasticsearch. If you want

@@ -4,5 +4,7 @@ agents:
   image: family/elasticsearch-ubuntu-2022
 
 steps:
-  - label: "Example Test"
-    command: echo "Hello!"
+  - label: ":docker: Publish docker images"
+    key: docker-publish
+    cancel_on_build_failing: true
+    command: ".buildkite/scripts/publish-docker-artifacts.sh"
