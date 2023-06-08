@@ -170,7 +170,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
   description: Elasticsearch serverless end to end tests
-  name: buildkite-pipeline-elasticsearch-e2e-tests
+  name: buildkite-pipeline-elasticsearch-serverless-e2e-tests
 spec:
   type: buildkite-pipeline
   owner: group:elasticsearch-team
