@@ -1,3 +1,20 @@
+/*
+ * ELASTICSEARCH CONFIDENTIAL
+ * __________________
+ *
+ * Copyright Elasticsearch B.V. All rights reserved.
+ *
+ * NOTICE:  All information contained herein is, and remains
+ * the property of Elasticsearch B.V. and its suppliers, if any.
+ * The intellectual and technical concepts contained herein
+ * are proprietary to Elasticsearch B.V. and its suppliers and
+ * may be covered by U.S. and Foreign Patents, patents in
+ * process, and are protected by trade secret or copyright
+ * law.  Dissemination of this information or reproduction of
+ * this material is strictly forbidden unless prior written
+ * permission is obtained from Elasticsearch B.V.
+ */
+
 import org.elasticsearch.gradle.internal.conventions.precommit.LicenseHeadersTask
 import org.elasticsearch.gradle.internal.precommit.CheckstylePrecommitPlugin
 import org.elasticsearch.gradle.internal.precommit.LoggerUsagePrecommitPlugin
@@ -7,8 +24,8 @@ import org.elasticsearch.gradle.internal.precommit.LoggerUsagePrecommitPlugin
  */
 allprojects {
     tasks.withType<LicenseHeadersTask>().configureEach {
-        // We don't need to enforce license headers on private code
-        onlyIf { false }
+        additionalLicense("CONFI", "Confidential", "ELASTICSEARCH CONFIDENTIAL")
+        approvedLicenses = listOf("Confidential")
     }
 
     plugins.withType<CheckstylePrecommitPlugin> {
