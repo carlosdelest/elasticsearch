@@ -4,5 +4,4 @@
       _internal.get_stateless_autoscaling_metrics: {}
 
   - match:
-      $body: { "index-tier": { "metrics": { "load": 100 },"constraints": { "tier": { "min_num_nodes": 2,"min_heap_bytes": 2000 },"node": { "min_storage_bytes": 1000,"min_heap_bytes": 2000 } } },"search-tier": { "metrics": { "non_interactive_load": 0,"interactive_load": 10 },"constraints": { "tier": { "min_num_nodes": 2,"min_heap_bytes": 2000000 },"node": { "min_storage_bytes": 2000000,"min_heap_bytes": 2000 } } }, "ml-tier" : { "metrics": { "current_ml_nodes": 3,"remove_container_size_gb": 0 },"constraints": { "tier": { "min_num_nodes": 2,"min_ml_memory_bytes": 20000000,"min_processors": 6 },"node": { "min_ml_memory_bytes": 20000000,"min_processors": 3 } } } }
-
+      $body: {"index-tier": {"metrics": {"indexing_load": [4, 10, 20], "min_memory_in_bytes": 1000}}, "search-tier": {"metrics": {"interactive_load": 10, "non_interactive_load": 0}}}
