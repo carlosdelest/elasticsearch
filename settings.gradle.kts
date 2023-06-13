@@ -43,6 +43,7 @@ include(":modules:serverless-license")
 include(":modules:serverless-transform")
 include(":modules:serverless-ml")
 include(":modules:serverless-sigterm")
+include(":modules:serverless-operator")
 
 /*
  * Distribution projects
