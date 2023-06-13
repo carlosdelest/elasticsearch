@@ -169,6 +169,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
     }
 
     // test valid -> invalid
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/377")
     public void testInvalidSettingsAfterExistingSettings() throws Exception {
         internalCluster().setBootstrapMasterNodeIndex(0);
         logger.info("--> start data node / non master node");
