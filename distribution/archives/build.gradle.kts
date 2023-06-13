@@ -1,3 +1,5 @@
+import java.nio.file.Path
+
 plugins {
     id("elasticsearch.internal-distribution-archive-setup")
     id("elasticsearch.distro")
@@ -10,9 +12,21 @@ val copyDistributionDefaults by tasks.registering(Sync::class) {
 project(":modules").subprojects.forEach { distro.copyModule(copyDistributionDefaults, it) }
 
 val serverCli by configurations.creating
+val bundledPlugins by configurations.creating {
+    attributes {
+        attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE)
+    }
+}
 
 dependencies {
     serverCli(project(":distribution:tools:serverless-server-cli"))
+    bundledPlugins("org.elasticsearch.plugin:analysis-icu")
+    bundledPlugins("org.elasticsearch.plugin:analysis-nori")
+    bundledPlugins("org.elasticsearch.plugin:analysis-smartcn")
+    bundledPlugins("org.elasticsearch.plugin:analysis-ukrainian")
+    bundledPlugins("org.elasticsearch.plugin:analysis-kuromoji")
+    bundledPlugins("org.elasticsearch.plugin:analysis-phonetic")
+    bundledPlugins("org.elasticsearch.plugin:analysis-stempel")
 }
 
 distribution_archives {
@@ -77,6 +91,17 @@ distribution_archives {
                     }
                     into("lib/tools/serverless-server-cli") {
                         from(serverCli)
+                    }
+                    into("modules") {
+                        // Bundle analysis language plugins as modules
+                        from(bundledPlugins) {
+                            eachFile {
+                                // Determine owning plugin and rewrite path
+                                val filePath = Path.of(path).run { subpath(2, count()) }
+                                val pluginName = file.toPath().run { subpath(0, count() - filePath.count() )}.fileName
+                                path = "elasticsearch-${version}/modules/${pluginName}/${filePath}"
+                            }
+                        }
                     }
                 }
             }
