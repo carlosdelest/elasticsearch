@@ -108,10 +108,6 @@ tasks {
                 "nodes.stats/11_indices_metrics/indices mappings does not exist in shards level", // Failure at [nodes.stats/11_indices_metrics:540]: field [nodes.$node_id.indices.mappings.total_count] is not greater than or equal to [2]
                 "nodes.stats/11_indices_metrics/indices mappings exact count test for indices level", // Failure at [nodes.stats/11_indices_metrics:502]: field [nodes.$node_id.indices.mappings.total_count] is not greater than or equal to [26]
 
-                // Require Get API and Search API as well as ES-5354
-                "termvectors/10_basic/Basic tests for termvector get",
-                "mtermvectors/10_basic/Basic tests for multi termvector get",
-
                 // Probably unsupported in stateless
                 "indices.shrink/*/*",
                 "indices.split/*/*",
