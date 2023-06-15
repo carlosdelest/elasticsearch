@@ -4,4 +4,4 @@
       _internal.get_stateless_autoscaling_metrics: {}
 
   - match:
-      $body: {"index-tier": {"metrics": {"indexing_load": [4, 10, 20], "min_memory_in_bytes": 1000}}, "search-tier": {"metrics": {"interactive_load": 10, "non_interactive_load": 0}}}
+      $body: {"index-tier": {"metrics": {"indexing_load": [{"value": 4, "quality": "exact"}, {"value": 10, "quality": "exact"}, {"value": 20, "quality": "exact"}], "min_memory_in_bytes": {"value": 1000, "quality": "exact"}}}, "search-tier": {"metrics": {"interactive_load": {"value": 10, "quality": "exact"}, "non_interactive_load": {"value": 0, "quality": "exact"}}}}
