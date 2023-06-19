@@ -44,6 +44,7 @@ include(":modules:serverless-transform")
 include(":modules:serverless-ml")
 include(":modules:serverless-sigterm")
 include(":modules:serverless-operator")
+include(":modules:serverless-rest-root")
 
 /*
  * Distribution projects
