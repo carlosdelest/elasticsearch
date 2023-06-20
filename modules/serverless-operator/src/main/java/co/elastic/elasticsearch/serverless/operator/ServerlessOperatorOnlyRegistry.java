@@ -26,7 +26,6 @@ import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestResponse;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.rest.Scope;
-import org.elasticsearch.rest.ServerlessScope;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xpack.security.operator.OperatorOnlyRegistry;
@@ -83,7 +82,7 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
                 return () -> errorMessage;
             } else if (restHandler.routes().stream().map(RestHandler.Route::getPath).anyMatch(partiallyRestrictedPaths::contains)) {
                 assert Scope.PUBLIC.equals(scope);
-                restRequest.markResponseRestricted(ServerlessScope.SERVERLESS_RESTRICTION);
+                restRequest.markResponseRestricted("serverless");
                 logger.trace("Marked request for uri [{}] as restricted for serverless", restRequest.uri());
             }
         } catch (Exception e) {

@@ -78,7 +78,6 @@ distribution_archives {
                     exclude("*/modules/transform")
                     exclude("*/modules/x-pack-voting-only-node")
                     exclude("*/modules/x-pack-shutdown")
-                    exclude("*/modules/rest-root")
                 }
                 into("elasticsearch-${version}") {
                     from(copyDistributionDefaults)

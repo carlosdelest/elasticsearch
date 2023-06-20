@@ -1,4 +1,0 @@
-operator:
-  - usernames: ["x_pack_rest_user"]
-    realm_type: "file"
-    auth_type: "realm"
