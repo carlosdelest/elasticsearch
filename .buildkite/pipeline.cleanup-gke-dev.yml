@@ -1,0 +1,7 @@
+agents:
+  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.4"
+  memory: "4G"
+
+steps:
+  - label: "Dummy Cleanup GKE Dev pipeline"
+    command: echo "Hello!"
