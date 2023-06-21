@@ -25,7 +25,7 @@ spec:
         - 4Gi
         - 8Gi
       memoryStorageRatio: 10
-      storageClass: standard-elastic
+      storageClass: elasticsearch-storage
       zoneCount: 1
     search:
       capacityLimits:
@@ -40,7 +40,7 @@ spec:
         - 4Gi
         - 8Gi
       memoryStorageRatio: 10
-      storageClass: standard-elastic
+      storageClass: elasticsearch-storage
       zoneCount: 1
     index:
       capacityLimits:
@@ -55,7 +55,7 @@ spec:
         - 4Gi
         - 8Gi
       memoryStorageRatio: 10
-      storageClass: standard-elastic
+      storageClass: elasticsearch-storage
       zoneCount: 1
   objectStore:
     # reference the previously created secret here
