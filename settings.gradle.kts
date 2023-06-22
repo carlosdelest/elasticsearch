@@ -39,11 +39,12 @@ if (file("elasticsearch/.git").exists() == false) {
  */
 include(":modules:stateless")
 include(":modules:secure-settings")
+include(":modules:serverless-autoscaling")
 include(":modules:serverless-license")
-include(":modules:serverless-transform")
 include(":modules:serverless-ml")
-include(":modules:serverless-sigterm")
 include(":modules:serverless-operator")
+include(":modules:serverless-sigterm")
+include(":modules:serverless-transform")
 
 /*
  * Distribution projects
