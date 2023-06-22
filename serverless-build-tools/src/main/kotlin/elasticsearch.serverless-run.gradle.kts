@@ -3,10 +3,12 @@ import org.elasticsearch.gradle.testclusters.RunTask
 import org.elasticsearch.gradle.testclusters.TestDistribution
 
 val testClusters = project.extensions.getByName("testClusters") as NamedDomainObjectContainer<ElasticsearchCluster>
+val repoDir = file("${buildDir}/runTask/repo")
 
 val runCluster by testClusters.registering {
     setTestDistribution(TestDistribution.DEFAULT)
     numberOfNodes = 3
+    setting("path.repo", repoDir.absolutePath)
     setting("stateless.enabled", "true")
     setting("stateless.object_store.type", "fs")
     setting("stateless.object_store.bucket", "stateless")
