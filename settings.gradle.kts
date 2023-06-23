@@ -40,6 +40,7 @@ if (file("elasticsearch/.git").exists() == false) {
 include(":modules:stateless")
 include(":modules:secure-settings")
 include(":modules:serverless-autoscaling")
+include(":modules:serverless-kibana")
 include(":modules:serverless-license")
 include(":modules:serverless-ml")
 include(":modules:serverless-operator")

@@ -1,0 +1,39 @@
+"Expected kibana indices have fast refresh applied":
+  - skip:
+      features: ["allowed_warnings_regex"]
+  - do:
+      indices.create:
+        index: ".kibana_7"
+  - do:
+      indices.create:
+        index: ".kibana_alerting_cases_1"
+  - do:
+      indices.create:
+        index: ".kibana_analytics_2"
+  - do:
+      indices.create:
+        index: ".kibana_ingest_4"
+  - do:
+      indices.create:
+        index: ".kibana_task_manager_11"
+  - do:
+      indices.create:
+        index: ".kibana_security_solution_10"
+  - do:
+      indices.create:
+        index: ".kibana_security_session_30"
+  - do:
+      indices.get_settings:
+        expand_wildcards: "open,hidden"
+      allowed_warnings_regex:
+        - "this request accesses system indices.*"
+
+  - match: { \.kibana_7.settings.index.fast_refresh: "true" }
+  - match: { \.kibana_alerting_cases_1.settings.index.fast_refresh: "true" }
+  - match: { \.kibana_analytics_2.settings.index.fast_refresh: "true" }
+  - match: { \.kibana_ingest_4.settings.index.fast_refresh: "true" }
+  - match: { \.kibana_task_manager_11.settings.index.fast_refresh: "true" }
+  - match: { \.kibana_security_solution_10.settings.index.fast_refresh: "true" }
+  - match: { \.kibana_security_session_30.settings.index.fast_refresh: null }
+
+
