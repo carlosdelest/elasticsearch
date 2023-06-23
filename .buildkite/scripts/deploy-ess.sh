@@ -36,7 +36,6 @@ if kubectl get elasticsearchappconfig -n $GCLOUD_ESS_DEV_NAMESPACE | grep -q "^e
   kubectl delete elasticsearchappconfig es -n $GCLOUD_ESS_DEV_NAMESPACE
   kubectl wait --for delete pod --selector=elasticsearch.k8s.elastic.co/tier=search -n $GCLOUD_ESS_DEV_NAMESPACE --timeout=90s
   kubectl wait --for delete pod --selector=elasticsearch.k8s.elastic.co/tier=index -n $GCLOUD_ESS_DEV_NAMESPACE --timeout=90s
-  kubectl wait --for delete pod --selector=elasticsearch.k8s.elastic.co/tier=master -n $GCLOUD_ESS_DEV_NAMESPACE --timeout=90s
 fi
 
 echo '--- Create GCS bucket to be used by ess'
@@ -52,7 +51,7 @@ gsutil ls -b gs://$GCS_BUCKET || gsutil mb -c standard gs://$GCS_BUCKET
 # Update config
 echo '--- Apply ElasticsearchAppConfg yaml'
 
-yq eval '.spec.objectStore.gcs.bucket = strenv(GCS_BUCKET) | 
+yq eval '.spec.objectStore.gcs.bucket = strenv(GCS_BUCKET) |
          .spec.image = strenv(INTEG_TEST_IMAGE) |
          .metadata.labels."k8s.elastic.co/project-id" = strenv(K8S_DEPLOY_PROJECT_ID) |
          .metadata.labels."k8s.elastic.co/deployment-id" = strenv(K8S_DEPLOY_ID)
@@ -64,7 +63,7 @@ kubectl apply -f $BUILDKITE_DIR/ess-config.yaml -n $GCLOUD_ESS_DEV_NAMESPACE
 # TODO make that smarter
 sleep 5
 echo '--- Wait for ess pods be ready'
-kubectl wait --for=condition=Ready pods --all -n $GCLOUD_ESS_DEV_NAMESPACE --timeout=180s
+kubectl wait --for=condition=Ready pods --all -n $GCLOUD_ESS_DEV_NAMESPACE --timeout=240s
 
 echo "--- Testing ess access"
 ES_USERNAME=$(vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)

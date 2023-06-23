@@ -12,21 +12,6 @@ metadata:
 spec:
   image: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:git-ff099f2eac32-x86_64
   components:
-    master:
-      capacityLimits:
-        memoryMax: 4G
-        memoryMin: 2G
-      compatibleAvailabilityZones: []
-      hardwareProfile: default
-      memoryCpuRatio: 0.5
-      memoryIncrements:
-        - 1Gi
-        - 2Gi
-        - 4Gi
-        - 8Gi
-      memoryStorageRatio: 10
-      storageClass: elasticsearch-storage
-      zoneCount: 1
     search:
       capacityLimits:
         memoryMax: 8G
