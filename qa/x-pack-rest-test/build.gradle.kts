@@ -36,8 +36,6 @@ tasks {
             "health/*/*",
             // managing a license is not supported in serverless
             "license/*/*",
-            // Currently finicky. Will be fixed by improving commit upload
-            "privileges/*/*",
             // rollup has many tests failing with "Expected: <1> but: was <0>"
             "rollup/*/*",
             // searchable_snapshots doesn't exist in serverless
