@@ -19,16 +19,18 @@ set -euo pipefail
 
 source "$BUILDKITE_DIR/scripts/utils/gke.sh"
 
+undeploynamespace=${1:-$GCLOUD_ESS_DEV_NAMESPACE}
+gcs_bucket=${2:-$GCS_BUCKET}
 gke_get_cluster_credentials $GCLOUD_SERVICE_ACCOUNT_VAULT_PATH $GCLOUD_PROJECT $GKE_CLUSTER_NAME $GCLOUD_REGION
 
-if kubectl get namespace | grep -q "^$GCLOUD_ESS_DEV_NAMESPACE ";then
-    echo "Deleting namespace $GCLOUD_ESS_DEV_NAMESPACE"
-    kubectl delete namespace $GCLOUD_ESS_DEV_NAMESPACE
+if kubectl get namespace | grep -q "^$undeploynamespace ";then
+    echo "Deleting namespace $undeploynamespace"
+    kubectl delete namespace $undeploynamespace
 else
-   echo "namespace $GCLOUD_ESS_DEV_NAMESPACE does not exist"
+   echo "namespace $undeploynamespace does not exist"
 fi
 
 # create gcs bucket to be used
 # using gcloud storage command blocked by https://github.com/elastic/ci-agent-images/pull/196
 # using -m allows running deletion of objects in bucket in parallel
-gsutil -m rm -r gs://$GCS_BUCKET
+gsutil -m rm -r gs://$gcs_bucket

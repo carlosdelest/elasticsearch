@@ -138,6 +138,12 @@ spec:
         elasticsearch-team: {}
         everyone:
           access_level: READ_ONLY
+      cancel_intermediate_builds: true
+      schedules:
+        main_semi_daily:
+          branch: 'main'
+          cronline: '0 */12 * * *'
+
 
 ---
 

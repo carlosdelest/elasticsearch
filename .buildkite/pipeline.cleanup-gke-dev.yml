@@ -2,6 +2,16 @@ agents:
   image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.4"
   memory: "4G"
 
+env:
+  MAX_DEPLOYMENT_AGE_IN_HOUR: "${MAX_DEPLOYMENT_AGE_IN_HOUR:-48}"
+  BUILDKITE_DIR: ".buildkite"
+  GCLOUD_PROJECT: "${GCLOUD_PROJECT:-elastic-cloud-dev}"
+  GCLOUD_REGION: "${GCLOUD_REGION:-us-central1}"
+  GCLOUD_SERVICE_ACCOUNT_VAULT_PATH: "secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-sa"
+  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-ess-integtest-dev-ci}"
+  K8S_DEPLOY_PROJECT_ID: ${K8S_DEPLOY_ID}-project
+  VAULT_ADDR: "https://vault-ci-prod.elastic.dev"
+
 steps:
-  - label: "Dummy Cleanup GKE Dev pipeline"
-    command: echo "Hello!"
+  - label: ":k8s: cleanup elasticsearch stateless deployments and dev environments"
+    command: "$$BUILDKITE_DIR/scripts/cleanup-ess-dev.sh"

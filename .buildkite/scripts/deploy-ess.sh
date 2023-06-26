@@ -43,7 +43,8 @@ echo '--- Create GCS bucket to be used by ess'
 # gcloud storage buckets create gs://$GCS_BUCKET
 # gcloud storage buckets update gs://$GCS_BUCKET --update-labels=USAGE=ess-dev-test
 gsutil ls -b gs://$GCS_BUCKET || gsutil mb -c standard gs://$GCS_BUCKET
-
+# add creation timestamp for easier maintenance later
+gsutil label ch -l creation-timestamp:$(date "+%s") gs://$GCS_BUCKET
 # TODO fix labeling issue (see https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/33#01887131-61cd-4511-b8cf-6d1f98180688)
 # gsutil label ch -l usage:ess-dev-test_1 gs://$GCS_BUCKET
 
