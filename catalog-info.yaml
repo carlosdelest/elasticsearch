@@ -23,6 +23,7 @@ spec:
       pipeline_file: .buildkite/pipeline.intake.yml
       teams:
         elasticsearch-team: {}
+        ml-core: {}
         everyone:
           access_level: READ_ONLY
       cancel_intermediate_builds: true
