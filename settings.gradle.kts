@@ -46,6 +46,8 @@ include(":modules:serverless-ml")
 include(":modules:serverless-security")
 include(":modules:serverless-sigterm")
 include(":modules:serverless-transform")
+include(":libs:serverless-metrics")
+include(":modules:serverless-metering")
 
 /*
  * Distribution projects
