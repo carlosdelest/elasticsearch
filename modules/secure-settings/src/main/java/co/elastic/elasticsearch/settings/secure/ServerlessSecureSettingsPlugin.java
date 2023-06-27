@@ -27,6 +27,7 @@ import org.elasticsearch.common.io.stream.NamedWriteable;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
+import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.ReloadablePlugin;
 import org.elasticsearch.plugins.internal.ReloadAwarePlugin;
@@ -59,7 +60,8 @@ public class ServerlessSecureSettingsPlugin extends Plugin implements ReloadAwar
         IndexNameExpressionResolver indexNameExpressionResolver,
         Supplier<RepositoriesService> repositoriesServiceSupplier,
         Tracer tracer,
-        AllocationService allocationService
+        AllocationService allocationService,
+        IndicesService indicesService
     ) {
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, environment);
         this.clusterStateSecretsListener = new ClusterStateSecretsListener(clusterService, environment);
