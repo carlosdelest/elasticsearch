@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.autoscaling.action;
 
-import co.elastic.elasticsearch.stateless.autoscaling.search.SearchTierMetricsService;
+import co.elastic.elasticsearch.stateless.autoscaling.indexing.IngestMetricsService;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
@@ -31,46 +31,45 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
-public class TransportGetSearchTierMetrics extends TransportMasterNodeAction<GetSearchTierMetrics.Request, GetSearchTierMetrics.Response> {
+public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetIndexTierMetrics.Request, GetIndexTierMetrics.Response> {
 
-    private final SearchTierMetricsService searchTierMetricsService;
+    private final IngestMetricsService ingestMetricsService;
 
     @Inject
-    public TransportGetSearchTierMetrics(
+    public TransportGetIndexTierMetrics(
         TransportService transportService,
         ClusterService clusterService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
         IndexNameExpressionResolver indexNameExpressionResolver,
-        SearchTierMetricsService searchTierMetricsService
+        IngestMetricsService ingestMetricsService
     ) {
         super(
-            GetSearchTierMetrics.NAME,
+            GetIndexTierMetrics.NAME,
             transportService,
             clusterService,
             threadPool,
             actionFilters,
-            GetSearchTierMetrics.Request::new,
+            GetIndexTierMetrics.Request::new,
             indexNameExpressionResolver,
-            GetSearchTierMetrics.Response::new,
+            GetIndexTierMetrics.Response::new,
             ThreadPool.Names.SAME
         );
-        this.searchTierMetricsService = searchTierMetricsService;
+        this.ingestMetricsService = ingestMetricsService;
     }
 
     @Override
     protected void masterOperation(
         Task task,
-        GetSearchTierMetrics.Request request,
+        GetIndexTierMetrics.Request request,
         ClusterState state,
-        ActionListener<GetSearchTierMetrics.Response> listener
+        ActionListener<GetIndexTierMetrics.Response> listener
     ) {
-        ActionListener.completeWith(listener, () -> new GetSearchTierMetrics.Response(searchTierMetricsService.getSearchTierMetrics()));
-
+        ActionListener.completeWith(listener, () -> new GetIndexTierMetrics.Response(ingestMetricsService.getIndexTierMetrics()));
     }
 
     @Override
-    protected ClusterBlockException checkBlock(GetSearchTierMetrics.Request request, ClusterState state) {
+    protected ClusterBlockException checkBlock(GetIndexTierMetrics.Request request, ClusterState state) {
         return null;
     }
 }

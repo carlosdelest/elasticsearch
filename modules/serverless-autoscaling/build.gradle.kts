@@ -6,7 +6,7 @@ esplugin {
     name = "serverless-autoscaling"
     description = "Serverless autoscaling module for Elasticsearch"
     classname = "co.elastic.elasticsearch.serverless.autoscaling.ServerlessAutoscalingPlugin"
-    extendedPlugins = listOf("x-pack-core")
+    extendedPlugins = listOf("stateless")
 }
 
 configurations {
@@ -21,6 +21,7 @@ dependencies {
     compileOnly("org.elasticsearch:server")
     compileOnly(xpackModule("core"))
     compileOnly(xpackModule("ml"))
+    compileOnly(project(":modules:stateless"))
 
     internalClusterTestImplementation(testArtifact(xpackModule("ml")))
 }

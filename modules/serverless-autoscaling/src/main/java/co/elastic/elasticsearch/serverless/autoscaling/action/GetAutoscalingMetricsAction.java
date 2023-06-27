@@ -17,7 +17,10 @@
 
 package co.elastic.elasticsearch.serverless.autoscaling.action;
 
+import co.elastic.elasticsearch.serverless.autoscaling.MachineLearningTierMetrics;
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetAutoscalingMetricsAction.Response;
+import co.elastic.elasticsearch.stateless.autoscaling.indexing.IndexTierMetrics;
+import co.elastic.elasticsearch.stateless.autoscaling.search.SearchTierMetrics;
 
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.ActionResponse;
@@ -25,6 +28,7 @@ import org.elasticsearch.action.ActionType;
 import org.elasticsearch.action.support.master.AcknowledgedRequest;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.Task;
@@ -33,12 +37,7 @@ import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-
-import static org.elasticsearch.core.Strings.format;
 
 public class GetAutoscalingMetricsAction extends ActionType<Response> {
 
@@ -66,60 +65,56 @@ public class GetAutoscalingMetricsAction extends ActionType<Response> {
 
         @Override
         public Task createTask(long id, String type, String action, TaskId parentTaskId, Map<String, String> headers) {
-            return new CancellableTask(id, type, action, format("get_serverless_autoscaling_metrics"), parentTaskId, headers);
+            return new CancellableTask(id, type, action, "get_serverless_autoscaling_metrics", parentTaskId, headers);
         }
     }
 
     public static class Response extends ActionResponse implements ToXContentObject {
+        @Nullable
+        private final IndexTierMetrics indexTierMetrics;
+        @Nullable
+        private final SearchTierMetrics searchTierMetrics;
+        @Nullable
+        private final MachineLearningTierMetrics machineLearningTierMetrics;
 
-        private final List<TierMetricsResponse> tierResponses;
-
-        public Response(List<TierMetricsResponse> tierResponses) {
-            this.tierResponses = Collections.unmodifiableList(tierResponses);
+        public Response(
+            @Nullable IndexTierMetrics indexTierMetrics,
+            @Nullable SearchTierMetrics searchTierMetrics,
+            @Nullable MachineLearningTierMetrics machineLearningTierMetrics
+        ) {
+            this.indexTierMetrics = indexTierMetrics;
+            this.searchTierMetrics = searchTierMetrics;
+            this.machineLearningTierMetrics = machineLearningTierMetrics;
         }
 
         public Response(final StreamInput input) throws IOException {
             super(input);
-            this.tierResponses = input.readImmutableList(TierMetricsResponse::new);
-        }
-
-        // for testing
-        List<TierMetricsResponse> getTierResponses() {
-            return tierResponses;
+            indexTierMetrics = input.readOptionalWriteable(IndexTierMetrics::new);
+            searchTierMetrics = input.readOptionalWriteable(SearchTierMetrics::new);
+            machineLearningTierMetrics = input.readOptionalWriteable(MachineLearningTierMetrics::new);
         }
 
         @Override
-        public int hashCode() {
-            return Objects.hash(tierResponses);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
-            if (obj instanceof Response == false) {
-                return false;
-            }
-            Response other = (Response) obj;
-            return Objects.equals(tierResponses, other.tierResponses);
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeOptionalWriteable(indexTierMetrics);
+            out.writeOptionalWriteable(searchTierMetrics);
+            out.writeOptionalWriteable(machineLearningTierMetrics);
         }
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
             builder.startObject();
-            for (TierMetricsResponse tierResponse : tierResponses) {
-                tierResponse.toXContent(builder, params);
+            if (indexTierMetrics != null) {
+                builder.field("index", indexTierMetrics);
             }
-
-            builder.field("took", 42);
+            if (searchTierMetrics != null) {
+                builder.field("search", searchTierMetrics);
+            }
+            if (machineLearningTierMetrics != null) {
+                builder.field("ml", machineLearningTierMetrics);
+            }
             builder.endObject();
             return builder;
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeCollection(tierResponses);
         }
     }
 }

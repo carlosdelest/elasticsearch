@@ -20,76 +20,112 @@ package co.elastic.elasticsearch.serverless.autoscaling.action;
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetAutoscalingMetricsAction.Request;
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetAutoscalingMetricsAction.Response;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.ActionType;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.GroupedActionListener;
-import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.action.support.RefCountingListener;
+import org.elasticsearch.action.support.master.TransportMasterNodeAction;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.ParentTaskAssigningClient;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.core.TimeValue;
-import org.elasticsearch.core.Tuple;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
+import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.xpack.core.ClientHelper;
 
-import java.util.List;
-import java.util.function.Function;
+import java.util.concurrent.atomic.AtomicReference;
 
-import static org.elasticsearch.core.Tuple.tuple;
-
-public class TransportGetAutoscalingMetricsAction extends HandledTransportAction<Request, Response> {
-    private static final Logger logger = LogManager.getLogger(TransportGetAutoscalingMetricsAction.class);
-
-    static final List<Tuple<ActionType<TierMetricsResponse>, Function<TimeValue, TierMetricsRequest>>> TIER_ACTIONS = List.of(
-        tuple(GetMachineLearningTierMetrics.INSTANCE, GetMachineLearningTierMetrics.Request::new),
-        tuple(GetIndexingTierMetrics.INSTANCE, GetIndexingTierMetrics.Request::new),
-        tuple(GetSearchTierMetrics.INSTANCE, GetSearchTierMetrics.Request::new)
-    );
-
+public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAction<Request, Response> {
     private final ClusterService clusterService;
     private final Client client;
 
     @Inject
     public TransportGetAutoscalingMetricsAction(
         TransportService transportService,
+        ClusterService clusterService,
+        ThreadPool threadPool,
         ActionFilters actionFilters,
-        Client client,
-        ClusterService clusterService
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        Client client
     ) {
-        super(GetAutoscalingMetricsAction.NAME, transportService, actionFilters, Request::new);
-        this.client = client;
+        super(
+            GetAutoscalingMetricsAction.NAME,
+            transportService,
+            clusterService,
+            threadPool,
+            actionFilters,
+            Request::new,
+            indexNameExpressionResolver,
+            Response::new,
+            ThreadPool.Names.SAME
+        );
         this.clusterService = clusterService;
+        this.client = client;
     }
 
     @Override
-    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+    protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) {
+        var parentTaskId = new TaskId(clusterService.localNode().getId(), task.getId());
+        var parentTaskAssigningClient = new ParentTaskAssigningClient(client, parentTaskId);
 
-        GroupedActionListener<TierMetricsResponse> groupedActionListener = new GroupedActionListener<>(
-            TIER_ACTIONS.size(),
-            ActionListener.wrap(tierResponses -> {
-                logger.debug("got {} responses", tierResponses.size());
-                listener.onResponse(new Response(tierResponses.stream().toList()));
-            }, listener::onFailure)
+        final AtomicReference<GetIndexTierMetrics.Response> indexTierMetricsRef = new AtomicReference<>();
+        final AtomicReference<GetSearchTierMetrics.Response> searchTierMetricsRef = new AtomicReference<>();
+        final AtomicReference<GetMachineLearningTierMetrics.Response> machineLearningMetricsRef = new AtomicReference<>();
+        ActionListener<Void> tierResponsesListener = listener.map(
+            unused -> new Response(
+                indexTierMetricsRef.get() != null ? indexTierMetricsRef.get().getMetrics() : null,
+                searchTierMetricsRef.get() != null ? searchTierMetricsRef.get().getMetrics() : null,
+                machineLearningMetricsRef.get() != null ? machineLearningMetricsRef.get().getMetrics() : null
+            )
         );
-
-        TaskId parentTaskId = new TaskId(clusterService.localNode().getId(), task.getId());
-        Client parentTaskAssigningClient = new ParentTaskAssigningClient(client, parentTaskId);
-
-        TIER_ACTIONS.forEach(tier -> {
-            ClientHelper.executeAsyncWithOrigin(
+        try (var refCountingListener = new RefCountingListener(tierResponsesListener)) {
+            // TODO: add logging to each listener
+            executeRequest(
                 parentTaskAssigningClient,
-                // TODO: we might use our own origin
-                ClientHelper.STACK_ORIGIN,
-                tier.v1(),
-                tier.v2().apply(request.timeout()),
-                groupedActionListener
+                GetIndexTierMetrics.INSTANCE,
+                new GetIndexTierMetrics.Request(request.timeout()),
+                refCountingListener.acquire(indexTierMetricsRef::set)
             );
-        });
+            executeRequest(
+                parentTaskAssigningClient,
+                GetSearchTierMetrics.INSTANCE,
+                new GetSearchTierMetrics.Request(request.timeout()),
+                refCountingListener.acquire(searchTierMetricsRef::set)
+            );
+            executeRequest(
+                parentTaskAssigningClient,
+                GetMachineLearningTierMetrics.INSTANCE,
+                new GetMachineLearningTierMetrics.Request(request.timeout()),
+                refCountingListener.acquire(machineLearningMetricsRef::set)
+            );
+        }
+    }
+
+    @Override
+    protected ClusterBlockException checkBlock(Request request, ClusterState state) {
+        return null;
+    }
+
+    private static <Req extends ActionRequest, Resp extends ActionResponse> void executeRequest(
+        Client client,
+        ActionType<Resp> action,
+        Req request,
+        ActionListener<Resp> listener
+    ) {
+        ClientHelper.executeAsyncWithOrigin(
+            client,
+            // TODO: we might use our own origin
+            ClientHelper.STACK_ORIGIN,
+            action,
+            request,
+            listener
+        );
     }
 }

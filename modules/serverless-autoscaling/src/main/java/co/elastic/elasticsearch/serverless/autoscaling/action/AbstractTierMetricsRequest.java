@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.serverless.autoscaling.action;
 
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.support.master.AcknowledgedRequest;
+import org.elasticsearch.action.support.master.MasterNodeRequest;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.core.TimeValue;
@@ -31,23 +32,19 @@ import java.util.Map;
 
 import static org.elasticsearch.core.Strings.format;
 
-class TierMetricsRequest extends AcknowledgedRequest<TierMetricsRequest> {
+abstract class AbstractTierMetricsRequest<Request extends MasterNodeRequest<Request>> extends AcknowledgedRequest<Request> {
 
     private final String tierName;
 
-    TierMetricsRequest(final String tierName, final TimeValue timeout) {
+    AbstractTierMetricsRequest(final String tierName, final TimeValue timeout) {
         super(timeout);
         assert Strings.isNullOrEmpty(tierName) == false;
         this.tierName = tierName;
     }
 
-    TierMetricsRequest(final String tierName, final StreamInput in) throws IOException {
+    AbstractTierMetricsRequest(final String tierName, final StreamInput in) throws IOException {
         super(in);
         this.tierName = tierName;
-    }
-
-    public String getTierName() {
-        return tierName;
     }
 
     @Override

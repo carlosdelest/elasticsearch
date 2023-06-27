@@ -17,8 +17,10 @@
 
 package co.elastic.elasticsearch.serverless.autoscaling.action;
 
+import co.elastic.elasticsearch.serverless.autoscaling.MachineLearningTierMetrics;
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetMachineLearningTierMetrics.Request;
-import co.elastic.elasticsearch.serverless.autoscaling.model.TierMetrics;
+import co.elastic.elasticsearch.serverless.autoscaling.action.GetMachineLearningTierMetrics.Response;
+import co.elastic.elasticsearch.stateless.autoscaling.MetricQuality;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
@@ -28,11 +30,7 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
-import java.util.Map;
-
-import static co.elastic.elasticsearch.serverless.autoscaling.model.Metric.exact;
-
-public class TransportGetMachineLearningTierMetrics extends HandledTransportAction<Request, TierMetricsResponse> {
+public class TransportGetMachineLearningTierMetrics extends HandledTransportAction<Request, Response> {
 
     private final ClusterService clusterService;
 
@@ -47,8 +45,7 @@ public class TransportGetMachineLearningTierMetrics extends HandledTransportActi
     }
 
     @Override
-    protected void doExecute(Task task, Request request, ActionListener<TierMetricsResponse> listener) {
-        TierMetrics metrics = new TierMetrics(Map.of("total_memory_in_bytes", exact(1)));
-        listener.onResponse(new TierMetricsResponse(GetMachineLearningTierMetrics.TIER_NAME, metrics));
+    protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
+        ActionListener.completeWith(listener, () -> new Response(new MachineLearningTierMetrics(1, MetricQuality.EXACT)));
     }
 }

@@ -17,13 +17,14 @@
 
 module org.elasticsearch.serverless.autoscaling {
     requires org.apache.logging.log4j;
-    requires org.apache.lucene.core;
 
     requires org.elasticsearch.base;
     requires org.elasticsearch.logging;
     requires org.elasticsearch.server;
     requires org.elasticsearch.xcontent;
     requires org.elasticsearch.xcore;
+
+    requires org.elasticsearch.stateless;
 
     exports co.elastic.elasticsearch.serverless.autoscaling.action to org.elasticsearch.server;
 }

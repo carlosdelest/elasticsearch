@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.autoscaling.action;
 
-import co.elastic.elasticsearch.serverless.autoscaling.MachineLearningTierMetrics;
+import co.elastic.elasticsearch.stateless.autoscaling.indexing.IndexTierMetrics;
 
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.ActionType;
@@ -26,14 +26,14 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.core.TimeValue;
 
 import java.io.IOException;
+import java.util.Objects;
 
-public class GetMachineLearningTierMetrics extends ActionType<GetMachineLearningTierMetrics.Response> {
-
-    public static final GetMachineLearningTierMetrics INSTANCE = new GetMachineLearningTierMetrics();
-    public static final String TIER_NAME = "ml";
+public class GetIndexTierMetrics extends ActionType<GetIndexTierMetrics.Response> {
+    public static final GetIndexTierMetrics INSTANCE = new GetIndexTierMetrics();
+    public static final String TIER_NAME = "index";
     public static final String NAME = "cluster:internal/serverless/autoscaling/get_serverless_" + TIER_NAME + "_tier_metrics";
 
-    public GetMachineLearningTierMetrics() {
+    public GetIndexTierMetrics() {
         super(NAME, Response::new);
     }
 
@@ -42,29 +42,48 @@ public class GetMachineLearningTierMetrics extends ActionType<GetMachineLearning
             super(TIER_NAME, timeout);
         }
 
-        public Request(StreamInput in) throws IOException {
-            super(TIER_NAME, in);
+        Request(final StreamInput input) throws IOException {
+            super(TIER_NAME, input);
         }
     }
 
     public static class Response extends ActionResponse {
-        private final MachineLearningTierMetrics metrics;
+        private final IndexTierMetrics indexTierMetrics;
 
-        public Response(MachineLearningTierMetrics metrics) {
-            this.metrics = metrics;
+        public Response(IndexTierMetrics indexTierMetrics) {
+            this.indexTierMetrics = indexTierMetrics;
         }
 
         public Response(StreamInput in) throws IOException {
-            metrics = new MachineLearningTierMetrics(in);
+            super(in);
+            indexTierMetrics = new IndexTierMetrics(in);
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
-            metrics.writeTo(out);
+            indexTierMetrics.writeTo(out);
         }
 
-        public MachineLearningTierMetrics getMetrics() {
-            return metrics;
+        public IndexTierMetrics getMetrics() {
+            return indexTierMetrics;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Response response = (Response) o;
+            return Objects.equals(indexTierMetrics, response.indexTierMetrics);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(indexTierMetrics);
+        }
+
+        @Override
+        public String toString() {
+            return "Response{" + "indexTierMetrics=" + indexTierMetrics + '}';
         }
     }
 }

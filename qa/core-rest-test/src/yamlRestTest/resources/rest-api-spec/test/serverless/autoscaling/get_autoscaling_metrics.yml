@@ -1,7 +1,7 @@
 ---
-"Test get stateless autoscaling metrics":
+"Test get autoscaling metrics":
   - do:
-      _internal.get_stateless_autoscaling_metrics: {}
+      _internal.get_serverless_autoscaling_metrics: {}
 
   - is_true: "index.metrics.node_memory_in_bytes.value"
   - is_true: "index.metrics.node_memory_in_bytes.quality"

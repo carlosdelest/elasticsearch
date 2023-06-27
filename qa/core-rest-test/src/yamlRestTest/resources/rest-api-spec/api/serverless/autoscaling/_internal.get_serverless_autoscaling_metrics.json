@@ -1,8 +1,8 @@
 {
-  "_internal.get_stateless_autoscaling_metrics":{
+  "_internal.get_serverless_autoscaling_metrics":{
     "documentation":{
-      "url":"TBD",
-      "description": "This is hardcoded API to integrate with ES Control Plane. Update url & this description upon API finalizing"
+      "url":"",
+      "description": "This API returns the metrics used by the autoscaling controller to scale the cluster automatically"
     },
     "stability":"experimental",
     "visibility":"private",
@@ -12,7 +12,7 @@
     "url":{
       "paths":[
         {
-          "path":"/_internal/stateless/autoscaling",
+          "path":"/_internal/serverless/autoscaling",
           "methods":[
             "GET"
           ]
