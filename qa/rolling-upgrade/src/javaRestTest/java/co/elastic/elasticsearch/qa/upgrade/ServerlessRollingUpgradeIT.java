@@ -8,7 +8,6 @@
 
 package co.elastic.elasticsearch.qa.upgrade;
 
-import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.Strings;
@@ -25,7 +24,6 @@ import java.io.IOException;
 import static org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster.SERVERLESS_BWC_VERSION;
 import static org.hamcrest.Matchers.equalTo;
 
-@LuceneTestCase.AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/447")
 public class ServerlessRollingUpgradeIT extends ESRestTestCase {
 
     @ClassRule
