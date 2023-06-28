@@ -13,11 +13,11 @@
   - is_true: "search.metrics.node_memory_in_bytes.quality"
   - is_true: "search.metrics.total_memory_in_bytes.value"
   - is_true: "search.metrics.total_memory_in_bytes.quality"
-  - gte: { "search.metrics.max_shard_copies.value" : 0 }
+  - is_true: "search.metrics.max_shard_copies.value"
   - is_true: "search.metrics.max_shard_copies.quality"
-  - gte: { "search.metrics.max_interactive_data_size_in_bytes.value" : 0 }
+  - is_true: "search.metrics.max_interactive_data_size_in_bytes.value"
   - is_true: "search.metrics.max_interactive_data_size_in_bytes.quality"
-  - gte: { "search.metrics.total_interactive_data_size_in_bytes.value" : 0 }
+  - is_true: "search.metrics.total_interactive_data_size_in_bytes.value"
   - is_true: "search.metrics.total_interactive_data_size_in_bytes.quality"
-  - gte: { "search.metrics.total_data_size_in_bytes.value": 0}
+  - is_true: "search.metrics.total_data_size_in_bytes.value"
   - is_true: "search.metrics.total_data_size_in_bytes.quality"

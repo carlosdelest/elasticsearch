@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.autoscaling.action;
 
-import co.elastic.elasticsearch.stateless.autoscaling.search.SearchMetricsService;
+import co.elastic.elasticsearch.stateless.autoscaling.search.SearchTierMetricsService;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
@@ -33,7 +33,7 @@ import org.elasticsearch.transport.TransportService;
 
 public class TransportGetSearchTierMetrics extends TransportMasterNodeAction<GetSearchTierMetrics.Request, GetSearchTierMetrics.Response> {
 
-    private final SearchMetricsService searchMetricsService;
+    private final SearchTierMetricsService searchTierMetricsService;
 
     @Inject
     public TransportGetSearchTierMetrics(
@@ -42,7 +42,7 @@ public class TransportGetSearchTierMetrics extends TransportMasterNodeAction<Get
         ThreadPool threadPool,
         ActionFilters actionFilters,
         IndexNameExpressionResolver indexNameExpressionResolver,
-        SearchMetricsService searchMetricsService
+        SearchTierMetricsService searchTierMetricsService
     ) {
         super(
             GetSearchTierMetrics.NAME,
@@ -55,7 +55,7 @@ public class TransportGetSearchTierMetrics extends TransportMasterNodeAction<Get
             GetSearchTierMetrics.Response::new,
             ThreadPool.Names.SAME
         );
-        this.searchMetricsService = searchMetricsService;
+        this.searchTierMetricsService = searchTierMetricsService;
     }
 
     @Override
@@ -65,7 +65,8 @@ public class TransportGetSearchTierMetrics extends TransportMasterNodeAction<Get
         ClusterState state,
         ActionListener<GetSearchTierMetrics.Response> listener
     ) {
-        ActionListener.completeWith(listener, () -> new GetSearchTierMetrics.Response(searchMetricsService.getSearchTierMetrics()));
+        ActionListener.completeWith(listener, () -> new GetSearchTierMetrics.Response(searchTierMetricsService.getSearchTierMetrics()));
+
     }
 
     @Override
