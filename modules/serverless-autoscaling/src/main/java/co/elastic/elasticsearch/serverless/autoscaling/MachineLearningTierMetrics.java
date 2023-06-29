@@ -26,26 +26,62 @@ import org.elasticsearch.xcontent.XContentBuilder;
 
 import java.io.IOException;
 
-public record MachineLearningTierMetrics(long totalMemoryInBytes, MetricQuality metricQuality) implements AutoscalingMetrics {
+public record MachineLearningTierMetrics(
+    int nodes,
+    long nodeMemoryInBytes,
+    long modelMemoryInBytes,
+    int minNodes,
+    long extraSingleNodeModelMemoryInBytes,
+    int extraSingleNodeProcessors,
+    long extraModelMemoryInBytes,
+    int extraProcessors,
+    long removeNodeMemoryInBytes,
+
+    MetricQuality metricQuality
+) implements AutoscalingMetrics {
     public MachineLearningTierMetrics(StreamInput in) throws IOException {
-        this(in.readLong(), MetricQuality.readFrom(in));
+        this(
+            in.readVInt(), // nodes
+            in.readVLong(),  // nodeMemoryInBytes
+            in.readVLong(), // modelMemoryInBytes
+            in.readVInt(), // minNodes
+            in.readVLong(), // extraSingleNodeModelMemoryInBytes
+            in.readVInt(), // extraSingleNodeProcessors
+            in.readVLong(), // extraModelMemoryInBytes
+            in.readVInt(), // extraProcessors
+            in.readVLong(), // removeNodeMemoryInBytes
+            MetricQuality.readFrom(in)
+        );
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeLong(totalMemoryInBytes);
+        out.writeVInt(nodes);
+        out.writeVLong(nodeMemoryInBytes);
+        out.writeVLong(modelMemoryInBytes);
+        out.writeVInt(minNodes);
+        out.writeVLong(extraSingleNodeModelMemoryInBytes);
+        out.writeVInt(extraSingleNodeProcessors);
+        out.writeVLong(extraModelMemoryInBytes);
+        out.writeVInt(extraProcessors);
+        out.writeVLong(removeNodeMemoryInBytes);
         metricQuality.writeTo(out);
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
-
         builder.object("metrics", (objectBuilder) -> {
-            builder.field("total_memory_in_bytes");
-            serializeMetric(builder, totalMemoryInBytes, metricQuality);
+            serializeMetric(builder, "nodes", nodes, metricQuality);
+            serializeMetric(builder, "node_memory_in_bytes", nodeMemoryInBytes, metricQuality);
+            serializeMetric(builder, "model_memory_in_bytes", modelMemoryInBytes, metricQuality);
+            serializeMetric(builder, "min_nodes", minNodes, metricQuality);
+            serializeMetric(builder, "extra_single_node_model_memory_in_bytes", extraSingleNodeModelMemoryInBytes, metricQuality);
+            serializeMetric(builder, "extra_single_node_processors", extraSingleNodeProcessors, metricQuality);
+            serializeMetric(builder, "extra_model_memory_in_bytes", extraModelMemoryInBytes, metricQuality);
+            serializeMetric(builder, "extra_processors", extraProcessors, metricQuality);
+            serializeMetric(builder, "remove_node_memory_in_bytes", removeNodeMemoryInBytes, metricQuality);
         });
-
         builder.endObject();
         return builder;
     }

@@ -46,6 +46,9 @@ public class TransportGetMachineLearningTierMetrics extends HandledTransportActi
 
     @Override
     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-        ActionListener.completeWith(listener, () -> new Response(new MachineLearningTierMetrics(1, MetricQuality.EXACT)));
+        ActionListener.completeWith(
+            listener,
+            () -> new Response(new MachineLearningTierMetrics(1, 2048, 1024, 1, 0, 0, 0, 0, 0, MetricQuality.EXACT))
+        );
     }
 }
