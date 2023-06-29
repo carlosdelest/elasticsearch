@@ -15,15 +15,15 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.serverless.autoscaling.action;
-
-import co.elastic.elasticsearch.stateless.autoscaling.search.SearchMetricsService;
+package co.elastic.elasticsearch.stateless.autoscaling.search;
 
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeAction;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
@@ -31,45 +31,48 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
-public class TransportGetSearchTierMetrics extends TransportMasterNodeAction<GetSearchTierMetrics.Request, GetSearchTierMetrics.Response> {
+public class TransportPublishShardSizes extends TransportMasterNodeAction<PublishShardSizesRequest, ActionResponse.Empty> {
 
-    private final SearchMetricsService searchMetricsService;
+    private final SearchMetricsService searchTierMetricsService;
 
     @Inject
-    public TransportGetSearchTierMetrics(
+    public TransportPublishShardSizes(
         TransportService transportService,
         ClusterService clusterService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
         IndexNameExpressionResolver indexNameExpressionResolver,
-        SearchMetricsService searchMetricsService
+        SearchMetricsService searchTierMetricsService
     ) {
         super(
-            GetSearchTierMetrics.NAME,
+            PublishShardSizesAction.NAME,
             transportService,
             clusterService,
             threadPool,
             actionFilters,
-            GetSearchTierMetrics.Request::new,
+            PublishShardSizesRequest::new,
             indexNameExpressionResolver,
-            GetSearchTierMetrics.Response::new,
+            in -> ActionResponse.Empty.INSTANCE,
             ThreadPool.Names.SAME
         );
-        this.searchMetricsService = searchMetricsService;
+        this.searchTierMetricsService = searchTierMetricsService;
     }
 
     @Override
     protected void masterOperation(
         Task task,
-        GetSearchTierMetrics.Request request,
+        PublishShardSizesRequest request,
         ClusterState state,
-        ActionListener<GetSearchTierMetrics.Response> listener
+        ActionListener<ActionResponse.Empty> listener
     ) {
-        ActionListener.completeWith(listener, () -> new GetSearchTierMetrics.Response(searchMetricsService.getSearchTierMetrics()));
+        ActionListener.completeWith(listener, () -> {
+            searchTierMetricsService.processShardSizesRequest(request);
+            return ActionResponse.Empty.INSTANCE;
+        });
     }
 
     @Override
-    protected ClusterBlockException checkBlock(GetSearchTierMetrics.Request request, ClusterState state) {
-        return null;
+    protected ClusterBlockException checkBlock(PublishShardSizesRequest request, ClusterState state) {
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA_READ);
     }
 }
