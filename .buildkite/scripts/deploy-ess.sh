@@ -45,9 +45,6 @@ echo '--- Create GCS bucket to be used by ess'
 gsutil ls -b gs://$GCS_BUCKET || gsutil mb -c standard gs://$GCS_BUCKET
 # add creation timestamp for easier maintenance later
 gsutil label ch -l creation-timestamp:$(date "+%s") gs://$GCS_BUCKET
-# TODO fix labeling issue (see https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/33#01887131-61cd-4511-b8cf-6d1f98180688)
-# gsutil label ch -l usage:ess-dev-test_1 gs://$GCS_BUCKET
-
 
 # Update config
 echo '--- Apply ElasticsearchAppConfg yaml'
@@ -55,8 +52,8 @@ echo '--- Apply ElasticsearchAppConfg yaml'
 yq eval '.spec.objectStore.gcs.bucket = strenv(GCS_BUCKET) |
          .spec.image = strenv(INTEG_TEST_IMAGE) |
          .metadata.labels."k8s.elastic.co/project-id" = strenv(K8S_DEPLOY_PROJECT_ID) |
-         .metadata.labels."k8s.elastic.co/deployment-id" = strenv(K8S_DEPLOY_ID)
-        ' $BUILDKITE_DIR/steps/k8s/ess-integtest-appconfig.yaml > $BUILDKITE_DIR/ess-config.yaml
+         .metadata.labels."k8s.elastic.co/deployment-id" = strenv(DEPLOY_ID)
+        ' $BUILDKITE_DIR/steps/k8s/ess-dev-appconfig.yaml > $BUILDKITE_DIR/ess-config.yaml
 
 kubectl apply -f $BUILDKITE_DIR/ess-config.yaml -n $GCLOUD_ESS_DEV_NAMESPACE
 
@@ -69,7 +66,7 @@ kubectl wait --for=condition=Ready pods --all -n $GCLOUD_ESS_DEV_NAMESPACE --tim
 echo "--- Testing ess access"
 ES_USERNAME=$(vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
 ES_PASSWORD=$(vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
-PUBLIC_IP=$(kubectl get svc ess-integtest-dev-proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].ip')
+PUBLIC_IP=$(kubectl get svc ess-dev-proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].ip')
 
 curl -k -u $ES_USERNAME:$ES_PASSWORD https://$K8S_DEPLOY_PROJECT_ID.es.$PUBLIC_IP.ip.es.io
 

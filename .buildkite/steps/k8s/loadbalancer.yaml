@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ess-integtest-dev-proxy
+  name: ess-dev-proxy
   namespace: elastic-system
 spec:
   type: LoadBalancer

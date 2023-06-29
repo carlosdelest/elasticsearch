@@ -4,16 +4,15 @@ agents:
 
 env:
   BUILDKITE_DIR: ".buildkite"
-  DEPLOY_ID: "${DEPLOY_ID:-integtest-git-${BUILDKITE_COMMIT:0:12}}"
+  CI_PIPELINE_ID: "${CI_PIPELINE_ID:-ess-dev-ci}"
+  DEPLOY_ID: "${CI_PIPELINE_ID}-git-${BUILDKITE_COMMIT:0:12}"
   GCLOUD_PROJECT: "${GCLOUD_PROJECT:-elastic-cloud-dev}"
   GCLOUD_REGION: "${GCLOUD_REGION:-us-central1}"
   GCLOUD_SERVICE_ACCOUNT_VAULT_PATH: "secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-sa"
   GCLOUD_ESS_DEV_NAMESPACE: "${GCLOUD_ESS_DEV_NAMESPACE:-ess-dev-${DEPLOY_ID}}"
-  K8S_DEPLOY_ID: ess-dev-${DEPLOY_ID}
-  GCS_BUCKET: "${K8S_DEPLOY_ID}-object-store"
-  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-ess-integtest-dev-ci}"
+  GCS_BUCKET: "${DEPLOY_ID}-object-store"
+  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-${CI_PIPELINE_ID}}"
   INTEG_TEST_IMAGE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${DEPLOY_ID}"
-  K8S_DEPLOY_PROJECT_ID: ${K8S_DEPLOY_ID}-project-${BUILDKITE_BUILD_NUMBER}
   VAULT_ADDR: "https://vault-ci-prod.elastic.dev"
 
 steps:

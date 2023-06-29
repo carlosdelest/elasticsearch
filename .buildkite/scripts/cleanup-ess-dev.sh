@@ -25,9 +25,9 @@ gke_get_cluster_credentials $GCLOUD_SERVICE_ACCOUNT_VAULT_PATH $GCLOUD_PROJECT $
 
 epochNow=$(date "+%s")
 epochHourNow=$((epochNow / 3600))
-
 # get all namespaces that start with ess-dev-
-namespaces=( $(kubectl get namespaces -o yaml | yq eval '.items.[].metadata.labels."kubernetes.io/metadata.name" | select(. == "ess-dev-*")' - ) )
+export NAMESPACE_PREFIX="${CI_PIPELINE_ID}*"
+namespaces=( $(kubectl get namespaces -o yaml | yq eval '.items.[].metadata.labels."kubernetes.io/metadata.name" | select(. == strenv(NAMESPACE_PREFIX))' - ) )
 
 # get length of namespaces array
 namespaceslength=${#namespaces[@]}
@@ -46,7 +46,7 @@ do
 done
 
 # cleanup dangling object stores
-objectstores=( $(gsutil ls | grep "ess-dev-.*object-store") )
+objectstores=( $(gsutil ls | grep "${NAMESPACE_PREFIX}-.*object-store") )
 # get length of objectstores array
 objectstoreslength=${#objectstores[@]}
 for (( i=0; i<${objectstoreslength}; i++ ));

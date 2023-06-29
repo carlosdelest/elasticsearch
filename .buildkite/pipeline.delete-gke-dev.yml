@@ -3,10 +3,11 @@ agents:
   memory: "4G"
 
 env:
+  CI_PIPELINE_ID: "${CI_PIPELINE_ID:-ess-dev-ci}"
   GCLOUD_PROJECT: "${GCLOUD_PROJECT:-elastic-cloud-dev}"
   GCLOUD_REGION: "${GCLOUD_REGION:-us-central1}"
-  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-ess-integtest-dev-ci}"
-  COSMOSDB_ACCOUNT_NAME: "es-serverless-integtest-dev-ci"
+  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-${CI_PIPELINE_ID}}"
+  COSMOSDB_ACCOUNT_NAME: "${COSMOSDB_ACCOUNT_NAME:-serverless-${CI_PIPELINE_ID}}"
   ENV_UNIQUE_NAME: "${ENV_UNIQUE_NAME}"
   GITOPS_PR_COMMIT: ${GITOPS_PR_COMMIT:-HEAD}
   GITOPS_PR_BRANCH: ${GITOPS_PR_BRANCH:-main}
