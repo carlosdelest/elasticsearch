@@ -32,7 +32,15 @@ steps:
 
   - wait
 
-  - label: ":argo: Update Image using gpctl"
+  - label: ":argo: Update Image using gpctl with centralized config"
+    trigger: gpctl-promote
+    branches: main
+    build:
+      env:
+        REMOTE_SERVICE_CONFIG: https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/config.yaml
+        SERVICE_COMMIT_HASH: $BUILDKITE_COMMIT
+
+  - label: ":argo: Update Image using gpctl (to be deprecated)"
     trigger: gpctl-promote
     branches: main
     build:
