@@ -49,7 +49,7 @@ tasks {
 // Register tasks and artifacts for backward compatibility testing
 project(":distribution:archives").subprojects.map(Project::getName).forEach { distributionProject ->
     val buildTaskName = "buildBwc" + distributionProject.split("-").joinToString(transform = String::capitalized, separator = "")
-    val artifactDestination = "${checkoutDirectory}/distribution/archives/${distributionProject}/build/install/elasticsearch-${VersionProperties.getElasticsearch()}"
+    val artifactDestination = "${checkoutDirectory}/distribution/archives/${distributionProject}/build/install"
     val buildTaskProvider = tasks.register(buildTaskName, LoggedExec::class) {
         dependsOn("checkoutBwcBranch")
         workingDir.set(checkoutDirectory)

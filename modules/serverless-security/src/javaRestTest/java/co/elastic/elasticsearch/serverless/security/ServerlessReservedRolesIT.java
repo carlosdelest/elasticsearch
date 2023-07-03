@@ -29,7 +29,7 @@ import org.elasticsearch.test.AnnotationTestOrdering;
 import org.elasticsearch.test.AnnotationTestOrdering.Order;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.MutableSettingsProvider;
-import org.elasticsearch.test.cluster.local.distribution.DistributionType;
+import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
@@ -65,8 +65,7 @@ public class ServerlessReservedRolesIT extends ESRestTestCase {
     private static Set<String> INCLUDED_RESERVED_ROLES;
 
     @ClassRule
-    public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
-        .distribution(DistributionType.DEFAULT)
+    public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("javaRestTest")
         .settings(clusterSettings)
         .user(OPERATOR_USER, OPERATOR_PASSWORD)

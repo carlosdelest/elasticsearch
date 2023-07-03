@@ -20,7 +20,7 @@ package co.elastic.elasticsearch.rest;
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
-import org.elasticsearch.test.cluster.local.distribution.DistributionType;
+import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
@@ -29,13 +29,8 @@ import org.junit.ClassRule;
 public class ServerlessLicenseRestIT extends AbstractXPackRestTest {
 
     @ClassRule
-    public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
-        .distribution(DistributionType.DEFAULT)
+    public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("yamlRestTest")
-        .setting("stateless.enabled", "true")
-        .setting("stateless.object_store.type", "fs")
-        .setting("stateless.object_store.bucket", "stateless")
-        .setting("stateless.object_store.base_path", "base_path")
         .setting("xpack.security.enabled", "true")
         .setting("xpack.security.transport.ssl.enabled", "true")
         .setting("xpack.security.transport.ssl.key", "testnode.pem")
@@ -46,9 +41,6 @@ public class ServerlessLicenseRestIT extends AbstractXPackRestTest {
         .user("x_pack_rest_user", "x-pack-test-password")
         .configFile("testnode.pem", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.pem"))
         .configFile("testnode.crt", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.crt"))
-        .setting("ingest.geoip.downloader.enabled", "false")
-        .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
-        .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
         .build();
 
     public ServerlessLicenseRestIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {

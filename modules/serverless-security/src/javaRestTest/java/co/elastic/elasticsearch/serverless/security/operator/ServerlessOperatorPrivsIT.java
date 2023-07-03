@@ -28,7 +28,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
-import org.elasticsearch.test.cluster.local.distribution.DistributionType;
+import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
@@ -45,14 +45,9 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
     private static final String NOT_OPERATOR_PASSWORD = "not_operator_password";
 
     @ClassRule
-    public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
-        .distribution(DistributionType.DEFAULT)
+    public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("javaRestTest")
-        .setting("stateless.enabled", "true")
         .setting("xpack.security.operator_privileges.enabled", "true")
-        .setting("stateless.object_store.type", "fs")
-        .setting("stateless.object_store.bucket", "stateless")
-        .setting("stateless.object_store.base_path", "base_path")
         .setting("xpack.security.enabled", "true")
         .setting("xpack.security.transport.ssl.enabled", "true")
         .setting("xpack.security.transport.ssl.key", "testnode.pem")
@@ -65,9 +60,6 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
         .configFile("testnode.pem", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.pem"))
         .configFile("testnode.crt", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.crt"))
         .configFile("operator_users.yml", Resource.fromClasspath("operator_users.yml"))
-        .setting("ingest.geoip.downloader.enabled", "false")
-        .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
-        .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
         .build();
 
     @Override

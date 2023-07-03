@@ -51,6 +51,8 @@ tasks {
             // voting_only_node assumes data nodes
             "voting_only_node/*/*",
             // the license is fixed to "enterprise"
-            "xpack/20_info/XPack Info API").joinToString(","))
+            "xpack/20_info/XPack Info API",
+            // expects predictable node names
+            "service_accounts/10_basic/Test service account tokens").joinToString(","))
     }
 }

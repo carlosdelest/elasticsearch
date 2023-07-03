@@ -58,7 +58,14 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
     val transformTask = tasks.register<Sync>("transform${baseName}DockerContext") {
         into("${buildDir}/docker-context/${architecture.name}")
         from(upstreamContext) {
-            exclude("elasticsearch-${VersionProperties.getElasticsearch()}")
+            exclude("elasticsearch-*/**")
+            eachFile {
+                if (name == "Dockerfile") {
+                    filter { contents ->
+                        return@filter contents.replace("COPY elasticsearch-${VersionProperties.getElasticsearch()} .", "COPY elasticsearch .")
+                    }
+                }
+            }
         }
         from(if (architecture == Architecture.AARCH64) aarch64DockerSource else dockerSource)
     }

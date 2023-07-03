@@ -1,4 +1,5 @@
 import java.nio.file.Path
+import java.util.*
 
 plugins {
     id("elasticsearch.internal-distribution-archive-setup")
@@ -71,6 +72,8 @@ distribution_archives {
                         if (relativePath.segments.reversed()[1] == "bin" || relativePath.segments.reversed()[1] == "MacOS" || relativePath.segments.last() == "jspawnhelper") {
                             mode = 0b111_101_101
                         }
+                        // Strip the version from the file path of the upstream distribution
+                        path = "elasticsearch/${Path.of(path).run { subpath(1, count())}}"
                     }
                     exclude("*/bin/elasticsearch")
                     exclude("*/bin/elasticsearch.bat")
@@ -78,9 +81,12 @@ distribution_archives {
                     exclude("*/modules/transform")
                     exclude("*/modules/x-pack-voting-only-node")
                     exclude("*/modules/x-pack-shutdown")
+                    includeEmptyDirs = false
                 }
-                into("elasticsearch-${version}") {
+                into("elasticsearch") {
                     from(copyDistributionDefaults)
+                    from((project.ext["logsDir"] as File).parent)
+                    from((project.extensions["pluginsDir"] as File).parent)
                     into("bin") {
                         from(if (name.contains("windows")) "src/bin/elasticsearch.bat" else "src/bin/elasticsearch") {
                             fileMode = 0b111_101_101
@@ -99,7 +105,7 @@ distribution_archives {
                                 // Determine owning plugin and rewrite path
                                 val filePath = Path.of(path).run { subpath(2, count()) }
                                 val pluginName = file.toPath().run { subpath(0, count() - filePath.count() )}.fileName
-                                path = "elasticsearch-${version}/modules/${pluginName}/${filePath}"
+                                path = "elasticsearch/modules/${pluginName}/${filePath}"
                             }
                         }
                     }
@@ -109,4 +115,4 @@ distribution_archives {
     }
 }
 
-fun archiveToSubprojectName(taskName: String): String = taskName.replace("[A-Z]".toRegex(), "-$0").toLowerCase()
+fun archiveToSubprojectName(taskName: String): String = taskName.replace("[A-Z]".toRegex(), "-$0").lowercase(Locale.getDefault())

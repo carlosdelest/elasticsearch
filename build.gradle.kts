@@ -1,5 +1,3 @@
-import org.elasticsearch.gradle.VersionProperties
-
 plugins {
     id("elasticsearch.global-build-info")
     id("elasticsearch.build-scan")
@@ -18,8 +16,6 @@ plugins {
 
 allprojects {
     apply(plugin = "elasticsearch.formatting")
-
-    version = VersionProperties.getElasticsearch()
 
     configurations {
         all {

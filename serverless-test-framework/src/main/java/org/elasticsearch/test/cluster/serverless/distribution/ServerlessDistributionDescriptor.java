@@ -8,23 +8,38 @@
 
 package org.elasticsearch.test.cluster.serverless.distribution;
 
-import org.elasticsearch.test.cluster.local.distribution.DefaultDistributionDescriptor;
+import org.elasticsearch.test.cluster.local.distribution.DistributionDescriptor;
 import org.elasticsearch.test.cluster.local.distribution.DistributionType;
 import org.elasticsearch.test.cluster.util.Version;
 
 import java.nio.file.Path;
 
-public class ServerlessDistributionDescriptor extends DefaultDistributionDescriptor {
-    private final Path extractedDir;
+public class ServerlessDistributionDescriptor implements DistributionDescriptor {
+    private final DistributionDescriptor delegate;
 
-    public ServerlessDistributionDescriptor(Version version, boolean snapshot, Path extractedDir, DistributionType type) {
-        super(Version.CURRENT, snapshot, extractedDir, type);
-        this.extractedDir = extractedDir;
+    public ServerlessDistributionDescriptor(DistributionDescriptor delegate) {
+        this.delegate = delegate;
+    }
+
+    @Override
+    public Version getVersion() {
+        return delegate.getVersion();
+    }
+
+    @Override
+    public boolean isSnapshot() {
+        return delegate.isSnapshot();
     }
 
     @Override
     public Path getDistributionDir() {
-        return extractedDir;
+        // Serverless distributions don't include a version in the path, so we hard-code this to "elasticsearch"
+        return delegate.getDistributionDir().getParent().resolve("elasticsearch");
+    }
+
+    @Override
+    public DistributionType getType() {
+        return delegate.getType();
     }
 
     @Override

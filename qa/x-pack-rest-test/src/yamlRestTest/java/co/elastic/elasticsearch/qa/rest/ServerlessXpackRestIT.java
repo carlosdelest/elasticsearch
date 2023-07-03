@@ -11,9 +11,7 @@ package co.elastic.elasticsearch.qa.rest;
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
-import org.elasticsearch.test.cluster.FeatureFlag;
-import org.elasticsearch.test.cluster.local.LocalNodeSpecBuilder;
-import org.elasticsearch.test.cluster.local.distribution.DistributionType;
+import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
@@ -22,13 +20,8 @@ import org.junit.ClassRule;
 public class ServerlessXpackRestIT extends AbstractXPackRestTest {
 
     @ClassRule
-    public static ElasticsearchCluster cluster = ElasticsearchCluster.local()
-        .distribution(DistributionType.DEFAULT)
+    public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("yamlRestTest")
-        .setting("stateless.enabled", "true")
-        .setting("stateless.object_store.type", "fs")
-        .setting("stateless.object_store.bucket", "stateless")
-        .setting("stateless.object_store.base_path", "base_path")
         .setting("xpack.ml.enabled", "true")
         .setting("xpack.security.enabled", "true")
         .setting("xpack.watcher.enabled", "false")
@@ -48,23 +41,8 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
         .configFile("testnode.pem", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.pem"))
         .configFile("testnode.crt", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.crt"))
         .configFile("service_tokens", Resource.fromClasspath("service_tokens"))
-        .setting("ingest.geoip.downloader.enabled", "false")
-        .feature(FeatureFlag.TIME_SERIES_MODE)
-        .withNode(indexNodeSpec -> {
-            indexNodeSpec.setting("node.roles", "[master,remote_cluster_client,ingest,index]");
-            addCacheSettings(indexNodeSpec);
-        })
-        .withNode(searchNodeSpec -> {
-            searchNodeSpec.setting("node.roles", "[master,remote_cluster_client,search]");
-            addCacheSettings(searchNodeSpec);
-        })
         .withNode(mlNodeSpec -> mlNodeSpec.setting("node.roles", "[master,remote_cluster_client,ml,transform]"))
         .build();
-
-    private static void addCacheSettings(LocalNodeSpecBuilder nodeSpec) {
-        nodeSpec.setting("xpack.searchable.snapshot.shared_cache.size", "16MB");
-        nodeSpec.setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB");
-    }
 
     public ServerlessXpackRestIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);
