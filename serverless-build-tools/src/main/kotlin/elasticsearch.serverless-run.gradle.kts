@@ -17,8 +17,11 @@ val runCluster by testClusters.registering {
     setting("xpack.ml.enabled", "true")
     setting("xpack.security.enabled", "true")
     setting("xpack.watcher.enabled", "false")
+    setting("xpack.security.operator_privileges.enabled", "true")
     keystore("bootstrap.password", "password")
+    extraConfigFile("operator_users.yml", file("${rootDir}/serverless-build-tools/src/main/resources/operator_users.yml"));
     user(mapOf("username" to "elastic-admin", "password" to "elastic-password"))
+    user(mapOf("username" to "elastic-user", "password" to "elastic-password", "role" to "superuser"))
     nodes["runCluster-0"].setting("node.roles", "[master,remote_cluster_client,ingest,index]")
     nodes["runCluster-0"].setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
     nodes["runCluster-0"].setting("xpack.searchable.snapshot.shared_cache.region_size", "256K")

@@ -19,15 +19,24 @@ package co.elastic.elasticsearch.serverless.security;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.repositories.RepositoriesService;
+import org.elasticsearch.rest.RestController;
+import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.rest.ServerlessApiProtections;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.tracing.Tracer;
@@ -44,7 +53,16 @@ import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesSto
 /**
  * Custom rules for security, e.g. operator privileges and reserved roles, when running in the serverless environment.
  */
-public class ServerlessSecurityPlugin extends Plugin {
+public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
+
+    public static final Setting<Boolean> API_PROTECTIONS_SETTING = Setting.boolSetting(
+        "http.api_protections.enabled",
+        false, // TODO : This will become true at a later time
+        Setting.Property.Dynamic,
+        Setting.Property.NodeScope
+    );
+
+    private ServerlessApiProtections apiProtections;
 
     @Override
     public Collection<Object> createComponents(
@@ -63,6 +81,8 @@ public class ServerlessSecurityPlugin extends Plugin {
         AllocationService allocationService,
         IndicesService indicesService
     ) {
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(API_PROTECTIONS_SETTING, this::configureApiProtections);
+
         // TODO: require operator privileges to be enabled. need to coordinate with deployment and testing concerns before we require this
         // if (OPERATOR_PRIVILEGES_ENABLED.get(environment.settings()) == false) {
         // throw new AssertionError("Operator privileges are required for serverless deployments. " +
@@ -75,6 +95,33 @@ public class ServerlessSecurityPlugin extends Plugin {
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(INCLUDED_RESERVED_ROLES_SETTING);
+        return List.of(INCLUDED_RESERVED_ROLES_SETTING, API_PROTECTIONS_SETTING);
+    }
+
+    @Override
+    public List<RestHandler> getRestHandlers(
+        Settings settings,
+        RestController restController,
+        ClusterSettings clusterSettings,
+        IndexScopedSettings indexScopedSettings,
+        SettingsFilter settingsFilter,
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        Supplier<DiscoveryNodes> nodesInCluster
+    ) {
+        this.apiProtections = restController.getApiProtections();
+        configureApiProtections(clusterSettings.get(API_PROTECTIONS_SETTING));
+        return List.of();
+    }
+
+    private void configureApiProtections(boolean enabled) {
+        if (this.apiProtections == null) {
+            throw new IllegalStateException("API protection object not configured");
+        } else {
+            this.apiProtections.setEnabled(enabled);
+        }
+    }
+
+    public boolean apiProtectionsEnabled() {
+        return apiProtections != null && apiProtections.isEnabled();
     }
 }

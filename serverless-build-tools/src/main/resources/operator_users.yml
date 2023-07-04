@@ -1,0 +1,5 @@
+operator:
+  - usernames: ["elastic-admin"]
+    realm_type: "file"
+    auth_type: "realm"
+

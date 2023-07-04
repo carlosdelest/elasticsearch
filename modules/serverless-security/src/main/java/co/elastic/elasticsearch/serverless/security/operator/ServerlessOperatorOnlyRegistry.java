@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.security.operator;
 
+import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchException;
@@ -34,6 +36,7 @@ import org.elasticsearch.xpack.security.operator.OperatorPrivilegesViolation;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Operator privilege rules specific for the serverless deployment.
@@ -44,14 +47,22 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
     private static final Set<String> PARTIALLY_RESTRICTED_PATHS = Set.of("/");
 
     private final Set<String> partiallyRestrictedPaths;
+    private final Supplier<Boolean> apiProtectionsEnabled;
 
+    // Needed for java module
     public ServerlessOperatorOnlyRegistry() {
-        this.partiallyRestrictedPaths = PARTIALLY_RESTRICTED_PATHS;
+        this(PARTIALLY_RESTRICTED_PATHS, () -> false);
+    }
+
+    // Used in SPI
+    public ServerlessOperatorOnlyRegistry(ServerlessSecurityPlugin plugin) {
+        this(PARTIALLY_RESTRICTED_PATHS, plugin::apiProtectionsEnabled);
     }
 
     // for testing
-    ServerlessOperatorOnlyRegistry(Set<String> partiallyRestrictedPaths) {
+    ServerlessOperatorOnlyRegistry(Set<String> partiallyRestrictedPaths, Supplier<Boolean> apiProtectionsEnabled) {
         this.partiallyRestrictedPaths = partiallyRestrictedPaths;
+        this.apiProtectionsEnabled = apiProtectionsEnabled;
     }
 
     public OperatorPrivilegesViolation check(String action, TransportRequest request) {
@@ -60,6 +71,10 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
 
     @Override
     public OperatorPrivilegesViolation checkRest(RestHandler restHandler, RestRequest restRequest, RestChannel restChannel) {
+        if (this.apiProtectionsEnabled.get() == false) {
+            return null;
+        }
+
         try {
             Scope scope = restHandler.getServerlessScope();
             Objects.requireNonNull(
