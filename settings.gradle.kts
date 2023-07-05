@@ -71,6 +71,7 @@ include(":distribution:tools:serverless-server-cli")
  */
 include(":qa:core-rest-test")
 include(":qa:rolling-upgrade")
+include(":qa:sigterm-shutdown")
 include(":qa:x-pack-rest-test")
 
 /*
