@@ -20,35 +20,56 @@ package co.elastic.elasticsearch.serverless.autoscaling.action;
 import co.elastic.elasticsearch.serverless.autoscaling.MachineLearningTierMetrics;
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetMachineLearningTierMetrics.Request;
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetMachineLearningTierMetrics.Response;
-import co.elastic.elasticsearch.stateless.autoscaling.MetricQuality;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.client.internal.Client;
+import org.elasticsearch.client.internal.ParentTaskAssigningClient;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.tasks.Task;
+import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.transport.TransportService;
+import org.elasticsearch.xpack.core.ClientHelper;
+import org.elasticsearch.xpack.core.ml.action.GetMlAutoscalingStats;
 
 public class TransportGetMachineLearningTierMetrics extends HandledTransportAction<Request, Response> {
 
     private final ClusterService clusterService;
+    private final Client client;
 
     @Inject
     public TransportGetMachineLearningTierMetrics(
         TransportService transportService,
         ActionFilters actionFilters,
-        ClusterService clusterService
+        ClusterService clusterService,
+        Client client
     ) {
         super(GetMachineLearningTierMetrics.NAME, transportService, actionFilters, Request::new);
         this.clusterService = clusterService;
+        this.client = client;
     }
 
     @Override
     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-        ActionListener.completeWith(
-            listener,
-            () -> new Response(new MachineLearningTierMetrics(1, 2048, 1024, 1, 0, 0, 0, 0, 0, MetricQuality.EXACT))
+        GetMlAutoscalingStats.Request autoscalingStatsRequest = new GetMlAutoscalingStats.Request(request.timeout());
+        autoscalingStatsRequest.masterNodeTimeout(request.masterNodeTimeout());
+
+        TaskId parentTaskId = new TaskId(clusterService.localNode().getId(), task.getId());
+        Client parentTaskAssigningClient = new ParentTaskAssigningClient(client, parentTaskId);
+
+        ClientHelper.executeAsyncWithOrigin(
+            parentTaskAssigningClient,
+            ClientHelper.ML_ORIGIN,
+            GetMlAutoscalingStats.INSTANCE,
+            autoscalingStatsRequest,
+            ActionListener.wrap(response -> {
+                ActionListener.completeWith(
+                    listener,
+                    () -> new Response(new MachineLearningTierMetrics(response.getAutoscalingResources()))
+                );
+            }, listener::onFailure)
         );
     }
 }

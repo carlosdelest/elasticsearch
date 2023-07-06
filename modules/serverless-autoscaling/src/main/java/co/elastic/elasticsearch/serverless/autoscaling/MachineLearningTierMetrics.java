@@ -23,64 +23,51 @@ import co.elastic.elasticsearch.stateless.autoscaling.MetricQuality;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xpack.core.ml.autoscaling.MlAutoscalingStats;
 
 import java.io.IOException;
 
-public record MachineLearningTierMetrics(
-    int nodes,
-    long nodeMemoryInBytes,
-    long modelMemoryInBytes,
-    int minNodes,
-    long extraSingleNodeModelMemoryInBytes,
-    int extraSingleNodeProcessors,
-    long extraModelMemoryInBytes,
-    int extraProcessors,
-    long removeNodeMemoryInBytes,
+public class MachineLearningTierMetrics implements AutoscalingMetrics {
 
-    MetricQuality metricQuality
-) implements AutoscalingMetrics {
+    private final MlAutoscalingStats autoscalingResources;
+
+    public MachineLearningTierMetrics(MlAutoscalingStats autoscalingResources) {
+        this.autoscalingResources = autoscalingResources;
+    }
+
     public MachineLearningTierMetrics(StreamInput in) throws IOException {
-        this(
-            in.readVInt(), // nodes
-            in.readVLong(),  // nodeMemoryInBytes
-            in.readVLong(), // modelMemoryInBytes
-            in.readVInt(), // minNodes
-            in.readVLong(), // extraSingleNodeModelMemoryInBytes
-            in.readVInt(), // extraSingleNodeProcessors
-            in.readVLong(), // extraModelMemoryInBytes
-            in.readVInt(), // extraProcessors
-            in.readVLong(), // removeNodeMemoryInBytes
-            MetricQuality.readFrom(in)
-        );
+        this.autoscalingResources = new MlAutoscalingStats(in);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeVInt(nodes);
-        out.writeVLong(nodeMemoryInBytes);
-        out.writeVLong(modelMemoryInBytes);
-        out.writeVInt(minNodes);
-        out.writeVLong(extraSingleNodeModelMemoryInBytes);
-        out.writeVInt(extraSingleNodeProcessors);
-        out.writeVLong(extraModelMemoryInBytes);
-        out.writeVInt(extraProcessors);
-        out.writeVLong(removeNodeMemoryInBytes);
-        metricQuality.writeTo(out);
+        autoscalingResources.writeTo(out);
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject();
         builder.object("metrics", (objectBuilder) -> {
-            serializeMetric(builder, "nodes", nodes, metricQuality);
-            serializeMetric(builder, "node_memory_in_bytes", nodeMemoryInBytes, metricQuality);
-            serializeMetric(builder, "model_memory_in_bytes", modelMemoryInBytes, metricQuality);
-            serializeMetric(builder, "min_nodes", minNodes, metricQuality);
-            serializeMetric(builder, "extra_single_node_model_memory_in_bytes", extraSingleNodeModelMemoryInBytes, metricQuality);
-            serializeMetric(builder, "extra_single_node_processors", extraSingleNodeProcessors, metricQuality);
-            serializeMetric(builder, "extra_model_memory_in_bytes", extraModelMemoryInBytes, metricQuality);
-            serializeMetric(builder, "extra_processors", extraProcessors, metricQuality);
-            serializeMetric(builder, "remove_node_memory_in_bytes", removeNodeMemoryInBytes, metricQuality);
+            serializeMetric(builder, "nodes", autoscalingResources.nodes(), MetricQuality.EXACT);
+            serializeMetric(builder, "node_memory_in_bytes", autoscalingResources.memoryInBytesSum(), MetricQuality.EXACT);
+            serializeMetric(builder, "model_memory_in_bytes", autoscalingResources.modelMemoryInBytesSum(), MetricQuality.EXACT);
+            serializeMetric(builder, "min_nodes", autoscalingResources.minNodes(), MetricQuality.EXACT);
+            serializeMetric(
+                builder,
+                "extra_single_node_model_memory_in_bytes",
+                autoscalingResources.extraSingleNodeModelMemoryInBytes(),
+                MetricQuality.EXACT
+            );
+            serializeMetric(builder, "extra_single_node_processors", autoscalingResources.extraSingleNodeProcessors(), MetricQuality.EXACT);
+            serializeMetric(builder, "extra_model_memory_in_bytes", autoscalingResources.extraModelMemoryInBytes(), MetricQuality.EXACT);
+            serializeMetric(builder, "extra_processors", autoscalingResources.extraProcessors(), MetricQuality.EXACT);
+            serializeMetric(builder, "remove_node_memory_in_bytes", autoscalingResources.removeNodeMemoryInBytes(), MetricQuality.EXACT);
+            serializeMetric(
+                builder,
+                "per_node_memory_overhead_in_bytes",
+                autoscalingResources.perNodeMemoryOverheadInBytes(),
+                MetricQuality.EXACT
+            );
         });
         builder.endObject();
         return builder;

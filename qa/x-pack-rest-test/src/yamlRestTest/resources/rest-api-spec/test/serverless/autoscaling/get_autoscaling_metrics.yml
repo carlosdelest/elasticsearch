@@ -25,9 +25,9 @@
   - is_true: "ml.metrics.nodes.quality"
   - is_true: "ml.metrics.node_memory_in_bytes.value"
   - is_true: "ml.metrics.node_memory_in_bytes.quality"
-  - is_true: "ml.metrics.model_memory_in_bytes.value"
+  - match: { ml.metrics.model_memory_in_bytes.value: 0 }
   - is_true: "ml.metrics.model_memory_in_bytes.quality"
-  - is_true: "ml.metrics.min_nodes.value"
+  - match: { ml.metrics.min_nodes.value: 0 }
   - is_true: "ml.metrics.min_nodes.quality"
   - match: { ml.metrics.extra_single_node_model_memory_in_bytes.value: 0 }
   - is_true: "ml.metrics.extra_single_node_model_memory_in_bytes.quality"
