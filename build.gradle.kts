@@ -1,4 +1,5 @@
 plugins {
+    id("base")
     id("elasticsearch.global-build-info")
     id("elasticsearch.build-scan")
     id("elasticsearch.build-complete")
