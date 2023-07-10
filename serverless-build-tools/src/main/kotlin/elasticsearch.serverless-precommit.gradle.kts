@@ -44,4 +44,8 @@ allprojects {
         // Fix up the logger usage check dependency
         dependencies.add("loggerUsagePlugin", "org.elasticsearch.test:logger-usage")
     }
+
+    tasks.withType<Javadoc>().configureEach {
+        enabled = false
+    }
 }
