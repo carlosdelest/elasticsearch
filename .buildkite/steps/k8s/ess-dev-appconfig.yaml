@@ -5,12 +5,12 @@ metadata:
     k8s.elastic.co/tracing-context: '{"parent":"00-ade1eb946d38028a65714ef31f9419c6-dc9d7b372bf2c303-01","state":"es=s:1"}'
   labels:
     k8s.elastic.co/application-id: es
-    k8s.elastic.co/deployment-id: ess-integtest-dev
+    k8s.elastic.co/deployment-id: placeholder-deployment-id
     k8s.elastic.co/organization-id: "1"
-    k8s.elastic.co/project-id: "ess-integtest-dev-project-id-1"
+    k8s.elastic.co/project-id: "placeholder-project-id-1"
   name: es
 spec:
-  image: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:git-ff099f2eac32-x86_64
+  image: placeholder-image
   components:
     search:
       capacityLimits:
@@ -46,7 +46,7 @@ spec:
     # reference the previously created secret here
     clientSecretName: gcs-credentials
     gcs:
-      bucket: ess-dev-test-object-store
+      bucket: placeholder-object-store
   users:
     - username: elastic
       password_hash: JDJhJDEwJHVKZVNFRHMwdXE4SlE0VS9QWjNCYy50eGR5UGRuaHh2VXBwNlFDeGpZQnZ3V0hrNUJLRXFXCg==

@@ -70,5 +70,6 @@ PUBLIC_IP=$(kubectl get svc ess-dev-proxy -n elastic-system -o json | jq -r '.st
 
 curl -k -u $ES_USERNAME:$ES_PASSWORD https://$K8S_DEPLOY_PROJECT_ID.es.$PUBLIC_IP.ip.es.io
 
-buildkite-agent meta-data set "ess-pubic-url" "https://$K8S_DEPLOY_PROJECT_ID.es.$PUBLIC_IP.ip.es.io"
 echo "Elasticsearch cluster available at https://$K8S_DEPLOY_PROJECT_ID.es.$PUBLIC_IP.ip.es.io" | buildkite-agent annotate --style "info" --context "ess-public-url"
+
+buildkite-agent meta-data set "ess-public-url" "https://$K8S_DEPLOY_PROJECT_ID.es.$PUBLIC_IP.ip.es.io"

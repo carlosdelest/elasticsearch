@@ -10,6 +10,8 @@ package org.elasticsearch.test.cluster.serverless;
 
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.LocalClusterSpecBuilder;
+import org.elasticsearch.test.cluster.serverless.remote.RemoteClusterSpecBuilder;
+import org.elasticsearch.test.cluster.serverless.remote.ServerlessRemoteClusterSpecBuilder;
 import org.elasticsearch.test.cluster.util.Version;
 
 public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
@@ -23,5 +25,15 @@ public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
      */
     static LocalClusterSpecBuilder<ServerlessElasticsearchCluster> local() {
         return new ServerlessLocalClusterSpecBuilder();
+    }
+
+    /**
+     * Creates a new {@link ServerlessLocalClusterSpecBuilder} for defining a remotely orchestrated cluster. Remote clusters do not
+     * use a locally built Elasticsearch distribution but a distribution deployed to k8s based dev environment before.
+     *
+     * @return a builder for a remote cluster deployed in a platform dev environment
+     */
+    static RemoteClusterSpecBuilder<ServerlessElasticsearchCluster> remote() {
+        return new ServerlessRemoteClusterSpecBuilder();
     }
 }

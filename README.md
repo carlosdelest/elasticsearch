@@ -109,17 +109,17 @@ If you need to make further customizations, the cluster definition for this task
 To run Serverless Elasticsearch in a kubernetes cluster environment you can use predifined buildkite pipelines. The main
 branch and working branches are supported.
 
-To deploy a branch into a kubernetes cluster 
+To deploy a branch into a kubernetes cluster
 
 1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev
    This deploys the selected branch into a kubernetes based dev environment (see https://docs.elastic.dev/serverless/dev-env)
-   by publishing a docker snapshot into our internal docker registry and then using kubernetes to apply 
-   a elasticsearchappconfig with that docker snapshot as ess image. 
-   
+   by publishing a docker snapshot into our internal docker registry and then using kubernetes to apply
+   a elasticsearchappconfig with that docker snapshot as ess image.
+
    The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/53#annotation-ess-public-url
 
 
-   Alternatively you can use the buildkite commandline interface (https://github.com/buildkite/cli) to trigger a deployment   
+   Alternatively you can use the buildkite commandline interface (https://github.com/buildkite/cli) to trigger a deployment
    ```
    > bk build create --pipeline elastic/elasticsearch-serverless-deploy-dev --branch buildkite-dev-deploy-pipeline-setup
    Triggering a build on pipeline elastic/elasticsearch-serverless-deploy-dev: Created #56 ✅
@@ -130,12 +130,11 @@ To deploy a branch into a kubernetes cluster
 
    https://ess-dev-integtest-git-b150520767e3-project.es.34.29.251.82.ip.es.io
    ```
-2. To access that elasticsearch instance the username and password can be resolved from vault
+2. To access that elasticsearch instance the username and password can be resolved from vault ci
 
-   ```
-   ESS_USERNAME=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
-
-   ESS_PASSWORD=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
+3. ```
+   export ESS_TEST_USERNAME=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
+   export ESS_TEST_PASSWORD=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
 
    curl -k -u $ESS_USERNAME:$ESS_PASSWORD https://ess-dev-integtest-git-b150520767e3-project.es.34.29.251.82.ip.es.io
    {
@@ -156,19 +155,39 @@ To deploy a branch into a kubernetes cluster
       "tagline" : "You Know, for Search"
     }
     ```
-   
-After its usage cleanup the ess deployment by triggering the undeploy-dev pipeline at https://buildkite.com/elastic/elasticsearch-serverless-undeploy-dev. Choose the same branch and commit you've created the deployment earlier. Alternatively you can use the buildkite commandline interface and run 
+
+After its usage cleanup the ess deployment by triggering the undeploy-dev pipeline at https://buildkite.com/elastic/elasticsearch-serverless-undeploy-dev. Choose the same branch and commit you've created the deployment earlier. Alternatively you can use the buildkite commandline interface and run
 
 ```
 # for deleting a deployment from the head of this branch
-> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch 
+> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch
 ```
 
-or 
+or
 
 ```
-# for deleting a deployment of a certain commit 
-> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch --commit b150520767e3 
+# for deleting a deployment of a certain commit
+> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch --commit b150520767e3
+```
+
+### Running end to end tests against a kubernetes based serverless platform dev environment
+
+We have a set of end to end tests that run against a kubernetes based serverless platform dev environment.
+Those tests live in the `:qa:e2e-test` subproject and are run against a dev deployment in this
+pipeline: https://buildkite.com/elastic/elasticsearch-serverless-e2e-tests
+
+The end to end tests can be run locally against a kubernetes based serverless platform dev deployment by
+
+1. Deploying a branch into a kubernetes cluster as described above
+2. Resolve deployment url as decribed above and export it as `ESS_PUBLIC_URL` env environment
+3. Resolve elasticsearch test username and password from vault ci as described above and export them as `ESS_TEST_USERNAME` and `ESS_TEST_PASSWORD` env variables
+4. Run `./gradlew :qa:e2e-test:javaRestTest`
+
+```
+> export ESS_TEST_USERNAME=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
+> export ESS_TEST_PASSWORD=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
+> export ESS_PUBLIC_URL=<your ess deployment url>
+> ./gradlew :qa:e2e-test:javaRestTest
 ```
 
 ### Building and running locally with docker

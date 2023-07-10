@@ -3,6 +3,53 @@ agents:
   machineType: "n1-standard-16"
   image: family/elasticsearch-ubuntu-2022
 
+env:
+  DEFAULT_CLUSTER_ID: "ess-dev-ci"
+  CI_PIPELINE_ID: "${CI_PIPELINE_ID:-${DEFAULT_CLUSTER_ID}}"
+  BUILDKITE_DIR: ".buildkite"
+  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-${CI_PIPELINE_ID}}"
+  GCLOUD_PROJECT: "${GCLOUD_PROJECT:-elastic-cloud-dev}"
+  GCLOUD_REGION: "${GCLOUD_REGION:-us-central1}"
+  GCLOUD_SERVICE_ACCOUNT_VAULT_PATH: "secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-sa"
+
 steps:
-  - label: "Dummy E2E Test pipeline"
-    command: echo "Hello!"
+  - label: ":k8s: :argocd: Create E2E test environment & deploy services"
+    key: create-gke-cluster
+    if: build.env('CI_PIPELINE_ID') != build.env('DEFAULT_CLUSTER_ID')
+    command:
+      "buildkite-agent pipeline upload .buildkite/pipeline.create-gke-dev.yml"
+
+  - label: ":k8s: Deploy elasticsearch snapshot in E2E environment"
+    key: deploy-ess
+    command:
+        "buildkite-agent pipeline upload .buildkite/pipeline.deploy-dev.yml"
+    depends_on:
+      - step: create-gke-cluster
+
+  - label: ":java: Run serverless e2e tests"
+    key: run-ess-e2e-tests
+    command:
+        "export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url); \
+         export ESS_TEST_USERNAME=$(vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials); \
+         export ESS_TEST_PASSWORD=$(vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials); \
+        .buildkite/scripts/run-gradle.sh :qa:e2e-test:javaRestTest"
+    depends_on:
+      - step: deploy-ess
+
+  - label: ":k8s: Undeploy elasticsearch snapshot in E2E environment"
+    key: undeploy-ess
+    command:
+      "buildkite-agent pipeline upload .buildkite/pipeline.undeploy-dev.yml"
+    depends_on:
+      - step: run-ess-e2e-tests
+    allow_dependency_failure: true
+
+  - label: ":k8s: :argocd: Cleanup dedicated E2E test environment"
+    key: delete-gke-cluster
+    if: build.env('CI_PIPELINE_ID') != build.env('DEFAULT_CLUSTER_ID')
+    command:
+      "buildkite-agent pipeline upload .buildkite/pipeline.cleanup-gke-dev.yml"
+    depends_on:
+      - step: undeploy-ess
+    allow_dependency_failure: true
+

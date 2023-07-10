@@ -73,6 +73,7 @@ include(":qa:core-rest-test")
 include(":qa:rolling-upgrade")
 include(":qa:sigterm-shutdown")
 include(":qa:x-pack-rest-test")
+include(":qa:e2e-test")
 
 /*
  * Test Framework
