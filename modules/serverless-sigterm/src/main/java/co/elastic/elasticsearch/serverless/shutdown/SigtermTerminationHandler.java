@@ -33,6 +33,7 @@ import org.elasticsearch.xpack.shutdown.SingleNodeShutdownStatus;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.elasticsearch.core.Strings.format;
 
@@ -60,9 +61,10 @@ public class SigtermTerminationHandler implements TerminationHandler {
     @Override
     public void handleTermination() {
         CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<SingleNodeShutdownStatus> lastStatus = new AtomicReference<>();
         client.execute(PutShutdownNodeAction.INSTANCE, shutdownRequest(), ActionListener.wrap(res -> {
             if (res.isAcknowledged()) {
-                pollStatusAndLoop(latch);
+                pollStatusAndLoop(latch, lastStatus);
             } else {
                 logger.warn("failed to register graceful shutdown request, request was not acknowledged, stopping immediately");
                 latch.countDown();
@@ -74,7 +76,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
         try {
             boolean latchReachedZero = latch.await(timeout.millis(), TimeUnit.MILLISECONDS);
             if (latchReachedZero == false && timeout.millis() != 0) {
-                logger.warn("timed out while waiting for shutdown to complete gracefully, shutting down anyway");
+                logger.warn("timed out waiting for graceful shutdown, shutting down anyway, last status: {}", lastStatus.get());
             }
         } catch (InterruptedException ex) {
             throw new RuntimeException(ex);
@@ -94,7 +96,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
         return request;
     }
 
-    private void pollStatusAndLoop(CountDownLatch latch) {
+    private void pollStatusAndLoop(CountDownLatch latch, AtomicReference<SingleNodeShutdownStatus> lastStatus) {
         client.execute(GetShutdownStatusAction.INSTANCE, new GetShutdownStatusAction.Request(nodeId), ActionListener.wrap(res -> {
             assert res.getShutdownStatuses().size() == 1 : "got more than this node's shutdown status";
             SingleNodeShutdownStatus status = res.getShutdownStatuses().get(0);
@@ -104,7 +106,8 @@ public class SigtermTerminationHandler implements TerminationHandler {
                 latch.countDown();
             } else {
                 logger.debug("polled for shutdown status: {}", status);
-                threadPool.schedule(() -> pollStatusAndLoop(latch), pollInterval, ThreadPool.Names.GENERIC);
+                lastStatus.set(status);
+                threadPool.schedule(() -> pollStatusAndLoop(latch, lastStatus), pollInterval, ThreadPool.Names.GENERIC);
             }
         }, ex -> {
             logger.warn("failed to get shutdown status for this node while waiting for shutdown, stopping immediately", ex);
