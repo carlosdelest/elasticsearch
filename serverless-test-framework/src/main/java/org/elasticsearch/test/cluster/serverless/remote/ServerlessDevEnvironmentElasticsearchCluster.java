@@ -76,6 +76,11 @@ public class ServerlessDevEnvironmentElasticsearchCluster implements ServerlessE
     }
 
     @Override
+    public long getPid(int index) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public String getTransportEndpoints() {
         throw new UnsupportedOperationException();
     }
