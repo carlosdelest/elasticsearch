@@ -49,7 +49,7 @@ public class MachineLearningTierMetrics implements AutoscalingMetrics {
         builder.startObject();
         builder.object("metrics", (objectBuilder) -> {
             serializeMetric(builder, "nodes", autoscalingResources.nodes(), MetricQuality.EXACT);
-            serializeMetric(builder, "node_memory_in_bytes", autoscalingResources.memoryInBytesSum(), MetricQuality.EXACT);
+            serializeMetric(builder, "node_memory_in_bytes", autoscalingResources.perNodeMemoryInBytes(), MetricQuality.EXACT);
             serializeMetric(builder, "model_memory_in_bytes", autoscalingResources.modelMemoryInBytesSum(), MetricQuality.EXACT);
             serializeMetric(builder, "min_nodes", autoscalingResources.minNodes(), MetricQuality.EXACT);
             serializeMetric(
