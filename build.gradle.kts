@@ -1,3 +1,5 @@
+import org.elasticsearch.gradle.internal.ResolveAllDependencies
+
 plugins {
     id("base")
     id("elasticsearch.global-build-info")
@@ -27,6 +29,12 @@ allprojects {
                     }
                 })
             }
+        }
+    }
+
+    tasks {
+        register("resolveAllDependencies", ResolveAllDependencies::class) {
+            configs = project.configurations
         }
     }
 }
