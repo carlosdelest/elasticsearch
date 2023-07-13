@@ -1,3 +1,4 @@
+import org.apache.tools.ant.filters.ConcatFilter
 import java.nio.file.Path
 import java.util.*
 
@@ -75,6 +76,10 @@ distribution_archives {
                         // Strip the version from the file path of the upstream distribution
                         path = "elasticsearch/${Path.of(path).run { subpath(1, count())}}"
                     }
+                    filesMatching("*/config/jvm.options") {
+                        // Add serverless jvm options to default distribution jvm.options file
+                        filter(mapOf("append" to file("src/feature-flags.options")), ConcatFilter::class.java)
+                    }
                     exclude("*/bin/elasticsearch")
                     exclude("*/bin/elasticsearch.bat")
                     exclude("*/modules/searchable-snapshots")
@@ -93,7 +98,7 @@ distribution_archives {
                         }
                     }
                     into("config") {
-                        from("src/config")
+                        from((project.extensions["jvmOptionsDir"] as File).parent)
                     }
                     into("lib/tools/serverless-server-cli") {
                         from(serverCli)
