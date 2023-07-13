@@ -1,0 +1,8 @@
+agents:
+  provider: k8s
+  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.4"
+  memory: "4G"
+
+steps:
+  - label: "Example update"
+    command: echo "Hello!"
