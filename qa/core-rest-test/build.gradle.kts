@@ -130,7 +130,10 @@ tasks {
 
                 // ignored untill we can recover a real primary shard
                 "indices.stats/30_segments/Segment Stats",
-                "indices.clone/10_basic/Clone index via API"
+                "indices.clone/10_basic/Clone index via API",
+
+                // AwaitsFix: https://github.com/elastic/elasticsearch-serverless/issues/541
+                "synonyms/90_synonyms_reloading_for_synset/Reload analyzers for specific synonym set"
             ).joinToString(",")
         )
     }
