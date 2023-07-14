@@ -23,6 +23,10 @@ echo $(gcloud --version)
 
 gke_get_cluster_credentials $GCLOUD_SERVICE_ACCOUNT_VAULT_PATH $GCLOUD_PROJECT $GKE_CLUSTER_NAME $GCLOUD_REGION
 
-echo '--- Apply loadbalancer configuration'
+echo '--- Expose global ingress nginx controller'
 
-kubectl apply -f $BUILDKITE_DIR/steps/k8s/loadbalancer.yaml
+kubectl expose svc/global-ingress-ingress-nginx-controller --port=8443 --target-port=443 --name=project-api-dev-proxy --type=LoadBalancer -n elastic-system
+
+echo '--- Apply ess loadbalancer configuration'
+
+kubectl apply -f $BUILDKITE_DIR/steps/k8s/ess-proxy.yaml

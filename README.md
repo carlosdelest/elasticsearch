@@ -113,8 +113,7 @@ To deploy a branch into a kubernetes cluster
 
 1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev
    This deploys the selected branch into a kubernetes based dev environment (see https://docs.elastic.dev/serverless/dev-env)
-   by publishing a docker snapshot into our internal docker registry and then using kubernetes to apply
-   a elasticsearchappconfig with that docker snapshot as ess image.
+   by publishing a docker snapshot into our internal docker registry and then using the serverless project api to deploy that snapshot to our serverless platform dev environment.
 
    The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/53#annotation-ess-public-url
 
@@ -128,7 +127,7 @@ To deploy a branch into a kubernetes cluster
    # Resolve ess url from commandline using curl, jq, htmlq
    > curl --silent -H "Authorization: Bearer bkua_a64eb34866110c2d205ff1e0bb37040c4b9c392b" "https://api.buildkite.com/v2/organizations/elastic/pipelines/elasticsearch-serverless-deploy-dev/builds/55/annotations" | jq '. | .[] | select(.context=="ess-public-url") | .body_html' | htmlq -t a
 
-   https://ess-dev-integtest-git-b150520767e3-project.es.34.29.251.82.ip.es.io
+   https://c56c73761b804a088ebdc6df94278e48.es.35.188.100.4.ip.es.io
    ```
 2. To access that elasticsearch instance the username and password can be resolved from vault ci
 
@@ -136,7 +135,7 @@ To deploy a branch into a kubernetes cluster
    export ESS_TEST_USERNAME=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
    export ESS_TEST_PASSWORD=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
 
-   curl -k -u $ESS_USERNAME:$ESS_PASSWORD https://ess-dev-integtest-git-b150520767e3-project.es.34.29.251.82.ip.es.io
+   curl -k -u $ESS_USERNAME:$ESS_PASSWORD https://c56c73761b804a088ebdc6df94278e48.es.35.188.100.4.ip.es.io
    {
       "name" : "es-es-search-656774785c-5gbqh",
       "cluster_name" : "es",

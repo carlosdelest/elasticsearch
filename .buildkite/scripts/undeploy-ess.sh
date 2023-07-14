@@ -17,20 +17,14 @@
 
 set -euo pipefail
 
-source "$BUILDKITE_DIR/scripts/utils/gke.sh"
+source "$BUILDKITE_DIR/scripts/utils/platform.sh"
 
-undeploynamespace=${1:-$GCLOUD_ESS_DEV_NAMESPACE}
-gcs_bucket=${2:-$GCS_BUCKET}
-gke_get_cluster_credentials $GCLOUD_SERVICE_ACCOUNT_VAULT_PATH $GCLOUD_PROJECT $GKE_CLUSTER_NAME $GCLOUD_REGION
+resolvePlatformEnvironment
 
-if kubectl get namespace | grep -q "^$undeploynamespace ";then
-    echo "Deleting namespace $undeploynamespace"
-    kubectl delete namespace $undeploynamespace
-else
-   echo "namespace $undeploynamespace does not exist"
-fi
+ALL_PROJECTS=$(curl -k -H 'Host: project-api' -H "Authorization: ApiKey $API_KEY" https://$PAPI_PUBLIC_IP:8443/api/v1/serverless/projects/elasticsearch)
+PROJECT_ID=$(echo $ALL_PROJECTS | jq -c --arg deploymentName "$DEPLOY_ID" '.items[] | select(.name == $deploymentName)' | jq -r '.id')
 
-# create gcs bucket to be used
-# using gcloud storage command blocked by https://github.com/elastic/ci-agent-images/pull/196
-# using -m allows running deletion of objects in bucket in parallel
-gsutil -m rm -r gs://$gcs_bucket
+curl -k -H 'Host: project-api' \
+     -H "Authorization: ApiKey $API_KEY" \
+     https://$PAPI_PUBLIC_IP:8443/api/v1/serverless/projects/elasticsearch/$PROJECT_ID \
+     -XDELETE

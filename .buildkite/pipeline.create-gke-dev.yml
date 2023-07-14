@@ -33,5 +33,5 @@ steps:
         ENV_UNIQUE_NAME: "${ENV_UNIQUE_NAME}"
         USER: "${USER}"
   - wait: ~
-  - label: ":k8s: Setup ess http proxy"
-    command: "$BUILDKITE_DIR/scripts/setup-ess-proxy.sh"
+  - label: ":k8s: Setup proxies"
+    command: "$BUILDKITE_DIR/scripts/setup-proxies.sh"

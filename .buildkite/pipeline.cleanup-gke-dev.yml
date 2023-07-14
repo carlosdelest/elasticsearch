@@ -11,7 +11,6 @@ env:
   GCLOUD_REGION: "${GCLOUD_REGION:-us-central1}"
   GCLOUD_SERVICE_ACCOUNT_VAULT_PATH: "secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-sa"
   GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-${CI_PIPELINE_ID}}"
-  K8S_DEPLOY_PROJECT_ID: ${DEPLOY_ID}-project
   VAULT_ADDR: "https://vault-ci-prod.elastic.dev"
 
 steps:

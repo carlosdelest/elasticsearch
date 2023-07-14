@@ -19,46 +19,25 @@
 
 set -euo pipefail
 
-source "$BUILDKITE_DIR/scripts/utils/gke.sh"
+source "$BUILDKITE_DIR/scripts/utils/platform.sh"
 
-gke_get_cluster_credentials $GCLOUD_SERVICE_ACCOUNT_VAULT_PATH $GCLOUD_PROJECT $GKE_CLUSTER_NAME $GCLOUD_REGION
+resolvePlatformEnvironment
+
+ALL_PROJECTS=$(curl -k -H 'Host: project-api' -H "Authorization: ApiKey $API_KEY" https://$PAPI_PUBLIC_IP:8443/api/v1/serverless/projects/elasticsearch)
 
 epochNow=$(date "+%s")
 epochHourNow=$((epochNow / 3600))
-# get all namespaces that start with ess-dev-
-export NAMESPACE_PREFIX="${CI_PIPELINE_ID}*"
-namespaces=( $(kubectl get namespaces -o yaml | yq eval '.items.[].metadata.labels."kubernetes.io/metadata.name" | select(. == strenv(NAMESPACE_PREFIX))' - ) )
-
-# get length of namespaces array
-namespaceslength=${#namespaces[@]}
-for (( i=0; i<${namespaceslength}; i++ ));
-do
-  epochCreation=$(date -d $(kubectl get namespace ${namespaces[$i]} -o yaml | yq eval '.metadata.creationTimestamp' -) "+%s")
-  epochHourCreation=$((epochCreation / 3600))
-  ageInHour=$(($epochHourNow - $epochHourCreation))
-
-  if (( ageInHour > $MAX_DEPLOYMENT_AGE_IN_HOUR )); then
-      echo "Deleting deployment ${namespaces[$i]} ($ageInHour hours old)"
-      . $BUILDKITE_DIR/scripts/undeploy-ess.sh ${namespaces[$i]} ${namespaces[$i]}-object-store
-  else
-      echo "Skipping deployment ${namespaces[$i]} ($ageInHour hours old)"
-  fi
-done
-
-# cleanup dangling object stores
-objectstores=( $(gsutil ls | grep "${NAMESPACE_PREFIX}-.*object-store") )
-# get length of objectstores array
-objectstoreslength=${#objectstores[@]}
-for (( i=0; i<${objectstoreslength}; i++ ));
-do
-  echo "Checking objectstore at ${objectstores[$i]}"
-  epochCreation=$(gsutil label get ${objectstores[$i]} | jq -r '."creation-timestamp"')
-  epochHourCreation=$((epochCreation / 3600))
-  ageInHour=$(($epochHourNow - $epochHourCreation))
-
-  if (( ageInHour > $MAX_DEPLOYMENT_AGE_IN_HOUR )); then
-      echo "Deleting dangling objectstore at ${objectstores[$i]} ($ageInHour hours old)"
-      # delete related object store
-      gsutil -m rm -r ${objectstores[$i]}
-  fi
+echo $ALL_PROJECTS | jq -c '.items[]' | while read deployment; do
+    epochCreation=$(date -d $(echo $deployment | jq -r '.metadata.created_at') "+%s")
+    epochHourCreation=$((epochCreation / 3600))
+    ageInHour=$(($epochHourNow - $epochHourCreation))
+    projectId=$(echo $deployment | jq -r '.id')
+    if (( ageInHour > $MAX_DEPLOYMENT_AGE_IN_HOUR )); then
+       echo "Deleting deployment $projectId ($ageInHour hours old)"
+       curl -k -H 'Host: project-api' \
+               -H "Authorization: ApiKey $API_KEY" \
+                https://$PAPI_PUBLIC_IP:8443/api/v1/serverless/projects/elasticsearch/$projectId -XDELETE
+    else
+        echo "Skipping deployment $projectId ($ageInHour hours old)"
+    fi
 done
