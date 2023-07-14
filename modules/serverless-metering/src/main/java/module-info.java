@@ -18,10 +18,10 @@
 module org.elasticsearch.metering {
     requires org.apache.logging.log4j;
 
+    requires org.elasticsearch.base;
     requires org.elasticsearch.logging;
     requires org.elasticsearch.server;
     requires org.elasticsearch.xcontent;
     requires org.elasticsearch.metrics;
 
-    provides co.elastic.elasticsearch.metrics.MetricsCollector with co.elastic.elasticsearch.metering.MeteringService;
 }

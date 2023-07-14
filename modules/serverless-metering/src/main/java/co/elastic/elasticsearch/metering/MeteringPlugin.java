@@ -22,6 +22,8 @@ import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.indices.IndicesService;
@@ -35,6 +37,7 @@ import org.elasticsearch.tracing.Tracer;
 import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
@@ -45,6 +48,13 @@ import java.util.function.Supplier;
 public class MeteringPlugin extends Plugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
+
+    private MeteringService service;
+
+    @Override
+    public List<Setting<?>> getSettings() {
+        return List.of(MeteringService.PROJECT_ID, MeteringService.REPORT_PERIOD);
+    }
 
     @Override
     public Collection<Object> createComponents(
@@ -63,8 +73,20 @@ public class MeteringPlugin extends Plugin {
         AllocationService allocationService,
         IndicesService indicesService
     ) {
-        log.info("Initializing MeteringPlugin");
+        log.info(
+            "Initializing MeteringPlugin using node id [{}], project id [{}]",
+            nodeEnvironment.nodeId(),
+            MeteringService.PROJECT_ID.get(environment.settings())
+        );
 
-        return List.of(new MeteringService(), new IngestMetricManager(), new IndexSizeMetricManager());
+        // do nothing with the reports for now
+        service = new MeteringService(nodeEnvironment.nodeId(), environment.settings(), r -> {}, threadPool);
+
+        return List.of(service, new IngestMetricManager(), new IndexSizeMetricManager());
+    }
+
+    @Override
+    public void close() throws IOException {
+        IOUtils.close(service);
     }
 }

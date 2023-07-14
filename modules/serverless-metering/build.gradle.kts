@@ -1,4 +1,5 @@
 plugins {
+    id("elasticsearch.build")
     id("elasticsearch.internal-cluster-test")
 }
 

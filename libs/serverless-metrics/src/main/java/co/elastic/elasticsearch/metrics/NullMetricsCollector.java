@@ -17,14 +17,17 @@
 
 package co.elastic.elasticsearch.metrics;
 
+import java.util.Map;
+import java.util.function.LongSupplier;
+
 class NullMetricsCollector implements MetricsCollector {
     @Override
-    public void registerCounterMetric(String id) {
-
+    public Counter registerCounterMetric(String id, Map<String, ?> metadata) {
+        return c -> {};
     }
 
     @Override
-    public void registerGaugeMetric(String id) {
+    public void registerSampledMetric(String id, Map<String, ?> metadata, LongSupplier getValue) {
 
     }
 }
