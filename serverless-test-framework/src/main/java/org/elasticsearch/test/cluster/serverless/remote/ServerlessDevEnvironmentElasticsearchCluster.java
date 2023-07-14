@@ -17,11 +17,13 @@
 
 package org.elasticsearch.test.cluster.serverless.remote;
 
+import org.elasticsearch.test.cluster.LogType;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.Version;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
+import java.io.InputStream;
 import java.util.List;
 
 public class ServerlessDevEnvironmentElasticsearchCluster implements ServerlessElasticsearchCluster {
@@ -107,6 +109,11 @@ public class ServerlessDevEnvironmentElasticsearchCluster implements ServerlessE
 
     @Override
     public void upgradeToVersion(Version version) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public InputStream getNodeLog(int index, LogType logType) {
         throw new UnsupportedOperationException();
     }
 
