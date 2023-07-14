@@ -67,6 +67,10 @@ project(":distribution:archives").subprojects.map(Project::getName).forEach { di
 
         args("-Dscan.tag.NESTED")
 
+        if (gradle.startParameter.isBuildCacheEnabled) {
+            args("--build-cache")
+        }
+
         val buildCacheUrl = System.getProperty("org.elasticsearch.build.cache.url")
         if (buildCacheUrl != null) {
             args("-Dorg.elasticsearch.build.cache.url=$buildCacheUrl")
