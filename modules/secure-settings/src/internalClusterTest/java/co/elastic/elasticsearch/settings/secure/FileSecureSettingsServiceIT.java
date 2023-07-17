@@ -103,7 +103,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         assertFalse(dataFileSettingsService.watching());
 
         writeJSONFile(masterNode, testJSON, "foo");
-        assertClusterStateSaveOK(savedClusterState.countDownLatch(), savedClusterState.metadataVersion(), "foo");
+        assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "foo");
 
         for (PluginsService ps : internalCluster().getInstances(PluginsService.class)) {
             TestSecureSettingPlugin plugin = (TestSecureSettingPlugin) ps.pluginMap().get(TestSecureSettingPlugin.class.getName());
@@ -165,7 +165,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         // reset cluster state listener
         savedClusterState = setupClusterStateListener(masterNode);
         writeJSONFile(masterNode, testJSON, "foo");
-        assertClusterStateSaveOK(savedClusterState.countDownLatch(), savedClusterState.metadataVersion(), "foo");
+        assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "foo");
     }
 
     // test valid -> invalid
@@ -189,7 +189,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         assertFalse(dataFileSettingsService.watching());
 
         writeJSONFile(masterNode, testJSON, "foo");
-        assertClusterStateSaveOK(savedClusterState.countDownLatch(), savedClusterState.metadataVersion(), "foo");
+        assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "foo");
 
         for (PluginsService ps : internalCluster().getInstances(PluginsService.class)) {
             TestSecureSettingPlugin plugin = (TestSecureSettingPlugin) ps.pluginMap().get(TestSecureSettingPlugin.class.getName());
@@ -225,7 +225,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         assertFalse(dataFileSettingsService.watching());
 
         writeJSONFile(masterNode, testJSON, "foo");
-        assertClusterStateSaveOK(savedClusterState.countDownLatch(), savedClusterState.metadataVersion(), "foo");
+        assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "foo");
 
         for (PluginsService ps : internalCluster().getInstances(PluginsService.class)) {
             TestSecureSettingPlugin plugin = (TestSecureSettingPlugin) ps.pluginMap().get(TestSecureSettingPlugin.class.getName());
@@ -236,7 +236,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         savedClusterState = setupClusterStateListener(masterNode);
         writeJSONFile(masterNode, testJSON, "bar");
         // reset cluster state listener
-        assertClusterStateSaveOK(savedClusterState.countDownLatch(), savedClusterState.metadataVersion(), "bar");
+        assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "bar");
 
         for (PluginsService ps : internalCluster().getInstances(PluginsService.class)) {
             TestSecureSettingPlugin plugin = (TestSecureSettingPlugin) ps.pluginMap().get(TestSecureSettingPlugin.class.getName());
@@ -260,8 +260,12 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         assertThat(metadata.getErrorStackTrace().get(0), containsString(expectedValue));
     }
 
-    private void assertClusterStateSaveOK(CountDownLatch savedClusterState, AtomicLong metadataVersion, String expectedValue)
-        throws Exception {
+    private void assertClusterStateSaveOK(
+        CountDownLatch savedClusterState,
+        String masterNode,
+        AtomicLong metadataVersion,
+        String expectedValue
+    ) throws Exception {
         boolean awaitSuccessful = savedClusterState.await(1, TimeUnit.MINUTES);
         assertTrue(awaitSuccessful);
 
@@ -273,9 +277,10 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         assertThat(clusterStateResponse.getState().custom(ClusterStateSecrets.TYPE), nullValue());
 
         // but it will be visible directly from the cluster service?
-        assertThat(clusterService().state().custom(ClusterStateSecrets.TYPE), not(nullValue()));
+        var clusterService = internalCluster().clusterService(masterNode);
+        assertThat(clusterService.state().custom(ClusterStateSecrets.TYPE), not(nullValue()));
         assertThat(
-            clusterService().state().<ClusterStateSecrets>custom(ClusterStateSecrets.TYPE).getSettings().getString("test.setting"),
+            clusterService.state().<ClusterStateSecrets>custom(ClusterStateSecrets.TYPE).getSettings().getString("test.setting"),
             equalTo(expectedValue)
         );
     }
