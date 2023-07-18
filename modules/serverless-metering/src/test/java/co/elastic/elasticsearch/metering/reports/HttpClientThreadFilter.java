@@ -15,13 +15,14 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-module org.elasticsearch.metering {
-    requires org.apache.logging.log4j;
+package co.elastic.elasticsearch.metering.reports;
 
-    requires org.elasticsearch.base;
-    requires org.elasticsearch.logging;
-    requires org.elasticsearch.server;
-    requires org.elasticsearch.xcontent;
-    requires org.elasticsearch.metrics;
-    requires java.net.http;
+import com.carrotsearch.randomizedtesting.ThreadFilter;
+
+public class HttpClientThreadFilter implements ThreadFilter {
+    @Override
+    public boolean reject(Thread t) {
+        // Java HttpClient has a selector thread that only goes away when it is GCd
+        return t.getName().startsWith("HttpClient-");
+    }
 }

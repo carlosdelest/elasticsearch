@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.reports.MeteringReporter;
+
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
@@ -49,11 +51,17 @@ public class MeteringPlugin extends Plugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
 
+    private MeteringReporter reporter;
     private MeteringService service;
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(MeteringService.PROJECT_ID, MeteringService.REPORT_PERIOD);
+        return List.of(
+            MeteringService.PROJECT_ID,
+            MeteringService.REPORT_PERIOD,
+            MeteringReporter.METERING_URL,
+            MeteringReporter.BATCH_SIZE
+        );
     }
 
     @Override
@@ -79,14 +87,14 @@ public class MeteringPlugin extends Plugin {
             MeteringService.PROJECT_ID.get(environment.settings())
         );
 
-        // do nothing with the reports for now
-        service = new MeteringService(nodeEnvironment.nodeId(), environment.settings(), r -> {}, threadPool);
+        reporter = new MeteringReporter(environment.settings(), threadPool);
+        service = new MeteringService(nodeEnvironment.nodeId(), environment.settings(), reporter::sendRecords, threadPool);
 
-        return List.of(service, new IngestMetricManager(), new IndexSizeMetricManager());
+        return List.of(reporter, service, new IngestMetricManager(), new IndexSizeMetricManager());
     }
 
     @Override
     public void close() throws IOException {
-        IOUtils.close(service);
+        IOUtils.close(reporter, service);
     }
 }

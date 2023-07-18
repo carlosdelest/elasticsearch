@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public record UsageMetrics(
+    // this is the metric value for a single metric & value, despite the name
     String type,
     @Nullable String subType,
     long quantity,

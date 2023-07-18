@@ -17,6 +17,10 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.reports.HttpClientThreadFilter;
+
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+
 import org.elasticsearch.plugins.PluginsService;
 
 import java.util.stream.StreamSupport;
@@ -24,6 +28,7 @@ import java.util.stream.StreamSupport;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.not;
 
+@ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
 public class MeteringIT extends AbstractMeteringIntegTestCase {
 
     public void testNodeCanStartWithMeteringEnabled() {

@@ -1,0 +1,5 @@
+grant {
+  // permissions for http clients
+  permission java.net.URLPermission "http:*", "POST:*";
+  permission java.net.URLPermission "https:*", "POST:*";
+};
