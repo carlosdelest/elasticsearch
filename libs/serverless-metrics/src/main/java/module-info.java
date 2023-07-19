@@ -16,8 +16,6 @@
  */
 
 module org.elasticsearch.metrics {
-    uses co.elastic.elasticsearch.metrics.MetricsCollector;
-
     requires org.apache.logging.log4j;
 
     requires org.elasticsearch.logging;

@@ -30,16 +30,13 @@ import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
-import java.util.function.LongSupplier;
+import java.util.stream.Stream;
 
 /**
  * The main metering service. Takes arbitrary metrics that are registered with it and reports them to a metering API.
  */
-public class MeteringService extends AbstractLifecycleComponent implements MetricsCollector {
+public class MeteringService extends AbstractLifecycleComponent {
 
     private static final Logger log = LogManager.getLogger(MeteringService.class);
 
@@ -54,22 +51,26 @@ public class MeteringService extends AbstractLifecycleComponent implements Metri
     private final String nodeId;
     private final String projectId;
     private final Scheduler scheduler;
+    private final List<MetricsCollector> sources;
     private final TimeValue reportPeriod;
     private final Consumer<List<UsageRecord>> reporter;
 
-    private final Map<String, Map<String, ?>> metricMetadata = new ConcurrentHashMap<>();
-    private final Map<String, AtomicLong> counters = new ConcurrentHashMap<>();
-    private final Map<String, LongSupplier> samples = new ConcurrentHashMap<>();
-
     private ReportGatherer reportGatherer;
 
-    public MeteringService(String nodeId, Settings settings, Consumer<List<UsageRecord>> reporter, Scheduler scheduler) {
+    public MeteringService(
+        String nodeId,
+        Settings settings,
+        Stream<MetricsCollector> sources,
+        Consumer<List<UsageRecord>> reporter,
+        Scheduler scheduler
+    ) {
         this.nodeId = nodeId;
         this.projectId = PROJECT_ID.get(settings);
         if (projectId.isEmpty()) {
             log.error(PROJECT_ID.getKey() + " is not set");
         }
         this.scheduler = scheduler;
+        this.sources = sources.toList();
         this.reportPeriod = REPORT_PERIOD.get(settings);
         this.reporter = reporter;
     }
@@ -85,28 +86,6 @@ public class MeteringService extends AbstractLifecycleComponent implements Metri
         reportGatherer.cancel();
     }
 
-    @Override
-    public Counter registerCounterMetric(String id, Map<String, ?> metadata) {
-        log.info("Registering counter metric [{}]", id);
-        if (metricMetadata.putIfAbsent(id, metadata) != null) {
-            throw new IllegalArgumentException(id + " already registered");
-        }
-
-        AtomicLong adder = new AtomicLong();
-        counters.put(id, adder);
-        return adder::addAndGet;
-    }
-
-    @Override
-    public void registerSampledMetric(String id, Map<String, ?> metadata, LongSupplier getValue) {
-        log.info("Registering sampled metric [{}]", id);
-        if (metricMetadata.putIfAbsent(id, metadata) != null) {
-            throw new IllegalArgumentException(id + " already registered");
-        }
-
-        samples.put(id, getValue);
-    }
-
     String nodeId() {
         return nodeId;
     }
@@ -115,16 +94,8 @@ public class MeteringService extends AbstractLifecycleComponent implements Metri
         return projectId;
     }
 
-    Map<String, Map<String, ?>> metricMetadata() {
-        return metricMetadata;
-    }
-
-    Map<String, AtomicLong> counters() {
-        return counters;
-    }
-
-    Map<String, LongSupplier> samples() {
-        return samples;
+    Stream<MetricsCollector.MetricValue> getMetrics() {
+        return sources.stream().flatMap(s -> s.getMetrics().stream());
     }
 
     @Override

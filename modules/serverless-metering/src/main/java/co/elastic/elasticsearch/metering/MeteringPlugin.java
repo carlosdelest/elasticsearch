@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
+import co.elastic.elasticsearch.metrics.MetricsCollector;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
@@ -31,6 +32,7 @@ import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
+import org.elasticsearch.plugins.ExtensiblePlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.script.ScriptService;
@@ -43,14 +45,16 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * Plugin responsible for starting up all serverless metering classes.
  */
-public class MeteringPlugin extends Plugin {
+public class MeteringPlugin extends Plugin implements ExtensiblePlugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
 
+    private List<MetricsCollector> metricsCollectors;
     private MeteringReporter reporter;
     private MeteringService service;
 
@@ -62,6 +66,11 @@ public class MeteringPlugin extends Plugin {
             MeteringReporter.METERING_URL,
             MeteringReporter.BATCH_SIZE
         );
+    }
+
+    @Override
+    public void loadExtensions(ExtensionLoader loader) {
+        metricsCollectors = loader.loadExtensions(MetricsCollector.class);
     }
 
     @Override
@@ -87,10 +96,16 @@ public class MeteringPlugin extends Plugin {
             MeteringService.PROJECT_ID.get(environment.settings())
         );
 
-        reporter = new MeteringReporter(environment.settings(), threadPool);
-        service = new MeteringService(nodeEnvironment.nodeId(), environment.settings(), reporter::sendRecords, threadPool);
+        // add in the built-in metrics
+        Stream<MetricsCollector> sources = Stream.concat(
+            Stream.of(new IngestMetricsCollector(), new IndexSizeMetricsCollector()),
+            metricsCollectors.stream()
+        );
 
-        return List.of(reporter, service, new IngestMetricManager(), new IndexSizeMetricManager());
+        reporter = new MeteringReporter(environment.settings(), threadPool);
+        service = new MeteringService(nodeEnvironment.nodeId(), environment.settings(), sources, reporter::sendRecords, threadPool);
+
+        return List.of(reporter, service, new IngestMetricsCollector(), new IndexSizeMetricsCollector());
     }
 
     @Override

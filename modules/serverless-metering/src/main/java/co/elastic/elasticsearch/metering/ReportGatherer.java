@@ -32,7 +32,6 @@ import org.elasticsearch.threadpool.ThreadPool;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -110,20 +109,10 @@ class ReportGatherer {
     private void reportMetrics() {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
-        List<UsageRecord> records = new ArrayList<>(service.counters().size() + service.samples().size());
-
-        // TODO: parallelise these
-        // gather counter metrics
-        for (var c : service.counters().entrySet()) {
-            long count = c.getValue().getAndSet(0);
-            records.add(getRecordForCount(c.getKey(), count, service.metricMetadata().get(c.getKey()), now));
-        }
-
-        // gather sampled metrics
-        for (var s : service.samples().entrySet()) {
-            long sample = s.getValue().getAsLong();
-            records.add(getRecordForSample(s.getKey(), sample, service.metricMetadata().get(s.getKey()), now));
-        }
+        List<UsageRecord> records = service.getMetrics().map(v -> switch (v.type()) {
+            case COUNTER -> getRecordForCount(v.id(), v.value(), v.metadata(), now);
+            case SAMPLED -> getRecordForSample(v.id(), v.value(), v.metadata(), now);
+        }).toList();
 
         reporter.accept(records);
     }

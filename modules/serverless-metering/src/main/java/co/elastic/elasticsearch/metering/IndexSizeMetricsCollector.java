@@ -17,12 +17,21 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metrics.MetricsCollector;
+
+import java.util.Collection;
+import java.util.List;
+
 /**
- * Responsible for the ingest document size metric.
+ * Responsible for the index size metric.
  * <p>
  * Registers a metric on the metering service,
- * and connects to the IngestService to be notified whenever there is a new document ingested.
- * It takes the document, calculates its normalized size, then reports it to the registered metric
- * on MeteringService.
+ * and connects to the SearchService to gather segment sizes whenever it is notified by the gauge metric
+ * that a new metric is required.
  */
-class IngestMetricManager {}
+class IndexSizeMetricsCollector implements MetricsCollector {
+    @Override
+    public Collection<MetricValue> getMetrics() {
+        return List.of();
+    }
+}

@@ -15,19 +15,24 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metrics;
+package co.elastic.elasticsearch.metering;
 
-import java.util.Map;
-import java.util.function.LongSupplier;
+import co.elastic.elasticsearch.metrics.MetricsCollector;
 
-class NullMetricsCollector implements MetricsCollector {
+import java.util.Collection;
+import java.util.List;
+
+/**
+ * Responsible for the ingest document size metric.
+ * <p>
+ * Registers a metric on the metering service,
+ * and connects to the IngestService to be notified whenever there is a new document ingested.
+ * It takes the document, calculates its normalized size, then reports it to the registered metric
+ * on MeteringService.
+ */
+class IngestMetricsCollector implements MetricsCollector {
     @Override
-    public Counter registerCounterMetric(String id, Map<String, ?> metadata) {
-        return c -> {};
-    }
-
-    @Override
-    public void registerSampledMetric(String id, Map<String, ?> metadata, LongSupplier getValue) {
-
+    public Collection<MetricValue> getMetrics() {
+        return List.of();
     }
 }

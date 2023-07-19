@@ -20,7 +20,6 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
 
-import org.apache.lucene.util.mutable.MutableValueLong;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
@@ -34,11 +33,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
@@ -56,6 +57,48 @@ public class MeteringServiceTests extends ESTestCase {
 
     private TestThreadPool threadPool;
     private Settings settings;
+
+    private static class TestCounter implements MetricsCollector {
+        private final String id;
+        private final Map<String, ?> metadata;
+
+        private final AtomicLong value = new AtomicLong();
+
+        private TestCounter(String id, Map<String, ?> metadata) {
+            this.id = id;
+            this.metadata = metadata;
+        }
+
+        public void add(long value) {
+            this.value.addAndGet(value);
+        }
+
+        @Override
+        public Collection<MetricValue> getMetrics() {
+            return List.of(new MetricValue(Type.COUNTER, id, metadata, value.getAndSet(0)));
+        }
+    }
+
+    private static class TestSample implements MetricsCollector {
+        private final String id;
+        private final Map<String, ?> metadata;
+
+        private long value;
+
+        private TestSample(String id, Map<String, ?> metadata) {
+            this.id = id;
+            this.metadata = metadata;
+        }
+
+        public void set(long value) {
+            this.value = value;
+        }
+
+        @Override
+        public Collection<MetricValue> getMetrics() {
+            return List.of(new MetricValue(Type.SAMPLED, id, metadata, value));
+        }
+    }
 
     @Before
     public void setup() {
@@ -130,20 +173,26 @@ public class MeteringServiceTests extends ESTestCase {
     public void testServiceReportsMetrics() throws InterruptedException {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        try (MeteringService service = new MeteringService(NODE_ID, settings, records::addAll, threadPool)) {
-            MetricsCollector.Counter counter1 = service.registerCounterMetric("counter1", Map.of("id", "counter1"));
-            MetricsCollector.Counter counter2 = service.registerCounterMetric("counter2", Map.of("id", "counter2"));
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var counter2 = new TestCounter("counter2", Map.of("id", "counter2"));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
+        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"));
 
-            MutableValueLong sampled1 = new MutableValueLong();
-            service.registerSampledMetric("sampled1", Map.of("id", "sampled1"), () -> sampled1.value);
-            MutableValueLong sampled2 = new MutableValueLong();
-            service.registerSampledMetric("sampled2", Map.of("id", "sampled2"), () -> sampled2.value);
+        try (
+            MeteringService service = new MeteringService(
+                NODE_ID,
+                settings,
+                Stream.of(counter1, counter2, sampled1, sampled2),
+                records::addAll,
+                threadPool
+            )
+        ) {
 
             counter1.add(10);
             counter1.add(5);
             counter2.add(20);
-            sampled1.value = 50;
-            sampled2.value = 60;
+            sampled1.set(50);
+            sampled2.set(60);
 
             service.start();
 
@@ -157,10 +206,10 @@ public class MeteringServiceTests extends ESTestCase {
     public void testCounterMetricsReset() throws InterruptedException {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        try (MeteringService service = new MeteringService(NODE_ID, settings, records::addAll, threadPool)) {
-            MetricsCollector.Counter counter1 = service.registerCounterMetric("counter1", Map.of("id", "counter1"));
-            MetricsCollector.Counter counter2 = service.registerCounterMetric("counter2", Map.of("id", "counter2"));
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var counter2 = new TestCounter("counter2", Map.of("id", "counter2"));
 
+        try (MeteringService service = new MeteringService(NODE_ID, settings, Stream.of(counter1, counter2), records::addAll, threadPool)) {
             counter1.add(10);
             counter1.add(5);
             counter2.add(20);
@@ -187,14 +236,12 @@ public class MeteringServiceTests extends ESTestCase {
     public void testSampledMetricsMaintained() throws InterruptedException {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        try (MeteringService service = new MeteringService(NODE_ID, settings, records::addAll, threadPool)) {
-            MutableValueLong sampled1 = new MutableValueLong();
-            service.registerSampledMetric("sampled1", Map.of("id", "sampled1"), () -> sampled1.value);
-            MutableValueLong sampled2 = new MutableValueLong();
-            service.registerSampledMetric("sampled2", Map.of("id", "sampled2"), () -> sampled2.value);
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
+        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"));
 
-            sampled1.value = 50;
-            sampled2.value = 60;
+        try (MeteringService service = new MeteringService(NODE_ID, settings, Stream.of(sampled1, sampled2), records::addAll, threadPool)) {
+            sampled1.set(50);
+            sampled2.set(60);
 
             service.start();
 
@@ -204,8 +251,8 @@ public class MeteringServiceTests extends ESTestCase {
             reported = pollRecords(records, 2, TimeValue.timeValueSeconds(10));
             checkRecords(reported, Map.of(), Map.of("sampled1", 50L, "sampled2", 60L));
 
-            sampled1.value = 20;
-            sampled2.value = 65;
+            sampled1.set(20);
+            sampled2.set(65);
 
             reported = pollRecords(records, 2, TimeValue.timeValueSeconds(10));
             checkRecords(reported, Map.of(), Map.of("sampled1", 20L, "sampled2", 65L));
@@ -217,13 +264,12 @@ public class MeteringServiceTests extends ESTestCase {
     public void testStopStops() throws InterruptedException {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        try (MeteringService service = new MeteringService(NODE_ID, settings, records::addAll, threadPool)) {
-            MetricsCollector.Counter counter1 = service.registerCounterMetric("counter1", Map.of("id", "counter1"));
-            MutableValueLong sampled1 = new MutableValueLong();
-            service.registerSampledMetric("sampled1", Map.of("id", "sampled1"), () -> sampled1.value);
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
 
+        try (MeteringService service = new MeteringService(NODE_ID, settings, Stream.of(counter1, sampled1), records::addAll, threadPool)) {
             counter1.add(15);
-            sampled1.value = 50;
+            sampled1.set(50);
 
             service.start();
 
@@ -233,7 +279,7 @@ public class MeteringServiceTests extends ESTestCase {
             service.stop();
 
             counter1.add(20);
-            sampled1.value = 60;
+            sampled1.set(60);
 
             // no more records should appear
             assertNull(records.poll(6, TimeUnit.SECONDS));

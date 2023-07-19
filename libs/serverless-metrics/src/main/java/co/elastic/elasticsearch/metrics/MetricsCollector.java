@@ -17,29 +17,35 @@
 
 package co.elastic.elasticsearch.metrics;
 
+import java.util.Collection;
 import java.util.Map;
-import java.util.function.LongSupplier;
 
 /**
- * A class that can collect metrics for reporting and metering. Can be referenced by other plugins
- * for reporting their own metrics.
+ * Represents an object that collects metrics for reporting
  */
 public interface MetricsCollector {
+
     /**
-     * Used to add values to a counter metric
+     * The type of metric
      */
-    interface Counter {
-        void add(long value);
+    enum Type {
+        COUNTER,
+        SAMPLED
     }
 
     /**
-     * Register a new counter metric. Add values to the counter at any time using the returned {@code Counter} object.
+     * A single metric value for reporting
+     * @param type      The metric type
+     * @param id        An id for the metric this value is for
+     * @param metadata  Associated metadata for the metric
+     * @param value     The current metric value
      */
-    Counter registerCounterMetric(String id, Map<String, ?> metadata);
+    record MetricValue(Type type, String id, Map<String, ?> metadata, long value) {}
 
     /**
-     * Register a new sampled metric. The metric value is obtained from the specified {@code LongSupplier}
-     * on an arbitrary threadpool.
+     * Returns the current value of the metrics collected by this class.
+     * This method may be called at any time on any thread.
+     * As part of calling this method, counter metrics should be (atomically) reset.
      */
-    void registerSampledMetric(String id, Map<String, ?> metadata, LongSupplier getValue);
+    Collection<MetricValue> getMetrics();
 }
