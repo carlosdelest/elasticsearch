@@ -8,4 +8,4 @@ steps:
     branches: main
     command:
         "export SNYK_TOKEN=$(vault read -field=snyk-token secret/ci/elastic-elasticsearch-serverless/snyk); \
-        .buildkite/scripts/run-gradle.sh uploadSnykDependencyGraph -PsnykTargetReference=main -P"
+        .buildkite/scripts/run-gradle.sh uploadSnykDependencyGraph -PsnykTargetReference=main"
