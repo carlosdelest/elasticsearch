@@ -1,0 +1,30 @@
+"Expected search indices have fast refresh applied":
+  - skip:
+      features: ["allowed_warnings_regex"]
+
+  - do:
+      synonyms.put:
+        synonyms_set: test-update-synonyms
+        body:
+          synonyms_set:
+            - synonyms: "hello, hi"
+            - synonyms: "bye => goodbye"
+              id: "test-id"
+  - match: { result: "created" }
+
+  - do:
+      indices.create:
+        index: ".synonyms30"
+        body:
+          settings:
+            index:
+              hidden: true
+
+  - do:
+      indices.get_settings:
+        expand_wildcards: "open,hidden"
+      allowed_warnings_regex:
+        - "this request accesses system indices.*"
+
+  - match: { \.synonyms-2.settings.index.fast_refresh: "true" }
+  - match: { \.synonyms30.settings.index.fast_refresh: null }
