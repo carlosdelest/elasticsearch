@@ -1,0 +1,59 @@
+"Expected enterprise search indices have fast refresh applied":
+  - skip:
+      features: ["allowed_warnings_regex"]
+
+  - do:
+      indices.create:
+        index: "test-index1"
+
+  - do:
+      search_application.put:
+        name: test-search-application-1
+        body:
+          indices: [ "test-index1" ]
+
+  - do:
+      indices.create:
+        index: ".search-1"
+        body:
+          settings:
+            index:
+              hidden: true
+
+  - do:
+      query_ruleset.put:
+        ruleset_id: test-ruleset
+        body:
+          rules:
+            - rule_id: query-rule-id1
+              type: pinned
+              criteria:
+                - type: exact
+                  metadata: query_string
+                  value: elastic
+              actions:
+                ids:
+                  - 'id1'
+                  - 'id2'
+  - match: { result: 'created' }
+
+  - do:
+      indices.create:
+        index: ".query-1"
+        body:
+          settings:
+            index:
+              hidden: true
+
+  - do:
+      indices.get_settings:
+        expand_wildcards: "open,hidden"
+      allowed_warnings_regex:
+        - "this request accesses system indices.*"
+
+  - match: { \.search-app-1.settings.index.fast_refresh: "true" }
+  - match: { \.search-1.settings.index.fast_refresh: null }
+  - match: { \.query-rules-1.settings.index.fast_refresh: "true" }
+  - match: { \.query-1.settings.index.fast_refresh: null }
+
+
