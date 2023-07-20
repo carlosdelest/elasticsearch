@@ -4,7 +4,7 @@ agents:
   image: family/elasticsearch-ubuntu-2022
 
 steps:
-  - label: ":gradle: Run snyk dependency monitoring"
+  - label: ":gradle: Run snyk monitoring"
     branches: main
     command:
         "export SNYK_TOKEN=$(vault read -field=snyk-token secret/ci/elastic-elasticsearch-serverless/snyk); \
