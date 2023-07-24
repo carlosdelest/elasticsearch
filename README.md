@@ -169,6 +169,16 @@ or
 > bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch --commit b150520767e3
 ```
 
+### Update an elasticsearch serverless platform dev environment deployment
+
+To update an existing elasticsearch serverless dev deployment the update-dev buildkite pipeline at https://buildkite.com/elastic/elasticsearch-serverless-udpate-dev can be used.
+
+The pipeline must be triggered manually and requires an existing ess deployment. 
+
+When invoking manually the `PROJECT_ID` of the deployment to be updated must be passed as environment variable which
+can be configured in the new build buildkite pipeline dialog (https://buildkite.com/elastic/elasticsearch-serverless-udpate-dev#new).
+
+
 ### Running end to end tests against a kubernetes based serverless platform dev environment
 
 We have a set of end to end tests that run against a kubernetes based serverless platform dev environment.
