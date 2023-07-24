@@ -42,7 +42,8 @@ ESS_ROOT_PASSWORD=$(echo $CREATE_RESULT | jq -r '.credentials.password')
 # wait for the project namespace to be created
 
 echo '--- Wait for ess pods be ready'
-retry 20 1 "kubectl wait --for=condition=Ready pods --all -n project-$PROJECT_ID --timeout=240s"
+
+retry 20 5 "kubectl wait --for=condition=Ready pods --all -n project-$PROJECT_ID --timeout=240s"
 
 echo "--- Testing ess access"
 ES_USERNAME=$(vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
