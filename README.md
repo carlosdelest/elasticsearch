@@ -282,6 +282,78 @@ docker run --rm -d --name es02 --net elastic -p 9202:9202 -p 9302:9302 -e ES_JAV
 docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAVA_OPTS="-Xms1g -Xmx1g" -e node.name=es03 -e cluster.initial_master_nodes=es01,es02,es03 -e discovery.seed_hosts=es01,es02 -e node.roles='["master"]' -e xpack.security.enabled=false -e cluster.name=stateless -e stateless.enabled=true -e stateless.object_store.type=s3 -e stateless.object_store.client=test -e stateless.object_store.bucket=... -v $(realpath ./secrets) elasticsearch-serverless
 ```
 
+#### Running autoscaling E2E tests
+
+* Create your own cloud dev enviroment based on the [k8s-gitops-control](https://github.com/elastic/k8s-gitops-control-plane#local-development-environment) instructions. 
+
+There are a lot of prerequisites that need to be installed on your local machine in order to create an environment with just a `make dev-deploy` command. Reach out to the `platform-engineering-productivity` team if you have any issues.
+
+* Create a dev Python environment for running (es-benchmarks)[https://github.com/elastic/elasticsearch-benchmarks]. 
+
+Reach out to the `es-perf` team if you have issues installing `pyenv` and building `esbench`.
+
+* Use [serverless-on-k8s](https://github.com/elastic/elasticsearch-benchmarks/tree/master/tools/serverless-on-k8s) tool for deploying `elasticsearch-serverless` Docker images 
+for performance testing. 
+
+* Configure `kubectl` to use the `esbench` configuration `serverless-on-k8s.py configure-kubectl --k8s-cluster=<your_k8s_cluster_name>`
+
+`your_k8s_cluster_name` is the cluster name you set in the `infra.env` file in the `k8s-gitops-control-plane` repo
+
+* Create a load balancer ``serverless-on-k8s.py create-external-loadbalancer`
+
+* Create a new ES namespace `serverless-on-k8s.py create`
+
+The script will ask you whether you want to edit the deployment descriptors for ES services. Do edit them, because the defaults are too high for your development clusters. 
+Set the disk limits to `100Gb`, memory limit to `8Gb` and the CPU limit to `4`.
+
+When the namespace is created, the script will print out an environment id and an URL that you will need to use for further interactions with the cluster.
+
+* Start `esbench`.
+
+The `create` command prints out instructions how start `esbench`. It should like something like
+
+```
+Invoke esbench with: esbench start --use-case=external --env-id=09ea5254-457a-45bb-b15f-eb2fc59d2abe --params='{"elasticsearch.url": "https://35.195.111.0", "elasticsearch.username": "esbench", "elasticsearch.password": "super-secret-password", "cloud.vendor": "gcp", "cloud.region": "europe-west1", "client.options": {"default": {"timeout": 60, "headers": {"X-Found-Cluster": "09ea5254-457a-45bb-b15f-eb2fc59d2abe.es"}}}, "track.name": "http_logs", "track.params": {}, "track.challenge": "append-no-conflicts-index-only"}' --user-tags="project:serverless"
+```
+
+It's a good idea to modify the track name and its parameters based on the type workload you're resting. For example, you can do something like `"track.name": "nyc_taxis", "track.params"`. For example,  "track.params": {"number_of_shards": 5, "bulk_indexing_clients": 16, "number_of_replicas": 1, "ingest_percentage": 10}`
+
+* Make sure the dry-run mode for the autoscaler is disabled
+
+Run `kubectl get eas -n <esbench_env_id>` and check that the autoscaler is actually active. If it's not, disable the dry-run mode with `kubectl annotate eas es common.k8s.elastic.co/dry-run- -n <esbench_env_id>`. You can also run `kubectl --namespace=<esbench_env_id> get pods` and see whether the autoscaler started scaling pods to the initial state. If pods are being scaled, wait until all the pods are active and the cluster is in a stable state.  
+
+* Execute the benchmark with `esbench execute --env-id=<esbench_env_id>`
+
+* Start monitoring the autoscaler and k8s pods to see the cluster scaling up and down
+
+
+Check es-ingest and es-search pods and their status to see whether the cluster is being scaled
+
+```
+kubectl --namespace=<esbench_env_id> get pods
+```
+
+Check the status of the es-ingest and es-search pods from the point of view of the autoscaler
+ 
+```
+kubectl --namespace=<esbench_env_id> get eas/es -o=jsonpath='{.status}'  | jq 
+```
+
+Check the autoscaler logs to see that the autoscaler is checking the metrics and trying to autoscale the cluster
+
+```
+kubectl --namespace=<esbench_env_id> logs -l app.kubernetes.io/name=elasticsearch-autoscaler -n elastic-system -f
+```
+
+Check exposed Autoscaling metrics
+```
+curl -k -u esbench:super-secret-password -H 'X-Found-Cluster: <esbench_env_id>.es' https://<esbench_es_url>/_internal/serverless/autoscaling | jq .
+```
+
+* Track the progress of the benchmark
+
+Login to the machine running the benchmark `esbench ssh --env-id=<esbench_env_id>` and look at the rally logs `~/.rally/logs/rally.log`
+
 #### Setting up AWS development environment
 
 * Install the `okta-awscli` tool according to the [docs](https://github.com/elastic/infra/blob/master/docs/aws/aws-user-access.md#apicli-access.
