@@ -47,7 +47,7 @@ public class MeteringReporter extends AbstractLifecycleComponent {
 
     private static final Logger log = LogManager.getLogger(MeteringReporter.class);
 
-    public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "http://usage-api:8080", s -> {
+    public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "http://usage-api/api/v1/usage", s -> {
         try {
             return new URI(s);
         } catch (URISyntaxException e) {
