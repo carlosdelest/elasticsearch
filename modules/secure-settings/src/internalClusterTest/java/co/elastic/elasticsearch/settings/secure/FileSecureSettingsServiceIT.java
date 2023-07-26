@@ -95,14 +95,14 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
-        var savedClusterState = setupClusterStateListener(masterNode);
+        var savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
         assertTrue(masterFileSettingsService.watching());
         assertFalse(dataFileSettingsService.watching());
 
-        writeJSONFile(masterNode, testJSON, "foo");
+        writeJSONFile(masterNode, savedClusterState.secretsVersion, testJSON, "foo");
         assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "foo");
 
         for (PluginsService ps : internalCluster().getInstances(PluginsService.class)) {
@@ -122,14 +122,14 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
-        var savedClusterState = setupClusterStateListener(masterNode);
+        var savedClusterState = setupClusterStateListener(masterNode, -1);
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
         assertTrue(masterFileSettingsService.watching());
         assertFalse(dataFileSettingsService.watching());
 
-        writeJSONFile(masterNode, malformedJSON, "foo");
+        writeJSONFile(masterNode, savedClusterState.secretsVersion, malformedJSON, "foo");
         assertClusterErrorStateSaveOK(
             savedClusterState.countDownLatch(),
             savedClusterState.metadataVersion(),
@@ -148,14 +148,14 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
-        var savedClusterState = setupClusterStateListener(masterNode);
+        var savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
         assertTrue(masterFileSettingsService.watching());
         assertFalse(dataFileSettingsService.watching());
 
-        writeJSONFile(masterNode, badSettingJSON, "foo");
+        writeJSONFile(masterNode, savedClusterState.secretsVersion, badSettingJSON, "foo");
         assertClusterErrorStateSaveOK(
             savedClusterState.countDownLatch(),
             savedClusterState.metadataVersion(),
@@ -163,13 +163,12 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         );
 
         // reset cluster state listener
-        savedClusterState = setupClusterStateListener(masterNode);
-        writeJSONFile(masterNode, testJSON, "foo");
+        savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
+        writeJSONFile(masterNode, savedClusterState.secretsVersion, testJSON, "foo");
         assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "foo");
     }
 
     // test valid -> invalid
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/377")
     public void testInvalidSettingsAfterExistingSettings() throws Exception {
         internalCluster().setBootstrapMasterNodeIndex(0);
         logger.info("--> start data node / non master node");
@@ -181,14 +180,14 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
-        var savedClusterState = setupClusterStateListener(masterNode);
+        var savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
         assertTrue(masterFileSettingsService.watching());
         assertFalse(dataFileSettingsService.watching());
 
-        writeJSONFile(masterNode, testJSON, "foo");
+        writeJSONFile(masterNode, savedClusterState.secretsVersion, testJSON, "foo");
         assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "foo");
 
         for (PluginsService ps : internalCluster().getInstances(PluginsService.class)) {
@@ -196,8 +195,8 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
             assertTrue(plugin.latch.await(20, TimeUnit.SECONDS));
         }
 
-        savedClusterState = setupClusterStateListener(masterNode);
-        writeJSONFile(masterNode, badSettingJSON, "foo");
+        savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
+        writeJSONFile(masterNode, savedClusterState.secretsVersion, badSettingJSON, "foo");
 
         assertClusterErrorStateSaveOK(
             savedClusterState.countDownLatch(),
@@ -206,7 +205,6 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         );
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/414")
     public void testIncrementSettings() throws Exception {
         internalCluster().setBootstrapMasterNodeIndex(0);
         logger.info("--> start data node / non master node");
@@ -218,14 +216,14 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
-        var savedClusterState = setupClusterStateListener(masterNode);
+        var savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
         assertTrue(masterFileSettingsService.watching());
         assertFalse(dataFileSettingsService.watching());
 
-        writeJSONFile(masterNode, testJSON, "foo");
+        writeJSONFile(masterNode, savedClusterState.secretsVersion, testJSON, "foo");
         assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "foo");
 
         for (PluginsService ps : internalCluster().getInstances(PluginsService.class)) {
@@ -234,8 +232,8 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
             plugin.latch = new CountDownLatch(1);
         }
 
-        savedClusterState = setupClusterStateListener(masterNode);
-        writeJSONFile(masterNode, testJSON, "bar");
+        savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
+        writeJSONFile(masterNode, savedClusterState.secretsVersion, testJSON, "bar");
         // reset cluster state listener
         assertClusterStateSaveOK(savedClusterState.countDownLatch(), masterNode, savedClusterState.metadataVersion(), "bar");
 
@@ -279,18 +277,17 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         // but it will be visible directly from the cluster service?
         var clusterService = internalCluster().clusterService(masterNode);
-        assertThat(clusterService.state().custom(ClusterStateSecrets.TYPE), not(nullValue()));
-        assertThat(
-            clusterService.state().<ClusterStateSecrets>custom(ClusterStateSecrets.TYPE).getSettings().getString("test.setting"),
-            equalTo(expectedValue)
-        );
+        var clusterStateSecrets = clusterService.state().<ClusterStateSecrets>custom(ClusterStateSecrets.TYPE);
+        assertThat(clusterStateSecrets, not(nullValue()));
+        assertThat(clusterStateSecrets.getVersion(), equalTo(versionCounter.get()));
+        assertThat(clusterStateSecrets.getSettings().getString("test.setting"), equalTo(expectedValue));
     }
 
-    private record ServicesAndListeners(CountDownLatch countDownLatch, AtomicLong metadataVersion) {
+    private record ServicesAndListeners(CountDownLatch countDownLatch, AtomicLong metadataVersion, long secretsVersion) {
 
     }
 
-    private ServicesAndListeners setupClusterStateListener(String node) {
+    private ServicesAndListeners setupClusterStateListener(String node, long targetVersion) {
         ClusterService clusterService = internalCluster().clusterService(node);
         CountDownLatch savedClusterState = new CountDownLatch(1);
         AtomicLong metadataVersion = new AtomicLong(-1);
@@ -299,6 +296,9 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
             public void clusterChanged(ClusterChangedEvent event) {
                 ClusterStateSecretsMetadata secureSettingsMetadata = event.state().custom(ClusterStateSecretsMetadata.TYPE);
                 if (secureSettingsMetadata != null) {
+                    if (secureSettingsMetadata.getVersion() != targetVersion) {
+                        return;
+                    }
                     clusterService.removeListener(this);
                     metadataVersion.set(event.state().metadata().version());
                     savedClusterState.countDown();
@@ -306,11 +306,10 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
             }
         });
 
-        return new ServicesAndListeners(savedClusterState, metadataVersion);
+        return new ServicesAndListeners(savedClusterState, metadataVersion, targetVersion);
     }
 
-    private void writeJSONFile(String node, String json, String settingValue) throws Exception {
-        long version = versionCounter.incrementAndGet();
+    private long writeJSONFile(String node, long version, String json, String settingValue) throws Exception {
 
         FileSecureSettingsService fileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, node);
 
@@ -320,6 +319,8 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         Files.writeString(tempFilePath, Strings.format(json, version, settingValue));
         Files.move(tempFilePath, fileSettingsService.watchedFile(), StandardCopyOption.ATOMIC_MOVE);
         logger.info("--> New file settings: [{}]", Strings.format(json, version, settingValue));
+
+        return version;
     }
 
     private void assertMasterNode(Client client, String node) {
