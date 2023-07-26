@@ -37,7 +37,7 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             )
             .withNode(
                 searchNodeSpec -> searchNodeSpec.name("search")
-                    .setting("node.roles", "[master,remote_cluster_client,search]")
+                    .setting("node.roles", "[remote_cluster_client,search]")
                     .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
                     .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
             );

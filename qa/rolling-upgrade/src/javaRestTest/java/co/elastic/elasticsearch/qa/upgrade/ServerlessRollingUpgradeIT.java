@@ -32,6 +32,18 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.security.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
+        .withNode(
+            indexNodeSpec -> indexNodeSpec.name("index-node-2")
+                .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
+                .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
+                .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
+        )
+        .withNode(
+            searchNodeSpec -> searchNodeSpec.name("search-node-2")
+                .setting("node.roles", "[remote_cluster_client,search]")
+                .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
+                .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
+        )
         .build();
 
     @Override
@@ -40,17 +52,23 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
     }
 
     public void testClusterUpgrade() throws Exception {
-        String index = "test";
+        // Two indices since we have two indexing nodes
+        String index1 = "test-idx-1";
+        String index2 = "test-idx-2";
         int docCount = randomIntBetween(10, 50);
 
-        createIndex(index, Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), "0").build());
+        createIndex(index1, Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), "0").build());
+        createIndex(index2, Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), "0").build());
         for (int i = 0; i < docCount; i++) {
-            indexDocument(index);
+            indexDocument(index1);
+            indexDocument(index2);
         }
         performUpgrade();
-        waitForNodes(2);
-        ensureGreen(index);
-        assertDocCount(client(), index, docCount);
+        waitForNodes(4);
+        ensureGreen(index1);
+        ensureGreen(index2);
+        assertDocCount(client(), index1, docCount);
+        assertDocCount(client(), index2, docCount);
     }
 
     private void indexDocument(String index) throws IOException {
