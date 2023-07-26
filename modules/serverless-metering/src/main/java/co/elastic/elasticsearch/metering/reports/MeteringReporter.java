@@ -31,23 +31,33 @@ import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
 
 import java.io.IOException;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.AccessController;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509ExtendedTrustManager;
 
 public class MeteringReporter extends AbstractLifecycleComponent {
 
     private static final Logger log = LogManager.getLogger(MeteringReporter.class);
 
-    public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "http://usage-api/api/v1/usage", s -> {
+    public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "https://usage-api/api/v1/usage", s -> {
         try {
             return new URI(s);
         } catch (URISyntaxException e) {
@@ -56,6 +66,31 @@ public class MeteringReporter extends AbstractLifecycleComponent {
     }, Setting.Property.NodeScope);
 
     public static final Setting<Integer> BATCH_SIZE = Setting.intSetting("metering.batch_size", 100, Setting.Property.NodeScope);
+
+    private static final TrustManager TRUST_EVERYTHING = new X509ExtendedTrustManager() {
+        @Override
+        public X509Certificate[] getAcceptedIssuers() {
+            return new X509Certificate[0];
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) {}
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) {}
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) {}
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) {}
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+    };
 
     private final Settings settings;
     private final int batchSize;
@@ -67,8 +102,19 @@ public class MeteringReporter extends AbstractLifecycleComponent {
         this.batchSize = BATCH_SIZE.get(settings);
         this.scheduler = scheduler;
 
-        // http client accesses system properties to get ssl, proxy settings, etc
-        client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
+        SSLContext context;
+        try {
+            // don't check the SSL cert for now
+            // TODO ES-6505
+            context = SSLContext.getInstance("TLS");
+            context.init(null, new TrustManager[] { TRUST_EVERYTHING }, new SecureRandom());
+        } catch (NoSuchAlgorithmException | KeyManagementException e) {
+            // SSL error that shouldn't happen
+            assert false : e;
+            throw new RuntimeException(e);
+        }
+
+        client = HttpClient.newBuilder().sslContext(context).followRedirects(HttpClient.Redirect.NORMAL).build();
     }
 
     @Override
