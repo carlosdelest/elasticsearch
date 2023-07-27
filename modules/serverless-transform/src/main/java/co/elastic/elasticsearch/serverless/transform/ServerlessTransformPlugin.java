@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.serverless.transform;
 
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.xpack.transform.Transform;
@@ -34,5 +35,10 @@ public class ServerlessTransformPlugin extends Transform {
     @Override
     public boolean includeNodeInfo() {
         return false;
+    }
+
+    @Override
+    public Settings getTransformInternalIndexAdditionalSettings() {
+        return Settings.builder().put(IndexSettings.INDEX_FAST_REFRESH_SETTING.getKey(), true).build();
     }
 }
