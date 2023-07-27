@@ -24,6 +24,7 @@ resolvePlatformEnvironment
 ALL_PROJECTS=$(curl -k -H 'Host: project-api' -H "Authorization: ApiKey $API_KEY" https://$PAPI_PUBLIC_IP:8443/api/v1/serverless/projects/elasticsearch)
 PROJECT_ID=$(echo $ALL_PROJECTS | jq -c --arg deploymentName "$DEPLOY_ID" '.items[] | select(.name == $deploymentName)' | jq -r '.id')
 
+echo "Deleting project $PROJECT_ID"
 curl -k -H 'Host: project-api' \
      -H "Authorization: ApiKey $API_KEY" \
      https://$PAPI_PUBLIC_IP:8443/api/v1/serverless/projects/elasticsearch/$PROJECT_ID \

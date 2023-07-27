@@ -34,6 +34,8 @@ CREATE_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
         }
      }")
 
+echo "PROJECT API CREATE RESPONSE: $CREATE_RESULT"
+
 PROJECT_ID=$(echo $CREATE_RESULT | jq -r '.id')
 ESS_ROOT_USERNAME=$(echo $CREATE_RESULT | jq -r '.credentials.username')
 ESS_ROOT_PASSWORD=$(echo $CREATE_RESULT | jq -r '.credentials.password')

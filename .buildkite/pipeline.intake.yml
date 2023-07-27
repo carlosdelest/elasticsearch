@@ -36,10 +36,10 @@ steps:
     depends_on: docker-publish
     branches: main
     build:
+      message: "${BUILDKITE_MESSAGE}"
       commit: "${BUILDKITE_COMMIT}"
       branch: "${BUILDKITE_BRANCH}"
       env:
-        message: "${BUILDKITE_MESSAGE}"
         DEPLOY_ID: "git-${BUILDKITE_COMMIT:0:12}"
 
   - wait
