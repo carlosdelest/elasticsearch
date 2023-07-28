@@ -19,6 +19,7 @@ val bundledPlugins by configurations.creating {
         attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE)
     }
 }
+val buildInfoJar by configurations.creating
 
 dependencies {
     serverCli(project(":distribution:tools:serverless-server-cli"))
@@ -29,6 +30,7 @@ dependencies {
     bundledPlugins("org.elasticsearch.plugin:analysis-kuromoji")
     bundledPlugins("org.elasticsearch.plugin:analysis-phonetic")
     bundledPlugins("org.elasticsearch.plugin:analysis-stempel")
+    buildInfoJar(project(":libs:serverless-build-info"))
 }
 
 distribution_archives {
@@ -103,6 +105,9 @@ distribution_archives {
                     }
                     into("lib/tools/serverless-server-cli") {
                         from(serverCli)
+                    }
+                    into("lib") {
+                        from(buildInfoJar)
                     }
                     into("modules") {
                         // Bundle analysis language plugins as modules

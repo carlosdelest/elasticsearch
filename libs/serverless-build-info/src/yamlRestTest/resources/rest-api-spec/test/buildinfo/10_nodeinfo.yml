@@ -1,0 +1,12 @@
+setup:
+  - skip:
+      features: [arbitrary_key]
+---
+"node_info build info test":
+  - do:
+      nodes.info: {}
+  - set:
+      nodes._arbitrary_key_: node_id
+
+  - is_true: nodes.$node_id.
+  - match: { nodes.$node_id.build_flavor: "serverless" }

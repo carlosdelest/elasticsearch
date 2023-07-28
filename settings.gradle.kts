@@ -52,6 +52,8 @@ include(":modules:serverless-transform")
 include(":libs:serverless-metrics")
 include(":modules:serverless-metering")
 
+include(":libs:serverless-build-info")
+
 /*
  * Distribution projects
  */
