@@ -19,6 +19,7 @@ val bundledPlugins by configurations.creating {
         attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE)
     }
 }
+val xpackTemplateResources by configurations.creating
 val buildInfoJar by configurations.creating
 
 dependencies {
@@ -30,6 +31,7 @@ dependencies {
     bundledPlugins("org.elasticsearch.plugin:analysis-kuromoji")
     bundledPlugins("org.elasticsearch.plugin:analysis-phonetic")
     bundledPlugins("org.elasticsearch.plugin:analysis-stempel")
+    xpackTemplateResources(project(":libs:serverless-xpack-template-resources"))
     buildInfoJar(project(":libs:serverless-build-info"))
 }
 
@@ -88,6 +90,8 @@ distribution_archives {
                     exclude("*/modules/transform")
                     exclude("*/modules/x-pack-voting-only-node")
                     exclude("*/modules/x-pack-shutdown")
+                    // this jar is redefined, see libs/serverless-xpack-template-resources
+                    exclude("*/modules/x-pack-core/elasticsearch-x-pack-template-resources*.jar")
                     exclude("*/modules/rest-root")
                     includeEmptyDirs = false
                 }
@@ -118,6 +122,9 @@ distribution_archives {
                                 val pluginName = file.toPath().run { subpath(0, count() - filePath.count() )}.fileName
                                 path = "elasticsearch/modules/${pluginName}/${filePath}"
                             }
+                        }
+                        into("x-pack-core") {
+                            from(xpackTemplateResources)
                         }
                     }
                 }

@@ -49,10 +49,15 @@ include(":modules:serverless-search")
 include(":modules:serverless-security")
 include(":modules:serverless-sigterm")
 include(":modules:serverless-transform")
-include(":libs:serverless-metrics")
 include(":modules:serverless-metering")
 
 include(":libs:serverless-build-info")
+
+/*
+ * Extraneous libs
+ */
+include(":libs:serverless-metrics")
+include(":libs:serverless-xpack-template-resources")
 
 /*
  * Distribution projects

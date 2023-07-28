@@ -1,6 +1,8 @@
 description = "Metrics accessor library"
 
-plugins {
+dependencies {
+    compileOnly("org.elasticsearch:server")
+    testImplementation("org.elasticsearch.test:framework")
 }
 
 configurations {
@@ -9,7 +11,4 @@ configurations {
             preferProjectModules()
         }
     }
-}
-
-dependencies {
 }
