@@ -24,4 +24,5 @@ module org.elasticsearch.metering {
     requires org.elasticsearch.xcontent;
     requires org.elasticsearch.metrics;
     requires java.net.http;
+    requires org.apache.lucene.core;
 }

@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.metrics.MetricsCollector;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -32,6 +33,7 @@ import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
+import org.elasticsearch.node.NodeRoleSettings;
 import org.elasticsearch.plugins.ExtensiblePlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.repositories.RepositoriesService;
@@ -91,11 +93,13 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin {
         String projectId = MeteringPlugin.PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
-        // add in the built-in metrics
-        Stream<MetricsCollector> sources = Stream.concat(
-            Stream.of(new IngestMetricsCollector(), new IndexSizeMetricsCollector()),
-            metricsCollectors.stream()
-        );
+        List<MetricsCollector> builtInMetrics = new ArrayList<>();
+        builtInMetrics.add(new IngestMetricsCollector());
+        if (NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings()).contains(DiscoveryNodeRole.SEARCH_ROLE)) {
+            builtInMetrics.add(new IndexSizeMetricsCollector(indicesService));
+        }
+
+        Stream<MetricsCollector> sources = Stream.concat(builtInMetrics.stream(), metricsCollectors.stream());
 
         if (projectId.isEmpty()) {
             log.warn(MeteringPlugin.PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
@@ -114,8 +118,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin {
         List<Object> cs = new ArrayList<>();
         if (reporter != null) cs.add(reporter);
         cs.add(service);
-        cs.add(new IngestMetricsCollector());
-        cs.add(new IndexSizeMetricsCollector());
+        cs.addAll(builtInMetrics);
 
         return cs;
     }

@@ -19,8 +19,23 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metrics.MetricsCollector;
 
+import org.apache.lucene.index.SegmentCommitInfo;
+import org.apache.lucene.util.StringHelper;
+import org.elasticsearch.index.IndexService;
+import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.shard.IndexShard;
+import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
+
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import static org.elasticsearch.core.Strings.format;
 
 /**
  * Responsible for the index size metric.
@@ -30,8 +45,56 @@ import java.util.List;
  * that a new metric is required.
  */
 class IndexSizeMetricsCollector implements MetricsCollector {
+    private static final Logger logger = LogManager.getLogger(IndexSizeMetricsCollector.class);
+    private static final String PARTIAL = "partial";
+    private static final String INDEX = "index";
+    private static final String SHARD = "shard";
+    final IndicesService indicesService;
+
+    IndexSizeMetricsCollector(IndicesService indicesService) {
+        this.indicesService = indicesService;
+    }
+
     @Override
     public Collection<MetricValue> getMetrics() {
-        return List.of();
+        List<MetricValue> metrics = new ArrayList<>();
+        for (final IndexService indexService : indicesService) {
+            String indexName = indexService.index().getName();
+            for (final IndexShard shard : indexService) {
+                Engine engine = shard.getEngineOrNull();
+                if (engine == null || shard.isSystem()) {
+                    continue;
+                }
+
+                int shardId = shard.shardId().id();
+                long size = 0;
+                boolean partial = false;
+
+                for (SegmentCommitInfo si : engine.getLastCommittedSegmentInfos()) {
+                    try {
+                        size += si.sizeInBytes();
+                    } catch (IOException err) {
+                        partial = true;
+                        logger.warn(
+                            "Failed to read file size for shard: [{}], commitId: [{}], err: [{}]",
+                            shardId,
+                            StringHelper.idToString(si.getId()),
+                            err
+                        );
+                    }
+                }
+
+                Map<String, Object> metadata = new HashMap<>();
+                metadata.put(INDEX, indexName);
+                metadata.put(SHARD, shardId);
+                if (partial) {
+                    metadata.put(PARTIAL, true);
+                }
+                String metricId = format("shard-size:%s:%s", indexName, shardId);
+
+                metrics.add(new MetricValue(Type.SAMPLED, metricId, metadata, size));
+            }
+        }
+        return metrics;
     }
 }
