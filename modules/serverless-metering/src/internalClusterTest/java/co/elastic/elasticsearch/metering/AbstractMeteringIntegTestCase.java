@@ -38,7 +38,7 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
 
     private Settings settingsForRoles(DiscoveryNodeRole... roles) {
         return Settings.builder()
-            .put(MeteringService.PROJECT_ID.getKey(), "testProjectId")
+            .put(MeteringPlugin.PROJECT_ID.getKey(), "testProjectId")
             .putList(NodeRoleSettings.NODE_ROLES_SETTING.getKey(), Arrays.stream(roles).map(DiscoveryNodeRole::roleName).toList())
             .build();
     }

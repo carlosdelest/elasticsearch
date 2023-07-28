@@ -40,8 +40,6 @@ public class MeteringService extends AbstractLifecycleComponent {
 
     private static final Logger log = LogManager.getLogger(MeteringService.class);
 
-    static final Setting<String> PROJECT_ID = Setting.simpleString("metering.project_id", Setting.Property.NodeScope);
-
     static final Setting<TimeValue> REPORT_PERIOD = Setting.timeSetting(
         "metering.report_period",
         TimeValue.timeValueMinutes(5),
@@ -65,10 +63,7 @@ public class MeteringService extends AbstractLifecycleComponent {
         Scheduler scheduler
     ) {
         this.nodeId = nodeId;
-        this.projectId = PROJECT_ID.get(settings);
-        if (projectId.isEmpty()) {
-            log.error(PROJECT_ID.getKey() + " is not set");
-        }
+        this.projectId = MeteringPlugin.PROJECT_ID.get(settings);
         this.scheduler = scheduler;
         this.sources = sources.toList();
         this.reportPeriod = REPORT_PERIOD.get(settings);

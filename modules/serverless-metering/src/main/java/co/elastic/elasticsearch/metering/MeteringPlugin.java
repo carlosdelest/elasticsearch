@@ -42,6 +42,7 @@ import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Supplier;
@@ -54,18 +55,15 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
 
+    static final Setting<String> PROJECT_ID = Setting.simpleString("metering.project_id", Setting.Property.NodeScope);
+
     private List<MetricsCollector> metricsCollectors;
     private MeteringReporter reporter;
     private MeteringService service;
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(
-            MeteringService.PROJECT_ID,
-            MeteringService.REPORT_PERIOD,
-            MeteringReporter.METERING_URL,
-            MeteringReporter.BATCH_SIZE
-        );
+        return List.of(PROJECT_ID, MeteringService.REPORT_PERIOD, MeteringReporter.METERING_URL, MeteringReporter.BATCH_SIZE);
     }
 
     @Override
@@ -90,11 +88,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin {
         AllocationService allocationService,
         IndicesService indicesService
     ) {
-        log.info(
-            "Initializing MeteringPlugin using node id [{}], project id [{}]",
-            nodeEnvironment.nodeId(),
-            MeteringService.PROJECT_ID.get(environment.settings())
-        );
+        String projectId = MeteringPlugin.PROJECT_ID.get(environment.settings());
+        log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
         // add in the built-in metrics
         Stream<MetricsCollector> sources = Stream.concat(
@@ -102,10 +97,27 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin {
             metricsCollectors.stream()
         );
 
-        reporter = new MeteringReporter(environment.settings(), threadPool);
-        service = new MeteringService(nodeEnvironment.nodeId(), environment.settings(), sources, reporter::sendRecords, threadPool);
+        if (projectId.isEmpty()) {
+            log.warn(MeteringPlugin.PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
+        } else {
+            reporter = new MeteringReporter(environment.settings(), threadPool);
+        }
 
-        return List.of(reporter, service, new IngestMetricsCollector(), new IndexSizeMetricsCollector());
+        service = new MeteringService(
+            nodeEnvironment.nodeId(),
+            environment.settings(),
+            sources,
+            reporter != null ? reporter::sendRecords : r -> {},
+            threadPool
+        );
+
+        List<Object> cs = new ArrayList<>();
+        if (reporter != null) cs.add(reporter);
+        cs.add(service);
+        cs.add(new IngestMetricsCollector());
+        cs.add(new IndexSizeMetricsCollector());
+
+        return cs;
     }
 
     @Override

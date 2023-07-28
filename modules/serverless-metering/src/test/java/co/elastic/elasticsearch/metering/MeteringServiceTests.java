@@ -104,7 +104,7 @@ public class MeteringServiceTests extends ESTestCase {
     public void setup() {
         threadPool = new TestThreadPool("meteringServiceTests");
         settings = Settings.builder()
-            .put(MeteringService.PROJECT_ID.getKey(), PROJECT_ID)
+            .put(MeteringPlugin.PROJECT_ID.getKey(), PROJECT_ID)
             .put(MeteringService.REPORT_PERIOD.getKey(), REPORT_PERIOD)
             .build();
     }
