@@ -30,7 +30,7 @@
               criteria:
                 - type: exact
                   metadata: query_string
-                  value: elastic
+                  values: [elastic]
               actions:
                 ids:
                   - 'id1'
