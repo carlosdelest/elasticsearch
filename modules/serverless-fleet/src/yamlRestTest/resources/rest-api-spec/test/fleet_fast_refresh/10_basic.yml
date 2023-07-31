@@ -1,0 +1,66 @@
+"Expected fleet indices have fast refresh applied":
+  - skip:
+      features: ["allowed_warnings_regex"]
+  - do:
+      indices.create:
+        index: ".fleet-actions-7"
+        body:
+          settings:
+            index:
+              hidden: true
+  - do:
+      indices.create:
+        index: ".fleet-agents-7"
+        body:
+          settings:
+            index:
+              hidden: true
+  - do:
+      indices.create:
+        index: ".fleet-enrollment-api-keys-7"
+        body:
+          settings:
+            index:
+             hidden: true
+  - do:
+      indices.create:
+        index: ".fleet-policies-7"
+        body:
+          settings:
+            index:
+              hidden: true
+  - do:
+      indices.create:
+        index: ".fleet-policies-leader-7"
+        body:
+          settings:
+            index:
+              hidden: true
+  - do:
+      indices.create:
+        index: ".fleet-secrets-7"
+        body:
+          settings:
+            index:
+              hidden: true
+  - do:
+      indices.create:
+        index: ".fleet-servers-7"
+        body:
+          settings:
+            index:
+              hidden: true
+  - do:
+      indices.get_settings:
+        expand_wildcards: "open,hidden"
+      allowed_warnings_regex:
+        - "this request accesses system indices.*"
+
+  - match: { \.fleet-actions-7.settings.index.fast_refresh: "true" }
+  - match: { \.fleet-agents-7.settings.index.fast_refresh: "true" }
+  - match: { \.fleet-enrollment-api-keys-7.settings.index.fast_refresh: "true" }
+  - match: { \.fleet-policies-7.settings.index.fast_refresh: "true" }
+  - match: { \.fleet-policies-leader-7.settings.index.fast_refresh: "true" }
+  - match: { \.fleet-secrets-7.settings.index.fast_refresh: "true" }
+  - match: { \.fleet-servers-7.settings.index.fast_refresh: "true" }
+
