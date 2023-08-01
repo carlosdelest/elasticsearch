@@ -51,6 +51,7 @@ include(":modules:serverless-security")
 include(":modules:serverless-sigterm")
 include(":modules:serverless-transform")
 include(":modules:serverless-metering")
+include(":modules:serverless-api-filtering")
 
 include(":libs:serverless-build-info")
 
