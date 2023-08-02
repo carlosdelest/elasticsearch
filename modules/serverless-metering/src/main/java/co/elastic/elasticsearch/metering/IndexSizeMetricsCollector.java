@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
 
 import org.apache.lucene.index.SegmentCommitInfo;
+import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.util.StringHelper;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine;
@@ -61,18 +62,24 @@ class IndexSizeMetricsCollector implements MetricsCollector {
         for (final IndexService indexService : indicesService) {
             String indexName = indexService.index().getName();
             for (final IndexShard shard : indexService) {
+
                 Engine engine = shard.getEngineOrNull();
                 if (engine == null || shard.isSystem()) {
+                    continue;
+                }
+
+                SegmentInfos segmentInfos = engine.getLastCommittedSegmentInfos();
+                if (segmentInfos.size() == 0) {
                     continue;
                 }
 
                 int shardId = shard.shardId().id();
                 long size = 0;
                 boolean partial = false;
-
-                for (SegmentCommitInfo si : engine.getLastCommittedSegmentInfos()) {
+                for (SegmentCommitInfo si : segmentInfos) {
                     try {
-                        size += si.sizeInBytes();
+                        long commitSize = si.sizeInBytes();
+                        size += commitSize;
                     } catch (IOException err) {
                         partial = true;
                         logger.warn(

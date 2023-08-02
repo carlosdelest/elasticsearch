@@ -17,18 +17,28 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.reports.HttpClientThreadFilter;
+import co.elastic.elasticsearch.metering.reports.UsageRecord;
 
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
-
+import org.elasticsearch.action.admin.indices.flush.FlushRequest;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugins.PluginsService;
+import org.elasticsearch.xcontent.XContentType;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.StreamSupport;
 
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.startsWith;
 
-@ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
 public class MeteringIT extends AbstractMeteringIntegTestCase {
 
     public void testNodeCanStartWithMeteringEnabled() {
@@ -38,5 +48,48 @@ public class MeteringIT extends AbstractMeteringIntegTestCase {
             .flatMap(ps -> ps.filterPlugins(MeteringPlugin.class).stream())
             .toList();
         assertThat(plugins, not(empty()));
+    }
+
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/pull/611")
+    public void testIngestMetricsAreRecordedThroughIndexing() throws InterruptedException {
+        startMasterAndIndexNode();
+
+        createIndex("idx1");
+        client().index(new IndexRequest("idx1").source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
+
+        waitUntil(() -> receivedMetrics().isEmpty() == false);
+        assertThat(receivedMetrics(), not(empty()));
+    }
+
+    public void testSizeMetricsAreRecorded() throws InterruptedException {
+        startMasterAndIndexNode();
+
+        String indexName = "idx1";
+        assertAcked(
+            prepareCreate(
+                indexName,
+                1,
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+            )
+        );
+        client().index(new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
+        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+
+        waitUntil(() -> receivedMetrics().isEmpty() == false);
+        assertThat(receivedMetrics(), not(empty()));
+        List<List<UsageRecord>> recordLists = new ArrayList<>();
+        receivedMetrics().drainTo(recordLists);
+        Optional<UsageRecord> maybeRecord = recordLists.stream()
+            .flatMap(List::stream)
+            .filter(m -> m.id().startsWith("shard-size"))
+            .findFirst();
+        assertTrue(maybeRecord.isPresent());
+
+        UsageRecord metric = maybeRecord.get();
+        String type = "shard-size:" + indexName + ":0";
+        assertThat(metric.id(), startsWith(type));
+        assertThat(metric.usage().type(), equalTo(type));
+        assertThat(metric.usage().quantity(), greaterThan(0L));
+        assertThat(metric.source().metadata(), equalTo(Map.of("index", indexName, "shard", 0)));
     }
 }

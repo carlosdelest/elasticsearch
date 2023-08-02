@@ -173,12 +173,11 @@ public class MeteringReporterTests extends ESTestCase {
     @After
     public void stopThreadPool() {
         ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
+        server.stop(0);
 
         // drain all requests
         if (requests.isEmpty() == false) {
             fail("Requests were unprocessed: " + requests);
         }
-        server.stop(0);
-        requests.clear();
     }
 }

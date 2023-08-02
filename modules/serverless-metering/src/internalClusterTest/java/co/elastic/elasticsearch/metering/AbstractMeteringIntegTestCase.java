@@ -17,23 +17,93 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.reports.HttpClientThreadFilter;
+import co.elastic.elasticsearch.metering.reports.MeteringReporter;
+import co.elastic.elasticsearch.metering.reports.UsageRecord;
+
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.xcontent.XContentParserUtils;
+import org.elasticsearch.core.SuppressForbidden;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.node.NodeRoleSettings;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.transport.MockTransportService;
+import org.elasticsearch.xcontent.XContentParser;
+import org.elasticsearch.xcontent.XContentParserConfiguration;
+import org.elasticsearch.xcontent.spi.XContentProvider;
+import org.junit.After;
+import org.junit.Before;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
+@SuppressForbidden(reason = "Uses an HTTP server for testing")
+@ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
 public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
+
+    private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
+
+    private final BlockingQueue<List<UsageRecord>> received = new LinkedBlockingQueue<>();
+    private HttpServer server;
+
+    @Before
+    public void setupServer() throws IOException {
+        server = HttpServer.create();
+        server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+        server.createContext("/", this::handle);
+        server.start();
+    }
+
+    private void handle(HttpExchange exchange) throws IOException {
+        try (exchange) {
+            try {
+                received.add(toUsageRecordMaps(exchange.getRequestBody()));
+            } catch (RuntimeException e) {
+                logger.warn("failed to parse request", e);
+            }
+            exchange.sendResponseHeaders(201, 0);
+        }
+    }
+
+    private static List<UsageRecord> toUsageRecordMaps(InputStream input) throws IOException {
+        XContentParser parser = XCONTENT.XContent().createParser(XContentParserConfiguration.EMPTY, input);
+        if (parser.currentToken() == null) {
+            parser.nextToken();
+        }
+        return XContentParserUtils.parseList(parser, UsageRecord::fromXContent);
+    }
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
         return List.of(MeteringPlugin.class, MockTransportService.TestPlugin.class);
+    }
+
+    protected BlockingQueue<List<UsageRecord>> receivedMetrics() {
+        return received;
+    }
+
+    @Override
+    protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
+        return Settings.builder()
+            .put(super.nodeSettings(nodeOrdinal, otherSettings))
+            .put(MeteringPlugin.PROJECT_ID.getKey(), "testProjectId")
+            .put(MeteringReporter.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
+            .put(MeteringService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
+            .build();
     }
 
     private Settings settingsForRoles(DiscoveryNodeRole... roles) {
@@ -44,6 +114,17 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
     }
 
     protected String startMasterAndIndexNode() {
-        return internalCluster().startNode(settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE));
+        return internalCluster().startNode(
+            settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.SEARCH_ROLE)
+        );
+    }
+
+    @After
+    public void stopServer() {
+        server.stop(0);
+        // drain all requests
+        if (received.isEmpty() == false) {
+            fail("Requests were unprocessed: " + received);
+        }
     }
 }

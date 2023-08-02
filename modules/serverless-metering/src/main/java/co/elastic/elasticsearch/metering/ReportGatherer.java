@@ -93,6 +93,7 @@ class ReportGatherer {
             if (remainingNanos < 0) {
                 // TODO: report to somewhere that cares
                 log.error("Gathering metrics took longer than the report period ({})!", runtime);
+                remainingNanos = 0;
             } else if (remainingNanos < reportPeriod.nanos() / 2) {
                 // TODO: report to somewhere that cares
                 log.warn("Gathering metrics took {}", runtime);
