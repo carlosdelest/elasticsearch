@@ -91,7 +91,7 @@ distribution_archives {
                     exclude("*/modules/x-pack-voting-only-node")
                     exclude("*/modules/x-pack-shutdown")
                     // this jar is redefined, see libs/serverless-xpack-template-resources
-                    exclude("*/modules/x-pack-core/elasticsearch-x-pack-template-resources*.jar")
+                    exclude("*/modules/x-pack-core/x-pack-template-resources*.jar")
                     exclude("*/modules/rest-root")
                     includeEmptyDirs = false
                 }
