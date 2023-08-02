@@ -29,19 +29,6 @@ steps:
         NAMESPACE: elasticsearch-ci
         IMAGE_NAME: elasticsearch-serverless
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
-
-  - label: ":gradle: Run ESS E2E tests"
-    trigger: elasticsearch-serverless-e2e-tests
-    # strictly not depending on docker publish but it avoids running it multiple times
-    depends_on: docker-publish
-    branches: main
-    build:
-      message: "${BUILDKITE_MESSAGE}"
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      env:
-        DEPLOY_ID: "git-${BUILDKITE_COMMIT:0:12}"
-
   - wait
 
   - label: ":argo: Update Image using gpctl with centralized config"

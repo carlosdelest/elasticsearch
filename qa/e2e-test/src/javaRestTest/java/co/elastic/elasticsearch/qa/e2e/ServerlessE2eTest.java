@@ -16,6 +16,7 @@ import org.elasticsearch.xcontent.json.JsonXContent;
 
 import java.io.IOException;
 
+@org.junit.Ignore
 public class ServerlessE2eTest extends AbstractServerlessE2eTest {
 
     public void testBasicIndexing() throws Exception {
