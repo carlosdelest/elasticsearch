@@ -20,6 +20,7 @@ val runCluster by testClusters.registering {
     setting("xpack.security.operator_privileges.enabled", "true")
     keystore("bootstrap.password", "password")
     extraConfigFile("operator_users.yml", file("${rootDir}/serverless-build-tools/src/main/resources/operator_users.yml"));
+    extraConfigFile("service_tokens", file("${rootDir}/serverless-build-tools/src/main/resources/service_tokens"));
     user(mapOf("username" to "elastic-admin", "password" to "elastic-password"))
     user(mapOf("username" to "elastic-user", "password" to "elastic-password", "role" to "superuser"))
     nodes["runCluster-0"].setting("node.roles", "[master,remote_cluster_client,ingest,index]")
