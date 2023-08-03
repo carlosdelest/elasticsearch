@@ -26,8 +26,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.xcontent.XContentType;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
@@ -39,10 +37,10 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 
-public class MeteringIT extends AbstractMeteringIntegTestCase {
+public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
 
     public void testNodeCanStartWithMeteringEnabled() {
-        startMasterAndIndexNode();
+        startNodes();
 
         var plugins = StreamSupport.stream(internalCluster().getInstances(PluginsService.class).spliterator(), false)
             .flatMap(ps -> ps.filterPlugins(MeteringPlugin.class).stream())
@@ -50,19 +48,8 @@ public class MeteringIT extends AbstractMeteringIntegTestCase {
         assertThat(plugins, not(empty()));
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/pull/611")
-    public void testIngestMetricsAreRecordedThroughIndexing() throws InterruptedException {
-        startMasterAndIndexNode();
-
-        createIndex("idx1");
-        client().index(new IndexRequest("idx1").source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
-
-        waitUntil(() -> receivedMetrics().isEmpty() == false);
-        assertThat(receivedMetrics(), not(empty()));
-    }
-
     public void testSizeMetricsAreRecorded() throws InterruptedException {
-        startMasterAndIndexNode();
+        startNodes();
 
         String indexName = "idx1";
         assertAcked(
@@ -77,13 +64,7 @@ public class MeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> receivedMetrics().isEmpty() == false);
         assertThat(receivedMetrics(), not(empty()));
-        List<List<UsageRecord>> recordLists = new ArrayList<>();
-        receivedMetrics().drainTo(recordLists);
-        Optional<UsageRecord> maybeRecord = recordLists.stream()
-            .flatMap(List::stream)
-            .filter(m -> m.id().startsWith("shard-size"))
-            .findFirst();
-        assertTrue(maybeRecord.isPresent());
+        Optional<UsageRecord> maybeRecord = getUsageRecords("shard-size");
 
         UsageRecord metric = maybeRecord.get();
         String idPRefix = "shard-size:" + indexName + ":0";

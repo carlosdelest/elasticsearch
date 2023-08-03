@@ -98,7 +98,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
         List<MetricsCollector> builtInMetrics = new ArrayList<>();
-        builtInMetrics.add(new IngestMetricsCollector());
+        builtInMetrics.add(ingestMetricsCollector);
         if (NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings()).contains(DiscoveryNodeRole.SEARCH_ROLE)) {
             builtInMetrics.add(new IndexSizeMetricsCollector(indicesService));
         }

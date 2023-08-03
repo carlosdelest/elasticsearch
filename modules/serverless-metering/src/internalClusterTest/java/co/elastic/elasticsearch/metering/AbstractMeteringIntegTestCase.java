@@ -44,9 +44,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -106,14 +108,14 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
             .build();
     }
 
-    private Settings settingsForRoles(DiscoveryNodeRole... roles) {
+    protected Settings settingsForRoles(DiscoveryNodeRole... roles) {
         return Settings.builder()
             .put(MeteringPlugin.PROJECT_ID.getKey(), "testProjectId")
             .putList(NodeRoleSettings.NODE_ROLES_SETTING.getKey(), Arrays.stream(roles).map(DiscoveryNodeRole::roleName).toList())
             .build();
     }
 
-    protected String startMasterAndIndexNode() {
+    protected String startNodes() {
         return internalCluster().startNode(
             settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.SEARCH_ROLE)
         );
@@ -126,5 +128,14 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
         if (received.isEmpty() == false) {
             fail("Requests were unprocessed: " + received);
         }
+    }
+
+    protected Optional<UsageRecord> getUsageRecords(String prefix) {
+        List<List<UsageRecord>> recordLists = new ArrayList<>();
+        receivedMetrics().drainTo(recordLists);
+
+        Optional<UsageRecord> maybeRecord = recordLists.stream().flatMap(List::stream).filter(m -> m.id().startsWith(prefix)).findFirst();
+        assertTrue(maybeRecord.isPresent());
+        return maybeRecord;
     }
 }
