@@ -47,6 +47,7 @@ import static org.elasticsearch.core.Strings.format;
  */
 class IndexSizeMetricsCollector implements MetricsCollector {
     private static final Logger logger = LogManager.getLogger(IndexSizeMetricsCollector.class);
+    public static final String METRIC_TYPE = "es_indexed_data";
     private static final String PARTIAL = "partial";
     private static final String INDEX = "index";
     private static final String SHARD = "shard";
@@ -99,7 +100,7 @@ class IndexSizeMetricsCollector implements MetricsCollector {
                 }
                 String metricId = format("shard-size:%s:%s", indexName, shardId);
 
-                metrics.add(new MetricValue(Type.SAMPLED, metricId, metadata, size));
+                metrics.add(new MetricValue(MeasurementType.SAMPLED, metricId, METRIC_TYPE, metadata, size));
             }
         }
         return metrics;

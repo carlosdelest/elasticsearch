@@ -110,9 +110,9 @@ class ReportGatherer {
     private void reportMetrics() {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
-        List<UsageRecord> records = service.getMetrics().map(v -> switch (v.type()) {
-            case COUNTER -> getRecordForCount(v.id(), v.value(), v.metadata(), now);
-            case SAMPLED -> getRecordForSample(v.id(), v.value(), v.metadata(), now);
+        List<UsageRecord> records = service.getMetrics().map(v -> switch (v.measurementType()) {
+            case COUNTER -> getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), now);
+            case SAMPLED -> getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), now);
         }).toList();
 
         reporter.accept(records);
@@ -139,22 +139,22 @@ class ReportGatherer {
         return hour.plus(reportPeriod.multipliedBy(times));
     }
 
-    private UsageRecord getRecordForCount(String metric, long count, Map<String, ?> metadata, Instant now) {
+    private UsageRecord getRecordForCount(String metric, String type, long count, Map<String, ?> metadata, Instant now) {
         return new UsageRecord(
             generateId(metric, now),
             now,
-            new UsageMetrics(metric, null, count, reportPeriod, null, null),
+            new UsageMetrics(type, null, count, reportPeriod, null, null),
             new UsageSource(service.nodeId(), service.projectId(), metadata)
         );
     }
 
-    private UsageRecord getRecordForSample(String metric, long value, Map<String, ?> metadata, Instant now) {
+    private UsageRecord getRecordForSample(String metric, String type, long value, Map<String, ?> metadata, Instant now) {
         Instant timestamp = calculateSampleTimestamp(now, reportPeriodDuration);
 
         return new UsageRecord(
             generateId(metric, timestamp),
             timestamp,
-            new UsageMetrics(metric, null, value, reportPeriod, null, null),
+            new UsageMetrics(type, null, value, reportPeriod, null, null),
             new UsageSource(service.nodeId(), service.projectId(), metadata)
         );
     }

@@ -28,19 +28,20 @@ public interface MetricsCollector {
     /**
      * The type of metric
      */
-    enum Type {
+    enum MeasurementType {
         COUNTER,
         SAMPLED
     }
 
     /**
      * A single metric value for reporting
-     * @param type      The metric type
-     * @param id        An id for the metric this value is for
-     * @param metadata  Associated metadata for the metric
-     * @param value     The current metric value
+     * @param measurementType What type of measurement
+     * @param id              An id for the metric this value is for
+     * @param type            The type to use for the record
+     * @param metadata        Associated metadata for the metric
+     * @param value           The current metric value
      */
-    record MetricValue(Type type, String id, Map<String, ?> metadata, long value) {}
+    record MetricValue(MeasurementType measurementType, String id, String type, Map<String, ?> metadata, long value) {}
 
     /**
      * Returns the current value of the metrics collected by this class.

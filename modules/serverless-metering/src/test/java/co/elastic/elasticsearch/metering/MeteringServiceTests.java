@@ -75,7 +75,7 @@ public class MeteringServiceTests extends ESTestCase {
 
         @Override
         public Collection<MetricValue> getMetrics() {
-            return List.of(new MetricValue(Type.COUNTER, id, metadata, value.getAndSet(0)));
+            return List.of(new MetricValue(MeasurementType.COUNTER, id, "test", metadata, value.getAndSet(0)));
         }
     }
 
@@ -96,7 +96,7 @@ public class MeteringServiceTests extends ESTestCase {
 
         @Override
         public Collection<MetricValue> getMetrics() {
-            return List.of(new MetricValue(Type.SAMPLED, id, metadata, value));
+            return List.of(new MetricValue(MeasurementType.SAMPLED, id, "test", metadata, value));
         }
     }
 
@@ -151,7 +151,7 @@ public class MeteringServiceTests extends ESTestCase {
                         .stream()
                         .map(
                             e -> allOf(
-                                transformedMatch(r -> r.usage().type(), equalTo(e.getKey())),
+                                transformedMatch(r -> r.usage().type(), equalTo("test")),
                                 transformedMatch(r -> r.usage().quantity(), equalTo(e.getValue())),
                                 transformedMatch(r -> r.source().metadata(), equalTo(Map.of("id", e.getKey())))
                             )
@@ -160,7 +160,7 @@ public class MeteringServiceTests extends ESTestCase {
                         .stream()
                         .map(
                             e -> allOf(
-                                transformedMatch(r -> r.usage().type(), equalTo(e.getKey())),
+                                transformedMatch(r -> r.usage().type(), equalTo("test")),
                                 transformedMatch(r -> r.usage().quantity(), equalTo(e.getValue())),
                                 transformedMatch(r -> r.source().metadata(), equalTo(Map.of("id", e.getKey())))
                             )

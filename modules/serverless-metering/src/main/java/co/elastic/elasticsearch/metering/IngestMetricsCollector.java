@@ -56,6 +56,7 @@ import java.util.stream.Collectors;
  * and we allow for concurrent addIngestedDocValue calls.
  */
 public class IngestMetricsCollector implements MetricsCollector {
+    public static final String METRIC_TYPE = "es_raw_data";
     private final Logger logger = LogManager.getLogger(IngestMetricsCollector.class);
     private Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
@@ -90,6 +91,6 @@ public class IngestMetricsCollector implements MetricsCollector {
     }
 
     private MetricValue metricValue(String index, long value) {
-        return new MetricValue(Type.COUNTER, "ingested-doc:" + index, Map.of("index", index), value);
+        return new MetricValue(MeasurementType.COUNTER, "ingested-doc:" + index, METRIC_TYPE, Map.of("index", index), value);
     }
 }

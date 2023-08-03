@@ -86,9 +86,9 @@ public class MeteringIT extends AbstractMeteringIntegTestCase {
         assertTrue(maybeRecord.isPresent());
 
         UsageRecord metric = maybeRecord.get();
-        String type = "shard-size:" + indexName + ":0";
-        assertThat(metric.id(), startsWith(type));
-        assertThat(metric.usage().type(), equalTo(type));
+        String idPRefix = "shard-size:" + indexName + ":0";
+        assertThat(metric.id(), startsWith(idPRefix));
+        assertThat(metric.usage().type(), equalTo("es_indexed_data"));
         assertThat(metric.usage().quantity(), greaterThan(0L));
         assertThat(metric.source().metadata(), equalTo(Map.of("index", indexName, "shard", 0)));
     }
