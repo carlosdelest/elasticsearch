@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingObserver;
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
 
@@ -36,6 +37,8 @@ import org.elasticsearch.logging.Logger;
 import org.elasticsearch.node.NodeRoleSettings;
 import org.elasticsearch.plugins.ExtensiblePlugin;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.plugins.internal.DocumentParsingObserver;
+import org.elasticsearch.plugins.internal.DocumentParsingObserverPlugin;
 import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -53,9 +56,10 @@ import java.util.stream.Stream;
 /**
  * Plugin responsible for starting up all serverless metering classes.
  */
-public class MeteringPlugin extends Plugin implements ExtensiblePlugin {
+public class MeteringPlugin extends Plugin implements ExtensiblePlugin, DocumentParsingObserverPlugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
+    private final IngestMetricsCollector ingestMetricsCollector = new IngestMetricsCollector();
 
     static final Setting<String> PROJECT_ID = Setting.simpleString("metering.project_id", Setting.Property.NodeScope);
 
@@ -126,5 +130,10 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin {
     @Override
     public void close() throws IOException {
         IOUtils.close(reporter, service);
+    }
+
+    @Override
+    public Supplier<DocumentParsingObserver> getDocumentParsingObserverSupplier() {
+        return () -> new MeteringDocumentParsingObserver(ingestMetricsCollector);
     }
 }

@@ -19,20 +19,77 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metrics.MetricsCollector;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.elasticsearch.common.util.concurrent.ReleasableLock;
+import org.elasticsearch.core.Strings;
+
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
- * Responsible for the ingest document size metric.
+ * Responsible for the ingest document size collection.
  * <p>
- * Registers a metric on the metering service,
- * and connects to the IngestService to be notified whenever there is a new document ingested.
- * It takes the document, calculates its normalized size, then reports it to the registered metric
- * on MeteringService.
+ * Accumulates metric values from ingestion.
+ *
+ * Note on concurrency used here:
+ * getMetrics is expected to run far fewer than addIngestedDocValue.
+ * getMetrics by default should be triggered once every 5min
+ *
+ * It is expected to have a lot (really a lot) of concurrent addIngestedDocValue calls, but most likely
+ * on different index value.
+ *
+ * ConcurrentHashMap - metrics - allows for safe concurrent updates on different indexNames
+ * AtomicLong - a value of ConcurrentHashMap - allows for safe concurrent updates on the same indexName
+ *
+ * We want to pause adding elements to a map when getMetrics is called. Otherwise, we risk a live lock when
+ * getMetrics would be iterating over elements from ConcurrentHashMap and at the same time addIngestedDocValue would
+ * be keep on adding more. Hence, getMetrics might never finish.
+ * By using exclusiveLock (writeLock) we prevent any addIngestedDocValue when getMetrics is called.
+ * By using nonExclusiveLock (readLock) we prevent getMetrics to be called at the same time as addIngestedDocValue
+ * and we allow for concurrent addIngestedDocValue calls.
  */
-class IngestMetricsCollector implements MetricsCollector {
+public class IngestMetricsCollector implements MetricsCollector {
+    private final Logger logger = LogManager.getLogger(IngestMetricsCollector.class);
+    private Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
+    private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
+
     @Override
     public Collection<MetricValue> getMetrics() {
-        return List.of();
+        Map<String, AtomicLong> oldMetrics;
+        Map<String, AtomicLong> emptyMetrics = new ConcurrentHashMap<>();
+        try (ReleasableLock ignored = exclusiveLock.acquire()) {
+            oldMetrics = metrics;
+            metrics = emptyMetrics;
+        }
+        List<MetricValue> toReturn = oldMetrics.entrySet()
+            .stream()
+            .map(e -> metricValue(e.getKey(), e.getValue().longValue()))
+            .collect(Collectors.toList());
+
+        logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
+        return toReturn;
+
+    }
+
+    public void addIngestedDocValue(String index, long size) {
+        try (ReleasableLock ignored = nonExclusiveLock.acquire()) {
+            AtomicLong currentValue = metrics.computeIfAbsent(index, (ind) -> new AtomicLong());
+            long newSize = currentValue.addAndGet(size);
+
+            logger.trace(() -> Strings.format("New ingested doc value %s for index %s, newValue %s", size, index, newSize));
+        }
+    }
+
+    private MetricValue metricValue(String index, long value) {
+        return new MetricValue(Type.COUNTER, "ingested-doc:" + index, Map.of("index", index), value);
     }
 }
