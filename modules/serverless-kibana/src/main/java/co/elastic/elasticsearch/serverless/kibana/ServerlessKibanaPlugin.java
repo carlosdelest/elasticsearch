@@ -35,7 +35,8 @@ public class ServerlessKibanaPlugin extends Plugin {
             + "\\.kibana_analytics_\\d+|"
             + "\\.kibana_ingest_\\d+|"
             + "\\.kibana_task_manager_\\d+|"
-            + "\\.kibana_security_solution_\\d+"
+            + "\\.kibana_security_solution_\\d+|"
+            + "\\.apm-custom-link"
     );
     private final Predicate<String> isKibanaFastRefreshIndex = pattern.asMatchPredicate();
 

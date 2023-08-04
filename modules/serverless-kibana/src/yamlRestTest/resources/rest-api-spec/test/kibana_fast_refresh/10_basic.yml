@@ -23,6 +23,9 @@
       indices.create:
         index: ".kibana_security_session_30"
   - do:
+      indices.create:
+        index: ".apm-custom-link"
+  - do:
       indices.get_settings:
         expand_wildcards: "open,hidden"
       allowed_warnings_regex:
@@ -35,5 +38,6 @@
   - match: { \.kibana_task_manager_11.settings.index.fast_refresh: "true" }
   - match: { \.kibana_security_solution_10.settings.index.fast_refresh: "true" }
   - match: { \.kibana_security_session_30.settings.index.fast_refresh: null }
+  - match: { \.apm-custom-link.settings.index.fast_refresh: "true" }
 
 
