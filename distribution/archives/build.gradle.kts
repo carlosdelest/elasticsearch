@@ -89,7 +89,10 @@ distribution_archives {
                     exclude("*/modules/searchable-snapshots")
                     exclude("*/modules/transform")
                     exclude("*/modules/x-pack-voting-only-node")
+                    exclude("*/modules/x-pack-monitoring")
+                    exclude("*/modules/x-pack-profiling")
                     exclude("*/modules/x-pack-shutdown")
+                    exclude("*/modules/x-pack-watcher")
                     // this jar is redefined, see libs/serverless-xpack-template-resources
                     exclude("*/modules/x-pack-core/x-pack-template-resources*.jar")
                     exclude("*/modules/rest-root")

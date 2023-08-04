@@ -36,6 +36,8 @@ tasks {
             "health/*/*",
             // managing a license is not supported in serverless
             "license/*/*",
+            // monitoring doesn't exist in serverless
+            "monitoring/bulk/*/*",
             // rollup has many tests failing with "Expected: <1> but: was <0>"
             "rollup/*/*",
             // searchable_snapshots doesn't exist in serverless
@@ -50,8 +52,8 @@ tasks {
             "terms_enum/*/*",
             // voting_only_node assumes data nodes
             "voting_only_node/*/*",
-            // the license is fixed to "enterprise"
-            "xpack/20_info/XPack Info API",
+            // monitoring and watcher are not supported in serverless, and the license is fixed to "enterprise"
+            "xpack/*/*",
             // expects predictable node names
             "service_accounts/10_basic/Test service account tokens",
             // https://github.com/elastic/elasticsearch-serverless/issues/652
