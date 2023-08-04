@@ -11,6 +11,11 @@
         name: test-search-application-1
         body:
           indices: [ "test-index1" ]
+          template:
+            script:
+              source:
+                query_string:
+                  query: "{{query_string}}"
 
   - do:
       indices.create:
