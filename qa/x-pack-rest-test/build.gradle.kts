@@ -53,6 +53,8 @@ tasks {
             // the license is fixed to "enterprise"
             "xpack/20_info/XPack Info API",
             // expects predictable node names
-            "service_accounts/10_basic/Test service account tokens").joinToString(","))
+            "service_accounts/10_basic/Test service account tokens",
+            // https://github.com/elastic/elasticsearch-serverless/issues/652
+            "security/settings/10_update_security_settings/Test update and get security settings API").joinToString(","))
     }
 }
