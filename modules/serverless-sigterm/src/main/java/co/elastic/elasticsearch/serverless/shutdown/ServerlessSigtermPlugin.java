@@ -56,15 +56,21 @@ import java.util.function.Supplier;
  * Elasticsearch (SIGTERM, you're welcome) into Node Shutdown requests.
  */
 public class ServerlessSigtermPlugin extends ShutdownPlugin {
-    public static final TimeValue POLL_INTERVAL = TimeValue.timeValueMinutes(1);
     private SigtermTerminationHandler terminationHandler;
     /**
      * The maximum amount of time to wait for an orderly shutdown.
      */
-    private static final Setting<TimeValue> TIMEOUT_SETTING = Setting.timeSetting(
+    public static final Setting<TimeValue> TIMEOUT_SETTING = Setting.timeSetting(
         "serverless.sigterm.timeout",
         new TimeValue(1, TimeUnit.HOURS),
-        new TimeValue(0, TimeUnit.SECONDS),
+        TimeValue.ZERO,
+        Setting.Property.NodeScope
+    );
+
+    public static final Setting<TimeValue> POLL_INTERVAL_SETTING = Setting.timeSetting(
+        "serverless.sigterm.poll_interval",
+        new TimeValue(1, TimeUnit.MINUTES),
+        TimeValue.ZERO,
         Setting.Property.NodeScope
     );
 
@@ -88,7 +94,7 @@ public class ServerlessSigtermPlugin extends ShutdownPlugin {
         this.terminationHandler = new SigtermTerminationHandler(
             client,
             threadPool,
-            POLL_INTERVAL,
+            POLL_INTERVAL_SETTING.get(clusterService.getSettings()),
             TIMEOUT_SETTING.get(clusterService.getSettings()),
             nodeEnvironment.nodeId()
         );
@@ -115,7 +121,7 @@ public class ServerlessSigtermPlugin extends ShutdownPlugin {
 
     @Override
     public List<Setting<?>> getSettings() {
-        return Collections.singletonList(TIMEOUT_SETTING);
+        return List.of(TIMEOUT_SETTING, POLL_INTERVAL_SETTING);
     }
 
     TerminationHandler getTerminationHandler() {
