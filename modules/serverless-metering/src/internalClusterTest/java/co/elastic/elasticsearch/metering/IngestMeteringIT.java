@@ -32,7 +32,6 @@ import org.elasticsearch.xcontent.XContentType;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
@@ -47,12 +46,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
     protected String startNodes() {
         return internalCluster().startNode(
-            settingsForRoles(
-                DiscoveryNodeRole.MASTER_ROLE,
-                DiscoveryNodeRole.INDEX_ROLE,
-                DiscoveryNodeRole.SEARCH_ROLE,
-                DiscoveryNodeRole.INGEST_ROLE
-            )
+            settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.INGEST_ROLE)
         );
     }
 
@@ -66,9 +60,9 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> receivedMetrics().isEmpty() == false);
         assertThat(receivedMetrics(), not(empty()));
 
-        Optional<UsageRecord> maybeRecord = getUsageRecords("ingested-doc:" + indexName);
+        UsageRecord usageRecord = getUsageRecords("ingested-doc:" + indexName);
 
-        assertUsageRecord(indexName, maybeRecord);
+        assertUsageRecord(indexName, usageRecord);
 
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();// size 3*char+int (long size)
 
@@ -83,12 +77,11 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> receivedMetrics().isEmpty() == false);
         assertThat(receivedMetrics(), not(empty()));
 
-        maybeRecord = getUsageRecords("ingested-doc:" + indexName2);
-        assertUsageRecord(indexName2, maybeRecord);
+        usageRecord = getUsageRecords("ingested-doc:" + indexName2);
+        assertUsageRecord(indexName2, usageRecord);
     }
 
-    private static void assertUsageRecord(String indexName, Optional<UsageRecord> maybeRecord) {
-        UsageRecord metric = maybeRecord.get();
+    private static void assertUsageRecord(String indexName, UsageRecord metric) {
         String id = "ingested-doc:" + indexName;
         assertThat(metric.id(), startsWith(id));
         assertThat(metric.usage().type(), equalTo("es_raw_data"));

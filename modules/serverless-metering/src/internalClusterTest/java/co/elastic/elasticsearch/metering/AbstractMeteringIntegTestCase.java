@@ -48,7 +48,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -130,12 +129,10 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
         }
     }
 
-    protected Optional<UsageRecord> getUsageRecords(String prefix) {
+    protected UsageRecord getUsageRecords(String prefix) {
         List<List<UsageRecord>> recordLists = new ArrayList<>();
         receivedMetrics().drainTo(recordLists);
 
-        Optional<UsageRecord> maybeRecord = recordLists.stream().flatMap(List::stream).filter(m -> m.id().startsWith(prefix)).findFirst();
-        assertTrue(maybeRecord.isPresent());
-        return maybeRecord;
+        return recordLists.stream().flatMap(List::stream).filter(m -> m.id().startsWith(prefix)).findFirst().get();
     }
 }

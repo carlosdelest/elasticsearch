@@ -62,6 +62,11 @@ public class IngestMetricsCollector implements MetricsCollector {
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
+    private final String nodeId;
+
+    public IngestMetricsCollector(String nodeId) {
+        this.nodeId = nodeId;
+    }
 
     @Override
     public Collection<MetricValue> getMetrics() {
@@ -91,6 +96,6 @@ public class IngestMetricsCollector implements MetricsCollector {
     }
 
     private MetricValue metricValue(String index, long value) {
-        return new MetricValue(MeasurementType.COUNTER, "ingested-doc:" + index, METRIC_TYPE, Map.of("index", index), value);
+        return new MetricValue(MeasurementType.COUNTER, "ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, Map.of("index", index), value);
     }
 }

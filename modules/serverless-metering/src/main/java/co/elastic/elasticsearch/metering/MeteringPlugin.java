@@ -59,13 +59,14 @@ import java.util.stream.Stream;
 public class MeteringPlugin extends Plugin implements ExtensiblePlugin, DocumentParsingObserverPlugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
-    private final IngestMetricsCollector ingestMetricsCollector = new IngestMetricsCollector();
 
     static final Setting<String> PROJECT_ID = Setting.simpleString("metering.project_id", Setting.Property.NodeScope);
 
     private List<MetricsCollector> metricsCollectors;
     private MeteringReporter reporter;
     private MeteringService service;
+
+    private volatile IngestMetricsCollector ingestMetricsCollector;
 
     @Override
     public List<Setting<?>> getSettings() {
@@ -97,9 +98,14 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         String projectId = MeteringPlugin.PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
+        ingestMetricsCollector = new IngestMetricsCollector(nodeEnvironment.nodeId());
+
         List<MetricsCollector> builtInMetrics = new ArrayList<>();
-        builtInMetrics.add(ingestMetricsCollector);
-        if (NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings()).contains(DiscoveryNodeRole.SEARCH_ROLE)) {
+        List<DiscoveryNodeRole> discoveryNodeRoles = NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings());
+        if (discoveryNodeRoles.contains(DiscoveryNodeRole.INGEST_ROLE) || discoveryNodeRoles.contains(DiscoveryNodeRole.INDEX_ROLE)) {
+            builtInMetrics.add(ingestMetricsCollector);
+        }
+        if (discoveryNodeRoles.contains(DiscoveryNodeRole.SEARCH_ROLE)) {
             builtInMetrics.add(new IndexSizeMetricsCollector(indicesService));
         }
 
@@ -132,6 +138,11 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         IOUtils.close(reporter, service);
     }
 
+    /**
+     * this method is called before the createComponents and passed down to other services
+     * the get on a supplier is only called upon parsing. so after createComponent
+     * Therefore the instance created in createComponents should be volatile
+     */
     @Override
     public Supplier<DocumentParsingObserver> getDocumentParsingObserverSupplier() {
         return () -> new MeteringDocumentParsingObserver(ingestMetricsCollector);

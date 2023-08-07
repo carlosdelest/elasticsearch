@@ -27,7 +27,6 @@ import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.xcontent.XContentType;
 
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.StreamSupport;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
@@ -64,9 +63,8 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> receivedMetrics().isEmpty() == false);
         assertThat(receivedMetrics(), not(empty()));
-        Optional<UsageRecord> maybeRecord = getUsageRecords("shard-size");
+        UsageRecord metric = getUsageRecords("shard-size");
 
-        UsageRecord metric = maybeRecord.get();
         String idPRefix = "shard-size:" + indexName + ":0";
         assertThat(metric.id(), startsWith(idPRefix));
         assertThat(metric.usage().type(), equalTo("es_indexed_data"));
