@@ -12,6 +12,7 @@ import org.elasticsearch.test.cluster.FeatureFlag;
 import org.elasticsearch.test.cluster.local.LocalClusterConfigProvider;
 import org.elasticsearch.test.cluster.local.LocalClusterSpecBuilder;
 import org.elasticsearch.test.cluster.local.distribution.DistributionType;
+import org.elasticsearch.test.cluster.util.Version;
 
 /**
  * Default configuration applied to all serverless clusters.
@@ -25,9 +26,9 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             .setting("stateless.object_store.type", "fs")
             .setting("stateless.object_store.bucket", "stateless")
             .setting("stateless.object_store.base_path", "base_path")
-            // TODO: remove when we're confident that stateless masters work
-            // .setting("logger.org.elasticsearch.cluster.coordination", "DEBUG")
             .setting("ingest.geoip.downloader.enabled", "false")
+            // TODO remove condition once BwC version also supports serverless.sigterm.poll_interval
+            .setting("serverless.sigterm.poll_interval", () -> "1s", n -> n.getVersion().equals(Version.CURRENT))
             .feature(FeatureFlag.TIME_SERIES_MODE)
             .withNode(
                 indexNodeSpec -> indexNodeSpec.name("index")
