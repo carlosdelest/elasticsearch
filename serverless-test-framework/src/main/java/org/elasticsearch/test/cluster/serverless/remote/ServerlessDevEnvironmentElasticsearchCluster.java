@@ -93,7 +93,7 @@ public class ServerlessDevEnvironmentElasticsearchCluster implements ServerlessE
     }
 
     @Override
-    public String getRemoteClusterServerEndpoint() {
+    public String getRemoteClusterServerEndpoints() {
         throw new UnsupportedOperationException();
     }
 
