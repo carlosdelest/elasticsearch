@@ -55,9 +55,10 @@ import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesSto
  */
 public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
+    // TODO: This setting should be removed in the future, and API protections will be on by default
     public static final Setting<Boolean> API_PROTECTIONS_SETTING = Setting.boolSetting(
         "http.api_protections.enabled",
-        false, // TODO : This will become true at a later time
+        true,
         Setting.Property.Dynamic,
         Setting.Property.NodeScope
     );
