@@ -92,11 +92,11 @@ class IndexSizeMetricsCollector implements MetricsCollector {
                     }
                 }
 
-                Map<String, Object> metadata = new HashMap<>();
+                Map<String, String> metadata = new HashMap<>();
                 metadata.put(INDEX, indexName);
-                metadata.put(SHARD, shardId);
+                metadata.put(SHARD, Integer.toString(shardId));
                 if (partial) {
-                    metadata.put(PARTIAL, true);
+                    metadata.put(PARTIAL, Boolean.TRUE.toString());
                 }
                 String metricId = format("shard-size:%s:%s", indexName, shardId);
 

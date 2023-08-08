@@ -60,11 +60,11 @@ public class MeteringServiceTests extends ESTestCase {
 
     private static class TestCounter implements MetricsCollector {
         private final String id;
-        private final Map<String, ?> metadata;
+        private final Map<String, String> metadata;
 
         private final AtomicLong value = new AtomicLong();
 
-        private TestCounter(String id, Map<String, ?> metadata) {
+        private TestCounter(String id, Map<String, String> metadata) {
             this.id = id;
             this.metadata = metadata;
         }
@@ -81,11 +81,11 @@ public class MeteringServiceTests extends ESTestCase {
 
     private static class TestSample implements MetricsCollector {
         private final String id;
-        private final Map<String, ?> metadata;
+        private final Map<String, String> metadata;
 
         private long value;
 
-        private TestSample(String id, Map<String, ?> metadata) {
+        private TestSample(String id, Map<String, String> metadata) {
             this.id = id;
             this.metadata = metadata;
         }

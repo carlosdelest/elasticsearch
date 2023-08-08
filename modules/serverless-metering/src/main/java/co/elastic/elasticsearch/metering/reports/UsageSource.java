@@ -30,7 +30,7 @@ import java.util.Objects;
 
 import static org.elasticsearch.xcontent.ConstructingObjectParser.constructorArg;
 
-public record UsageSource(String id, String instanceGroupId, @Nullable Map<String, ?> metadata) implements ToXContentObject {
+public record UsageSource(String id, String instanceGroupId, @Nullable Map<String, String> metadata) implements ToXContentObject {
 
     private static final String ID = "id";
     private static final String INSTANCE_GROUP_ID = "instance_group_id";
@@ -42,7 +42,7 @@ public record UsageSource(String id, String instanceGroupId, @Nullable Map<Strin
             String id = (String) a[0];
             String instanceGroupId = (String) a[1];
             @SuppressWarnings("unchecked")
-            Map<String, Object> metadata = (Map<String, Object>) a[2];
+            Map<String, String> metadata = (Map<String, String>) a[2];
             return new UsageSource(id, instanceGroupId, metadata);
         });
         PARSER.declareString(constructorArg(), new ParseField(ID));

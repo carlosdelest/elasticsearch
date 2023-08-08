@@ -139,7 +139,7 @@ class ReportGatherer {
         return hour.plus(reportPeriod.multipliedBy(times));
     }
 
-    private UsageRecord getRecordForCount(String metric, String type, long count, Map<String, ?> metadata, Instant now) {
+    private UsageRecord getRecordForCount(String metric, String type, long count, Map<String, String> metadata, Instant now) {
         return new UsageRecord(
             generateId(metric, now),
             now,
@@ -148,7 +148,7 @@ class ReportGatherer {
         );
     }
 
-    private UsageRecord getRecordForSample(String metric, String type, long value, Map<String, ?> metadata, Instant now) {
+    private UsageRecord getRecordForSample(String metric, String type, long value, Map<String, String> metadata, Instant now) {
         Instant timestamp = calculateSampleTimestamp(now, reportPeriodDuration);
 
         return new UsageRecord(

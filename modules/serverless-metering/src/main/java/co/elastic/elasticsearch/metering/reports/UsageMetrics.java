@@ -39,7 +39,7 @@ public record UsageMetrics(
     long quantity,
     @Nullable TimeValue period,
     @Nullable String cause,
-    @Nullable Map<String, ?> metadata
+    @Nullable Map<String, String> metadata
 ) implements ToXContentObject {
 
     private static final String TYPE = "type";
@@ -58,7 +58,7 @@ public record UsageMetrics(
             TimeValue period = periodSeconds == Long.MIN_VALUE ? null : TimeValue.timeValueSeconds(periodSeconds);
             String cause = (String) a[4];
             @SuppressWarnings("unchecked")
-            Map<String, Object> metadata = (Map<String, Object>) a[5];
+            Map<String, String> metadata = (Map<String, String>) a[5];
             return new UsageMetrics(type, subtype, quantity, period, cause, metadata);
         });
         PARSER.declareString(constructorArg(), new ParseField(TYPE));
