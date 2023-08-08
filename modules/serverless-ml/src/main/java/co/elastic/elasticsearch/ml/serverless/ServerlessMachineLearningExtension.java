@@ -18,12 +18,31 @@
 package co.elastic.elasticsearch.ml.serverless;
 
 import org.apache.lucene.util.SetOnce;
+import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.xpack.ml.MachineLearningExtension;
 
+import java.util.Map;
+import java.util.Set;
+
 public class ServerlessMachineLearningExtension implements MachineLearningExtension {
+
+    public static final DiscoveryNode SERVERLESS_VIRTUAL_ML_NODE = new DiscoveryNode(
+        "serverless",
+        "serverless",
+        "serverless",
+        "serverless",
+        NetworkAddress.format(TransportAddress.META_ADDRESS),
+        new TransportAddress(TransportAddress.META_ADDRESS, 0),
+        Map.of(),
+        Set.of(DiscoveryNodeRole.ML_ROLE),
+        null
+    );
 
     private static final Logger logger = LogManager.getLogger(ServerlessMachineLearningExtension.class);
 

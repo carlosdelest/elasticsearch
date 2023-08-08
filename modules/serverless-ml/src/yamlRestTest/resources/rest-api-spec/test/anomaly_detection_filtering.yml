@@ -1,0 +1,141 @@
+setup:
+  - skip:
+      features: headers
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # run as x_pack_rest_user, i.e. the test setup superuser
+      indices.create:
+        index: airline-data
+        body:
+          mappings:
+            properties:
+              time:
+                type: date
+              airline:
+                type: keyword
+              responsetime:
+                type: float
+
+---
+"Test job and datafeed responses as operator with no filtering":
+  - skip:
+      features: headers
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      ml.put_job:
+        job_id: operator-job
+        body:  >
+          {
+            "description":"A job with a datafeed",
+            "analysis_config" : {
+                "bucket_span": "1h",
+                "detectors" :[{"function":"metric","field_name":"responsetime","by_field_name":"airline"}]
+            },
+            "analysis_limits" : {
+                "model_memory_limit": "10mb"
+            },
+            "data_description" : {
+                "time_field":"time"
+            }
+          }
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      ml.open_job:
+        job_id: operator-job
+  # We don't know what the node ID will be, but it will be 22 characters and "serverless" is shorter
+  - length: { node: 22 }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      ml.get_job_stats:
+        job_id: "operator-job"
+  - match: { jobs.0.job_id: "operator-job" }
+  - match: { jobs.0.state: opened }
+  # We don't know what the node ID will be, but it will be 22 characters and "serverless" is shorter
+  - length: { jobs.0.node.id: 22 }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      ml.put_datafeed:
+        datafeed_id: operator-datafeed
+        body:  >
+          {
+            "job_id":"operator-job",
+            "indices":["airline-data"]
+          }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      ml.start_datafeed:
+        datafeed_id: "operator-datafeed"
+        start: 0
+  # We don't know what the node ID will be, but it will be 22 characters and "serverless" is shorter
+  - length: { node: 22 }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      ml.get_datafeed_stats:
+        datafeed_id: "operator-datafeed"
+  - match: { datafeeds.0.datafeed_id: "operator-datafeed" }
+  - match: { datafeeds.0.state: started }
+  # We don't know what the node ID will be, but it will be 22 characters and "serverless" is shorter
+  - length: { datafeeds.0.node.id: 22 }
+
+---
+"Test job and datafeed responses as non operator with filtering":
+  - do:
+      ml.put_job:
+        job_id: non-operator-job
+        body:  >
+          {
+            "description":"A job with a datafeed",
+            "analysis_config" : {
+                "bucket_span": "1h",
+                "detectors" :[{"function":"metric","field_name":"responsetime","by_field_name":"airline"}]
+            },
+            "analysis_limits" : {
+                "model_memory_limit": "10mb"
+            },
+            "data_description" : {
+                "time_field":"time"
+            }
+          }
+  - do:
+      ml.open_job:
+        job_id: non-operator-job
+  - match: { node: serverless }
+
+  - do:
+      ml.get_job_stats:
+        job_id: "non-operator-job"
+  - match: { jobs.0.job_id: "non-operator-job" }
+  - match: { jobs.0.state: opened }
+  - match: { jobs.0.node.id: serverless }
+
+  - do:
+      ml.put_datafeed:
+        datafeed_id: non-operator-datafeed
+        body:  >
+          {
+            "job_id":"non-operator-job",
+            "indices":["airline-data"]
+          }
+
+  - do:
+      ml.start_datafeed:
+        datafeed_id: "non-operator-datafeed"
+        start: 0
+  - match: { node: serverless }
+
+  - do:
+      ml.get_datafeed_stats:
+        datafeed_id: "non-operator-datafeed"
+  - match: { datafeeds.0.datafeed_id: "non-operator-datafeed" }
+  - match: { datafeeds.0.state: started }
+  - match: { datafeeds.0.node.id: serverless }

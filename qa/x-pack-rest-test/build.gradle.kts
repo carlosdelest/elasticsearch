@@ -36,6 +36,8 @@ tasks {
             "health/*/*",
             // managing a license is not supported in serverless
             "license/*/*",
+            // this test asserts on ml node attributes that we don't reveal in serverless
+            "ml/jobs_get_stats/Test get job stats after uploading data prompting the creation of some stats",
             // monitoring doesn't exist in serverless
             "monitoring/bulk/*/*",
             // rollup has many tests failing with "Expected: <1> but: was <0>"

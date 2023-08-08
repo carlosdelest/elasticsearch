@@ -22,6 +22,8 @@ module org.elasticsearch.ml.serverless {
     requires org.elasticsearch.logging;
     requires org.elasticsearch.ml;
     requires org.elasticsearch.server;
+    requires org.elasticsearch.xcontent;
+    requires org.elasticsearch.xcore;
 
     provides org.elasticsearch.xpack.ml.MachineLearningExtension
         with
