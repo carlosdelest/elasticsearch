@@ -95,40 +95,7 @@ public class ServerlessReservedRolesIT extends ESRestTestCase {
         final Map<String, Object> responseMap = responseAsMap(response);
         assertThat(
             responseMap.keySet(),
-            equalTo(
-                Set.of(
-                    "apm_system",
-                    "apm_user",
-                    "beats_admin",
-                    "beats_system",
-                    "data_frame_transforms_admin",
-                    "data_frame_transforms_user",
-                    "editor",
-                    "enrich_user",
-                    "ingest_admin",
-                    "kibana_admin",
-                    "kibana_system",
-                    "kibana_user",
-                    "logstash_admin",
-                    "logstash_system",
-                    "machine_learning_admin",
-                    "machine_learning_user",
-                    "monitoring_user",
-                    "remote_monitoring_agent",
-                    "remote_monitoring_collector",
-                    "reporting_user",
-                    "rollup_admin",
-                    "rollup_user",
-                    "snapshot_user",
-                    "superuser",
-                    "transform_admin",
-                    "transform_user",
-                    "transport_client",
-                    "viewer",
-                    "watcher_admin",
-                    "watcher_user"
-                )
-            )
+            equalTo(Set.of("superuser", "remote_monitoring_agent", "remote_monitoring_collector", "editor", "viewer", "kibana_system"))
         );
     }
 

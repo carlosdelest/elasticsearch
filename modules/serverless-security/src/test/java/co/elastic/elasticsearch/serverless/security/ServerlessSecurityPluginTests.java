@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.serverless.security;
 import org.elasticsearch.test.ESTestCase;
 
 import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDED_RESERVED_ROLES_SETTING;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasItem;
 
 public class ServerlessSecurityPluginTests extends ESTestCase {
@@ -34,6 +35,13 @@ public class ServerlessSecurityPluginTests extends ESTestCase {
 
     public void testIncludeReservedRoleSettingIsRegistered() {
         assertThat(plugin.getSettings(), hasItem(INCLUDED_RESERVED_ROLES_SETTING));
+    }
+
+    public void testDefaultValueForIncludedReservedRoles() {
+        assertThat(
+            INCLUDED_RESERVED_ROLES_SETTING.get(plugin.additionalSettings()),
+            contains("superuser", "remote_monitoring_agent", "remote_monitoring_collector", "editor", "viewer", "kibana_system")
+        );
     }
 
 }
