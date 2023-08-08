@@ -50,6 +50,7 @@ include(":modules:serverless-rest-root")
 include(":modules:serverless-search")
 include(":modules:serverless-security")
 include(":modules:serverless-sigterm")
+include(":modules:serverless-master-failover")
 include(":modules:serverless-transform")
 include(":modules:serverless-metering")
 include(":modules:serverless-api-filtering")
@@ -87,6 +88,7 @@ include(":qa:rolling-upgrade")
 include(":qa:sigterm-shutdown")
 include(":qa:x-pack-rest-test")
 include(":qa:e2e-test")
+include(":qa:master-failover")
 
 /*
  * Test Framework
