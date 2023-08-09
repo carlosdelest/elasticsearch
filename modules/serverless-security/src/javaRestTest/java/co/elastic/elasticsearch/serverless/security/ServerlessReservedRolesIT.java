@@ -30,7 +30,6 @@ import org.elasticsearch.test.AnnotationTestOrdering.Order;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.MutableSettingsProvider;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
-import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
 
@@ -69,7 +68,6 @@ public class ServerlessReservedRolesIT extends ESRestTestCase {
         .name("javaRestTest")
         .settings(clusterSettings)
         .user(OPERATOR_USER, OPERATOR_PASSWORD)
-        .configFile("operator_users.yml", Resource.fromClasspath("operator_users.yml"))
         .build();
 
     @Override

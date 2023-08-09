@@ -23,8 +23,8 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
+import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
-import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.xpack.core.ml.integration.MlRestTestStateCleaner;
 import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
@@ -43,9 +43,8 @@ public class MlApiFilteringYamlTestSuiteIT extends AbstractXPackRestTest {
         .module("x-pack-core")
         .name("yamlRestTest")
         .setting("xpack.security.operator_privileges.enabled", "true")
-        .user(OPERATOR_USER, OPERATOR_PASSWORD)
-        .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD)
-        .configFile("operator_users.yml", Resource.fromClasspath("operator_users.yml"))
+        .user(OPERATOR_USER, OPERATOR_PASSWORD, User.ROOT_USER_ROLE, true)
+        .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.ROOT_USER_ROLE, false)
         .withNode(mlNodeSpec -> mlNodeSpec.setting("node.roles", "[ml]"))
         .build();
 

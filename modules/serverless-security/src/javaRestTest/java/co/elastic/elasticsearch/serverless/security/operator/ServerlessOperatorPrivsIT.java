@@ -28,6 +28,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
+import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.ESRestTestCase;
@@ -59,10 +60,9 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
         .secret("bootstrap.password", "x-pack-test-password")
         .secret("xpack.security.transport.ssl.secure_key_passphrase", "testnode")
         .user(OPERATOR_USER, OPERATOR_PASSWORD)
-        .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD)
+        .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.DEFAULT_USER.getRole(), false)
         .configFile("testnode.pem", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.pem"))
         .configFile("testnode.crt", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.crt"))
-        .configFile("operator_users.yml", Resource.fromClasspath("operator_users.yml"))
         .build();
 
     @Override
