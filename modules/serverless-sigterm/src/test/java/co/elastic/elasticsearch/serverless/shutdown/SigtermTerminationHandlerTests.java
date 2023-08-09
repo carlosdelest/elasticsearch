@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.shutdown;
 
+import org.apache.logging.log4j.Level;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.client.internal.Client;
@@ -26,6 +27,8 @@ import org.elasticsearch.cluster.metadata.ShutdownShardMigrationStatus;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.MockLogAppender;
+import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.xpack.shutdown.GetShutdownStatusAction;
 import org.elasticsearch.xpack.shutdown.PutShutdownNodeAction;
@@ -46,24 +49,38 @@ import static org.mockito.Mockito.when;
 
 public class SigtermTerminationHandlerTests extends ESTestCase {
 
+    @TestLogging(
+        reason = "Testing logging at INFO level",
+        value = "co.elastic.elasticsearch.serverless.shutdown.SigtermTerminationHandler:INFO"
+    )
     public void testShutdownCompletesImmediate() {
         shutdownFinishesImmediately(SingleNodeShutdownMetadata.Status.COMPLETE);
     }
 
+    @TestLogging(
+        reason = "Testing logging at INFO level",
+        value = "co.elastic.elasticsearch.serverless.shutdown.SigtermTerminationHandler:INFO"
+    )
     public void testShutdownStallsImmediately() {
         shutdownFinishesImmediately(SingleNodeShutdownMetadata.Status.STALLED);
     }
 
-    public void shutdownFinishesImmediately(SingleNodeShutdownMetadata.Status finishedWithStatus) {
+    private void shutdownFinishesImmediately(SingleNodeShutdownMetadata.Status finishedWithStatus) {
         final TimeValue pollInterval = TimeValue.parseTimeValue(randomPositiveTimeValue(), this.getTestName());
         final TimeValue timeout = TimeValue.parseTimeValue(randomPositiveTimeValue(), this.getTestName());
         final String nodeId = randomAlphaOfLength(10);
         TestThreadPool threadPool = new TestThreadPool(this.getTestName());
-        try {
+
+        final var appender = new MockLogAppender();
+        try (var ignored = appender.capturing(SigtermTerminationHandler.class)) {
             Client client = mock(Client.class);
             when(client.threadPool()).thenReturn(threadPool);
             doAnswer(invocation -> {
+                appender.assertAllExpectationsMatched();
                 PutShutdownNodeAction.Request putRequest = invocation.getArgument(1, PutShutdownNodeAction.Request.class);
+                assertEquals(timeout, putRequest.ackTimeout());
+                assertEquals(timeout, putRequest.timeout());
+                assertEquals(timeout, putRequest.masterNodeTimeout());
                 assertThat(putRequest.getNodeId(), equalTo(nodeId));
                 assertThat(putRequest.getType(), equalTo(SingleNodeShutdownMetadata.Type.SIGTERM));
                 ActionListener<AcknowledgedResponse> listener = invocation.getArgument(2);
@@ -74,6 +91,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
             doAnswer(invocation -> {
                 GetShutdownStatusAction.Request getRequest = invocation.getArgument(1, GetShutdownStatusAction.Request.class);
                 assertThat(getRequest.getNodeIds()[0], equalTo(nodeId));
+                assertEquals(timeout, getRequest.masterNodeTimeout());
                 ActionListener<GetShutdownStatusAction.Response> listener = invocation.getArgument(2);
                 listener.onResponse(
                     new GetShutdownStatusAction.Response(
@@ -97,6 +115,16 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
             }).when(client).execute(eq(GetShutdownStatusAction.INSTANCE), any(), any());
 
             SigtermTerminationHandler handler = new SigtermTerminationHandler(client, threadPool, pollInterval, timeout, nodeId);
+
+            appender.addExpectation(
+                new MockLogAppender.SeenEventExpectation(
+                    "start of handler message",
+                    SigtermTerminationHandler.class.getCanonicalName(),
+                    Level.INFO,
+                    "handling graceful shutdown request"
+                )
+            );
+
             handler.handleTermination();
 
             verify(client, times(1)).execute(eq(PutShutdownNodeAction.INSTANCE), any(), any());
@@ -143,7 +171,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
                 assertThat(putRequest.getNodeId(), equalTo(nodeId));
                 assertThat(putRequest.getType(), equalTo(SingleNodeShutdownMetadata.Type.SIGTERM));
                 ActionListener<AcknowledgedResponse> listener = invocation.getArgument(2);
-                listener.onResponse(AcknowledgedResponse.TRUE);
+                listener.onResponse(randomFrom(AcknowledgedResponse.TRUE, AcknowledgedResponse.FALSE));
                 return null; // real method is void
             }).when(client).execute(eq(PutShutdownNodeAction.INSTANCE), any(), any());
 

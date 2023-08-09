@@ -60,19 +60,17 @@ public class SigtermTerminationHandler implements TerminationHandler {
 
     @Override
     public void handleTermination() {
+        logger.info("handling graceful shutdown request");
         CountDownLatch latch = new CountDownLatch(1);
         AtomicReference<SingleNodeShutdownStatus> lastStatus = new AtomicReference<>();
-        client.execute(PutShutdownNodeAction.INSTANCE, shutdownRequest(), ActionListener.wrap(res -> {
-            if (res.isAcknowledged()) {
-                pollStatusAndLoop(latch, lastStatus);
-            } else {
-                logger.warn("failed to register graceful shutdown request, request was not acknowledged, stopping immediately");
+        client.execute(
+            PutShutdownNodeAction.INSTANCE,
+            shutdownRequest(),
+            ActionListener.wrap(res -> pollStatusAndLoop(latch, lastStatus), ex -> {
+                logger.warn("failed to register graceful shutdown request with an exception, stopping immediately", ex);
                 latch.countDown();
-            }
-        }, ex -> {
-            logger.warn("failed to register graceful shutdown request with an exception, stopping immediately", ex);
-            latch.countDown();
-        }));
+            })
+        );
         try {
             boolean latchReachedZero = latch.await(timeout.millis(), TimeUnit.MILLISECONDS);
             if (latchReachedZero == false && timeout.millis() != 0) {
@@ -92,12 +90,16 @@ public class SigtermTerminationHandler implements TerminationHandler {
             null,
             timeout
         );
+        request.masterNodeTimeout(timeout);
+        request.timeout(timeout);
         assert request.validate() == null;
         return request;
     }
 
     private void pollStatusAndLoop(CountDownLatch latch, AtomicReference<SingleNodeShutdownStatus> lastStatus) {
-        client.execute(GetShutdownStatusAction.INSTANCE, new GetShutdownStatusAction.Request(nodeId), ActionListener.wrap(res -> {
+        final var request = new GetShutdownStatusAction.Request(nodeId);
+        request.masterNodeTimeout(timeout);
+        client.execute(GetShutdownStatusAction.INSTANCE, request, ActionListener.wrap(res -> {
             assert res.getShutdownStatuses().size() == 1 : "got more than this node's shutdown status";
             SingleNodeShutdownStatus status = res.getShutdownStatuses().get(0);
             if (status.overallStatus().equals(SingleNodeShutdownMetadata.Status.COMPLETE)
