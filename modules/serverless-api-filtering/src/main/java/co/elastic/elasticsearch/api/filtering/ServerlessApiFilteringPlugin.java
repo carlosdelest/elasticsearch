@@ -66,7 +66,9 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
         AllocationService allocationService,
         IndicesService indicesService
     ) {
-        actionFilters.set(List.of(new EnrichStatsResponseFilter(threadPool.getThreadContext())));
+        actionFilters.set(
+            List.of(new EnrichStatsResponseFilter(threadPool.getThreadContext()), new TaskResponseFilter(threadPool.getThreadContext()))
+        );
 
         return List.of();
     }
