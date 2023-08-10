@@ -296,14 +296,19 @@ docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAV
 
 * Create your own cloud dev enviroment based on the [k8s-gitops-control](https://github.com/elastic/k8s-gitops-control-plane#local-development-environment) instructions. 
 
-There are a lot of prerequisites that need to be installed on your local machine in order to create an environment with just a `make dev-deploy` command. Reach out to the `platform-engineering-productivity` team if you have any issues.
+There are a lot of prerequisites that need to be installed on your local machine in order to create an environment with just a `make dev-deploy` command. Reach out to the `platform-engineering-productivity` team if you have any issues. 
+
+We test by default on AWS, see [Setting up AWS development environment](#setting-up-aws-development-environment) for the tips how to make sure you use the correct AWS configuration for creating own EKS cluster.
 
 * Create a dev Python environment for running (es-benchmarks)[https://github.com/elastic/elasticsearch-benchmarks]. 
 
-Reach out to the `es-perf` team if you have issues installing `pyenv` and building `esbench`.
+Reach out to the `es-perf` team if you have issues installing `pyenv` and building `esbench`. 
+Tip: don't forget to activate the environment with `source .venv/bin/activate`.
 
 * Use [serverless-on-k8s](https://github.com/elastic/elasticsearch-benchmarks/tree/master/tools/serverless-on-k8s) tool for deploying `elasticsearch-serverless` Docker images 
-for performance testing. 
+for performance testing.
+
+Switch `AWS_PROFILE` to `ecdev` by running `export AWS_PROFILE=ecdev` before using `serverless-on-k8s` in order to communicate with your EKS cluster.
 
 * Configure `kubectl` to use the `esbench` configuration `serverless-on-k8s.py configure-kubectl --k8s-cluster=<your_k8s_cluster_name>`
 
@@ -319,6 +324,8 @@ Set the disk limits to `100Gb`, memory limit to `8Gb` and the CPU limit to `4`.
 When the namespace is created, the script will print out an environment id and an URL that you will need to use for further interactions with the cluster.
 
 * Start `esbench`.
+
+Switch `AWS_PROFILE` to `elastic-dev` by running `export AWS_PROFILE=elastic-dev` before using `esbench`, so it can use the `elastic-dev` account. Don't forget update credentials with `okta-awscli -o default --profile=elastic-dev`.
 
 The `create` command prints out instructions how start `esbench`. It should like something like
 
@@ -366,9 +373,40 @@ Login to the machine running the benchmark `esbench ssh --env-id=<esbench_env_id
 
 #### Setting up AWS development environment
 
-* Install the `okta-awscli` tool according to the [docs](https://github.com/elastic/infra/blob/master/docs/aws/aws-user-access.md#apicli-access.
-* Generate the AWS credentials with the `okta-awscli --profile=okta-elastic-dev -f -s` command. The credentials will be stored in the `~/.aws/credentials` file.
-* Add the AWS profile to your environment: `export AWS_PROFILE=okta-elastic-dev`
-* Verify the credentials by running the `aws s3 ls` command.
-* Create an own bucket with `aws s3 mb s3://<<your_bucket_name>> --region <<your_region>>`
-* You can run AWS third party tests on your development machine by specifying the bucket name and region name via the `-Ds3.test.bucket` and `-Ds3.test.region` system properties.
+* Set `CSP_TYPE` environment variable `export CSP_TYPE=aws`.
+* Set `AWS_DEFAULT_REGION` environment variable `export AWS_DEFAULT_REGION=eu-west-1` # Set to the region that is closer to you.
+* Install and configure `okta-awscli` tool according to the [docs](https://github.com/elastic/cloud/blob/master/wiki/AWS.md).
+* Latest `okta-awscli` requires Python 3.10. Make sure to update it, e.g. Ubuntu uses Python 3.8 by default.
+* Remove `factor: FIDO` from the `.okta-aws` config you had it set previously.
+* `esbench` and `gitops-control-plane` use different AWS profiles and accounts. You have to set up *both*. So, your `.okta-aws` should look like this
+
+```      
+[default]
+base-url = elastic.okta.com
+app-link = https://elastic.okta.com/home/amazon_aws/0oabplp058WZVHLWM1t7/272
+username = firstname.lastname@elastic.co
+duration = 14400
+role = arn:aws:iam::946960629917:role/ElasticDeveloper
+
+[ecdev]
+base-url = elastic.okta.com
+app-link = https://elastic.okta.com/home/amazon_aws/0oaaibfi8ztk6zoVR1t7/272
+username = firstname.lastname@elastic.co
+duration = 43200
+role = arn:aws:iam::284141849446:role/saml/saml_cloud_developers
+```
+    
+* Double check the `app-link` in your `ecdev` config in `.okta-aws`. It should be set to `https://elastic.okta.com/home/amazon_aws/0oaaibfi8ztk6zoVR1t7/272`. If you set the `app-link` correctly, `okta-awscli` will assign `arn:aws:iam::284141849446:role/saml/saml_cloud_developers` role.     
+* Make sure the `~/.aws/credentials` has *exact* lines for the `ecdev` profile.
+    
+```
+[ecdev]
+role_arn = arn:aws:iam::444732909647:role/cross_account/developers
+source_profile = default   
+```
+
+* If you need to use `gitops-control-plane`, generate `ecdev` AWS credentials with the `okta-awscli -o ecdev --profile=ecdev -f -s` command.
+* Verify that the `ecdev` credentials work by running the `aws eks list-clusters --region=<<your_region>> --profile ecdev` command.
+* If you need to use `esbench`, generate `elastic-dev` AWS credentials with the `okta-awscli -o default --profile=elastic-dev -f -s` command.
+* Verify that the `elastic-dev` credentials work by running the `aws s3 ls --profile elastic-dev` command.
+* If you want to run AWS third party tests on your development machine, create an own bucket with `aws s3 mb s3://<<your_bucket_name>> --region <<your_region>>`. You can the use it by passing the bucket name and region name via the `-Ds3.test.bucket` and `-Ds3.test.region` system properties.
