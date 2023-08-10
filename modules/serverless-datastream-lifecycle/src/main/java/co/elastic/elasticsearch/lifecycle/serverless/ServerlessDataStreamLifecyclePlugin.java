@@ -32,16 +32,16 @@ public class ServerlessDataStreamLifecyclePlugin extends Plugin {
     private static final String DATA_STREAMS_LIFECYCLE_ONLY_MODE_NAME = "data_streams.lifecycle_only.mode";
     public static final Setting<Boolean> DATA_STREAMS_LIFECYCLE_ONLY_MODE = Setting.boolSetting(
         "data_streams.lifecycle_only.mode",
-        false,
+        true,
         Property.NodeScope
     );
 
-    public ServerlessDataStreamLifecyclePlugin(Settings settings) {
-        if (DATA_STREAMS_LIFECYCLE_ONLY_MODE.get(settings) == false) {
-            throw new IllegalArgumentException(
-                DATA_STREAMS_LIFECYCLE_ONLY_MODE_NAME + " is not enabled and must be enable on serverless Elasticsearch"
-            );
-        }
+    @Override
+    public Settings additionalSettings() {
+        // we explicitly configure the setting here as it's read in the open source distribution where the
+        // setting is not registered (and it's read with a default of `false`)
+        // this way we'll be able to make sure the in serverless the setting will always have the value `true`
+        return Settings.builder().put(DATA_STREAMS_LIFECYCLE_ONLY_MODE_NAME, true).build();
     }
 
     @Override

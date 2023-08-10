@@ -28,9 +28,9 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             .setting("stateless.object_store.base_path", "base_path")
             .setting("ingest.geoip.downloader.enabled", "false")
             .setting("http.api_protections.enabled", "false") // TODO - Need to fix this
+            .setting("data_streams.lifecycle_only.mode", "true")
             // TODO remove condition once BwC version also supports serverless.sigterm.poll_interval
             .setting("serverless.sigterm.poll_interval", () -> "1s", n -> n.getVersion().equals(Version.CURRENT))
-            .setting("data_streams.lifecycle_only.mode", "true")
             .feature(FeatureFlag.TIME_SERIES_MODE)
             .withNode(
                 indexNodeSpec -> indexNodeSpec.name("index")

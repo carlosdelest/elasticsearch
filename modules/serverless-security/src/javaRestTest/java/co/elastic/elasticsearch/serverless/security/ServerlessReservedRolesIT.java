@@ -55,7 +55,6 @@ public class ServerlessReservedRolesIT extends ESRestTestCase {
             put("ingest.geoip.downloader.enabled", "false");
             put("xpack.searchable.snapshot.shared_cache.size", "16MB");
             put("xpack.searchable.snapshot.shared_cache.region_size", "256KB");
-            put("data_streams.lifecycle_only.mode", "true");
         }
     };
 
