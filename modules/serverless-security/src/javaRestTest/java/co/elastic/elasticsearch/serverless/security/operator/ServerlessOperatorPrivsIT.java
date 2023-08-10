@@ -51,7 +51,6 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("javaRestTest")
-        .setting("xpack.security.operator_privileges.enabled", "true")
         .setting("xpack.security.enabled", "true")
         .setting("xpack.security.transport.ssl.enabled", "true")
         .setting("xpack.security.transport.ssl.key", "testnode.pem")
@@ -59,8 +58,8 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
         .setting("xpack.security.transport.ssl.verification_mode", "certificate")
         .secret("bootstrap.password", "x-pack-test-password")
         .secret("xpack.security.transport.ssl.secure_key_passphrase", "testnode")
-        .user(OPERATOR_USER, OPERATOR_PASSWORD)
-        .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.DEFAULT_USER.getRole(), false)
+        .user(OPERATOR_USER, OPERATOR_PASSWORD, User.ROOT_USER_ROLE, true)
+        .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.ROOT_USER_ROLE, false)
         .configFile("testnode.pem", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.pem"))
         .configFile("testnode.crt", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.crt"))
         .build();

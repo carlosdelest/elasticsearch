@@ -29,6 +29,7 @@ import org.elasticsearch.test.AnnotationTestOrdering;
 import org.elasticsearch.test.AnnotationTestOrdering.Order;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.MutableSettingsProvider;
+import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
@@ -47,7 +48,6 @@ public class ServerlessReservedRolesIT extends ESRestTestCase {
     private static MutableSettingsProvider clusterSettings = new MutableSettingsProvider() {
         {
             put("stateless.enabled", "true");
-            put("xpack.security.operator_privileges.enabled", "true");
             put("stateless.object_store.type", "fs");
             put("stateless.object_store.bucket", "stateless");
             put("stateless.object_store.base_path", "base_path");
@@ -67,7 +67,7 @@ public class ServerlessReservedRolesIT extends ESRestTestCase {
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("javaRestTest")
         .settings(clusterSettings)
-        .user(OPERATOR_USER, OPERATOR_PASSWORD)
+        .user(OPERATOR_USER, OPERATOR_PASSWORD, User.ROOT_USER_ROLE, true)
         .build();
 
     @Override

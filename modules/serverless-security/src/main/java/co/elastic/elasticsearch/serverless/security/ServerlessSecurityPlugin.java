@@ -42,6 +42,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.tracing.Tracer;
 import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
+import org.elasticsearch.xpack.security.operator.OperatorPrivileges;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -106,6 +107,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
                 "viewer",
                 "kibana_system"
             )
+            .put(OperatorPrivileges.OPERATOR_PRIVILEGES_ENABLED.getKey(), true)
             .build();
     }
 
