@@ -18,6 +18,7 @@ val runCluster by testClusters.registering {
     setting("xpack.security.enabled", "true")
     setting("xpack.watcher.enabled", "false")
     setting("xpack.security.operator_privileges.enabled", "true")
+    setting("data_streams.lifecycle_only.mode", "true")
     keystore("bootstrap.password", "password")
     extraConfigFile("operator_users.yml", file("${rootDir}/serverless-build-tools/src/main/resources/operator_users.yml"));
     extraConfigFile("service_tokens", file("${rootDir}/serverless-build-tools/src/main/resources/service_tokens"));

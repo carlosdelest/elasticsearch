@@ -30,6 +30,7 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             .setting("http.api_protections.enabled", "false") // TODO - Need to fix this
             // TODO remove condition once BwC version also supports serverless.sigterm.poll_interval
             .setting("serverless.sigterm.poll_interval", () -> "1s", n -> n.getVersion().equals(Version.CURRENT))
+            .setting("data_streams.lifecycle_only.mode", "true")
             .feature(FeatureFlag.TIME_SERIES_MODE)
             .withNode(
                 indexNodeSpec -> indexNodeSpec.name("index")

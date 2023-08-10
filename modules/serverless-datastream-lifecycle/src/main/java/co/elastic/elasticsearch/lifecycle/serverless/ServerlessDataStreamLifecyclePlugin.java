@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.lifecycle.serverless;
 
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugins.Plugin;
 
 import java.util.List;
@@ -28,11 +29,20 @@ import java.util.List;
  */
 public class ServerlessDataStreamLifecyclePlugin extends Plugin {
 
+    private static final String DATA_STREAMS_LIFECYCLE_ONLY_MODE_NAME = "data_streams.lifecycle_only.mode";
     public static final Setting<Boolean> DATA_STREAMS_LIFECYCLE_ONLY_MODE = Setting.boolSetting(
         "data_streams.lifecycle_only.mode",
-        true,
+        false,
         Property.NodeScope
     );
+
+    public ServerlessDataStreamLifecyclePlugin(Settings settings) {
+        if (DATA_STREAMS_LIFECYCLE_ONLY_MODE.get(settings) == false) {
+            throw new IllegalArgumentException(
+                DATA_STREAMS_LIFECYCLE_ONLY_MODE_NAME + " is not enabled and must be enable on serverless Elasticsearch"
+            );
+        }
+    }
 
     @Override
     public List<Setting<?>> getSettings() {
