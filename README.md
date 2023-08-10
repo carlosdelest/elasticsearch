@@ -300,7 +300,7 @@ There are a lot of prerequisites that need to be installed on your local machine
 
 We test by default on AWS, see [Setting up AWS development environment](#setting-up-aws-development-environment) for the tips how to make sure you use the correct AWS configuration for creating own EKS cluster.
 
-* Create a dev Python environment for running (es-benchmarks)[https://github.com/elastic/elasticsearch-benchmarks]. 
+* Create a dev Python environment for running [es-benchmarks](https://github.com/elastic/elasticsearch-benchmarks). 
 
 Reach out to the `es-perf` team if you have issues installing `pyenv` and building `esbench`. 
 Tip: don't forget to activate the environment with `source .venv/bin/activate`.
@@ -310,13 +310,13 @@ for performance testing.
 
 Switch `AWS_PROFILE` to `ecdev` by running `export AWS_PROFILE=ecdev` before using `serverless-on-k8s` in order to communicate with your EKS cluster.
 
-* Configure `kubectl` to use the `esbench` configuration `serverless-on-k8s.py configure-kubectl --k8s-cluster=<your_k8s_cluster_name>`
+* Configure `kubectl` to use the `esbench` configuration `./serverless-on-k8s.py configure-kubectl --k8s-cluster=<your_k8s_cluster_name>`
 
 `your_k8s_cluster_name` is the cluster name you set in the `infra.env` file in the `k8s-gitops-control-plane` repo
 
-* Create a load balancer ``serverless-on-k8s.py create-external-loadbalancer`
+* Create a load balancer `./serverless-on-k8s.py create-external-loadbalancer`
 
-* Create a new ES namespace `serverless-on-k8s.py create`
+* Create a new ES namespace `./serverless-on-k8s.py create`
 
 The script will ask you whether you want to edit the deployment descriptors for ES services. Do edit them, because the defaults are too high for your development clusters. 
 Set the disk limits to `100Gb`, memory limit to `8Gb` and the CPU limit to `4`.
