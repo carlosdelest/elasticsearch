@@ -33,8 +33,6 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
         .setting("xpack.security.transport.ssl.certificate", "testnode.crt")
         .setting("xpack.security.transport.ssl.verification_mode", "certificate")
         .setting("xpack.security.audit.enabled", "true")
-        // disable ILM history, since it disturbs tests using _all
-        .setting("indices.lifecycle.history_index_enabled", "false")
         .secret("bootstrap.password", "x-pack-test-password")
         .secret("xpack.security.transport.ssl.secure_key_passphrase", "testnode")
         .user("x_pack_rest_user", "x-pack-test-password")

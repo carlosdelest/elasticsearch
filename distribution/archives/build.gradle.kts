@@ -90,6 +90,7 @@ distribution_archives {
                     exclude("*/modules/transform")
                     exclude("*/modules/x-pack-voting-only-node")
                     exclude("*/modules/x-pack-monitoring")
+                    exclude("*/modules/x-pack-ilm")
                     exclude("*/modules/x-pack-profiling")
                     exclude("*/modules/x-pack-shutdown")
                     exclude("*/modules/x-pack-watcher")
