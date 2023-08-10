@@ -9,14 +9,14 @@
 package org.elasticsearch.test.cluster.serverless;
 
 import org.apache.commons.lang3.RandomStringUtils;
-import org.elasticsearch.test.cluster.local.LocalClusterFactory;
+import org.elasticsearch.test.cluster.local.AbstractLocalClusterFactory;
 import org.elasticsearch.test.cluster.local.LocalClusterSpec;
 import org.elasticsearch.test.cluster.local.distribution.DistributionResolver;
 
 import java.nio.file.Path;
 import java.util.stream.Collectors;
 
-public class ServerlessLocalClusterFactory extends LocalClusterFactory {
+public class ServerlessLocalClusterFactory extends AbstractLocalClusterFactory<LocalClusterSpec, ServerlessLocalClusterHandle> {
     private final DistributionResolver distributionResolver;
 
     public ServerlessLocalClusterFactory(DistributionResolver distributionResolver) {

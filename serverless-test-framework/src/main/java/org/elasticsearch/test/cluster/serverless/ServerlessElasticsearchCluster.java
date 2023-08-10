@@ -36,4 +36,5 @@ public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
     static RemoteClusterSpecBuilder<ServerlessElasticsearchCluster> remote() {
         return new ServerlessRemoteClusterSpecBuilder();
     }
+
 }

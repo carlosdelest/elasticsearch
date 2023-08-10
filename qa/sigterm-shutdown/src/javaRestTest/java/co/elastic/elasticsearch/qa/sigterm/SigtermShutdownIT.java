@@ -46,7 +46,7 @@ public class SigtermShutdownIT extends ESRestTestCase {
             assertThat(nodeId, instanceOf(String.class));
             var shutdownStatus = new Request("GET", "_nodes/" + nodeId + "/shutdown");
             assertThat(assertOKAndCreateObjectPath(client.performRequest(shutdownStatus)).evaluate("nodes"), hasSize(0));
-            cluster.stopNode(searchIndex);
+            cluster.stopNode(searchIndex, false);
             // Created
             assertBusy(
                 () -> assertThat(assertOKAndCreateObjectPath(client.performRequest(shutdownStatus)).evaluate("nodes"), hasSize(1)),

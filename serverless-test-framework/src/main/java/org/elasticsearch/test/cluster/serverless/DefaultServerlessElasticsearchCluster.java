@@ -10,18 +10,17 @@ package org.elasticsearch.test.cluster.serverless;
 
 import org.elasticsearch.test.cluster.ClusterFactory;
 import org.elasticsearch.test.cluster.DefaultElasticsearchCluster;
-import org.elasticsearch.test.cluster.local.LocalClusterHandle;
 import org.elasticsearch.test.cluster.local.LocalClusterSpec;
 
 import java.util.function.Supplier;
 
-public class DefaultServerlessElasticsearchCluster extends DefaultElasticsearchCluster<LocalClusterSpec, LocalClusterHandle>
+public class DefaultServerlessElasticsearchCluster extends DefaultElasticsearchCluster<LocalClusterSpec, ServerlessLocalClusterHandle>
     implements
         ServerlessElasticsearchCluster {
 
     public DefaultServerlessElasticsearchCluster(
         Supplier<LocalClusterSpec> specProvider,
-        ClusterFactory<LocalClusterSpec, LocalClusterHandle> clusterFactory
+        ClusterFactory<LocalClusterSpec, ServerlessLocalClusterHandle> clusterFactory
     ) {
         super(specProvider, clusterFactory);
     }

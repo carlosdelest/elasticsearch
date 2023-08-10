@@ -44,7 +44,7 @@ public class ServerlessDevEnvironmentElasticsearchCluster implements ServerlessE
     }
 
     @Override
-    public void stopNode(int index) {
+    public void stopNode(int index, boolean forcibly) {
         throw new UnsupportedOperationException("stopNode not supported");
     }
 
