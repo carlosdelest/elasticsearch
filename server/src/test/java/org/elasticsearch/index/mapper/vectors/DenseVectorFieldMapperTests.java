@@ -74,32 +74,23 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
 
     @Override
     protected void minimalMapping(XContentBuilder b) throws IOException {
-        b.field("type", "dense_vector").field("dims", 4);
-        if (elementType != ElementType.FLOAT) {
-            b.field("element_type", elementType.toString());
-        }
-        if (indexed) {
-            b.field("similarity", "dot_product");
-            if (indexOptionsSet) {
-                b.startObject("index_options");
-                b.field("type", "hnsw");
-                b.field("m", 5);
-                b.field("ef_construction", 50);
-                b.endObject();
-            }
-        } else {
-            b.field("index", indexed);
-        }
+        createMapping(b, true);
     }
 
     @Override
     protected void deprecatedBoostMapping(XContentBuilder b) throws IOException {
+        createMapping(b, false);
+    }
+
+    private void createMapping(XContentBuilder b, boolean defaultIndexValue) throws IOException {
         b.field("type", "dense_vector").field("dims", 4);
         if (elementType != ElementType.FLOAT) {
             b.field("element_type", elementType.toString());
         }
-        if (indexed) {
+        if (indexed != defaultIndexValue) {
             b.field("index", indexed);
+        }
+        if (indexed) {
             b.field("similarity", "dot_product");
             if (indexOptionsSet) {
                 b.startObject("index_options");
