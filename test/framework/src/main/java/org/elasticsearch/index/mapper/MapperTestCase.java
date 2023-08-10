@@ -477,7 +477,7 @@ public abstract class MapperTestCase extends MapperServiceTestCase {
     public final void testDeprecatedBoost() throws IOException {
         try {
             createMapperService(IndexVersion.V_7_10_0, fieldMapping(b -> {
-                minimalMapping(b);
+                deprecatedBoostMapping(b);
                 b.field("boost", 2.0);
             }));
             String[] warnings = Strings.concatStringArrays(
@@ -499,6 +499,10 @@ public abstract class MapperTestCase extends MapperServiceTestCase {
         assertThat(e.getMessage(), anyOf(containsString("Unknown parameter [boost]"), containsString("[boost : 2.0]")));
 
         assertParseMinimalWarnings();
+    }
+
+    protected void deprecatedBoostMapping(XContentBuilder b) throws IOException {
+        minimalMapping(b);
     }
 
     /**

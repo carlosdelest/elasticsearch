@@ -28,7 +28,6 @@ setup:
             vector:
               type: dense_vector
               dims: 5
-              index: true
               similarity: cosine
 
 ---
@@ -61,7 +60,6 @@ setup:
             vector:
               type: dense_vector
               dims: 5
-              index: true
               similarity: dot_product
               index_options:
                 type: hnsw
