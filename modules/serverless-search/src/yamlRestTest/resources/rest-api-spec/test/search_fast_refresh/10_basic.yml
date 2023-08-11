@@ -3,8 +3,8 @@
       features: ["allowed_warnings_regex"]
 
   - do:
-      synonyms.put:
-        synonyms_set: test-update-synonyms
+      synonyms.put_synonym:
+        id: test-update-synonyms
         body:
           synonyms_set:
             - synonyms: "hello, hi"
