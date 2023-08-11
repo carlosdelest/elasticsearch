@@ -56,8 +56,12 @@ echo '--- Wait for ess being ready'
 # aws does not expose ip but hostname 
 LBS_HOST=$(kubectl get svc ess-dev-proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].hostname')
 
+checkEssAvailability() {
+    curl -k -H 'X-Found-Cluster: $PROJECT_ID.es' -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD https://$LBS_HOST/_health | jq -e 'select(.ok == true).status'
+}
+
 # wait for a maximum of 20 minutes
-retry 30 40 "curl -k -H 'X-Found-Cluster: $PROJECT_ID.es' -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD https://$LBS_HOST"
+retry 30 40 checkEssAvailability
 
 echo "Elasticsearch cluster available via https://$LBS_HOST" | buildkite-agent annotate --style "info" --context "ess-public-url"
 
