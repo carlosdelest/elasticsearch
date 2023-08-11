@@ -51,15 +51,13 @@ ESS_ROOT_PASSWORD=$(echo $CRED_RESULT | jq -r '.credentials.password')
 
 # wait for the project namespace to be created
 
-echo '--- Wait for ess pods be ready'
+echo '--- Wait for ess being ready'
 
-retry 5 30 "kubectl wait --for=condition=Ready pods --all -n project-$PROJECT_ID --timeout=240s"
-
-echo "--- Testing ess access"
-kubectl get svc ess-dev-proxy -n elastic-system -o json 
 # aws does not expose ip but hostname 
 LBS_HOST=$(kubectl get svc ess-dev-proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].hostname')
-curl -k -H "X-Found-Cluster: $PROJECT_ID.es" -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD https://$LBS_HOST
+
+# wait for a maximum of 20 minutes
+retry 30 40 "curl -k -H 'X-Found-Cluster: $PROJECT_ID.es' -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD https://$LBS_HOST"
 
 echo "Elasticsearch cluster available via https://$LBS_HOST" | buildkite-agent annotate --style "info" --context "ess-public-url"
 
