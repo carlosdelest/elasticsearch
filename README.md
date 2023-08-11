@@ -175,8 +175,7 @@ To update an existing elasticsearch serverless dev deployment the update-dev bui
 
 The pipeline must be triggered manually and requires an existing ess deployment. 
 
-When invoking manually the `PROJECT_ID` of the deployment to be updated must be passed as environment variable which
-can be configured in the new build buildkite pipeline dialog (https://buildkite.com/elastic/elasticsearch-serverless-udpate-dev#new).
+When invoking manually the `PROJECT_ID` and `ESS_API_KEY` of the deployment to be updated must be passed as environment variable which can be configured in the new build buildkite pipeline dialog (https://buildkite.com/elastic/elasticsearch-serverless-udpate-dev#new).
 
 
 ### Running end to end tests against a kubernetes based serverless platform dev environment
@@ -189,13 +188,16 @@ The end to end tests can be run locally against a kubernetes based serverless pl
 
 1. Deploying a branch into a kubernetes cluster as described above
 2. Resolve deployment url as decribed above and export it as `ESS_PUBLIC_URL` env environment
-3. Resolve elasticsearch test username and password from vault ci as described above and export them as `ESS_TEST_USERNAME` and `ESS_TEST_PASSWORD` env variables
-4. Run `./gradlew :qa:e2e-test:javaRestTest`
+3. Resolve the elasticsearch encrypted api key from the buildkite UI and export to `ESS_API_KEY_ENCRYPTED`
+4. Resolve the ci encryption key from vault and store it in a file
+5. Export the encoded api key in an env variable.
+6. Run `./gradlew :qa:e2e-test:javaRestTest` to invoke the end to end tests.
 
 ```
-> export ESS_TEST_USERNAME=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
-> export ESS_TEST_PASSWORD=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
 > export ESS_PUBLIC_URL=<your ess deployment url>
+> export ESS_API_KEY_ENCRYPTED=<the encrypted ess api key of the deployment>
+> vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem 
+> export ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_ENCRYPTED | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem)`
 > ./gradlew :qa:e2e-test:javaRestTest
 ```
 

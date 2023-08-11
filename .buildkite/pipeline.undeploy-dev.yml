@@ -1,16 +1,15 @@
 agents:
   provider: k8s
-  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.4"
+  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
   memory: "4G"
 
 env:
   BUILDKITE_DIR: ".buildkite"
   CI_PIPELINE_ID: "${CI_PIPELINE_ID:-ess-dev-ci}"
   DEPLOY_ID: "${DEPLOY_ID:-${CI_PIPELINE_ID}-git-${BUILDKITE_COMMIT:0:12}}"
-  GCLOUD_PROJECT: "${GCLOUD_PROJECT:-elastic-cloud-dev}"
-  GCLOUD_REGION: "${GCLOUD_REGION:-us-central1}"
-  GCLOUD_SERVICE_ACCOUNT_VAULT_PATH: "secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-sa"
-  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-${CI_PIPELINE_ID}}"
+  CLUSTER_NAME: "${CLUSTER_NAME:-${CI_PIPELINE_ID}}"
+  AWS_CLUSTER_NAME: "${CLUSTER_NAME}"
+  AWS_REGION: "${AWS_REGION:-eu-west-1}"
   INTEG_TEST_IMAGE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${DEPLOY_ID}"
   VAULT_ADDR: "https://vault-ci-prod.elastic.dev"
 

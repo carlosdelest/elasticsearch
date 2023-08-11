@@ -28,6 +28,11 @@ dependencies {
 tasks {
     javaRestTest { ->
         onlyIf("E2E test task must be invoked directly", { directlyInvoked(this) })
+        doFirst {
+            println("Running E2E tests with ESS_PUBLIC_URL = ${System.getenv().get("ESS_PUBLIC_URL")}")
+            println("Running E2E tests with ESS_PROJECT_ID = ${System.getenv().get("ESS_PROJECT_ID")}")
+            println("Running E2E tests with ESS_API_KEY_ENCODED = ${System.getenv().get("ESS_API_KEY_ENCODED")}")
+        }
     }
 }
 

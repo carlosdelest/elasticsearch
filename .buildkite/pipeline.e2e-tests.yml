@@ -8,14 +8,12 @@ env:
   CI_PIPELINE_ID: "${CI_PIPELINE_ID:-${DEFAULT_CLUSTER_ID}}"
   BUILDKITE_DIR: ".buildkite"
   DEPLOY_ID: "${DEPLOY_ID:-${CI_PIPELINE_ID}-git-${BUILDKITE_COMMIT:0:12}}"
-  GKE_CLUSTER_NAME: "${GKE_CLUSTER_NAME:-${CI_PIPELINE_ID}}"
-  GCLOUD_PROJECT: "${GCLOUD_PROJECT:-elastic-cloud-dev}"
-  GCLOUD_REGION: "${GCLOUD_REGION:-us-central1}"
-  GCLOUD_SERVICE_ACCOUNT_VAULT_PATH: "secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-sa"
+  CLUSTER_NAME: "${CLUSTER_NAME:-${CI_PIPELINE_ID}}"
+  AWS_CLUSTER_NAME: "${CLUSTER_NAME}"
 
 steps:
   - label: ":k8s: :argocd: Create E2E test environment & deploy services"
-    key: create-gke-cluster
+    key: create-k8s-cluster
     if: build.env('CI_PIPELINE_ID') != build.env('DEFAULT_CLUSTER_ID')
     command:
       "buildkite-agent pipeline upload .buildkite/pipeline.create-gke-dev.yml"
@@ -25,14 +23,15 @@ steps:
     command:
         "buildkite-agent pipeline upload .buildkite/pipeline.deploy-dev.yml"
     depends_on:
-      - step: create-gke-cluster
+      - step: create-k8s-cluster
 
   - label: ":java: Run serverless e2e tests"
     key: run-ess-e2e-tests
     command:
-        "export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url); \
-         export ESS_TEST_USERNAME=$(vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials); \
-         export ESS_TEST_PASSWORD=$(vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials); \
+        "vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem; \
+         export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url); \
+         export ESS_PROJECT_ID=$(buildkite-agent meta-data get ess-project-id); \
+         export ESS_API_KEY_ENCODED=$(buildkite-agent meta-data get ess-api-key-encrypted | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem); \
         .buildkite/scripts/run-gradle.sh :qa:e2e-test:javaRestTest"
     depends_on:
       - step: deploy-ess
@@ -46,7 +45,7 @@ steps:
     allow_dependency_failure: true
 
   - label: ":k8s: :argocd: Cleanup dedicated E2E test environment"
-    key: delete-gke-cluster
+    key: delete-k8s-cluster
     if: build.env('CI_PIPELINE_ID') != build.env('DEFAULT_CLUSTER_ID')
     command:
       "buildkite-agent pipeline upload .buildkite/pipeline.cleanup-gke-dev.yml"

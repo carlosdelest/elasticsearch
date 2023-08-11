@@ -58,14 +58,8 @@ UPDATE_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
 
 echo $UPDATE_RESULT
 retry 20 10 checkForUpdatedDeployment
-
 retry 20 1 "kubectl wait --for=condition=Ready pods --all -n project-$PROJECT_ID --timeout=240s"
 
 echo "--- Testing ess access"
-ES_USERNAME=$(vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
-ES_PASSWORD=$(vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
-ESS_PUBLIC_IP=$(kubectl get svc ess-dev-proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].ip')
-
-curl -k -u $ES_USERNAME:$ES_PASSWORD https://$PROJECT_ID.es.$ESS_PUBLIC_IP.ip.es.io
-
-buildkite-agent meta-data set "ess-public-url" "https://$PROJECT_ID.es.$ESS_PUBLIC_IP.ip.es.io"
+LBS_HOST=$(kubectl get svc ess-dev-proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].hostname')
+curl -k -H "X-Found-Cluster: $PROJECT_ID.es" -H Authorization", "ApiKey $ESS_API_KEY" https://$LBS_HOST

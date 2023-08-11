@@ -17,11 +17,10 @@
 
 set -euo pipefail
 
-source "$BUILDKITE_DIR/scripts/utils/gke.sh"
+source "$BUILDKITE_DIR/scripts/utils/eks.sh"
 
-echo $(gcloud --version)
-
-gke_get_cluster_credentials $GCLOUD_SERVICE_ACCOUNT_VAULT_PATH $GCLOUD_PROJECT $GKE_CLUSTER_NAME $GCLOUD_REGION
+aws_auth
+aws_get_cluster_credentials
 
 echo '--- Expose global ingress nginx controller'
 
