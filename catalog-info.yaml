@@ -63,8 +63,8 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
-  description: Create elasticsearch serverless integration test gke dev environment
-  name: buildkite-pipeline-elasticsearch-serverless-create-gke-dev
+  description: Create elasticsearch serverless integration test k8s dev environment
+  name: buildkite-pipeline-elasticsearch-serverless-create-k8s-dev
 spec:
   type: buildkite-pipeline
   owner: group:elasticsearch-team
@@ -73,11 +73,11 @@ spec:
     apiVersion: buildkite.elastic.dev/v1
     kind: Pipeline
     metadata:
-      name: elasticsearch-serverless / create gke dev
-      description: ':k8s: Create elasticsearch serverless integration test gke dev environment'
+      name: elasticsearch-serverless / create k8s dev
+      description: ':k8s: Create elasticsearch serverless integration test k8s dev environment'
     spec:
       repository: elastic/elasticsearch-serverless
-      pipeline_file: .buildkite/pipeline.create-gke-dev.yml
+      pipeline_file: .buildkite/pipeline.create-k8s-dev.yml
       provider_settings:
         trigger_mode: none
       teams:
@@ -91,8 +91,8 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
-  description: Delete elasticsearch serverless integration test gke dev environment
-  name: buildkite-pipeline-elasticsearch-serverless-delete-gke-dev
+  description: Delete elasticsearch serverless integration test k8s dev environment
+  name: buildkite-pipeline-elasticsearch-serverless-delete-k8s-dev
 spec:
   type: buildkite-pipeline
   owner: group:elasticsearch-team
@@ -101,11 +101,11 @@ spec:
     apiVersion: buildkite.elastic.dev/v1
     kind: Pipeline
     metadata:
-      name: elasticsearch-serverless / delete gke dev
-      description: ':k8s: Delete elasticsearch serverless integration test gke dev environment'
+      name: elasticsearch-serverless / delete k8s dev
+      description: ':k8s: Delete elasticsearch serverless integration test k8s dev environment'
     spec:
       repository: elastic/elasticsearch-serverless
-      pipeline_file: .buildkite/pipeline.delete-gke-dev.yml
+      pipeline_file: .buildkite/pipeline.delete-k8s-dev.yml
       provider_settings:
         trigger_mode: none
       teams:
@@ -119,8 +119,8 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
-  description: Cleanup elasticsearch serverless integration test gke dev environments
-  name: buildkite-pipeline-elasticsearch-serverless-cleanup-gke-dev
+  description: Cleanup elasticsearch serverless integration test k8s dev environments
+  name: buildkite-pipeline-elasticsearch-serverless-cleanup-k8s-dev
 spec:
   type: buildkite-pipeline
   owner: group:elasticsearch-team
@@ -129,11 +129,11 @@ spec:
     apiVersion: buildkite.elastic.dev/v1
     kind: Pipeline
     metadata:
-      name: elasticsearch-serverless / cleanup gke dev
-      description: ':k8s: Create elasticsearch serverless integration test gke dev environment'
+      name: elasticsearch-serverless / cleanup k8s dev
+      description: ':k8s: Create elasticsearch serverless integration test k8s dev environment'
     spec:
       repository: elastic/elasticsearch-serverless
-      pipeline_file: .buildkite/pipeline.cleanup-gke-dev.yml
+      pipeline_file: .buildkite/pipeline.cleanup-k8s-dev.yml
       provider_settings:
         trigger_mode: none
       teams:

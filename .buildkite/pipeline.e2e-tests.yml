@@ -16,7 +16,7 @@ steps:
     key: create-k8s-cluster
     if: build.env('CI_PIPELINE_ID') != build.env('DEFAULT_CLUSTER_ID')
     command:
-      "buildkite-agent pipeline upload .buildkite/pipeline.create-gke-dev.yml"
+      "buildkite-agent pipeline upload .buildkite/pipeline.create--dev.yml"
 
   - label: ":k8s: Deploy elasticsearch snapshot in E2E environment"
     key: deploy-ess
@@ -48,7 +48,7 @@ steps:
     key: delete-k8s-cluster
     if: build.env('CI_PIPELINE_ID') != build.env('DEFAULT_CLUSTER_ID')
     command:
-      "buildkite-agent pipeline upload .buildkite/pipeline.cleanup-gke-dev.yml"
+      "buildkite-agent pipeline upload .buildkite/pipeline.cleanup-k8s-dev.yml"
     depends_on:
       - step: undeploy-ess
     allow_dependency_failure: true
