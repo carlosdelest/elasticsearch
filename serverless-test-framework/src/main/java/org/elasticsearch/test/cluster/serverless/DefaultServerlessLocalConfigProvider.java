@@ -12,7 +12,6 @@ import org.elasticsearch.test.cluster.FeatureFlag;
 import org.elasticsearch.test.cluster.local.LocalClusterConfigProvider;
 import org.elasticsearch.test.cluster.local.LocalClusterSpecBuilder;
 import org.elasticsearch.test.cluster.local.distribution.DistributionType;
-import org.elasticsearch.test.cluster.util.Version;
 
 /**
  * Default configuration applied to all serverless clusters.
@@ -29,8 +28,7 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             .setting("ingest.geoip.downloader.enabled", "false")
             .setting("http.api_protections.enabled", "false") // TODO - Need to fix this
             .setting("data_streams.lifecycle_only.mode", "true")
-            // TODO remove condition once BwC version also supports serverless.sigterm.poll_interval
-            .setting("serverless.sigterm.poll_interval", () -> "1s", n -> n.getVersion().equals(Version.CURRENT))
+            .setting("serverless.sigterm.poll_interval", "1s")
             .feature(FeatureFlag.TIME_SERIES_MODE)
             .withNode(
                 indexNodeSpec -> indexNodeSpec.name("index")
