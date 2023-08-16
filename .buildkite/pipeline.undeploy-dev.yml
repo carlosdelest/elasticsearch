@@ -14,5 +14,5 @@ env:
   VAULT_ADDR: "https://vault-ci-prod.elastic.dev"
 
 steps:
-  - label: ":k8s: undeploy elasticsearch stateless"
+  - label: ":k8s: Undeploy serverless Elasticsearch"
     command: "$$BUILDKITE_DIR/scripts/undeploy-ess.sh"

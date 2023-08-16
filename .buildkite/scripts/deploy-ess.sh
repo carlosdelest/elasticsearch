@@ -38,7 +38,7 @@ CREATE_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
 
 echo "PROJECT API CREATE RESPONSE: $CREATE_RESULT"
 
-PROJECT_ID=$(echo $CREATE_RESULT | jq -r '.id')
+PROJECT_ID=$(echo $CREATE_RESULT | jq -e -r '.id')
 
 # resolve credentials from reset credentials call
 CRED_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
@@ -46,18 +46,18 @@ CRED_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
       "https://$PAPI_PUBLIC_IP:8443/api/v1/serverless/projects/elasticsearch/$PROJECT_ID/_reset-credentials" \
       -XPOST)
 
-ESS_ROOT_USERNAME=$(echo $CRED_RESULT | jq -r '.credentials.username')
-ESS_ROOT_PASSWORD=$(echo $CRED_RESULT | jq -r '.credentials.password')
+ESS_ROOT_USERNAME=$(echo $CRED_RESULT | jq -e -r '.username')
+ESS_ROOT_PASSWORD=$(echo $CRED_RESULT | jq -e -r '.password')
 
 # wait for the project namespace to be created
 
 echo '--- Wait for ess being ready'
 
-# aws does not expose ip but hostname 
-LBS_HOST=$(kubectl get svc ess-dev-proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].hostname')
+# aws does not expose ip but hostname
+LBS_HOST=$(kubectl get svc proxy -n elastic-system -o json | jq -e -r '.status.loadBalancer.ingress[0].hostname')
 
 checkEssAvailability() {
-    curl -k -H 'X-Found-Cluster: $PROJECT_ID.es' -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD https://$LBS_HOST/_health | jq -e 'select(.ok == true).status'
+    curl -k -H "X-Found-Cluster: $PROJECT_ID.es" -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD "https://$LBS_HOST/_cluster/health" | jq -e 'select(.status == "green")'
 }
 
 # wait for a maximum of 20 minutes
@@ -69,7 +69,7 @@ echo "--- Creating Elasticsearch API key"
 ESS_API_KEY_RESPONSE=$(curl -k -H "Content-Type: application/json" -H "X-Found-Cluster: $PROJECT_ID.es" -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD https://$LBS_HOST/_security/api_key -XPOST -d'
 {
   "name": "elastic-test-user-api-key",
-  "expiration": "2d",   
+  "expiration": "2d",
   "metadata": {
     "application": "ess-dev-test",
     "environment": {
@@ -80,11 +80,8 @@ ESS_API_KEY_RESPONSE=$(curl -k -H "Content-Type: application/json" -H "X-Found-C
   }
 }')
 
-ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_RESPONSE | jq -r '.encoded') 
+ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_RESPONSE | jq -e -r '.encoded')
 ESS_API_KEY_ENCRYPTED=$(encrypt $ESS_API_KEY_ENCODED)
-
-echo "$ESS_API_KEY_ENCRYPTED" | buildkite-agent annotate --style "info" --context "ess-api-key-encrypted"
-echo "$PROJECT_ID" | buildkite-agent annotate --style "info" --context "project-id"
 
 buildkite-agent meta-data set "ess-project-id" "$PROJECT_ID"
 buildkite-agent meta-data set "ess-public-url" "https://$LBS_HOST"

@@ -36,7 +36,7 @@ checkForUpdatedDeployment() {
         let expectedNewRevision=$oldRevision+1
         let currRevision=$(kubectl get deployments -l "k8s.elastic.co/application-id=es" -n project-$PROJECT_ID -o json | jq -r -c --arg deploymentName "es-es-index" '.items[] | select(.metadata.name == $deploymentName) | .metadata.annotations["deployment.kubernetes.io/revision"]')
         let readyReplicas=$(kubectl get deployments -l "k8s.elastic.co/application-id=es" -n project-$PROJECT_ID -o json | jq -r -c --arg deploymentName "es-es-index" '.items[] | select(.metadata.name == $deploymentName) | .status.replicas')
-        echo "Deployment $deploymentName with old revision $oldRevision and expected new revision $expectedNewRevision is currently at revision $currRevision with ready replicas count $readyReplicas"  
+        echo "Deployment $deploymentName with old revision $oldRevision and expected new revision $expectedNewRevision is currently at revision $currRevision with ready replicas count $readyReplicas"
         if (($currRevision != $expectedNewRevision)) && [[ $readyReplicas -gt 0 ]]; then
             result=-1
         fi
@@ -61,5 +61,5 @@ retry 20 10 checkForUpdatedDeployment
 retry 20 1 "kubectl wait --for=condition=Ready pods --all -n project-$PROJECT_ID --timeout=240s"
 
 echo "--- Testing ess access"
-LBS_HOST=$(kubectl get svc ess-dev-proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].hostname')
+LBS_HOST=$(kubectl get svc proxy -n elastic-system -o json | jq -r '.status.loadBalancer.ingress[0].hostname')
 curl -k -H "X-Found-Cluster: $PROJECT_ID.es" -H Authorization", "ApiKey $ESS_API_KEY" https://$LBS_HOST
