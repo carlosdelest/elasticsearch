@@ -98,15 +98,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
     @Override
     public Settings additionalSettings() {
         return Settings.builder()
-            .putList(
-                INCLUDED_RESERVED_ROLES_SETTING.getKey(),
-                "superuser",
-                "remote_monitoring_agent",
-                "remote_monitoring_collector",
-                "editor",
-                "viewer",
-                "kibana_system"
-            )
+            .putList(INCLUDED_RESERVED_ROLES_SETTING.getKey(), "superuser", "remote_monitoring_agent", "remote_monitoring_collector")
             .put(OperatorPrivileges.OPERATOR_PRIVILEGES_ENABLED.getKey(), true)
             .build();
     }

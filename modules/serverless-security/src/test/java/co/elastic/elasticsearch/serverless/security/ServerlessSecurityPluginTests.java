@@ -40,7 +40,7 @@ public class ServerlessSecurityPluginTests extends ESTestCase {
     public void testDefaultValueForIncludedReservedRoles() {
         assertThat(
             INCLUDED_RESERVED_ROLES_SETTING.get(plugin.additionalSettings()),
-            contains("superuser", "remote_monitoring_agent", "remote_monitoring_collector", "editor", "viewer", "kibana_system")
+            contains("superuser", "remote_monitoring_agent", "remote_monitoring_collector")
         );
     }
 

@@ -91,10 +91,7 @@ public class ServerlessReservedRolesIT extends ESRestTestCase {
         final Response response = adminClient().performRequest(new Request("GET", "/_security/role"));
         assertOK(response);
         final Map<String, Object> responseMap = responseAsMap(response);
-        assertThat(
-            responseMap.keySet(),
-            equalTo(Set.of("superuser", "remote_monitoring_agent", "remote_monitoring_collector", "editor", "viewer", "kibana_system"))
-        );
+        assertThat(responseMap.keySet(), equalTo(Set.of("superuser", "remote_monitoring_agent", "remote_monitoring_collector")));
     }
 
     @Order(20)
