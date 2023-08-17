@@ -38,6 +38,7 @@ import org.elasticsearch.xcontent.XContentBuilder;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.Objects;
 
 public class GetAutoscalingMetricsAction extends ActionType<Response> {
 
@@ -94,6 +95,18 @@ public class GetAutoscalingMetricsAction extends ActionType<Response> {
             machineLearningTierMetrics = input.readOptionalWriteable(MachineLearningTierMetrics::new);
         }
 
+        IndexTierMetrics getIndexTierMetrics() {
+            return indexTierMetrics;
+        }
+
+        SearchTierMetrics getSearchTierMetrics() {
+            return searchTierMetrics;
+        }
+
+        MachineLearningTierMetrics getMachineLearningTierMetrics() {
+            return machineLearningTierMetrics;
+        }
+
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             out.writeOptionalWriteable(indexTierMetrics);
@@ -115,6 +128,24 @@ public class GetAutoscalingMetricsAction extends ActionType<Response> {
             }
             builder.endObject();
             return builder;
+        }
+
+        public int hashCode() {
+            return Objects.hash(indexTierMetrics, searchTierMetrics, machineLearningTierMetrics);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (obj instanceof Response == false) {
+                return false;
+            }
+            Response other = (Response) obj;
+            return Objects.equals(indexTierMetrics, other.indexTierMetrics)
+                && Objects.equals(searchTierMetrics, other.searchTierMetrics)
+                && Objects.equals(machineLearningTierMetrics, other.machineLearningTierMetrics);
         }
     }
 }

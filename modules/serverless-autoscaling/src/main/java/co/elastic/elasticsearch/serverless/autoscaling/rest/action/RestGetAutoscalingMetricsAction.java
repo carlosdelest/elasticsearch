@@ -19,7 +19,6 @@ package co.elastic.elasticsearch.serverless.autoscaling.rest.action;
 
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetAutoscalingMetricsAction;
 
-import org.elasticsearch.action.support.master.AcknowledgedRequest;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.rest.BaseRestHandler;
@@ -32,12 +31,14 @@ import org.elasticsearch.rest.action.RestToXContentListener;
 import java.io.IOException;
 import java.util.List;
 
+import static org.elasticsearch.core.TimeValue.timeValueSeconds;
 import static org.elasticsearch.rest.RestRequest.Method.GET;
 
 @ServerlessScope(Scope.INTERNAL)
 public class RestGetAutoscalingMetricsAction extends BaseRestHandler {
 
     public static final String TIMEOUT = "timeout";
+    public static final TimeValue DEFAULT_AUTOSCALING_METRICS_TIMEOUT = timeValueSeconds(5);
 
     @Override
     public String getName() {
@@ -51,7 +52,7 @@ public class RestGetAutoscalingMetricsAction extends BaseRestHandler {
 
     @Override
     protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
-        TimeValue timeout = request.paramAsTime(TIMEOUT, AcknowledgedRequest.DEFAULT_ACK_TIMEOUT);
+        TimeValue timeout = request.paramAsTime(TIMEOUT, DEFAULT_AUTOSCALING_METRICS_TIMEOUT);
 
         return channel -> new RestCancellableNodeClient(client, request.getHttpChannel()).execute(
             GetAutoscalingMetricsAction.INSTANCE,

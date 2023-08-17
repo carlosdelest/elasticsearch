@@ -19,17 +19,20 @@ package co.elastic.elasticsearch.serverless.autoscaling.action;
 
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetAutoscalingMetricsAction.Response;
 
-import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.test.AbstractWireSerializingTestCase;
 
 import java.io.IOException;
 
-@LuceneTestCase.AwaitsFix(bugUrl = "ES-6252")
+import static co.elastic.elasticsearch.serverless.autoscaling.MachineLearningTierMetricsTests.randomMachineLearningTierMetrics;
+import static co.elastic.elasticsearch.serverless.autoscaling.action.GetIndexTierMetricsSerializationTests.randomIndexTierMetrics;
+
 public class GetAutoscalingMetricsActionResponseTests extends AbstractWireSerializingTestCase<Response> {
 
     public static Response randomAutoscalingMetricsResponse() {
-        return null;
+        return
+        // TODO: search tier has no serialization tests yet
+        new Response(randomIndexTierMetrics(), null, randomMachineLearningTierMetrics());
     }
 
     @Override
@@ -44,7 +47,11 @@ public class GetAutoscalingMetricsActionResponseTests extends AbstractWireSerial
 
     @Override
     protected Response mutateInstance(Response instance) throws IOException {
-        // TODO: Add serialization tests once all the APIs are stable enough
-        return instance;
+        int branch = randomInt(1);
+        return switch (branch) {
+            case 0 -> new Response(randomIndexTierMetrics(), instance.getSearchTierMetrics(), instance.getMachineLearningTierMetrics());
+            case 1 -> new Response(instance.getIndexTierMetrics(), instance.getSearchTierMetrics(), randomMachineLearningTierMetrics());
+            default -> throw new IllegalStateException("Unexpected value: " + branch);
+        };
     }
 }

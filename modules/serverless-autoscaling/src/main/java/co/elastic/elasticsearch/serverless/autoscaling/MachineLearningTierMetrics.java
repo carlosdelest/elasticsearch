@@ -17,36 +17,57 @@
 
 package co.elastic.elasticsearch.serverless.autoscaling;
 
+import co.elastic.elasticsearch.stateless.autoscaling.AbstractBaseTierMetrics;
 import co.elastic.elasticsearch.stateless.autoscaling.AutoscalingMetrics;
 import co.elastic.elasticsearch.stateless.autoscaling.MetricQuality;
 
+import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.TransportVersion;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xpack.core.ml.autoscaling.MlAutoscalingStats;
 
 import java.io.IOException;
+import java.util.Objects;
 
-public class MachineLearningTierMetrics implements AutoscalingMetrics {
+public class MachineLearningTierMetrics extends AbstractBaseTierMetrics implements AutoscalingMetrics {
 
     private final MlAutoscalingStats autoscalingResources;
 
     public MachineLearningTierMetrics(MlAutoscalingStats autoscalingResources) {
+        super();
         this.autoscalingResources = autoscalingResources;
     }
 
+    public MachineLearningTierMetrics(String reason, ElasticsearchException exception) {
+        super(reason, exception);
+        this.autoscalingResources = null;
+    }
+
     public MachineLearningTierMetrics(StreamInput in) throws IOException {
-        this.autoscalingResources = new MlAutoscalingStats(in);
+        super(in);
+        if (in.getTransportVersion().before(TransportVersion.V_8_500_063)) {
+            this.autoscalingResources = new MlAutoscalingStats(in);
+            return;
+        }
+
+        this.autoscalingResources = in.readOptionalWriteable(MlAutoscalingStats::new);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        autoscalingResources.writeTo(out);
+        super.writeTo(out);
+        if (out.getTransportVersion().before(TransportVersion.V_8_500_063)) {
+            autoscalingResources.writeTo(out);
+            return;
+        }
+
+        out.writeOptionalWriteable(autoscalingResources);
     }
 
     @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject();
+    protected XContentBuilder toInnerXContent(XContentBuilder builder, Params params) throws IOException {
         builder.object("metrics", (objectBuilder) -> {
             serializeMetric(builder, "nodes", autoscalingResources.nodes(), MetricQuality.EXACT);
             serializeMetric(builder, "node_memory_in_bytes", autoscalingResources.perNodeMemoryInBytes(), MetricQuality.EXACT);
@@ -69,7 +90,28 @@ public class MachineLearningTierMetrics implements AutoscalingMetrics {
                 MetricQuality.EXACT
             );
         });
-        builder.endObject();
         return builder;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+
+        if (other == null || getClass() != other.getClass()) {
+            return false;
+        }
+
+        final MachineLearningTierMetrics that = (MachineLearningTierMetrics) other;
+
+        return Objects.equals(this.autoscalingResources, that.autoscalingResources)
+            && Objects.equals(this.reason, that.reason)
+            && Objects.equals(this.exception, that.exception);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(autoscalingResources, reason, exception);
     }
 }

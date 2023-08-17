@@ -84,8 +84,8 @@ public class GetIndexTierMetricsSerializationTests extends AbstractWireSerializi
     public static IndexTierMetrics mutateIndexTierMetrics(IndexTierMetrics instance) {
         int branch = randomInt(1);
         return switch (branch) {
-            case 0 -> new IndexTierMetrics(mutateNodesIngestLoad(instance.nodesLoad()), instance.memoryMetrics());
-            case 1 -> new IndexTierMetrics(instance.nodesLoad(), mutateMemoryMetrics(instance.memoryMetrics()));
+            case 0 -> new IndexTierMetrics(mutateNodesIngestLoad(instance.getNodesLoad()), instance.getMemoryMetrics());
+            case 1 -> new IndexTierMetrics(instance.getNodesLoad(), mutateMemoryMetrics(instance.getMemoryMetrics()));
             default -> throw new IllegalStateException("Unexpected value: " + branch);
         };
     }
