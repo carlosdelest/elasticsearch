@@ -65,13 +65,10 @@ teardown:
 "Test stats as operator with no filtering":
   - skip:
       features:
-      - allowed_warnings
       - headers
   - do:
       headers:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
-      allowed_warnings:
-        - '[POST /_ml/trained_models/{model_id}/deployment/_infer] is deprecated! Use [POST /_ml/trained_models/{model_id}/_infer] instead.'
       ml.infer_trained_model:
         model_id: "test_model"
         body: >
@@ -84,8 +81,6 @@ teardown:
   - do:
       headers:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
-      allowed_warnings:
-        - '[POST /_ml/trained_models/{model_id}/deployment/_infer] is deprecated! Use [POST /_ml/trained_models/{model_id}/_infer] instead.'
       ml.infer_trained_model:
         model_id: "test_model"
         body: >
@@ -98,8 +93,6 @@ teardown:
   - do:
       headers:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
-      allowed_warnings:
-        - '[POST /_ml/trained_models/{model_id}/deployment/_infer] is deprecated! Use [POST /_ml/trained_models/{model_id}/_infer] instead.'
       ml.infer_trained_model:
         model_id: "test_model"
         body: >
@@ -121,11 +114,7 @@ teardown:
 
 ---
 "Test stats as non operator with filtering":
-  - skip:
-      features: allowed_warnings
   - do:
-      allowed_warnings:
-        - '[POST /_ml/trained_models/{model_id}/deployment/_infer] is deprecated! Use [POST /_ml/trained_models/{model_id}/_infer] instead.'
       ml.infer_trained_model:
         model_id: "test_model"
         body: >
@@ -136,8 +125,6 @@ teardown:
           }
 
   - do:
-      allowed_warnings:
-        - '[POST /_ml/trained_models/{model_id}/deployment/_infer] is deprecated! Use [POST /_ml/trained_models/{model_id}/_infer] instead.'
       ml.infer_trained_model:
         model_id: "test_model"
         body: >
@@ -148,8 +135,6 @@ teardown:
           }
 
   - do:
-      allowed_warnings:
-        - '[POST /_ml/trained_models/{model_id}/deployment/_infer] is deprecated! Use [POST /_ml/trained_models/{model_id}/_infer] instead.'
       ml.infer_trained_model:
         model_id: "test_model"
         body: >

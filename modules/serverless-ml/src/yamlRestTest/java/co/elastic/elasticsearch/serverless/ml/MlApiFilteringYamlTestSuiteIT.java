@@ -26,6 +26,8 @@ import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
+import org.elasticsearch.test.rest.yaml.ClientYamlTestClient;
+import org.elasticsearch.test.rest.yaml.ClientYamlTestExecutionContext;
 import org.elasticsearch.xpack.core.ml.integration.MlRestTestStateCleaner;
 import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
 import org.junit.After;
@@ -72,5 +74,18 @@ public class MlApiFilteringYamlTestSuiteIT extends AbstractXPackRestTest {
     protected Settings restAdminSettings() {
         String token = basicAuthHeaderValue(OPERATOR_USER, new SecureString(OPERATOR_PASSWORD.toCharArray()));
         return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
+    }
+
+    @Override
+    protected ClientYamlTestExecutionContext createRestTestExecutionContext(
+        ClientYamlTestCandidate clientYamlTestCandidate,
+        ClientYamlTestClient clientYamlTestClient
+    ) {
+        return new ClientYamlTestExecutionContext(
+            clientYamlTestCandidate,
+            clientYamlTestClient,
+            randomizeContentType(),
+            (api, path) -> (api.getName().equals("ml.infer_trained_model") && path.deprecated()) == false
+        );
     }
 }
