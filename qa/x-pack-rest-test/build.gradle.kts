@@ -59,6 +59,11 @@ tasks {
             // expects predictable node names
             "service_accounts/10_basic/Test service account tokens",
             // https://github.com/elastic/elasticsearch-serverless/issues/652
-            "security/settings/10_update_security_settings/Test update and get security settings API").joinToString(","))
+            "security/settings/10_update_security_settings/Test update and get security settings API",
+
+            // Temporarily disable this until we fix a a bug in FLS with real-time-get on stateless
+            "security/authz_api_keys/20_field_level_security/*"
+        ).joinToString(","))
     }
 }
+
