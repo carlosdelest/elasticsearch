@@ -5,27 +5,7 @@ setup:
 
   - do:
       cluster.health:
-          wait_for_status: yellow
-
-  - do:
-      security.put_role:
-        name: "mixed_role"
-        body:  >
-            {
-              "indices": [
-                { "names": ["only_write"], "privileges": ["write"] }
-              ]
-            }
-
-  - do:
-      security.put_user:
-        username: "test_user"
-        body:  >
-          {
-            "password" : "x-pack-test-password",
-            "roles" : [ "mixed_role" ],
-            "full_name" : "user with mixed privileges to multiple indices"
-          }
+        wait_for_status: yellow
 
   - do:
       indices.create:
@@ -33,29 +13,49 @@ setup:
         body:
           settings:
             index:
-              number_of_shards:   1
+              number_of_shards: 1
               number_of_replicas: 1
           mappings:
             properties:
               name:
                 type: "keyword"
----
-teardown:
-  - do:
-      security.delete_user:
-        username: "test_user"
-        ignore: 404
 
   - do:
-      security.delete_role:
-        name: "mixed_role"
-        ignore: 404
+      indices.create:
+        index: only_read
+        body:
+          settings:
+            index:
+              number_of_shards: 1
+              number_of_replicas: 1
+          mappings:
+            properties:
+              name:
+                type: "keyword"
 
 ---
 "Test wait_for a refresh of new doc":
 
   - do:
-      headers: { Authorization: "Basic dGVzdF91c2VyOngtcGFjay10ZXN0LXBhc3N3b3Jk" } # test_user
+      security.create_api_key:
+        body: >
+          {
+            "name": "write_only_api_key",
+            "role_descriptors": {
+              "write_only": {
+                "indices": [
+                  { "names": ["only_write"], "privileges": ["write"] },
+                  { "names": ["only_read"], "privileges": ["read"] }
+                ]
+              }
+            }
+          }
+  - set:
+      id: api_key_id
+      encoded: api_key_cred
+
+  - do:
+      headers: { Authorization: "ApiKey ${api_key_cred}" }
       create:
         id: "1"
         index: only_write
@@ -65,12 +65,26 @@ teardown:
           }
 
   - do:
-      headers: { Authorization: "Basic dGVzdF91c2VyOngtcGFjay10ZXN0LXBhc3N3b3Jk" } # test_user
+      headers: { Authorization: "ApiKey ${api_key_cred}" }
       create:
         id: "2"
         index: only_write
         refresh: 'wait_for'
         body: >
-            {
-              "name" : "doc2"
-            }
+          {
+            "name" : "doc2"
+          }
+
+  - do:
+      # Writing to an index with only read privileges should fail with a 403 forbidden
+      # (We do this so that we can be confident that the above tests didn't accidentally pass due to excessive permissions)
+      # Note: In the YAML test runner a "catch" requires that the exception is actually throw (it's not an "ignore")
+      catch: forbidden
+      headers: { Authorization: "ApiKey ${api_key_cred}" }
+      create:
+        id: "3"
+        index: only_read
+        body: >
+          {
+            "name" : "doc3-fail"
+          }
