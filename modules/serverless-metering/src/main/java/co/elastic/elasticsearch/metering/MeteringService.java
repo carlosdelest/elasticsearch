@@ -72,8 +72,8 @@ public class MeteringService extends AbstractLifecycleComponent {
 
     @Override
     protected void doStart() {
-        reportGatherer = new ReportGatherer(this, reporter, scheduler, reportPeriod);
-        reportGatherer.start(ThreadPool.Names.GENERIC);
+        reportGatherer = new ReportGatherer(this, reporter, scheduler, ThreadPool.Names.GENERIC, reportPeriod);
+        reportGatherer.start();
     }
 
     @Override

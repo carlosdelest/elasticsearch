@@ -23,11 +23,11 @@ import co.elastic.elasticsearch.metering.reports.UsageSource;
 
 import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.threadpool.Scheduler;
-import org.elasticsearch.threadpool.ThreadPool;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -42,6 +42,7 @@ class ReportGatherer {
     private final MeteringService service;
     private final Consumer<List<UsageRecord>> reporter;
     private final Scheduler scheduler;
+    private final String executorName;
     private final TimeValue reportPeriod;
     private final Duration reportPeriodDuration;
     private final StopWatch runTimer = new StopWatch();
@@ -49,10 +50,17 @@ class ReportGatherer {
     private volatile boolean cancel;
     private volatile Scheduler.Cancellable nextRun;
 
-    ReportGatherer(MeteringService service, Consumer<List<UsageRecord>> reporter, Scheduler scheduler, TimeValue reportPeriod) {
+    ReportGatherer(
+        MeteringService service,
+        Consumer<List<UsageRecord>> reporter,
+        Scheduler scheduler,
+        String executorName,
+        TimeValue reportPeriod
+    ) {
         this.service = service;
         this.reporter = reporter;
         this.scheduler = scheduler;
+        this.executorName = executorName;
         this.reportPeriod = reportPeriod;
 
         reportPeriodDuration = Duration.ofNanos(reportPeriod.nanos());
@@ -62,8 +70,8 @@ class ReportGatherer {
         }
     }
 
-    void start(String threadPool) {
-        nextRun = scheduler.schedule(this::gatherReports, reportPeriod, threadPool);
+    void start() {
+        nextRun = scheduler.schedule(this::gatherReports, reportPeriod, executorName);
     }
 
     boolean cancel() {
@@ -100,9 +108,21 @@ class ReportGatherer {
             }
 
             if (cancel == false) {
-                // schedule the next run
-                // TODO: jitter within the expected schedules
-                nextRun = scheduler.schedule(this::gatherReports, TimeValue.timeValueNanos(remainingNanos), ThreadPool.Names.SAME);
+                try {
+                    // schedule the next run
+                    // TODO: jitter within the expected schedules
+                    nextRun = scheduler.schedule(this::gatherReports, TimeValue.timeValueNanos(remainingNanos), executorName);
+                } catch (EsRejectedExecutionException e) {
+                    nextRun = null;
+                    if (e.isExecutorShutdown()) {
+                        // ok - thread pool shutting down
+                        log.trace("Not rescheduling report gathering because this node is being shutdown", e);
+                    } else {
+                        log.error("Unexpected exception whilst re-scheduling report gathering", e);
+                        assert false : e;
+                        // exception can't go anywhere, just stop here
+                    }
+                }
             }
         }
     }
