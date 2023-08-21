@@ -24,4 +24,4 @@ aws_get_cluster_credentials
 
 echo '--- Expose global ingress nginx controller'
 
-kubectl expose svc/global-ingress-ingress-nginx-controller --port=8443 --target-port=443 --name=project-api-dev-proxy --type=LoadBalancer -n elastic-system
+kubectl expose svc/global-ingress-nginx-user-ingress-controller --port=8443 --target-port=443 --name=project-api-dev-proxy --type=LoadBalancer -n elastic-system
