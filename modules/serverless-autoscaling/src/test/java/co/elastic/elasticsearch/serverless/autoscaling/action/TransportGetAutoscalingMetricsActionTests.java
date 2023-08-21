@@ -75,7 +75,7 @@ public class TransportGetAutoscalingMetricsActionTests extends ESTestCase {
                 client,
                 threadPool,
                 GetSearchTierMetrics.INSTANCE,
-                new GetSearchTierMetrics.Request(TimeValue.timeValueMillis(10)),
+                new GetSearchTierMetrics.Request(TimeValue.timeValueSeconds(10)),
                 ActionListener.wrap(response -> searchTierMetricsRef.set(response.getMetrics()), exceptionRef::set),
                 countDownListener
             );
