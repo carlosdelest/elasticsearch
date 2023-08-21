@@ -46,6 +46,10 @@ tasks {
                 "index/60_refresh/Refresh",
                 "update/60_refresh/Refresh",
 
+                //this test is failing with security enabled
+                //https://github.com/elastic/elasticsearch/issues/32238
+                // and https://github.com/elastic/elasticsearch/issues/74540
+                "indices.get_alias/10_basic/Get alias against closed indices",
                 // Those tests compute stats from any shards and that don't play well with search shards
                 "indices.stats/13_fields/Completion fields - multi",
                 "indices.stats/13_fields/Completion fields - one",
