@@ -129,12 +129,12 @@ public class MeteringReporter extends AbstractLifecycleComponent {
         List<List<UsageRecord>> batches = CollectionUtils.eagerPartition(records, batchSize);
         for (List<UsageRecord> batch : batches) {
             try {
-                HttpRequest request = createRequest(records);
+                HttpRequest request = createRequest(batch);
 
                 var response = AccessController.doPrivileged(
                     (PrivilegedExceptionAction<HttpResponse<String>>) () -> client.send(request, HttpResponse.BodyHandlers.ofString())
                 );
-                handleResponse(response, records);
+                handleResponse(response, batch);
             } catch (IOException | PrivilegedActionException e) {
                 // TODO: log the record info & retry
                 assert false : e;
