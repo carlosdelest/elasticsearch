@@ -140,7 +140,46 @@ tasks {
                 "synonyms/90_synonyms_reloading_for_synset/Reload analyzers for specific synonym set",
 
                 // Adjusting the voting configuration is not possible in stateless
-                "cluster.voting_config_exclusions/*/*"
+                "cluster.voting_config_exclusions/*/*",
+
+                // Features not available on serverless (via API protections)
+                // - Legacy Templates
+                "indices.get_template/*/*",
+                "indices.put_template/*/*",
+                "indices.exists_template/*/*",
+                "indices.put_index_template/15_composition/*",
+                "indices.simulate_index_template/10_basic/Simulate index matches overlapping legacy and composable templates",
+                "indices.simulate_template/*/*",
+                // - Field Mappings
+                "indices.get_field_mapping/*/*",
+                // - Clone
+                "indices.clone/*/*",
+                // - Direct Shard Access
+                "indices.shard_stores/*/*",
+                "search_shards/*/*",
+                "search_shards/10_basic/*/*", // One of the tests in this suite has a "/" in its name
+                // - Allocation / Balance
+                "cluster.desired_balance/*/*",
+                // - Migration
+                "migration/*/*",
+                // - CCS / CCR
+                "cluster.remote_info/*/*",
+                // - Node Management
+                "cluster.desired_nodes/*/*",
+                "cluster.prevalidate_node_removal/*/*",
+                // - Keystore
+                "nodes.reload_secure_settings/*/*",
+                // - Scripting
+                "scripts/20_get_script_context/*",
+                "scripts/25_get_script_languages/*",
+                // - Legacy _knn_search
+                "search.vectors/40_knn_search/kNN search in _knn_search endpoint",
+                "search.vectors/40_knn_search/kNN search with filter in _knn_search endpoint",
+
+                // Tests that depend on unavailable features (if possible, we should fix test)
+                "index/91_metrics_no_subobjects/*", // depends on a legacy template
+                "cat.templates/*/*", // depends on a legacy templates
+
             ).joinToString(",")
         )
     }
