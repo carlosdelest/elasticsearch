@@ -31,11 +31,15 @@ import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
 import org.junit.ClassRule;
 
 public class ServerlessRestRootIT extends ESClientYamlSuiteTestCase {
+    private static final String OPERATOR_USER = "elastic_operator";
+    private static final SecureString OPERATOR_PASSWORD = new SecureString("elastic-password".toCharArray());
+
     private static final String NOT_OPERATOR_USER = "not_operator";
     private static final String NOT_OPERATOR_PASSWORD = "not_operator_password";
 
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
+        .user(OPERATOR_USER, OPERATOR_PASSWORD.toString(), User.ROOT_USER_ROLE, true)
         .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.ROOT_USER_ROLE, false)
         .build();
 
@@ -51,6 +55,12 @@ public class ServerlessRestRootIT extends ESClientYamlSuiteTestCase {
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
+    }
+
+    @Override
+    protected Settings restAdminSettings() {
+        String token = basicAuthHeaderValue(OPERATOR_USER, OPERATOR_PASSWORD);
+        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 
     @Override
