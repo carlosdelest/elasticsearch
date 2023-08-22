@@ -16,7 +16,7 @@
 "Attempts to install a license fails":
   # note - this API should be disabled in a future version and return a 404 instead of 500
   - do:
-      catch: missing
+      catch: gone
       license.post:
         acknowledge: true
         body: |
@@ -25,24 +25,24 @@
 "Attempts to delete a license fails":
   # note - this API should be disabled in a future version and return a 404 instead of 500
   - do:
-      catch: missing
+      catch: gone
       license.delete: {}
 ---
 "Attempts to start a basic license fails":
   # note - this API should be disabled in a future version and return a 404 instead of 500
   - do:
-      catch: missing
+      catch: gone
       license.post_start_basic: {}
 ---
 "Attempts to start a trial license fails":
   # note - this API should be disabled in a future version and return a 404 instead of 500
   - do:
-      catch: missing
+      catch: gone
       license.post_start_trial: {}
 ---
 "Not eligible to start trial":
   - do:
-      catch: missing
+      catch: gone
       license.get_trial_status: {}
 
 

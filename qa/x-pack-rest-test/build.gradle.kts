@@ -66,6 +66,7 @@ tasks {
             "users/*/*",
             "roles/*/*",
             "change_password/*/*",
+            "service_accounts/*/*",
             // Some ML APIs
             "ml/post_data/*",
             // Deprecation
