@@ -82,7 +82,7 @@ distribution_archives {
                     }
                     filesMatching("*/config/jvm.options") {
                         // Add serverless jvm options to default distribution jvm.options file
-                        filter(mapOf("append" to file("src/feature-flags.options")), ConcatFilter::class.java)
+                        filter(mapOf("append" to file("src/additional-jvm.options")), ConcatFilter::class.java)
                     }
                     exclude("*/bin/elasticsearch")
                     exclude("*/bin/elasticsearch.bat")
@@ -140,3 +140,7 @@ distribution_archives {
 }
 
 fun archiveToSubprojectName(taskName: String): String = taskName.replace("[A-Z]".toRegex(), "-$0").lowercase(Locale.getDefault())
+
+tasks.withType<AbstractCopyTask>().configureEach {
+    inputs.file("src/additional-jvm.options")
+}
