@@ -12,6 +12,7 @@ import org.elasticsearch.client.Request;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.test.cluster.serverless.ServerlessBwcVersion;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.Version;
 import org.elasticsearch.test.rest.ESRestTestCase;
@@ -21,14 +22,13 @@ import org.junit.ClassRule;
 
 import java.io.IOException;
 
-import static org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster.SERVERLESS_BWC_VERSION;
 import static org.hamcrest.Matchers.equalTo;
 
 public class ServerlessRollingUpgradeIT extends ESRestTestCase {
 
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
-        .version(SERVERLESS_BWC_VERSION)
+        .version(ServerlessBwcVersion.instance())
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.security.enabled", "false")
         .setting("xpack.watcher.enabled", "false")

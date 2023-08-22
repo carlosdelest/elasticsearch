@@ -15,7 +15,6 @@ import org.elasticsearch.test.cluster.serverless.remote.ServerlessRemoteClusterS
 import org.elasticsearch.test.cluster.util.Version;
 
 public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
-    Version SERVERLESS_BWC_VERSION = Version.fromString("0.0.0");
 
     /**
      * Creates a new {@link ServerlessLocalClusterSpecBuilder} for defining a locally orchestrated cluster. Local clusters use a locally built

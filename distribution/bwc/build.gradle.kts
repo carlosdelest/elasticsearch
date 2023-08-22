@@ -8,10 +8,10 @@
 
 import org.elasticsearch.gradle.LoggedExec
 import org.elasticsearch.gradle.OS
-import org.elasticsearch.gradle.VersionProperties
 import org.elasticsearch.gradle.internal.BwcGitExtension
 import org.elasticsearch.gradle.internal.InternalBwcGitPlugin
 import org.gradle.configurationcache.extensions.capitalized
+import java.util.*
 
 apply {
     plugin(InternalBwcGitPlugin::class)
@@ -43,6 +43,12 @@ tasks {
 
     named("checkoutBwcBranch") {
         extra.set("refspec", bwcTag)
+        doLast {
+            File("${checkoutDirectory}/elasticsearch/build-tools-internal/version.properties").bufferedReader().use { reader ->
+                val version = Properties().apply { load(reader) }.getProperty("elasticsearch")
+                extra.set("stackVersion", version)
+            }
+        }
     }
 }
 

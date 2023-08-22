@@ -1,9 +1,11 @@
 import groovy.lang.Closure
 import org.elasticsearch.gradle.serverless.ServerlessDistributionDownloadPlugin
+import org.elasticsearch.gradle.test.SystemPropertyCommandLineArgumentProvider
 import org.elasticsearch.gradle.testclusters.StandaloneRestIntegTestTask
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.dsl.DependencyHandler
+import org.gradle.kotlin.dsl.extra
 
 /**
  * Returns a dependency notation for the given x-pack plugin project.
@@ -34,4 +36,12 @@ fun StandaloneRestIntegTestTask.usesBwcDistribution() {
     // Use a hard-coded dummy version to indicate a BWC distribution
     // This is handled by a custom resolver in ServerlessDistributionDownloadPlugin
     closure.call(ServerlessDistributionDownloadPlugin.SERVERLESS_BWC_VERSION)
+
+    // Fetch the actual "stack" version of the BWC distribution and pass it into the tests as a system property
+    val systemProperties = extensions.getByType(SystemPropertyCommandLineArgumentProvider::class.java)
+    systemProperties.systemProperty("tests.serverless.bwc_stack_version") {
+        project.tasks.getByPath(":distribution:bwc:checkoutBwcBranch").extra.get(
+            "stackVersion"
+        ).toString()
+    }
 }
