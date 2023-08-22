@@ -118,6 +118,11 @@ public class ServerlessDevEnvironmentElasticsearchCluster implements ServerlessE
     }
 
     @Override
+    public void upgradeNodeToVersion(int index, Version version, boolean forciblyDestroyOldNode) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void close() {
         throw new UnsupportedOperationException();
     }

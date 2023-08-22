@@ -37,4 +37,16 @@ public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
         return new ServerlessRemoteClusterSpecBuilder();
     }
 
+    /**
+     * Upgrades a single node to the given version. Method blocks until the node is back up and ready to respond to requests.
+     * When {@code forciblyDestroyOldNode} is {@code true}, the old node is forcibly killed rather than gracefully shut down. This
+     * simulates a scenario in which the old node "dies" during upgrade, forcing a recovery rather than relocation on the newly upgraded
+     * node.
+     *
+     * @param index index of node ot upgrade
+     * @param version version to upgrade to
+     * @param forciblyDestroyOldNode whether to forcibly destroy the old node
+     */
+    void upgradeNodeToVersion(int index, Version version, boolean forciblyDestroyOldNode);
+
 }
