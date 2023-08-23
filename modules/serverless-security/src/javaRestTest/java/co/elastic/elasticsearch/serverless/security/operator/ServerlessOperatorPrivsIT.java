@@ -32,11 +32,8 @@ import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.ESRestTestCase;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.ClassRule;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -81,20 +78,6 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
         return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 
-    /**
-     *  We currently need to do this dynamically because the test framework cannot handle API protections being on - the
-     *  cleanup process attempts to call APIs that aren't available on serverless, such as retrieving SLM policies.
-     */
-    @Before
-    public void enableApiProtections() throws IOException {
-        configureApiProtections(true);
-    }
-
-    @After
-    public void disableApiProtections() throws IOException {
-        configureApiProtections(false);
-    }
-
     public void testAsOperator() throws Exception {
         RestClient operatorClient = adminClient();
         Response response = operatorClient.performRequest(new Request("GET", "/_cat/thread_pool/write"));
@@ -116,17 +99,4 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
             EntityUtils.toString(exception.getResponse().getEntity(), StandardCharsets.UTF_8)
         );
     }
-
-    private static void configureApiProtections(boolean enabled) throws IOException {
-        final Request req = new Request("PUT", "/_cluster/settings");
-        req.setJsonEntity(Strings.format("""
-            {
-              "persistent" : {
-                "http.api_protections.enabled": %s
-              }
-            }
-            """, enabled));
-        adminClient().performRequest(req);
-    }
-
 }

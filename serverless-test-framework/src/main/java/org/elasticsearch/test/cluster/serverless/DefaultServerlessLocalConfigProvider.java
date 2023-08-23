@@ -27,7 +27,6 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             .setting("stateless.object_store.bucket", "stateless")
             .setting("stateless.object_store.base_path", "base_path")
             .setting("ingest.geoip.downloader.enabled", "false")
-            .setting("http.api_protections.enabled", "true")
             .setting("serverless.sigterm.poll_interval", "1s")
             .feature(FeatureFlag.TIME_SERIES_MODE)
             .withNode(

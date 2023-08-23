@@ -56,7 +56,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
         RestHandler restHandler = mock(RestHandler.class);
         RestRequest restRequest = mock(RestRequest.class);
         RestChannel restChannel = mock(RestChannel.class);
-        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry(Set.of(), () -> true);
+        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry(Set.of());
 
         // no access at all is controlled outside of operator privileges - so we only assert this precondition
         when(restHandler.getServerlessScope()).thenReturn(null);
@@ -92,7 +92,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
             100,
             () -> randomValueOtherThanMany(restrictedPaths::contains, () -> randomAlphaOfLengthBetween(10, 20))
         );
-        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry(Sets.newHashSet(restrictedPaths), () -> true);
+        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry(Sets.newHashSet(restrictedPaths));
 
         // create a rest request that should be restricted
         String restrictedPath = randomFrom(restrictedPaths);
@@ -136,18 +136,6 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
         violation = registry.checkRest(restHandler, unRestrictedRequest, null);
         assertNull(violation);
         assertThat(restrictedRequest.param(RestRequest.RESPONSE_RESTRICTED), is("serverless"));
-    }
-
-    public void testCheckRestDisabled() throws Exception {
-        RestHandler restHandler = mock(RestHandler.class);
-        RestRequest restRequest = mock(RestRequest.class);
-        RestChannel restChannel = mock(RestChannel.class);
-        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry(Set.of(), () -> false);
-
-        when(restHandler.getServerlessScope()).thenReturn(randomBoolean() ? null : randomFrom(Scope.values()));
-        when(restRequest.uri()).thenReturn(randomAlphaOfLengthBetween(4, 8));
-        when(restRequest.method()).thenReturn(randomFrom(RestRequest.Method.values()));
-        assertThat(registry.checkRest(restHandler, restRequest, restChannel), nullValue());
     }
 
 }
