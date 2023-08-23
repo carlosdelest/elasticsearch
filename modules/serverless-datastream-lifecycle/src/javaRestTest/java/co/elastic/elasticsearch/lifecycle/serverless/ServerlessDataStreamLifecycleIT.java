@@ -41,14 +41,14 @@ public class ServerlessDataStreamLifecycleIT extends ESRestTestCase {
         .build();
 
     @Override
-    protected String getTestRestCluster() {
-        return cluster.getHttpAddresses();
-    }
-
-    @Override
     protected Settings restClientSettings() {
         String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
         return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
+    }
+
+    @Override
+    protected String getTestRestCluster() {
+        return cluster.getHttpAddresses();
     }
 
     public void testILMPolicesAreNotInstalled() throws Exception {

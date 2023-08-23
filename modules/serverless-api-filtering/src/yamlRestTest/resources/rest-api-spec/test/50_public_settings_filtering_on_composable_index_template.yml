@@ -1,0 +1,41 @@
+---
+"Create composable index template with settings as an operator, filter for non-operator":
+  - skip:
+      features:  [ "allowed_warnings" ,"headers"]
+
+  - do:
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
+      allowed_warnings:
+        - "index template [my-template] has index patterns [baz*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
+      indices.put_index_template:
+        name: my-template
+        body:
+          index_patterns: ["test_index*"]
+          template:
+            settings:
+              index.number_of_replicas: 0
+              index.query_string.lenient: "true"
+
+
+# create index using a template
+  - do:
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
+      indices.create:
+        index: test_index
+  - match: {acknowledged: true}
+
+  - do:
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
+      indices.get_settings:
+        index: test_index
+        flat_settings: false
+
+  - match: { test_index.settings.index.query_string.lenient: "true" }
+  - match: { test_index.settings.index.number_of_replicas: "0"}
+
+  - do:
+      indices.get_settings:
+        index: test_index
+        flat_settings: false
+
+  - match: { test_index.settings.index.query_string.lenient: "true"}
