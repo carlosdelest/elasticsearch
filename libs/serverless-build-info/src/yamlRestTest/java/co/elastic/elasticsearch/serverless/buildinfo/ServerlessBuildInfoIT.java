@@ -20,6 +20,9 @@ package co.elastic.elasticsearch.serverless.buildinfo;
 import com.carrotsearch.randomizedtesting.annotations.Name;
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 
+import org.elasticsearch.common.settings.SecureString;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
@@ -28,7 +31,7 @@ import org.junit.ClassRule;
 
 public class ServerlessBuildInfoIT extends ESClientYamlSuiteTestCase {
     @ClassRule
-    public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local().setting("xpack.security.enabled", "false").build();
+    public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local().user("admin-user", "x-pack-test-password").build();
 
     public ServerlessBuildInfoIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);
@@ -42,5 +45,11 @@ public class ServerlessBuildInfoIT extends ESClientYamlSuiteTestCase {
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
+    }
+
+    @Override
+    protected Settings restClientSettings() {
+        String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
+        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 }
