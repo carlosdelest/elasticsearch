@@ -56,12 +56,13 @@ include(":modules:serverless-transform")
 include(":modules:serverless-metering")
 include(":modules:serverless-api-filtering")
 
-include(":libs:serverless-build-info")
 
 /*
  * Extraneous libs
  */
+include(":libs:serverless-build-info")
 include(":libs:serverless-metrics")
+include(":libs:serverless-shared-constants")
 include(":libs:serverless-xpack-template-resources")
 
 /*

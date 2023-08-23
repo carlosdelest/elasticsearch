@@ -20,7 +20,7 @@ val bundledPlugins by configurations.creating {
     }
 }
 val xpackTemplateResources by configurations.creating
-val buildInfoJar by configurations.creating
+val additionalLibJars by configurations.creating
 
 dependencies {
     serverCli(project(":distribution:tools:serverless-server-cli"))
@@ -32,7 +32,8 @@ dependencies {
     bundledPlugins("org.elasticsearch.plugin:analysis-phonetic")
     bundledPlugins("org.elasticsearch.plugin:analysis-stempel")
     xpackTemplateResources(project(":libs:serverless-xpack-template-resources"))
-    buildInfoJar(project(":libs:serverless-build-info"))
+    additionalLibJars(project(":libs:serverless-build-info"))
+    additionalLibJars(project(":libs:serverless-shared-constants"))
 }
 
 distribution_archives {
@@ -117,7 +118,7 @@ distribution_archives {
                         from(serverCli)
                     }
                     into("lib") {
-                        from(buildInfoJar)
+                        from(additionalLibJars)
                     }
                     into("modules") {
                         // Bundle analysis language plugins as modules
