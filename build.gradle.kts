@@ -18,6 +18,19 @@ plugins {
 }
 
 allprojects {
+    repositories {
+        maven {
+            name = "opensaml"
+            url = uri("https://artifactory.elstc.co/artifactory/shibboleth-releases/")
+            content {
+                // this repository *only* contains opensaml artifacts
+                includeGroup("org.opensaml")
+                includeGroup("net.shibboleth.utilities")
+                includeGroup("net.shibboleth")
+            }
+        }
+    }
+
     apply(plugin = "elasticsearch.formatting")
 
     configurations {
