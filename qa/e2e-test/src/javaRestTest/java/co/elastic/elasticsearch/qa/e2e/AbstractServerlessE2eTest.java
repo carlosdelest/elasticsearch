@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.qa.e2e;
 import org.apache.http.conn.ssl.NoopHostnameVerifier;
 import org.apache.http.ssl.SSLContexts;
 import org.elasticsearch.client.RestClientBuilder;
+import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
@@ -73,16 +74,16 @@ public abstract class AbstractServerlessE2eTest extends ESRestTestCase {
         return Settings.builder()
             .put(ThreadContext.PREFIX + ".Authorization", "ApiKey " + getApiKey())
             .put(ThreadContext.PREFIX + ".X-Found-Cluster", getProjectId() + ".es")
-            .put(ThreadContext.PREFIX + ".X-elastic-internal-origin", true)
             .build();
     }
 
     @Override
     protected Settings restAdminSettings() {
         return Settings.builder()
-            .put(ThreadContext.PREFIX + ".Authorization", "ApiKey " + getApiKey())
+            // TODO: Sort out how to use API keys since they don't support operator privileges
+            // .put(ThreadContext.PREFIX + ".Authorization", "ApiKey " + getApiKey())
+            .put(ThreadContext.PREFIX + ".Authorization", getBasicAuthCredentials())
             .put(ThreadContext.PREFIX + ".X-Found-Cluster", getProjectId() + ".es")
-            .put(ThreadContext.PREFIX + ".X-elastic-internal-origin", true)
             .put("client.path.prefix", "/")
             .build();
     }
@@ -98,7 +99,7 @@ public abstract class AbstractServerlessE2eTest extends ESRestTestCase {
         return true;
     }
 
-    public String getProjectId() {
+    protected String getProjectId() {
         String essProjectId = System.getenv().get("ESS_PROJECT_ID");
         if (essProjectId == null) {
             throw new RuntimeException("ESS_PROJECT_ID is not set");
@@ -106,11 +107,24 @@ public abstract class AbstractServerlessE2eTest extends ESRestTestCase {
         return essProjectId;
     }
 
-    public String getApiKey() {
+    protected String getApiKey() {
         String essApiKey = System.getenv().get("ESS_API_KEY_ENCODED");
         if (essApiKey == null) {
             throw new RuntimeException("ESS_API_KEY_ENCODED is not set");
         }
         return essApiKey;
+    }
+
+    protected String getBasicAuthCredentials() {
+        String username = System.getenv().get("ESS_USERNAME");
+        if (username == null) {
+            throw new RuntimeException("ESS_USERNAME is not set");
+        }
+        String password = System.getenv().get("ESS_PASSWORD");
+        if (password == null) {
+            throw new RuntimeException("ESS_PASSWORD is not set");
+        }
+
+        return basicAuthHeaderValue(username, new SecureString(password));
     }
 }

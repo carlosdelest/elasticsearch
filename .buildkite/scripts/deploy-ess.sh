@@ -82,7 +82,10 @@ ESS_API_KEY_RESPONSE=$(curl -k -H "Content-Type: application/json" -H "X-Found-C
 
 ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_RESPONSE | jq -e -r '.encoded')
 ESS_API_KEY_ENCRYPTED=$(encrypt $ESS_API_KEY_ENCODED)
+ESS_ROOT_PASSWORD_ENCRYPTED=$(encrypt $ESS_ROOT_PASSWORD)
 
 buildkite-agent meta-data set "ess-project-id" "$PROJECT_ID"
 buildkite-agent meta-data set "ess-public-url" "https://$LBS_HOST"
 buildkite-agent meta-data set "ess-api-key-encrypted" "$ESS_API_KEY_ENCRYPTED"
+buildkite-agent meta-data set "ess-username" "$ESS_ROOT_USERNAME"
+buildkite-agent meta-data set "ess-password-encrypted" "$ESS_ROOT_PASSWORD_ENCRYPTED"

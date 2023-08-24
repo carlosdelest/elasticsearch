@@ -9,24 +9,27 @@
 package co.elastic.elasticsearch.qa.e2e;
 
 import org.elasticsearch.client.Request;
-import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.xcontent.json.JsonXContent;
+import org.junit.AfterClass;
 
 import java.io.IOException;
 
-@org.junit.Ignore
 public class ServerlessE2eTest extends AbstractServerlessE2eTest {
+    public static final String INDEX_NAME = "test-e2e-index";
+
+    @AfterClass
+    public static void cleanup() throws IOException {
+        deleteIndex(INDEX_NAME);
+    }
 
     public void testBasicIndexing() throws Exception {
-        String index = "test";
         int docCount = randomIntBetween(10, 50);
-        createIndex(index, Settings.builder().put(UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.getKey(), "0").build());
+        createIndex(INDEX_NAME);
         for (int i = 0; i < docCount; i++) {
-            indexDocument(index);
+            indexDocument(INDEX_NAME);
         }
-        assertDocCount(client(), index, docCount);
+        assertDocCount(client(), INDEX_NAME, docCount);
     }
 
     private void indexDocument(String index) throws IOException {
