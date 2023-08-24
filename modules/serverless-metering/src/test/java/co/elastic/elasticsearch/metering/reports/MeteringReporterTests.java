@@ -41,11 +41,13 @@ import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static org.elasticsearch.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.hamcrest.Matchers.contains;
@@ -128,6 +130,41 @@ public class MeteringReporterTests extends ESTestCase {
             List<?> data = requests.poll(10, TimeUnit.SECONDS);
             assertNotNull("Request was not received in time", data);
             assertRecord(List.of(record), data);
+
+            reporter.stop();
+        }
+    }
+
+    public void testReporterSendsLotsOfData() throws Exception {
+        Settings testSettings = Settings.builder().put(settings).put(MeteringReporter.BATCH_SIZE.getKey(), 10).build();
+
+        List<UsageRecord> records = IntStream.range(0, 25)
+            .mapToObj(
+                i -> new UsageRecord(
+                    "id" + i,
+                    Instant.now(),
+                    new UsageMetrics("type", null, 1, null, null, null),
+                    new UsageSource("id", "instanceId", null)
+                )
+            )
+            .toList();
+
+        try (MeteringReporter reporter = new MeteringReporter(testSettings, threadPool)) {
+            reporter.start();
+            reporter.sendRecords(records);
+
+            List<Object> received = new ArrayList<>();
+            waitUntil(() -> {
+                try {
+                    var polled = requests.poll(10, TimeUnit.SECONDS);
+                    assertNotNull("Request was not received in time", polled);
+                    received.addAll(polled);
+                    return received.size() == records.size();
+                } catch (InterruptedException e) {
+                    throw new AssertionError(e);
+                }
+            });
+            assertRecord(records, received);
 
             reporter.stop();
         }

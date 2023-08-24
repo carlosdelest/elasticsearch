@@ -257,6 +257,7 @@ public class IndexDirectory extends ByteSizeDirectory {
     public void updateCommit(StatelessCompoundCommit commit) {
         synchronized (this) {
             cacheDirectory.updateCommit(commit);
+            // TODO: we need to also clean the map in SearchDirectory for indexing shards.
             if (localFiles.isEmpty()) {
                 // create references for first commit files if they are not known
                 commit.commitFiles().keySet().forEach(file -> localFiles.putIfAbsent(file, new LocalFileRef(file) {
@@ -479,7 +480,7 @@ public class IndexDirectory extends ByteSizeDirectory {
             IndexInput inputToClone = currentDelegate.getDelegate();
             if (currentDelegate.isReopened()) {
                 assert inputToClone instanceof SearchIndexInput : toString();
-                return ((BlobCacheBufferedIndexInput) inputToClone).clone();
+                return seekOnClone(((BlobCacheBufferedIndexInput) inputToClone).clone());
             }
             if (localFile.tryIncRef()) {
                 try {
@@ -494,10 +495,23 @@ public class IndexDirectory extends ByteSizeDirectory {
 
             try {
                 // We clone the actual delegate input. No need to clone our wrapper with the isReopened marker.
-                return (BlobCacheBufferedIndexInput) reopenInputFromCache().getDelegate().clone();
+                return seekOnClone((BlobCacheBufferedIndexInput) reopenInputFromCache().getDelegate().clone());
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
+        }
+
+        /**
+         * Apply the super file pointer (based on buffer position) to the cloned object.
+         */
+        private BlobCacheBufferedIndexInput seekOnClone(BlobCacheBufferedIndexInput clone) {
+            try {
+                clone.seek(getFilePointer());
+            } catch (IOException e) {
+                assert false : e;
+                throw new UncheckedIOException(e);
+            }
+            return clone;
         }
 
         @Override

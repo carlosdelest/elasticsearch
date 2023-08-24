@@ -1,0 +1,4 @@
+operator:
+  - usernames: ["admin-user"]
+    realm_type: "file"
+    auth_type: "realm"

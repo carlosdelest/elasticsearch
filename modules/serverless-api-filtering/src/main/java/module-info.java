@@ -22,4 +22,5 @@ module org.elasticsearch.api.filtering.serverless {
     requires org.elasticsearch.xcore;
 
     exports co.elastic.elasticsearch.api.filtering to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.api.validation to org.elasticsearch.server;
 }

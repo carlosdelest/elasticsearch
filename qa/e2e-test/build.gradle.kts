@@ -27,14 +27,14 @@ dependencies {
 
 tasks {
     javaRestTest { ->
-        onlyIf("E2E test task must be invoked directly", { directlyInvoked(this) })
+        onlyIf("E2E test task must be invoked directly") { directlyInvoked() }
         doFirst {
             println("Running E2E tests with ESS_PUBLIC_URL = ${System.getenv().get("ESS_PUBLIC_URL")}")
             println("Running E2E tests with ESS_PROJECT_ID = ${System.getenv().get("ESS_PROJECT_ID")}")
-            println("Running E2E tests with ESS_API_KEY_ENCODED = ${System.getenv().get("ESS_API_KEY_ENCODED")}")
+            // println("Running E2E tests with ESS_API_KEY_ENCODED = ${System.getenv().get("ESS_API_KEY_ENCODED")}")
         }
     }
 }
 
-fun Build_gradle.directlyInvoked(task: Task) = gradle.startParameter.getTaskNames().contains(task.getPath()) ||
-        (gradle.startParameter.getTaskNames().contains(task.getName()) && gradle.startParameter.currentDir == project.projectDir)
+fun Task.directlyInvoked() = gradle.startParameter.getTaskNames().contains(this.path) ||
+        (gradle.startParameter.getTaskNames().contains(this.name) && gradle.startParameter.currentDir == project.projectDir)

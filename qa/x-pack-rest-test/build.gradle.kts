@@ -61,6 +61,35 @@ tasks {
             // https://github.com/elastic/elasticsearch-serverless/issues/652
             "security/settings/10_update_security_settings/Test update and get security settings API",
 
+            // Features not available on serverless (via API protections)
+            // Security users/roles
+            "users/*/*",
+            "roles/*/*",
+            "change_password/*/*",
+            "service_accounts/*/*",
+            // Some ML APIs
+            "ml/post_data/*",
+            // Deprecation
+            "deprecation/*/*",
+
+            // Things that incidentally depend on endpoints that aren't available
+            // - Deprecated ML deployment inference endpoint
+            "ml/3rd_party_deployment/*",
+            // - ML RestPostDataAction
+            "ml/jobs_get_stats/*",
+            "ml/ml_anomalies_default_mappings/*",
+            "ml/job_cat_apis/*",
+            // - Create user/role
+            "security/authz/14_cat_indices/*",
+            "security/authz/14_cat_indices/*/*",
+            // - CCS/CCR access keys
+            "api_key/50_cross_cluster/*",
+            // - Internal API using native user
+            "api_key/12_grant/*",
+            "privileges/40_get_user_privs/*",
+            // - Legacy templates
+            "analytics/multi_terms/*",
+
             // Temporarily disable this until we fix a a bug in FLS with real-time-get on stateless
             "security/authz_api_keys/20_field_level_security/*"
         ).joinToString(","))

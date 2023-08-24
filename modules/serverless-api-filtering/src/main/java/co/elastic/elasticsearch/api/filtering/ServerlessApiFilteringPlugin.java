@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.api.filtering;
 
+import co.elastic.elasticsearch.api.validation.PublicSettingsValidationActionFilter;
+
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
@@ -67,7 +69,13 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
         IndicesService indicesService
     ) {
         actionFilters.set(
-            List.of(new EnrichStatsResponseFilter(threadPool.getThreadContext()), new TaskResponseFilter(threadPool.getThreadContext()))
+            List.of(
+                new EnrichStatsResponseFilter(threadPool.getThreadContext()),
+                new TaskResponseFilter(threadPool.getThreadContext()),
+                new GetComponentTemplateSettingsFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings()),
+                new GetIndexActionSettingsFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings()),
+                new PublicSettingsValidationActionFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings())
+            )
         );
 
         return List.of();

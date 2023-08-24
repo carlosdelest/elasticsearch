@@ -11,7 +11,10 @@ package co.elastic.elasticsearch.qa.upgrade;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.test.cluster.serverless.ServerlessBwcVersion;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.Version;
 import org.elasticsearch.test.rest.ESRestTestCase;
@@ -21,17 +24,16 @@ import org.junit.ClassRule;
 
 import java.io.IOException;
 
-import static org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster.SERVERLESS_BWC_VERSION;
 import static org.hamcrest.Matchers.equalTo;
 
 public class ServerlessRollingUpgradeIT extends ESRestTestCase {
 
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
-        .version(SERVERLESS_BWC_VERSION)
+        .version(ServerlessBwcVersion.instance())
         .setting("xpack.ml.enabled", "false")
-        .setting("xpack.security.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
+        .user("admin-user", "x-pack-test-password")
         .withNode(
             indexNodeSpec -> indexNodeSpec.name("index-node-2")
                 .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
@@ -49,6 +51,12 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
+    }
+
+    @Override
+    protected Settings restClientSettings() {
+        String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
+        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 
     public void testClusterUpgrade() throws Exception {

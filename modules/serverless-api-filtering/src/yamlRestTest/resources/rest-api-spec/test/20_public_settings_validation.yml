@@ -1,0 +1,47 @@
+---
+"Create index with settings":
+
+  - do:
+      catch: bad_request
+      indices.create:
+        index: test_index
+        body:
+          settings:
+            index.number_of_replicas: "0"
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Settings [index.number_of_replicas] are not available when running in serverless mode" }
+
+
+---
+"Create component template with settings":
+  - do:
+      catch: bad_request
+      cluster.put_component_template:
+        name: test_template
+        body:
+          template:
+            settings:
+              index.number_of_replicas: 0
+
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Settings [index.number_of_replicas] are not available when running in serverless mode" }
+
+---
+"Create composable index template with settings":
+  - do:
+      catch: bad_request
+      indices.put_index_template:
+        name: my-template
+        body:
+          index_patterns: [ "test_index*" ]
+          template:
+            settings:
+              index.number_of_replicas: 0
+
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Settings [index.number_of_replicas] are not available when running in serverless mode" }

@@ -11,6 +11,7 @@ package org.elasticsearch.test.cluster.serverless;
 import org.elasticsearch.test.cluster.ClusterFactory;
 import org.elasticsearch.test.cluster.DefaultElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.LocalClusterSpec;
+import org.elasticsearch.test.cluster.util.Version;
 
 import java.util.function.Supplier;
 
@@ -23,5 +24,10 @@ public class DefaultServerlessElasticsearchCluster extends DefaultElasticsearchC
         ClusterFactory<LocalClusterSpec, ServerlessLocalClusterHandle> clusterFactory
     ) {
         super(specProvider, clusterFactory);
+    }
+
+    @Override
+    public void upgradeNodeToVersion(int index, Version version, boolean forciblyDestroyOldNode) {
+        getHandle().upgradeNodeToVersion(index, version, forciblyDestroyOldNode);
     }
 }

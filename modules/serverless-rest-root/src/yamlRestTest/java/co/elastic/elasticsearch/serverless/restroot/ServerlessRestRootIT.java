@@ -20,15 +20,28 @@ package co.elastic.elasticsearch.serverless.restroot;
 import com.carrotsearch.randomizedtesting.annotations.Name;
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 
+import org.elasticsearch.common.settings.SecureString;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
+import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
 import org.junit.ClassRule;
 
 public class ServerlessRestRootIT extends ESClientYamlSuiteTestCase {
+    private static final String OPERATOR_USER = "elastic_operator";
+    private static final SecureString OPERATOR_PASSWORD = new SecureString("elastic-password".toCharArray());
+
+    private static final String NOT_OPERATOR_USER = "not_operator";
+    private static final String NOT_OPERATOR_PASSWORD = "not_operator_password";
+
     @ClassRule
-    public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local().setting("xpack.security.enabled", "false").build();
+    public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
+        .user(OPERATOR_USER, OPERATOR_PASSWORD.toString(), User.ROOT_USER_ROLE, true)
+        .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.ROOT_USER_ROLE, false)
+        .build();
 
     public ServerlessRestRootIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);
@@ -42,5 +55,17 @@ public class ServerlessRestRootIT extends ESClientYamlSuiteTestCase {
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
+    }
+
+    @Override
+    protected Settings restAdminSettings() {
+        String token = basicAuthHeaderValue(OPERATOR_USER, OPERATOR_PASSWORD);
+        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
+    }
+
+    @Override
+    protected Settings restClientSettings() {
+        String token = basicAuthHeaderValue("not_operator", new SecureString("not_operator_password".toCharArray()));
+        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 }

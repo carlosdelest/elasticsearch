@@ -1,0 +1,31 @@
+---
+"Create index with settings as an operator, filter for non-operator":
+  - skip:
+      features: headers
+  - do:
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
+      indices.create:
+        index: test_index
+        body:
+          settings:
+            index.number_of_replicas: "0" #non-public setting
+            index.query_string.lenient: "true" #public setting
+  - match: {acknowledged: true}
+
+  - do:
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
+      indices.get_settings:
+        index: test_index
+        flat_settings: false
+
+  - match: { test_index.settings.index.query_string.lenient: "true" }
+  - match: { test_index.settings.index.number_of_replicas: "0"}
+
+  - do:
+      indices.get_settings:
+        index: test_index
+        flat_settings: false
+
+  - match: { test_index.settings.index.query_string.lenient: "true"}
+
+

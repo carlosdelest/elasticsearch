@@ -46,6 +46,7 @@ include(":modules:serverless-fleet")
 include(":modules:serverless-kibana")
 include(":modules:serverless-license")
 include(":modules:serverless-ml")
+include(":modules:serverless-rest-controller")
 include(":modules:serverless-rest-root")
 include(":modules:serverless-search")
 include(":modules:serverless-security")
@@ -55,12 +56,13 @@ include(":modules:serverless-transform")
 include(":modules:serverless-metering")
 include(":modules:serverless-api-filtering")
 
-include(":libs:serverless-build-info")
 
 /*
  * Extraneous libs
  */
+include(":libs:serverless-build-info")
 include(":libs:serverless-metrics")
+include(":libs:serverless-shared-constants")
 include(":libs:serverless-xpack-template-resources")
 
 /*

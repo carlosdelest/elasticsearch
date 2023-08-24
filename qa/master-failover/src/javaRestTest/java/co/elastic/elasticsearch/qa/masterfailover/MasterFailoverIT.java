@@ -22,6 +22,9 @@ import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.settings.SecureString;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.Version;
 import org.elasticsearch.test.rest.ESRestTestCase;
@@ -37,14 +40,20 @@ public class MasterFailoverIT extends ESRestTestCase {
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("xpack.ml.enabled", "false")
-        .setting("xpack.security.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
+        .user("admin-user", "x-pack-test-password")
         .setting(MAX_MISSED_HEARTBEATS.getKey(), "100") // blocks non-graceful failovers for long enough that the test will fail
         .build();
 
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
+    }
+
+    @Override
+    protected Settings restClientSettings() {
+        String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
+        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 
     public void testFailover() throws Exception {

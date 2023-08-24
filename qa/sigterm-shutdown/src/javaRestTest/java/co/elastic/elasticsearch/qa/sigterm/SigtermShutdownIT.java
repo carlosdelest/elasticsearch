@@ -9,6 +9,9 @@
 package co.elastic.elasticsearch.qa.sigterm;
 
 import org.elasticsearch.client.Request;
+import org.elasticsearch.common.settings.SecureString;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.ESRestTestCase;
@@ -26,7 +29,7 @@ public class SigtermShutdownIT extends ESRestTestCase {
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("xpack.ml.enabled", "false")
-        .setting("xpack.security.enabled", "false")
+        .user("admin-user", "x-pack-test-password")
         .setting("xpack.watcher.enabled", "false")
         .setting("serverless.sigterm.timeout", SIGTERM_TIMEOUT.getStringRep())
         .build();
@@ -34,6 +37,12 @@ public class SigtermShutdownIT extends ESRestTestCase {
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
+    }
+
+    @Override
+    protected Settings restClientSettings() {
+        String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
+        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 
     public void testShutdown() throws Exception {

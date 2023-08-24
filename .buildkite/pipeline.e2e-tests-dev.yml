@@ -1,7 +1,7 @@
 agents:
-  provider: "gcp"
-  machineType: "n1-standard-16"
-  image: family/elasticsearch-ubuntu-2022
+  provider: k8s
+  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+  memory: "4G"
 
 env:
   DEFAULT_CLUSTER_ID: "ess-dev-ci"
@@ -27,11 +27,17 @@ steps:
 
   - label: ":java: Run serverless e2e tests"
     key: run-ess-e2e-tests
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
     command:
         "vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem; \
          export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url); \
          export ESS_PROJECT_ID=$(buildkite-agent meta-data get ess-project-id); \
          export ESS_API_KEY_ENCODED=$(buildkite-agent meta-data get ess-api-key-encrypted | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem); \
+         export ESS_USERNAME=$(buildkite-agent meta-data get ess-username); \
+         export ESS_PASSWORD=$(buildkite-agent meta-data get ess-password-encrypted | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem); \
         .buildkite/scripts/run-gradle.sh :qa:e2e-test:javaRestTest"
     depends_on:
       - step: deploy-ess

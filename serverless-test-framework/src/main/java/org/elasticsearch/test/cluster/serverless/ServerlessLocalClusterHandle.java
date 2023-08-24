@@ -69,6 +69,10 @@ public class ServerlessLocalClusterHandle extends LocalClusterHandle {
 
     @Override
     public void upgradeNodeToVersion(int index, Version version) {
+        upgradeNodeToVersion(index, version, false);
+    }
+
+    public void upgradeNodeToVersion(int index, Version version, boolean forciblyDestroyOldNode) {
         nodeLock.lock();
         AbstractLocalClusterFactory.Node oldNode = nodes.get(index);
         AbstractLocalClusterFactory.Node newNode = new AbstractLocalClusterFactory.Node(
@@ -82,7 +86,7 @@ public class ServerlessLocalClusterHandle extends LocalClusterHandle {
         nodes.add(index, newNode);
         newNode.start(version);
         waitUntilReady();
-        oldNode.stop(false);
+        oldNode.stop(forciblyDestroyOldNode);
         nodes.remove(oldNode);
         waitUntilReady();
         nodeLock.unlock();
