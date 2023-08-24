@@ -72,11 +72,11 @@ public class PublicSettingsValidatorTests extends ESTestCase {
             );
             Settings nonPublicSettings = Settings.builder().put(NON_PUBLIC_SETTING.getKey(), 0).build();
             var e = expectThrows(IllegalArgumentException.class, () -> publicSettingsValidator.validateSettings(nonPublicSettings));
-            assertThat(e.getMessage(), equalTo("unknown setting [index.internal_setting] within non-operator mode"));
+            assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
 
             Settings mixPublicNonPublic = Settings.builder().put(NON_PUBLIC_SETTING.getKey(), 0).put(PUBLIC_SETTING.getKey(), 0).build();
             e = expectThrows(IllegalArgumentException.class, () -> publicSettingsValidator.validateSettings(mixPublicNonPublic));
-            assertThat(e.getMessage(), equalTo("unknown setting [index.internal_setting] within non-operator mode"));
+            assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
 
             Settings publicSettings = Settings.builder().put(PUBLIC_SETTING.getKey(), 0).build();
             // no exception

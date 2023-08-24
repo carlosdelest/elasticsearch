@@ -53,12 +53,10 @@ public class PublicSettingsValidator {
             }).toList();
             if (false == list.isEmpty()) {
                 throw new IllegalArgumentException(
-                    "unknown "
-                        + (list.size() == 1 ? "setting" : "settings")
-                        + " ["
+                    "Settings ["
                         + Strings.collectionToDelimitedString(list, ",")
                         + "]"
-                        + " within non-operator mode"
+                        + " are not available when running in serverless mode"
                 );
             }
         }

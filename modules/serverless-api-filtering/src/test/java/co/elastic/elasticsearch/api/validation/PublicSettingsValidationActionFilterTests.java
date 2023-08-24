@@ -70,7 +70,7 @@ public class PublicSettingsValidationActionFilterTests extends ESTestCase {
                 IllegalArgumentException.class,
                 () -> actionFilter.apply(task, CreateIndexAction.NAME, request, listener, chain)
             );
-            assertThat(e.getMessage(), equalTo("unknown setting [index.internal_setting] within non-operator mode"));
+            assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
         }
     }
 
@@ -95,7 +95,7 @@ public class PublicSettingsValidationActionFilterTests extends ESTestCase {
                 IllegalArgumentException.class,
                 () -> actionFilter.apply(task, PutComponentTemplateAction.NAME, request, listener, chain)
             );
-            assertThat(e.getMessage(), equalTo("unknown setting [index.internal_setting] within non-operator mode"));
+            assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
         }
     }
 
@@ -129,7 +129,7 @@ public class PublicSettingsValidationActionFilterTests extends ESTestCase {
                 IllegalArgumentException.class,
                 () -> actionFilter.apply(task, PutComposableIndexTemplateAction.NAME, request, listener, chain)
             );
-            assertThat(e.getMessage(), equalTo("unknown setting [index.internal_setting] within non-operator mode"));
+            assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
         }
     }
 
