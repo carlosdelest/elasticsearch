@@ -35,6 +35,8 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
         .setting("xpack.security.transport.ssl.certificate", "testnode.crt")
         .setting("xpack.security.transport.ssl.verification_mode", "certificate")
         .setting("xpack.security.audit.enabled", "true")
+        .setting("xpack.security.authc.native_users.enabled", "true")
+        .setting("xpack.security.authc.native_roles.enabled", "true")
         .secret("bootstrap.password", "x-pack-test-password")
         .secret("xpack.security.transport.ssl.secure_key_passphrase", "testnode")
         .user("x_pack_rest_user", "x-pack-test-password")

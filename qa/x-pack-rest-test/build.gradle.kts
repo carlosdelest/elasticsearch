@@ -82,20 +82,11 @@ tasks {
             // - Create user/role
             "security/authz/14_cat_indices/*",
             "security/authz/14_cat_indices/*/*",
-            "security/hidden-index/*/*",
-            "api_key/1*/*",
-            "api_key/20_*/*",
-            "api_key/30_*/*",
-            "api_key/40_*/*",
-            "api_key/50_*/*",
-            // ^ don't skip 60 - it's designed to work on serverless
-            "authenticate/10_field_level_security/*",
-            "authenticate/10_basic/*",
-            "user_profile/*/*",
-            "privileges/*/*",
-            "token/10_basic/*",
-            "token/11_invalidation/*",
-            "set_security_user/10_small_users_one_index/*",
+            // - CCS/CCR access keys
+            "api_key/50_cross_cluster/*",
+            // - Internal API using native user
+            "api_key/12_grant/*",
+            "privileges/40_get_user_privs/*",
             // - Legacy templates
             "analytics/multi_terms/*",
 

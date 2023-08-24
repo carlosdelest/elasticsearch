@@ -41,6 +41,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.tracing.Tracer;
 import org.elasticsearch.watcher.ResourceWatcherService;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
+import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -54,6 +55,28 @@ import static org.elasticsearch.xpack.security.operator.OperatorPrivileges.OPERA
  * Custom rules for security, e.g. operator privileges and reserved roles, when running in the serverless environment.
  */
 public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
+
+    /**
+     * Register a <code>Setting</code> for the (x-pack) "native_users.enabled" implicit setting.
+     * X-Pack never registers the setting - it only exists so that serverless can use it.
+     * We default to disabled, but allow it to be enabled again for automated tests
+     * (this allows us to share many test cases between stateful and serverless)
+     */
+    public static final Setting<Boolean> NATIVE_USERS_SETTING = Setting.boolSetting(
+        NativeRealmSettings.NATIVE_USERS_ENABLED,
+        false,
+        Setting.Property.NodeScope
+    );
+
+    /**
+     * Register a <code>Setting</code> for the (x-pack) "native_roles.enabled" implicit setting.
+     * @see #NATIVE_USERS_SETTING
+     */
+    public static final Setting<Boolean> NATIVE_ROLES_SETTING = Setting.boolSetting(
+        "xpack.security.authc.native_roles.enabled",
+        false,
+        Setting.Property.NodeScope
+    );
 
     @Override
     public Collection<Object> createComponents(
@@ -89,12 +112,14 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         return Settings.builder()
             .putList(INCLUDED_RESERVED_ROLES_SETTING.getKey(), "superuser", "remote_monitoring_agent", "remote_monitoring_collector")
             .put(OPERATOR_PRIVILEGES_ENABLED.getKey(), true)
+            .put(NATIVE_USERS_SETTING.getKey(), false)
+            .put(NATIVE_ROLES_SETTING.getKey(), false)
             .build();
     }
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(INCLUDED_RESERVED_ROLES_SETTING);
+        return List.of(INCLUDED_RESERVED_ROLES_SETTING, NATIVE_USERS_SETTING, NATIVE_ROLES_SETTING);
     }
 
     @Override
