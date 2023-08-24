@@ -1,0 +1,110 @@
+setup:
+  - skip:
+      features: headers
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # run as x_pack_rest_user, i.e. the test setup superuser
+      indices.create:
+        index: source-index
+        body:
+          mappings:
+            properties:
+              numeric_field: { type: "long" }
+              keyword_field: { type: "keyword" }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # run as x_pack_rest_user, i.e. the test setup superuser
+      index:
+        index: source-index
+        body: { numeric_field: 1.0, keyword_field: "class_a" }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # run as x_pack_rest_user, i.e. the test setup superuser
+      index:
+        index: source-index
+        body: { numeric_field: 2.0, keyword_field: "class_b" }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # run as x_pack_rest_user, i.e. the test setup superuser
+      indices.refresh:
+        index: source-index
+
+---
+"Test transform responses as operator with no filtering":
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      transform.put_transform:
+        transform_id: "operator-classification"
+        body: >
+          {
+            "source": {
+              "index": "source-index"
+            },
+            "dest": {
+              "index": "dest-index"
+            },
+            "pivot": {
+              "group_by": { "user": { "terms": { "field": "keyword_field" } } },
+              "aggs": {
+                "avg_stars": { "avg": { "field": "numeric_field" } },
+                "count": { "value_count": { "field": "keyword_field" } }
+              }
+            }
+          }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      transform.start_transform:
+        transform_id: "operator-classification"
+  - match: { acknowledged: true }
+
+  - do:
+      headers:
+        Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
+      transform.get_transform_stats:
+        transform_id: "operator-classification"
+  - match: { count: 1 }
+  - match: { transforms.0.id: "operator-classification" }
+  - match: { transforms.0.state: "/started|indexing|stopping|stopped/" }
+  # We don't know what the node ID will be, but it will be 22 characters and "serverless" is shorter
+  - length: { transforms.0.node.id: 22 }
+
+---
+"Test transform responses as non operator with filtering":
+  - do:
+      transform.put_transform:
+        transform_id: "non-operator-classification"
+        body: >
+          {
+            "source": {
+              "index": "source-index"
+            },
+            "dest": {
+              "index": "dest-index"
+            },
+            "pivot": {
+              "group_by": { "user": { "terms": { "field": "keyword_field" } } },
+              "aggs": {
+                "avg_stars": { "avg": { "field": "numeric_field" } },
+                "count": { "value_count": { "field": "keyword_field" } }
+              }
+            }
+          }
+
+  - do:
+      transform.start_transform:
+        transform_id: "non-operator-classification"
+  - match: { acknowledged: true }
+
+  - do:
+      transform.get_transform_stats:
+        transform_id: "non-operator-classification"
+  - match: { count: 1 }
+  - match: { transforms.0.id: "non-operator-classification" }
+  - match: { transforms.0.state: "/started|indexing|stopping|stopped/" }
+  - match: { transforms.0.node.id: serverless }

@@ -35,42 +35,48 @@ import static org.hamcrest.Matchers.is;
 
 public class GetTransformStatsResponseFilterTests extends ESTestCase {
 
+    public void testEmptyPage() {
+        var filter = new GetTransformStatsResponseFilter(new ThreadContext(Settings.EMPTY));
+        var response = new GetTransformStatsAction.Response(List.of());
+        assertThat(filter.filterResponse(response), is(equalTo(response)));
+    }
+
+    public void testTransformStatsUnchangedWhenNodeInfoIsNull() {
+        var filter = new GetTransformStatsResponseFilter(new ThreadContext(Settings.EMPTY));
+        var response = new GetTransformStatsAction.Response(List.of(createTransformStats(null)));
+        assertThat(filter.filterResponse(response), is(equalTo(response)));
+    }
+
     public void testNodeInfoIsRemovedFromTransformStats() {
         var filter = new GetTransformStatsResponseFilter(new ThreadContext(Settings.EMPTY));
         var response = new GetTransformStatsAction.Response(
             List.of(
-                new TransformStats(
-                    "my-id",
-                    TransformStats.State.STARTED,
-                    "some-reason",
+                createTransformStats(
                     new NodeAttributes(
                         "node-id",
                         "node-name",
                         "node-ephemeral-id",
                         "192.0.0.1",
-                        Map.of("attr-1", "attr-1-value", "attr-2", "attr-2-value")
-                    ),
-                    new TransformIndexerStats(),
-                    TransformCheckpointingInfo.EMPTY,
-                    TransformHealth.GREEN
+                        Map.of("attr-1", "attr-1-value", "attr-2", "attr-2-value", "attr-3", "attr-3-value")
+                    )
                 )
-            ),
-            1
+            )
         );
         var expectedResponse = new GetTransformStatsAction.Response(
-            List.of(
-                new TransformStats(
-                    "my-id",
-                    TransformStats.State.STARTED,
-                    "some-reason",
-                    new NodeAttributes("serverless", "serverless", "serverless", "0.0.0.0", Map.of()),
-                    new TransformIndexerStats(),
-                    TransformCheckpointingInfo.EMPTY,
-                    TransformHealth.GREEN
-                )
-            ),
-            1
+            List.of(createTransformStats(new NodeAttributes("serverless", "serverless", "serverless", "0.0.0.0", Map.of())))
         );
         assertThat(filter.filterResponse(response), is(equalTo(expectedResponse)));
+    }
+
+    private static TransformStats createTransformStats(NodeAttributes nodeAttributes) {
+        return new TransformStats(
+            "my-id",
+            TransformStats.State.STARTED,
+            "some-reason",
+            nodeAttributes,
+            new TransformIndexerStats(),
+            TransformCheckpointingInfo.EMPTY,
+            TransformHealth.GREEN
+        );
     }
 }

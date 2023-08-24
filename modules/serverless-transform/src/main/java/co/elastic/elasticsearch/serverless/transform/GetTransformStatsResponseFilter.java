@@ -44,8 +44,7 @@ public class GetTransformStatsResponseFilter extends ApiFilteringActionFilter<Ge
     }
 
     /**
-     * This method replaces the "node" sub-object from each set of stats in the response that has one
-     * with the virtual "serverless" node.
+     * This method replaces the "node" sub-object from each set of stats in the response that has one with the virtual "serverless" node.
      */
     @Override
     protected GetTransformStatsAction.Response filterResponse(GetTransformStatsAction.Response response) {
@@ -63,7 +62,7 @@ public class GetTransformStatsResponseFilter extends ApiFilteringActionFilter<Ge
         }
     }
 
-    static TransformStats replaceNodeField(TransformStats stats) {
+    private static TransformStats replaceNodeField(TransformStats stats) {
         if (stats.getNode() == null) {
             return stats;
         } else {
