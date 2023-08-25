@@ -51,7 +51,7 @@ UPDATE_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
         \"name\": \"$DEPLOYMENT_NAME\",
         \"overrides\": {
             \"elasticsearch\": {
-                \"docker_image\": \"$INTEG_TEST_IMAGE\"
+                \"docker_image\": \"$IMAGE_OVERRIDE\"
             }
         }
      }")

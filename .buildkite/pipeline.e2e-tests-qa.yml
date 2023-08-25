@@ -1,35 +1,18 @@
 agents:
-  provider: "gcp"
-  machineType: "n1-standard-16"
-  image: family/elasticsearch-ubuntu-2022
+  provider: k8s
+  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+  memory: "4G"
 
 env:
   BUILDKITE_DIR: ".buildkite"
+  DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-git-${BUILDKITE_COMMIT:0:12}}"
+  VAULT_PATH_API_KEY: "secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-qa-creds"
+  ENV_URL: "https://global.qa.cld.elstc.co"
+  AWS_REGION: "aws-eu-west-1"
+  TEST_ENV: "qa"
+  IMAGE_OVERRIDE: "${IMAGE_OVERRIDE-docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${DEPLOY_ID}}"
 
 steps:
-  - label: ":pipeline::arrow_up: Trigger deploy project in QA"
-    key: deploy-ess
+  - label: ":pipeline::arrow_up: E2E tests in ${TEST_ENV}"
     command:
-        "buildkite-agent pipeline upload .buildkite/pipeline.deploy-dev.yml"
-    depends_on:
-      - step: create-k8s-cluster
-
-  - label: ":java: Run serverless e2e tests"
-    key: run-ess-e2e-tests
-    command:
-        "vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem; \
-         export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url); \
-         export ESS_PROJECT_ID=$(buildkite-agent meta-data get ess-project-id); \
-         export ESS_API_KEY_ENCODED=$(buildkite-agent meta-data get ess-api-key-encrypted | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem); \
-        .buildkite/scripts/run-gradle.sh :qa:e2e-test:javaRestTest"
-    depends_on:
-      - step: deploy-ess
-
-  - label: ":pipeline::arrow_up: Trigger undeploy from QA"
-    key: undeploy-ess
-    command:
-      "buildkite-agent pipeline upload .buildkite/pipeline.undeploy-dev.yml"
-    depends_on:
-      - step: run-ess-e2e-tests
-    allow_dependency_failure: true
-
+        "buildkite-agent pipeline upload .buildkite/pipeline.e2e-tests-managed.yml"

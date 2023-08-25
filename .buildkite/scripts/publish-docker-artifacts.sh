@@ -8,17 +8,25 @@ DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
 
 # by default we build and publish both x86_64 and aarch64 docker images
 if [[ -z "${DEPLOY_ARCH}" ]]; then
-    echo "--- Build serverless docker images"
-    source $scripts_dir/run-gradle.sh buildDockerImage buildAarch64DockerImage
-    echo "--- Tag and push docker images and manifest"
-    X86_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-x86_64
-    ARM_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-aarch64
-    docker tag elasticsearch-serverless:x86_64 ${X86_IMAGE_TAG}
-    docker tag elasticsearch-serverless:aarch64 ${ARM_IMAGE_TAG}
-    docker_login
-    docker push ${X86_IMAGE_TAG}
-    docker push ${ARM_IMAGE_TAG}
-    push_docker_manifest ${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT} ${X86_IMAGE_TAG} ${ARM_IMAGE_TAG}
+    IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}
+    echo "--- Check if docker image already exists"
+    DOCKER_IMAGE_EXISTS=0
+    docker manifest inspect $IMAGE_TAG || DOCKER_IMAGE_EXISTS=$?
+    if [ $DOCKER_IMAGE_EXISTS -eq 1 ]; then
+        echo "--- Build serverless docker images"
+        source $scripts_dir/run-gradle.sh buildDockerImage buildAarch64DockerImage
+        echo "--- Tag and push docker images and manifest"
+        X86_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-x86_64
+        ARM_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-aarch64
+        docker tag elasticsearch-serverless:x86_64 ${X86_IMAGE_TAG}
+        docker tag elasticsearch-serverless:aarch64 ${ARM_IMAGE_TAG}
+        docker_login
+        docker push ${X86_IMAGE_TAG}
+        docker push ${ARM_IMAGE_TAG}
+        push_docker_manifest ${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT} ${X86_IMAGE_TAG} ${ARM_IMAGE_TAG}
+    else
+        echo "--- Docker image $IMAGE_TAG already pubslished. Not rebuilding..."
+    fi
 # if specified we only build x86_64 to save time in the pipeline
 elif [ "$DEPLOY_ARCH" == "x86_64" ]; then
     ARCH_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-x86_64

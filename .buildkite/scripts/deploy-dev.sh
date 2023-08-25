@@ -31,7 +31,7 @@ CREATE_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
         \"region_id\": \"local-k8s\",
         \"overrides\": {
             \"elasticsearch\": {
-                \"docker_image\": \"$INTEG_TEST_IMAGE\"
+                \"docker_image\": \"$IMAGE_OVERRIDE\"
             }
         }
      }")
