@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.api.validation;
 
+import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -42,15 +43,18 @@ public class PublicSettingsValidator {
     /**
      * Validates if a public user (no operator privileges) has settings with ServerlessPublic property only
      * It does not perform this validation if an operator privileges are set
+     *
      * @param settings - settings from the request
      * @throws IllegalArgumentException with a message indicating what settings are not allowed
      */
     public void validateSettings(Settings settings) {
         if (isOperator() == false) {
-            List<String> list = Optional.ofNullable(settings).orElse(Settings.EMPTY).keySet().stream().filter(settingName -> {
-                assert indexScopedSettings.get(settingName) != null : settingName + "is null";
-                return indexScopedSettings.get(settingName).isServerlessPublic() == false;
-            }).toList();
+            Settings normalised = normaliseSettings(settings);
+            List<String> list = normalised.keySet()
+                .stream()
+                .filter(settingName -> indexScopedSettings.get(settingName) != null) // unknown settings will be validated later
+                .filter(settingName -> indexScopedSettings.get(settingName).isServerlessPublic() == false)
+                .toList();
             if (false == list.isEmpty()) {
                 throw new IllegalArgumentException(
                     "Settings ["
@@ -61,6 +65,11 @@ public class PublicSettingsValidator {
             }
         }
 
+    }
+
+    private static Settings normaliseSettings(Settings settings) {
+        Settings toValidate = Optional.ofNullable(settings).orElse(Settings.EMPTY);
+        return Settings.builder().put(toValidate).normalizePrefix(IndexMetadata.INDEX_SETTING_PREFIX).build();
     }
 
     private boolean isOperator() {

@@ -22,6 +22,7 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 
+import java.util.List;
 import java.util.Set;
 
 public class CommonTestPublicSettings {
@@ -48,4 +49,17 @@ public class CommonTestPublicSettings {
         Set.of(PUBLIC_SETTING, NON_PUBLIC_SETTING)
     );
 
+    public static final Setting.AffixSetting<List<String>> AFFIX_PUBLIC_SETTING = Setting.prefixKeySetting(
+        "index.public.affix.",
+        key -> Setting.stringListSetting(key, Setting.Property.Dynamic, Setting.Property.IndexScope, Setting.Property.ServerlessPublic)
+    );
+
+    public static final Setting.AffixSetting<List<String>> AFFIX_PRIVATE_SETTING = Setting.prefixKeySetting(
+        "index.private.affix.",
+        key -> Setting.stringListSetting(key, Setting.Property.Dynamic, Setting.Property.IndexScope)
+    );
+    public static IndexScopedSettings AFFIX_SETTINGS = new IndexScopedSettings(
+        Settings.EMPTY,
+        Set.of(AFFIX_PRIVATE_SETTING, AFFIX_PUBLIC_SETTING)
+    );
 }

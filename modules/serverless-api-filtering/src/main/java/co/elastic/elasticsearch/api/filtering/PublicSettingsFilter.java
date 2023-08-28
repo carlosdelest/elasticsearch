@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.api.filtering;
 
+import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Settings;
 
@@ -40,10 +41,10 @@ public class PublicSettingsFilter {
      * @return settings after filtering
      */
     public Settings filter(Settings settings) {
-        return settings.filter(key -> {
+        var normalized = Settings.builder().put(settings).normalizePrefix(IndexMetadata.INDEX_SETTING_PREFIX).build();
+        return normalized.filter(key -> {
             var setting = indexScopedSettings.get(key);
             return setting != null && setting.isServerlessPublic();
         });
     }
-
 }

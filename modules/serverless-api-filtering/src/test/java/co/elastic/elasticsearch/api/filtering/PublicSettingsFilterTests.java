@@ -44,4 +44,19 @@ public class PublicSettingsFilterTests extends ESTestCase {
             assertThat(publicSettingsValidator.filter(settings), equalTo(Settings.builder().put(PUBLIC_SETTING.getKey(), 0).build()));
         }
     }
+
+    // in some contexts i.e. index templates, settings in a request might be missing a prefix (index.)
+    // this is fixed in a transport action by SettingsBuilder#normalizePrefix
+    public void testPublicSettingFilteringForNonNormalized() {
+        try (ThreadContext.StoredContext ctx = THREAD_CONTEXT.stashContext()) {
+            PublicSettingsFilter publicSettingsValidator = new PublicSettingsFilter(MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS);
+
+            Settings settings = Settings.builder().put("internal_setting", 0).build();
+            assertThat(publicSettingsValidator.filter(settings), equalTo(Settings.EMPTY));
+
+            settings = Settings.builder().put("public_setting", 0).build();
+            assertThat(publicSettingsValidator.filter(settings), equalTo(Settings.builder().put("index.public_setting", 0).build()));
+        }
+    }
+
 }
