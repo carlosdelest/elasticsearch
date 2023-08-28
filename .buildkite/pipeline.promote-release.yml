@@ -1,0 +1,8 @@
+steps:
+  - label: ":argo: Trigger serverless Elasticsearch release"
+    trigger: elasticsearch-serverless-intake
+    build:
+      env:
+        GPCTL_CONFIG: https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/config.yaml
+        GITOPS_ENV: qa
+

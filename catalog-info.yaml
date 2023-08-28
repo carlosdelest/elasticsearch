@@ -375,3 +375,34 @@ spec:
         Daily:
           branch: main
           cronline: "0 14 * * *"
+
+# yaml-language-server: $schema=https://gist.githubusercontent.com/elasticmachine/988b80dae436cafea07d9a4a460a011d/raw/e57ee3bed7a6f73077a3f55a38e76e40ec87a7cf/rre.schema.json
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  description: Elasticsearch serverless release promotion
+  name: buildkite-pipeline-elasticsearch-serverless-promote-release
+spec:
+  type: buildkite-pipeline
+  owner: group:elasticsearch-team
+  system: buildkite
+  implementation:
+    apiVersion: buildkite.elastic.dev/v1
+    kind: Pipeline
+    metadata:
+      name: elasticsearch-serverless / promote release
+      description: ':ship: Promote serverless release'
+    spec:
+      repository: elastic/elasticsearch-serverless
+      pipeline_file: .buildkite/pipeline.promote-release.yml
+      provider_settings:
+        trigger_mode: none
+      teams:
+        elasticsearch-team: {}
+        ml-core: {}
+        everyone:
+          access_level: READ_ONLY
+      schedules:
+        Daily:
+          branch: main
+          cronline: "0 18 * * *"

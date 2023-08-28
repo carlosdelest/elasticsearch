@@ -3,6 +3,10 @@ agents:
   machineType: "n1-standard-16"
   image: family/elasticsearch-ubuntu-2022
 
+env:
+  GITOPS_ENV: "${GITOPS_ENV:-dev}"
+  GPCTL_CONFIG: "${GPCTL_CONFIG:-https://raw.githubusercontent.com/elastic/elasticsearch-serverless/main/.buildkite/gpctl/dev-config.yaml}"
+
 steps:
   - label: ":git: Validate elasticsearch submodule"
     branches: main
@@ -31,12 +35,12 @@ steps:
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
   - wait
 
-  - label: ":argo: Update Image using gpctl with centralized config"
+  - label: ":argo: Promote build using gpctl"
     trigger: gpctl-promote
     branches: main
     build:
       env:
-        REMOTE_SERVICE_CONFIG: https://raw.githubusercontent.com/elastic/elasticsearch-serverless/main/.buildkite/gpctl/dev-config.yaml
+        REMOTE_SERVICE_CONFIG: $GPCTL_CONFIG
         SERVICE_COMMIT_HASH: $BUILDKITE_COMMIT
 
   - label: ":git: Push promoted build tags"
