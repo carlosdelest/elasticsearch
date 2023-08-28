@@ -18,28 +18,13 @@
 package co.elastic.elasticsearch.serverless.constants;
 
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.plugins.internal.SettingsExtension;
 
-/**
- * Settings that may be read across multiple serverless modules.
- */
-public class ServerlessSharedSettings {
+import java.util.List;
 
-    public static final Setting<TimeValue> BOOST_WINDOW_SETTING = Setting.timeSetting(
-        "serverless.search.boost_window",
-        TimeValue.timeValueDays(7),
-        TimeValue.timeValueDays(1),
-        TimeValue.timeValueDays(365),
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
-    );
-    public static final Setting<Integer> SEARCH_POWER_SETTING = Setting.intSetting(
-        "serverless.search.search_power",
-        100,
-        0,
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
-    );
-
-    private ServerlessSharedSettings() {}
+public class ServerlessSharedSettingsExtension implements SettingsExtension {
+    @Override
+    public List<Setting<?>> getSettings() {
+        return List.of(ServerlessSharedSettings.BOOST_WINDOW_SETTING, ServerlessSharedSettings.SEARCH_POWER_SETTING);
+    }
 }

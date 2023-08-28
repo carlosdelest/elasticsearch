@@ -1,3 +1,4 @@
+
 /*
  * ELASTICSEARCH CONFIDENTIAL
  * __________________
@@ -19,4 +20,8 @@ module org.elasticsearch.serverless.constants {
     requires org.elasticsearch.base;
 
     exports co.elastic.elasticsearch.serverless.constants;
+
+    provides org.elasticsearch.plugins.internal.SettingsExtension
+        with
+            co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettingsExtension;
 }
