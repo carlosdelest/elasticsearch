@@ -6,7 +6,7 @@ agents:
 env:
   BUILDKITE_DIR: ".buildkite"
   IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
-  DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-${IMAGE_+TAG}}"
+  DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-${IMAGE_TAG}}"
   VAULT_PATH_API_KEY: "secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-qa-creds"
   ENV_URL: "https://global.qa.cld.elstc.co"
   AWS_REGION: "aws-eu-west-1"
