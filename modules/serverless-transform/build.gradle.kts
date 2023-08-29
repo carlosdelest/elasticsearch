@@ -7,7 +7,7 @@ esplugin {
     name = "serverless-transform"
     description = "Serverless Transform module for Elasticsearch"
     classname = "co.elastic.elasticsearch.serverless.transform.ServerlessTransformPlugin"
-    extendedPlugins = listOf("stateless")
+    extendedPlugins = listOf("x-pack-core")
 }
 
 configurations {
@@ -19,12 +19,11 @@ configurations {
 }
 
 dependencies {
-    compileOnly("org.elasticsearch:server")
     compileOnly(xpackModule("core"))
-    compileOnly(project(":modules:stateless"))
 
     implementation(xpackModule("transform"))
-    testImplementation(xpackModule("core"))
+
+    testImplementation(testArtifact(xpackModule("core")))
 
     yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
     yamlRestTestImplementation(testArtifact(xpackModule("core")))

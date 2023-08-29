@@ -38,7 +38,7 @@ setup:
       headers:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
       transform.put_transform:
-        transform_id: "operator-classification"
+        transform_id: "operator-transform"
         body: >
           {
             "source": {
@@ -60,16 +60,16 @@ setup:
       headers:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
       transform.start_transform:
-        transform_id: "operator-classification"
+        transform_id: "operator-transform"
   - match: { acknowledged: true }
 
   - do:
       headers:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
       transform.get_transform_stats:
-        transform_id: "operator-classification"
+        transform_id: "operator-transform"
   - match: { count: 1 }
-  - match: { transforms.0.id: "operator-classification" }
+  - match: { transforms.0.id: "operator-transform" }
   - match: { transforms.0.state: "/started|indexing|stopping|stopped/" }
   # We don't know what the node ID will be, but it will be 22 characters and "serverless" is shorter
   - length: { transforms.0.node.id: 22 }
@@ -78,7 +78,7 @@ setup:
 "Test transform responses as non operator with filtering":
   - do:
       transform.put_transform:
-        transform_id: "non-operator-classification"
+        transform_id: "non-operator-transform"
         body: >
           {
             "source": {
@@ -98,13 +98,13 @@ setup:
 
   - do:
       transform.start_transform:
-        transform_id: "non-operator-classification"
+        transform_id: "non-operator-transform"
   - match: { acknowledged: true }
 
   - do:
       transform.get_transform_stats:
-        transform_id: "non-operator-classification"
+        transform_id: "non-operator-transform"
   - match: { count: 1 }
-  - match: { transforms.0.id: "non-operator-classification" }
+  - match: { transforms.0.id: "non-operator-transform" }
   - match: { transforms.0.state: "/started|indexing|stopping|stopped/" }
   - match: { transforms.0.node.id: serverless }
