@@ -98,7 +98,11 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         String projectId = MeteringPlugin.PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
-        ingestMetricsCollector = new IngestMetricsCollector(nodeEnvironment.nodeId());
+        ingestMetricsCollector = new IngestMetricsCollector(
+            nodeEnvironment.nodeId(),
+            clusterService.getClusterSettings(),
+            environment.settings()
+        );
 
         List<MetricsCollector> builtInMetrics = new ArrayList<>();
         List<DiscoveryNodeRole> discoveryNodeRoles = NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings());
@@ -106,7 +110,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             builtInMetrics.add(ingestMetricsCollector);
         }
         if (discoveryNodeRoles.contains(DiscoveryNodeRole.SEARCH_ROLE)) {
-            builtInMetrics.add(new IndexSizeMetricsCollector(indicesService));
+            builtInMetrics.add(new IndexSizeMetricsCollector(indicesService, clusterService.getClusterSettings(), environment.settings()));
         }
 
         Stream<MetricsCollector> sources = Stream.concat(builtInMetrics.stream(), metricsCollectors.stream());
@@ -121,7 +125,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             nodeEnvironment.nodeId(),
             environment.settings(),
             sources,
-            reporter != null ? reporter::sendRecords : r -> {},
+            reporter != null ? reporter::sendRecords : records -> {},
             threadPool
         );
 

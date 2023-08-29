@@ -27,6 +27,8 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.store.Directory;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexService;
@@ -43,7 +45,9 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
@@ -52,10 +56,19 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class IndexSizeMetricsCollectorTests extends ESTestCase {
+    protected final ClusterSettings clusterSettings = new ClusterSettings(
+        Settings.builder().put(SEARCH_POWER_SETTING.getKey(), 100).build(),
+        Set.of(SEARCH_POWER_SETTING)
+    );
+
     public void testGetMetrics() throws IOException {
         String indexName = "myIndex";
         try (TestIndex testIndex = setUpIndicesService(indexName, 1, 1, 1)) {
-            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(testIndex.indicesService);
+            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
+                testIndex.indicesService,
+                clusterSettings,
+                Settings.EMPTY
+            );
             Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
 
             assertThat(metrics.size(), is(1));
@@ -72,7 +85,11 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
     public void testMultipleShards() throws IOException {
         String indexName = "myMultiShardIndex";
         try (TestIndex testIndex = setUpIndicesService(indexName, 10, 2, 3)) {
-            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(testIndex.indicesService);
+            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
+                testIndex.indicesService,
+                clusterSettings,
+                Settings.EMPTY
+            );
             Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
 
             assertThat(metrics.size(), is(10));
@@ -96,7 +113,11 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             for (var file : failed.listAll()) {
                 failed.deleteFile(file);
             }
-            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(testIndex.indicesService);
+            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
+                testIndex.indicesService,
+                clusterSettings,
+                Settings.EMPTY
+            );
             Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
 
             assertThat(metrics.size(), is(10));
@@ -139,7 +160,11 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
 
         when(shard.getEngineOrNull()).thenReturn(null);
 
-        IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(indicesService);
+        IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
+            indicesService,
+            clusterSettings,
+            Settings.EMPTY
+        );
         Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
 
         assertThat(metrics.size(), is(0));

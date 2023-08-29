@@ -22,6 +22,8 @@ import co.elastic.elasticsearch.metrics.MetricsCollector;
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.util.StringHelper;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.shard.IndexShard;
@@ -36,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static org.elasticsearch.core.Strings.format;
 
 /**
@@ -51,14 +54,20 @@ class IndexSizeMetricsCollector implements MetricsCollector {
     private static final String PARTIAL = "partial";
     private static final String INDEX = "index";
     private static final String SHARD = "shard";
+    private static final String SEARCH_POWER = "search_power";
     final IndicesService indicesService;
+    private volatile int searchPowerSetting;
 
-    IndexSizeMetricsCollector(IndicesService indicesService) {
+    IndexSizeMetricsCollector(IndicesService indicesService, ClusterSettings clusterSettings, Settings settings) {
         this.indicesService = indicesService;
+        this.searchPowerSetting = SEARCH_POWER_SETTING.get(settings);
+        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_SETTING, sp -> this.searchPowerSetting = sp);
     }
 
     @Override
     public Collection<MetricValue> getMetrics() {
+        Map<String, Object> settings = Map.of(SEARCH_POWER, searchPowerSetting);
+
         List<MetricValue> metrics = new ArrayList<>();
         for (final IndexService indexService : indicesService) {
             String indexName = indexService.index().getName();
@@ -100,7 +109,7 @@ class IndexSizeMetricsCollector implements MetricsCollector {
                 }
                 String metricId = format("shard-size:%s:%s", indexName, shardId);
 
-                metrics.add(new MetricValue(MeasurementType.SAMPLED, metricId, METRIC_TYPE, metadata, size));
+                metrics.add(new MetricValue(MeasurementType.SAMPLED, metricId, METRIC_TYPE, metadata, settings, size));
             }
         }
         return metrics;

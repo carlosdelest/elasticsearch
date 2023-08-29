@@ -131,8 +131,8 @@ class ReportGatherer {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
 
         List<UsageRecord> records = service.getMetrics().map(v -> switch (v.measurementType()) {
-            case COUNTER -> getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), now);
-            case SAMPLED -> getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), now);
+            case COUNTER -> getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), v.settings(), now);
+            case SAMPLED -> getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), now);
         }).toList();
 
         reporter.accept(records);
@@ -159,22 +159,36 @@ class ReportGatherer {
         return hour.plus(reportPeriod.multipliedBy(times));
     }
 
-    private UsageRecord getRecordForCount(String metric, String type, long count, Map<String, String> metadata, Instant now) {
+    private UsageRecord getRecordForCount(
+        String metric,
+        String type,
+        long count,
+        Map<String, String> metadata,
+        Map<String, Object> settings,
+        Instant now
+    ) {
         return new UsageRecord(
             generateId(metric, now),
             now,
-            new UsageMetrics(type, null, count, reportPeriod, null, null),
+            new UsageMetrics(type, null, count, reportPeriod, null, settings, null),
             new UsageSource(service.nodeId(), service.projectId(), metadata)
         );
     }
 
-    private UsageRecord getRecordForSample(String metric, String type, long value, Map<String, String> metadata, Instant now) {
+    private UsageRecord getRecordForSample(
+        String metric,
+        String type,
+        long value,
+        Map<String, String> metadata,
+        Map<String, Object> settings,
+        Instant now
+    ) {
         Instant timestamp = calculateSampleTimestamp(now, reportPeriodDuration);
 
         return new UsageRecord(
             generateId(metric, timestamp),
             timestamp,
-            new UsageMetrics(type, null, value, reportPeriod, null, null),
+            new UsageMetrics(type, null, value, reportPeriod, null, settings, null),
             new UsageSource(service.nodeId(), service.projectId(), metadata)
         );
     }

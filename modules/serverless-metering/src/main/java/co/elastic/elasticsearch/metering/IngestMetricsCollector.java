@@ -21,6 +21,8 @@ import co.elastic.elasticsearch.metrics.MetricsCollector;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
 
@@ -32,6 +34,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.BOOST_WINDOW_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 
 /**
  * Responsible for the ingest document size collection.
@@ -57,19 +62,28 @@ import java.util.stream.Collectors;
  */
 public class IngestMetricsCollector implements MetricsCollector {
     public static final String METRIC_TYPE = "es_raw_data";
+    private static final String SEARCH_POWER = "search_power";
+    private static final String BOOST_WINDOW = "boost_window";
     private final Logger logger = LogManager.getLogger(IngestMetricsCollector.class);
     private Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
     private final String nodeId;
+    private volatile int searchPowerSetting;
+    private volatile long boostWindowSetting;
 
-    public IngestMetricsCollector(String nodeId) {
+    public IngestMetricsCollector(String nodeId, ClusterSettings clusterSettings, Settings settings) {
         this.nodeId = nodeId;
+        this.searchPowerSetting = SEARCH_POWER_SETTING.get(settings);
+        this.boostWindowSetting = BOOST_WINDOW_SETTING.get(settings).getSeconds();
+        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_SETTING, sp -> this.searchPowerSetting = sp);
+        clusterSettings.addSettingsUpdateConsumer(BOOST_WINDOW_SETTING, bw -> this.boostWindowSetting = bw.getSeconds());
     }
 
     @Override
     public Collection<MetricValue> getMetrics() {
+        Map<String, Object> settings = Map.of(SEARCH_POWER, searchPowerSetting, BOOST_WINDOW, boostWindowSetting);
         Map<String, AtomicLong> oldMetrics;
         Map<String, AtomicLong> emptyMetrics = new ConcurrentHashMap<>();
         try (ReleasableLock ignored = exclusiveLock.acquire()) {
@@ -78,7 +92,7 @@ public class IngestMetricsCollector implements MetricsCollector {
         }
         List<MetricValue> toReturn = oldMetrics.entrySet()
             .stream()
-            .map(e -> metricValue(e.getKey(), e.getValue().longValue()))
+            .map(e -> metricValue(e.getKey(), e.getValue().longValue(), settings))
             .collect(Collectors.toList());
 
         logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
@@ -95,7 +109,14 @@ public class IngestMetricsCollector implements MetricsCollector {
         }
     }
 
-    private MetricValue metricValue(String index, long value) {
-        return new MetricValue(MeasurementType.COUNTER, "ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, Map.of("index", index), value);
+    private MetricValue metricValue(String index, long value, Map<String, Object> settings) {
+        return new MetricValue(
+            MeasurementType.COUNTER,
+            "ingested-doc:" + index + ":" + nodeId,
+            METRIC_TYPE,
+            Map.of("index", index),
+            settings,
+            value
+        );
     }
 }

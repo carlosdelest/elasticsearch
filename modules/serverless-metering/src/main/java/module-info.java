@@ -25,4 +25,5 @@ module org.elasticsearch.metering {
     requires org.elasticsearch.metrics;
     requires java.net.http;
     requires org.apache.lucene.core;
+    requires org.elasticsearch.serverless.constants;
 }

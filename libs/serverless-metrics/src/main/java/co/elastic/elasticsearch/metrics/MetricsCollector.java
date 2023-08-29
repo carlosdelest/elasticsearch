@@ -39,9 +39,17 @@ public interface MetricsCollector {
      * @param id              An id for the metric this value is for
      * @param type            The type to use for the record
      * @param metadata        Associated metadata for the metric
+     * @param settings        Additional values associated with the metric
      * @param value           The current metric value
      */
-    record MetricValue(MeasurementType measurementType, String id, String type, Map<String, String> metadata, long value) {}
+    record MetricValue(
+        MeasurementType measurementType,
+        String id,
+        String type,
+        Map<String, String> metadata,
+        Map<String, Object> settings,
+        long value
+    ) {}
 
     /**
      * Returns the current value of the metrics collected by this class.

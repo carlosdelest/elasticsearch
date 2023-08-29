@@ -39,6 +39,7 @@ public record UsageMetrics(
     long quantity,
     @Nullable TimeValue period,
     @Nullable String cause,
+    @Nullable Map<String, Object> es,
     @Nullable Map<String, String> metadata
 ) implements ToXContentObject {
 
@@ -48,6 +49,8 @@ public record UsageMetrics(
     private static final String PERIOD = "period_seconds";
     private static final String CAUSE = "cause";
     private static final String METADATA = "metadata";
+
+    private static final String ES = "es";
     private static final ConstructingObjectParser<UsageMetrics, Void> PARSER;
     static {
         PARSER = new ConstructingObjectParser<>("usage_metrics", true, a -> {
@@ -58,14 +61,17 @@ public record UsageMetrics(
             TimeValue period = periodSeconds == Long.MIN_VALUE ? null : TimeValue.timeValueSeconds(periodSeconds);
             String cause = (String) a[4];
             @SuppressWarnings("unchecked")
-            Map<String, String> metadata = (Map<String, String>) a[5];
-            return new UsageMetrics(type, subtype, quantity, period, cause, metadata);
+            Map<String, Object> es = (Map<String, Object>) a[5];
+            @SuppressWarnings("unchecked")
+            Map<String, String> metadata = (Map<String, String>) a[6];
+            return new UsageMetrics(type, subtype, quantity, period, cause, es, metadata);
         });
         PARSER.declareString(constructorArg(), new ParseField(TYPE));
         PARSER.declareString(optionalConstructorArg(), new ParseField(SUBTYPE));
         PARSER.declareLong(constructorArg(), new ParseField(QUANTITY));
         PARSER.declareLong(optionalConstructorArg(), new ParseField(PERIOD));
         PARSER.declareString(optionalConstructorArg(), new ParseField(CAUSE));
+        PARSER.declareObject(optionalConstructorArg(), (parser, s) -> parser.map(), new ParseField(ES));
         PARSER.declareObject(optionalConstructorArg(), (parser, s) -> parser.map(), new ParseField(METADATA));
     }
 
@@ -86,6 +92,9 @@ public record UsageMetrics(
         }
         if (cause != null) {
             builder.field(CAUSE, cause);
+        }
+        if (es != null) {
+            builder.startObject(ES).mapContents(es).endObject();
         }
         if (metadata != null) {
             builder.startObject(METADATA).mapContents(metadata).endObject();

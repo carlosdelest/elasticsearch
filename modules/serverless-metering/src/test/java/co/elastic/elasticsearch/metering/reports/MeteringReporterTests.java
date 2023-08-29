@@ -119,7 +119,7 @@ public class MeteringReporterTests extends ESTestCase {
         UsageRecord record = new UsageRecord(
             "id1",
             Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null),
+            new UsageMetrics("type", null, 1, null, null, null, null),
             new UsageSource("id", "instanceId", null)
         );
 
@@ -143,7 +143,7 @@ public class MeteringReporterTests extends ESTestCase {
                 i -> new UsageRecord(
                     "id" + i,
                     Instant.now(),
-                    new UsageMetrics("type", null, 1, null, null, null),
+                    new UsageMetrics("type", null, 1, null, null, null, null),
                     new UsageSource("id", "instanceId", null)
                 )
             )
@@ -176,7 +176,7 @@ public class MeteringReporterTests extends ESTestCase {
         UsageRecord record = new UsageRecord(
             "id1",
             Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null),
+            new UsageMetrics("type", null, 1, null, null, null, null),
             new UsageSource("id", "instanceId", null)
         );
 
@@ -195,7 +195,7 @@ public class MeteringReporterTests extends ESTestCase {
         UsageRecord record = new UsageRecord(
             "id1",
             Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null),
+            new UsageMetrics("type", null, 1, null, null, null, null),
             new UsageSource("id", "instanceId", null)
         );
 
