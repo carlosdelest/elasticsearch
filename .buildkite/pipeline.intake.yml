@@ -12,7 +12,7 @@ steps:
     branches: main
     command: ".buildkite/scripts/validate-submodule.sh"
 
-  - label: ":java: Run serverless Elasticsearch tests"
+  - label: ":java: Run serverless Elasticsearch functional tests"
     command: ".buildkite/scripts/run-gradle.sh check"
 
   - label: ":s3: Run AWS S3 third party tests"
@@ -20,7 +20,6 @@ steps:
 
   - label: ":docker: Publish docker images"
     key: docker-publish
-    branches: main
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
 
@@ -33,6 +32,15 @@ steps:
         NAMESPACE: elasticsearch-ci
         IMAGE_NAME: elasticsearch-serverless
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
+
+  - label: ":k8s: :java: Run Elasticsearch E2E tests"
+    trigger: elasticsearch-serverless-e2e-tests-${GITOPS_ENV}
+    depends_on: docker-publish
+    build:
+      message: "${BUILDKITE_MESSAGE}"
+      commit: "${BUILDKITE_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
+
   - wait
 
   - label: ":argo: Promote build using gpctl"

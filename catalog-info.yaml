@@ -219,7 +219,7 @@ spec:
     apiVersion: buildkite.elastic.dev/v1
     kind: Pipeline
     metadata:
-      name: elasticsearch-serverless / udpate dev
+      name: elasticsearch-serverless / update dev
       description: ':k8s: Update Elasticsearch serverless dev deployment'
     spec:
       repository: elastic/elasticsearch-serverless
