@@ -5,7 +5,8 @@ agents:
 
 env:
   BUILDKITE_DIR: ".buildkite"
-  DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-git-${BUILDKITE_COMMIT:0:12}}"
+  IMAGE_TAG: "${IMAGE_TAG:-git-${BUILDKITE_COMMIT:0:12}}"
+  DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-${IMAGE_TAG}}"
   VAULT_PATH_API_KEY: "${VAULT_PATH_API_KEY}"
   ENV_URL: "${ENV_URL}"
   AWS_REGION: "${AWS_REGION}"
@@ -22,7 +23,7 @@ steps:
       commit: "${BUILDKITE_COMMIT}"
       branch: "${BUILDKITE_BRANCH}"
       env:
-        DEPLOY_ID: "${DEPLOY_ID}"
+        IMAGE_TAG: "${IMAGE_TAG}"
 
   - wait: ~
 

@@ -10,12 +10,12 @@ TAG_NAME=current_${GITOPS_ENV}
 echo "Tagging commit ${BUILDKITE_COMMIT}"
 git config user.name "elasticsearchmachine"
 git config user.email "infra-root+elasticsearchmachine@elastic.co"
-git tag -f TAG_NAME ${BUILDKITE_COMMIT}
-git push -f origin TAG_NAME
+git tag -f ${TAG_NAME} ${BUILDKITE_COMMIT}
+git push -f origin ${TAG_NAME}
 
 if [ "${GITOPS_ENV}" == "dev" ]; then
   echo "--- Tag and push 'latest' image manifest"
-  GIT_ABBREV_COMMIT="${DEPLOY_ID:-git-${BUILDKITE_COMMIT:0:12}}"
+  GIT_ABBREV_COMMIT="${IMAGE_TAG:-git-${BUILDKITE_COMMIT:0:12}}"
   DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
   X86_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-x86_64
   ARM_IMAGE_TAG=${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT}-aarch64
