@@ -37,6 +37,7 @@ steps:
 
   - label: ":k8s: :java: Run Elasticsearch E2E tests"
     trigger: elasticsearch-serverless-e2e-tests-${GITOPS_ENV}
+    branches: main
     depends_on: docker-publish
     build:
       message: "${BUILDKITE_MESSAGE}"
@@ -44,9 +45,6 @@ steps:
       branch: "${BUILDKITE_BRANCH}"
       env:
         SKIP_DOCKER: "true"
-        BUILDKITE_PULL_REQUEST: "${BUILDKITE_PULL_REQUEST}"
-        BUILDKITE_PULL_REQUEST_BASE_BRANCH: "${BUILDKITE_PULL_REQUEST_BASE_BRANCH}"
-        BUILDKITE_PULL_REQUEST_REPO: "${BUILDKITE_PULL_REQUEST_REPO}"
 
   - wait
 
