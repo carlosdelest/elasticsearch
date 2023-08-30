@@ -22,4 +22,6 @@ module org.elasticsearch.serverless.transform {
     requires org.elasticsearch.logging;
     requires org.elasticsearch.server;
     requires org.elasticsearch.transform;
+    requires org.elasticsearch.xcontent;
+    requires org.elasticsearch.xcore;
 }
