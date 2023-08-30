@@ -19,11 +19,27 @@ package co.elastic.elasticsearch.serverless.transform;
 
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESTestCase;
-import org.elasticsearch.xpack.transform.Transform;
+import org.elasticsearch.xpack.transform.TransformExtension;
 
-public class ServerlessTransformTests extends ESTestCase {
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
+
+public class ServerlessTransformExtensionTests extends ESTestCase {
+
+    private TransformExtension transformExtension = new ServerlessTransformExtension();
+
     public void testIncludeNodeInfo() {
-        Transform serverlesstransform = new ServerlessTransformPlugin(Settings.EMPTY);
-        assertFalse(serverlesstransform.includeNodeInfo());
+        assertFalse(transformExtension.includeNodeInfo());
+    }
+
+    public void testGetTransformInternalIndexAdditionalSettings() {
+        assertThat(
+            transformExtension.getTransformInternalIndexAdditionalSettings(),
+            is(equalTo(Settings.builder().put("index.fast_refresh", "true").build()))
+        );
+    }
+
+    public void testGetTransformDestinationIndexSettings() {
+        assertThat(transformExtension.getTransformDestinationIndexSettings(), is(equalTo(Settings.EMPTY)));
     }
 }

@@ -1,5 +1,6 @@
 plugins {
     id("elasticsearch.internal-cluster-test")
+    id("elasticsearch.internal-yaml-rest-test")
 }
 
 esplugin {
@@ -18,6 +19,18 @@ configurations {
 }
 
 dependencies {
+    compileOnly(xpackModule("core"))
+
     implementation(xpackModule("transform"))
-    testImplementation(xpackModule("core"))
+
+    testImplementation(testArtifact(xpackModule("core")))
+
+    yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
+    yamlRestTestImplementation(testArtifact(xpackModule("core")))
+}
+
+tasks {
+    yamlRestTest {
+        usesDefaultDistribution()
+    }
 }
