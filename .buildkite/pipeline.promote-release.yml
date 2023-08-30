@@ -1,8 +1,8 @@
-steps:
-  - label: ":argo: Trigger serverless Elasticsearch release"
-    trigger: elasticsearch-serverless-intake
-    build:
-      env:
-        GPCTL_CONFIG: https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/config.yaml
-        GITOPS_ENV: qa
+agents:
+  provider: k8s
+  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+  memory: "4G"
 
+steps:
+  - label: ":git: Promote release build"
+    command: ".buildkite/scripts/promote-release.sh"

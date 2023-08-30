@@ -13,9 +13,11 @@ steps:
     command: ".buildkite/scripts/validate-submodule.sh"
 
   - label: ":java: Run serverless Elasticsearch functional tests"
+    if: build.env('GITOPS_ENV') == 'dev'
     command: ".buildkite/scripts/run-gradle.sh check"
 
   - label: ":s3: Run AWS S3 third party tests"
+    if: build.env('GITOPS_ENV') == 'dev'
     command: ".buildkite/scripts/run-s3-third-party-tests.sh"
 
   - label: ":docker: Publish docker images"
@@ -24,9 +26,9 @@ steps:
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
 
   - label: ":rocket: Run E2E tests to check the component update"
+    if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main'
     trigger: service-or-stack-update-e2e-tests
     depends_on: docker-publish
-    branches: main
     build:
       env:
         NAMESPACE: elasticsearch-ci
