@@ -11,6 +11,7 @@ env:
   DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-${IMAGE_TAG}}"
   CLUSTER_NAME: "${CLUSTER_NAME:-${CI_PIPELINE_ID}}"
   AWS_CLUSTER_NAME: "${CLUSTER_NAME}"
+  SKIP_DOCKER: "${SKIP_DOCKER:-false}"
 
 steps:
   - label: ":k8s: :argocd: Create E2E test environment & deploy services"

@@ -17,6 +17,7 @@ env:
 steps:
   - label: ":docker: Publish docker test images"
     trigger: elasticsearch-serverless-publish-docker
+    if: build.env('SKIP_DOCKER') != "true"
     key: docker-publish
     build:
         message: "${BUILDKITE_MESSAGE}"
