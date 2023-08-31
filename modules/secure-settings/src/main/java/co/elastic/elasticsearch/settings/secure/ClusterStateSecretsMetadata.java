@@ -105,7 +105,7 @@ public class ClusterStateSecretsMetadata extends AbstractNamedDiffable<ClusterSt
 
     @Override
     public TransportVersion getMinimalSupportedVersion() {
-        return TransportVersion.V_8_500_010;
+        return TransportVersion.V_8_500_020;
     }
 
     @Override
