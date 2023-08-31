@@ -559,7 +559,7 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
     private Schedule verifySchedule(ThreadPool threadPool, int times) {
         var shutdown = ArgumentCaptor.forClass(SigtermShutdownCleanupService.SubmitCleanupSigtermShutdown.class);
         var delay = ArgumentCaptor.forClass(TimeValue.class);
-        Mockito.verify(threadPool, times(times)).schedule(shutdown.capture(), delay.capture(), any());
+        Mockito.verify(threadPool, times(times)).schedule(shutdown.capture(), delay.capture(), any(String.class));
         var schedule = new Schedule(shutdown.getAllValues(), delay.getAllValues(), new HashMap<>());
         assertThat(schedule.shutdown, hasSize(schedule.delay.size()));
         for (int i = 0; i < schedule.shutdown.size(); i++) {
