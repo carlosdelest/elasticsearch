@@ -72,7 +72,8 @@ public abstract class AbstractServerlessE2eTest extends ESRestTestCase {
     @Override
     protected Settings restClientSettings() {
         return Settings.builder()
-            .put(ThreadContext.PREFIX + ".Authorization", "ApiKey " + getApiKey())
+            // .put(ThreadContext.PREFIX + ".Authorization", "ApiKey " + getApiKey())
+            .put(ThreadContext.PREFIX + ".Authorization", getBasicAuthCredentials())
             .put(ThreadContext.PREFIX + ".X-Found-Cluster", getProjectId() + ".es")
             .build();
     }

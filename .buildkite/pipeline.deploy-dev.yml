@@ -26,6 +26,6 @@ steps:
         env:
           IMAGE_TAG: "${IMAGE_TAG}"
 
-  - wait: ~
   - label: ":k8s: Deploy serverless Elasticsearch"
     command: "$$BUILDKITE_DIR/scripts/deploy-dev.sh"
+    depends_on: docker-publish

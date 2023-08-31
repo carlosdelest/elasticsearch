@@ -53,39 +53,41 @@ ESS_ROOT_PASSWORD=$(echo $CRED_RESULT | jq -e -r '.password')
 
 echo '--- Wait for ess being ready'
 
-# aws does not expose ip but hostname
-LBS_HOST=$(kubectl get svc proxy -n elastic-system -o json | jq -e -r '.status.loadBalancer.ingress[0].hostname')
+PROJ_INFO=$(curl -k -H "Authorization: ApiKey $API_KEY" -H "Content-Type: application/json" "https://${PAPI_PUBLIC_IP}:8443/api/v1/serverless/projects/elasticsearch/${PROJECT_ID}")
+
+ES_ENDPOINT=$(echo $PROJ_INFO | jq -r '.endpoints.elasticsearch')
 
 checkEssAvailability() {
-    curl -k -H "X-Found-Cluster: $PROJECT_ID.es" -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD "https://$LBS_HOST/_cluster/health" | jq -e 'select(.status == "green")'
+    curl -k -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD "${ES_ENDPOINT}/_cluster/health" | jq -e 'select(.status == "green")'
 }
 
 # wait for a maximum of 20 minutes
 retry 30 40 checkEssAvailability
 
-echo "Elasticsearch cluster available via https://$LBS_HOST" | buildkite-agent annotate --style "info" --context "ess-public-url"
+echo "Elasticsearch cluster available via ${ES_ENDPOINT}" | buildkite-agent annotate --style "info" --context "ess-public-url"
 
-echo "--- Creating Elasticsearch API key"
-ESS_API_KEY_RESPONSE=$(curl -k -H "Content-Type: application/json" -H "X-Found-Cluster: $PROJECT_ID.es" -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD https://$LBS_HOST/_security/api_key -XPOST -d'
-{
-  "name": "elastic-test-user-api-key",
-  "expiration": "2d",
-  "metadata": {
-    "application": "ess-dev-test",
-    "environment": {
-       "level": 1,
-       "trusted": true,
-       "tags": ["dev", "ci"]
-    }
-  }
-}')
-
-ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_RESPONSE | jq -e -r '.encoded')
-ESS_API_KEY_ENCRYPTED=$(encrypt $ESS_API_KEY_ENCODED)
+# Don't bother creating an API key for now since our tests are using basic auth
+#echo "--- Creating Elasticsearch API key"
+#ESS_API_KEY_RESPONSE=$(curl -k -H "Content-Type: application/json" -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD ${ES_ENDPOINT}/_security/api_key -XPOST -d'
+#{
+#  "name": "elastic-test-user-api-key",
+#  "expiration": "2d",
+#  "metadata": {
+#    "application": "ess-dev-test",
+#    "environment": {
+#       "level": 1,
+#       "trusted": true,
+#       "tags": ["dev", "ci"]
+#    }
+#  }
+#}')
+#
+#ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_RESPONSE | jq -e -r '.encoded')
+#ESS_API_KEY_ENCRYPTED=$(encrypt $ESS_API_KEY_ENCODED)
 ESS_ROOT_PASSWORD_ENCRYPTED=$(encrypt $ESS_ROOT_PASSWORD)
 
 buildkite-agent meta-data set "ess-project-id" "$PROJECT_ID"
-buildkite-agent meta-data set "ess-public-url" "https://$LBS_HOST"
-buildkite-agent meta-data set "ess-api-key-encrypted" "$ESS_API_KEY_ENCRYPTED"
+buildkite-agent meta-data set "ess-public-url" "$ES_ENDPOINT"
+#buildkite-agent meta-data set "ess-api-key-encrypted" "$ESS_API_KEY_ENCRYPTED"
 buildkite-agent meta-data set "ess-username" "$ESS_ROOT_USERNAME"
 buildkite-agent meta-data set "ess-password-encrypted" "$ESS_ROOT_PASSWORD_ENCRYPTED"

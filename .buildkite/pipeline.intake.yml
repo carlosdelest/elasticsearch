@@ -6,6 +6,7 @@ agents:
 env:
   GITOPS_ENV: "${GITOPS_ENV:-dev}"
   GPCTL_CONFIG: "${GPCTL_CONFIG:-https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/dev.yaml}"
+  SKIP_DOCKER: "true"
 
 steps:
   - label: ":git: Validate elasticsearch submodule"
@@ -22,6 +23,7 @@ steps:
 
   - label: ":docker: Publish docker images"
     key: docker-publish
+    branches: main
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
 
@@ -37,8 +39,8 @@ steps:
 
   - label: ":k8s: :java: Run Elasticsearch E2E tests"
     trigger: elasticsearch-serverless-e2e-tests-${GITOPS_ENV}
-    branches: main
     depends_on: docker-publish
+    branches: main
     build:
       message: "${BUILDKITE_MESSAGE}"
       commit: "${BUILDKITE_COMMIT}"
