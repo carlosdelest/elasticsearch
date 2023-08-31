@@ -1,3 +1,4 @@
 [submodule "elasticsearch"]
-	path = elasticsearch
-	url = git@github.com:elastic/elasticsearch.git
+  path = elasticsearch
+  url = git@github.com:elastic/elasticsearch.git
+  branch = main
