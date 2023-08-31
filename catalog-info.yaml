@@ -285,6 +285,8 @@ spec:
       teams:
         elasticsearch-team: {}
         ml-core: {}
+        cloud-tooling:
+          access_level: BUILD_AND_READ
         everyone:
           access_level: READ_ONLY
 
@@ -313,6 +315,8 @@ spec:
       teams:
         elasticsearch-team: {}
         ml-core: {}
+        cloud-tooling:
+          access_level: BUILD_AND_READ
         everyone:
           access_level: READ_ONLY
 
