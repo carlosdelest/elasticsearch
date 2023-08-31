@@ -136,7 +136,7 @@ public class MeteringReporter extends AbstractLifecycleComponent {
                 );
                 handleResponse(response, batch);
             } catch (IOException | PrivilegedActionException e) {
-                // TODO: log the record info & retry
+                // TODO: ES-6462 remove assert, log the record info, and retry
                 assert false : e;
                 log.error("Could not send {} records to billing service", batch.size(), e);
             }

@@ -121,8 +121,12 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
     }
 
     @After
-    public void stopServer() {
-        server.stop(0);
+    public void stopServer() throws Exception {
+        // explicitly clean up the cluster here
+        // the cluster needs to be stopped BEFORE the http server is stopped
+        cleanUpCluster();
+
+        server.stop(1);
         // drain all requests
         if (received.isEmpty() == false) {
             fail("Requests were unprocessed: " + received);
