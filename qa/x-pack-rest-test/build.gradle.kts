@@ -48,8 +48,6 @@ tasks {
             "security/authz/*/*",
             // snapshot has a problem with shards type null
             "snapshot/*/*",
-            // spatial has a problem with serializing geo shape
-            "spatial/*/*",
             // terms_enum has most tests failing with "field [terms] doesn't have length [1]"
             "terms_enum/*/*",
             // voting_only_node assumes data nodes
@@ -60,6 +58,11 @@ tasks {
             "service_accounts/10_basic/Test service account tokens",
             // https://github.com/elastic/elasticsearch-serverless/issues/652
             "security/settings/10_update_security_settings/Test update and get security settings API",
+
+            // These spatial tests fail because serverless uses a multi-node setup
+            // See https://github.com/elastic/elasticsearch/issues/99089
+            "spatial/70_script_doc_values/bounding box",
+            "spatial/70_script_doc_values/geoshape value",
 
             // Features not available on serverless (via API protections)
             // Security users/roles
