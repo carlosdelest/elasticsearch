@@ -5,7 +5,7 @@ agents:
 
 env:
   GITOPS_ENV: "${GITOPS_ENV:-dev}"
-  GPCTL_CONFIG: "${GPCTL_CONFIG:-https://raw.githubusercontent.com/elastic/elasticsearch-serverless/main/.buildkite/gpctl/dev-config.yaml}"
+  GPCTL_CONFIG: "${GPCTL_CONFIG:-https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/dev.yaml}"
 
 steps:
   - label: ":git: Validate elasticsearch submodule"
