@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Setting;
@@ -63,7 +64,7 @@ public class MeteringService extends AbstractLifecycleComponent {
         Scheduler scheduler
     ) {
         this.nodeId = nodeId;
-        this.projectId = MeteringPlugin.PROJECT_ID.get(settings);
+        this.projectId = ServerlessSharedSettings.PROJECT_ID.get(settings);
         this.scheduler = scheduler;
         this.sources = sources.toList();
         this.reportPeriod = REPORT_PERIOD.get(settings);

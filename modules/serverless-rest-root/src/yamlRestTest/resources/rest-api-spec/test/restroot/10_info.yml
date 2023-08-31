@@ -2,7 +2,7 @@
 "Info":
   - do:       { info: {} }
   - match:    { name: serverless }
-  - match:    { cluster_name: serverless }
+  - match:    { cluster_name: dummy-project-id }
   - match:    { version.number: "8.11.0" }
   - match:    { version.build_flavor: serverless }
   - match:    { version.build_type: docker }

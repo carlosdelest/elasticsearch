@@ -53,14 +53,14 @@ import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_ID;
+
 /**
  * Plugin responsible for starting up all serverless metering classes.
  */
 public class MeteringPlugin extends Plugin implements ExtensiblePlugin, DocumentParsingObserverPlugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
-
-    static final Setting<String> PROJECT_ID = Setting.simpleString("metering.project_id", Setting.Property.NodeScope);
 
     private List<MetricsCollector> metricsCollectors;
     private MeteringReporter reporter;
@@ -70,7 +70,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(PROJECT_ID, MeteringService.REPORT_PERIOD, MeteringReporter.METERING_URL, MeteringReporter.BATCH_SIZE);
+        return List.of(MeteringService.REPORT_PERIOD, MeteringReporter.METERING_URL, MeteringReporter.BATCH_SIZE);
     }
 
     @Override
@@ -95,7 +95,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         AllocationService allocationService,
         IndicesService indicesService
     ) {
-        String projectId = MeteringPlugin.PROJECT_ID.get(environment.settings());
+        String projectId = PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
         ingestMetricsCollector = new IngestMetricsCollector(
@@ -116,7 +116,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         Stream<MetricsCollector> sources = Stream.concat(builtInMetrics.stream(), metricsCollectors.stream());
 
         if (projectId.isEmpty()) {
-            log.warn(MeteringPlugin.PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
+            log.warn(PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
         } else {
             reporter = new MeteringReporter(environment.settings(), threadPool);
         }

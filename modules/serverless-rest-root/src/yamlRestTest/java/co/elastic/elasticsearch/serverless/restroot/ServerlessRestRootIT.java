@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.restroot;
 
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
+
 import com.carrotsearch.randomizedtesting.annotations.Name;
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 
@@ -39,6 +41,7 @@ public class ServerlessRestRootIT extends ESClientYamlSuiteTestCase {
 
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
+        .setting(ServerlessSharedSettings.PROJECT_ID.getKey(), "dummy-project-id")
         .user(OPERATOR_USER, OPERATOR_PASSWORD.toString(), User.ROOT_USER_ROLE, true)
         .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.ROOT_USER_ROLE, false)
         .build();

@@ -112,13 +112,13 @@ public class MeteringServiceTests extends ESTestCase {
     public void setup() {
         threadPool = new TestThreadPool("meteringServiceTests");
         settings = Settings.builder()
-            .put(MeteringPlugin.PROJECT_ID.getKey(), PROJECT_ID)
+            .put(ServerlessSharedSettings.PROJECT_ID.getKey(), PROJECT_ID)
             .put(MeteringService.REPORT_PERIOD.getKey(), REPORT_PERIOD)
             .build();
         clusterSettings = new ClusterSettings(
             settings,
             Set.of(
-                MeteringPlugin.PROJECT_ID,
+                ServerlessSharedSettings.PROJECT_ID,
                 MeteringService.REPORT_PERIOD,
                 ServerlessSharedSettings.BOOST_WINDOW_SETTING,
                 ServerlessSharedSettings.SEARCH_POWER_SETTING

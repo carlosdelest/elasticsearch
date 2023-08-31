@@ -11,7 +11,9 @@ esplugin {
 }
 
 dependencies {
+  compileOnly(project(":libs:serverless-shared-constants"))
   implementation("org.elasticsearch.plugin:rest-root")
+  yamlRestTestImplementation(project(":libs:serverless-shared-constants"))
 }
 
 tasks {

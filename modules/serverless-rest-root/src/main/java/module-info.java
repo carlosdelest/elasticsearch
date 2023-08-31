@@ -19,6 +19,7 @@ module org.elasticsearch.serverless.restroot {
     requires org.elasticsearch.server;
     requires org.apache.lucene.core;
     requires org.elasticsearch.rest.root;
+    requires org.elasticsearch.serverless.constants;
 
     exports co.elastic.elasticsearch.serverless.restroot;
 }

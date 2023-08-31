@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.restroot;
 
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
+
 import org.elasticsearch.Build;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
@@ -24,6 +26,7 @@ import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.env.Environment;
 import org.elasticsearch.rest.root.MainAction;
 import org.elasticsearch.rest.root.MainRequest;
 import org.elasticsearch.rest.root.MainResponse;
@@ -49,25 +52,23 @@ public class ServerlessTransportMainAction extends HandledTransportAction<MainRe
     );
 
     private final ClusterService clusterService;
+    private final ClusterName projectId;
 
     @Inject
-    public ServerlessTransportMainAction(TransportService transportService, ActionFilters actionFilters, ClusterService clusterService) {
+    public ServerlessTransportMainAction(
+        TransportService transportService,
+        ActionFilters actionFilters,
+        ClusterService clusterService,
+        Environment env
+    ) {
         super(MainAction.NAME, transportService, actionFilters, MainRequest::new);
         this.clusterService = clusterService;
+        this.projectId = new ClusterName(ServerlessSharedSettings.PROJECT_ID.get(env.settings()));
     }
 
     @Override
     protected void doExecute(Task task, MainRequest request, ActionListener<MainResponse> listener) {
         var clusterState = clusterService.state();
-        listener.onResponse(
-            new MainResponse(
-                SERVERLESS_NAME,
-                LUCENE_VERSION,
-                // TODO: fill in with project id
-                new ClusterName("serverless"),
-                clusterState.metadata().clusterUUID(),
-                BUILD
-            )
-        );
+        listener.onResponse(new MainResponse(SERVERLESS_NAME, LUCENE_VERSION, projectId, clusterState.metadata().clusterUUID(), BUILD));
     }
 }

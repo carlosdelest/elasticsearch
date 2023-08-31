@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.reports.HttpClientThreadFilter;
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
 import com.sun.net.httpserver.HttpExchange;
@@ -101,7 +102,7 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
-            .put(MeteringPlugin.PROJECT_ID.getKey(), "testProjectId")
+            .put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
             .put(MeteringReporter.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
             .put(MeteringService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
             .build();
@@ -109,7 +110,7 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
 
     protected Settings settingsForRoles(DiscoveryNodeRole... roles) {
         return Settings.builder()
-            .put(MeteringPlugin.PROJECT_ID.getKey(), "testProjectId")
+            .put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
             .putList(NodeRoleSettings.NODE_ROLES_SETTING.getKey(), Arrays.stream(roles).map(DiscoveryNodeRole::roleName).toList())
             .build();
     }

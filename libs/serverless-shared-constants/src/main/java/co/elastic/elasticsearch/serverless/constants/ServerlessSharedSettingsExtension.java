@@ -25,6 +25,11 @@ import java.util.List;
 public class ServerlessSharedSettingsExtension implements SettingsExtension {
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(ServerlessSharedSettings.BOOST_WINDOW_SETTING, ServerlessSharedSettings.SEARCH_POWER_SETTING);
+        return List.of(
+            ServerlessSharedSettings.BOOST_WINDOW_SETTING,
+            ServerlessSharedSettings.SEARCH_POWER_SETTING,
+            ServerlessSharedSettings.BWC_PROJECT_ID,
+            ServerlessSharedSettings.PROJECT_ID
+        );
     }
 }
