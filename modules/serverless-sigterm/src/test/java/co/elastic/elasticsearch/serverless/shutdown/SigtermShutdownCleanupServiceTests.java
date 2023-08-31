@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.shutdown;
 
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
@@ -70,6 +71,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
+@LuceneTestCase.AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/pull/821")
 public class SigtermShutdownCleanupServiceTests extends ESTestCase {
 
     private static final long GRACE_PERIOD = 60_000;
