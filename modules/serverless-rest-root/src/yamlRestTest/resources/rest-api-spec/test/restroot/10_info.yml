@@ -3,12 +3,12 @@
   - do:       { info: {} }
   - match:    { name: serverless }
   - match:    { cluster_name: serverless }
-  - match:    { version.number: "8.10.0" }
+  - match:    { version.number: "8.11.0" }
   - match:    { version.build_flavor: serverless }
   - match:    { version.build_type: docker }
   - match:    { version.build_hash: "00000000" }
   - match:    { version.build_date: "2023-10-31" }
   - match:    { version.build_snapshot: false }
   - match:    { version.lucene_version: "9.7.0" }
-  - match:    { version.minimum_wire_compatibility_version: "8.10.0" }
-  - match:    { version.minimum_index_compatibility_version: "8.10.0" }
+  - match:    { version.minimum_wire_compatibility_version: "8.11.0" }
+  - match:    { version.minimum_index_compatibility_version: "8.11.0" }

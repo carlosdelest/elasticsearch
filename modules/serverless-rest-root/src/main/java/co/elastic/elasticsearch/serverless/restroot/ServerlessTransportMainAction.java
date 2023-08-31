@@ -18,14 +18,12 @@
 package co.elastic.elasticsearch.serverless.restroot;
 
 import org.elasticsearch.Build;
-import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.index.IndexVersion;
 import org.elasticsearch.rest.root.MainAction;
 import org.elasticsearch.rest.root.MainRequest;
 import org.elasticsearch.rest.root.MainResponse;
@@ -34,18 +32,18 @@ import org.elasticsearch.transport.TransportService;
 
 public class ServerlessTransportMainAction extends HandledTransportAction<MainRequest, MainResponse> {
 
-    private static final Version VERSION = Version.V_8_10_0;
+    private static final String VERSION = "8.11.0";
     private static final String SERVERLESS_NAME = "serverless";
-    private static final String LUCENE_VERSION = IndexVersion.fromId(VERSION.id).luceneVersion().toString();
+    private static final String LUCENE_VERSION = "9.7.0";
     private static final Build BUILD = new Build(
         SERVERLESS_NAME,
         Build.Type.DOCKER,
         "00000000",
         "2023-10-31",
         false,
-        VERSION.toString(),
-        VERSION.toString(),
-        VERSION.toString(),
+        VERSION,
+        VERSION,
+        VERSION,
         // the display string is not used by the main response, so it does not matter here
         ""
     );
