@@ -30,8 +30,6 @@ tasks {
             "aggregate-metrics/*/*",
             // data_streams uses searchable_snapshots
             "data_streams/*/*",
-            // graph is sensitive to shards/replicas settings
-            "graph/*/*",
             // health expects a data_content tier
             "health/*/*",
             // managing a license is not supported in serverless
