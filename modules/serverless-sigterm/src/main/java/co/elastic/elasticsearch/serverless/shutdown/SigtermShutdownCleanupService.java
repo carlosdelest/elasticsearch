@@ -45,6 +45,7 @@ import java.util.HashMap;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -57,13 +58,15 @@ import static org.elasticsearch.core.Strings.format;
 public class SigtermShutdownCleanupService implements ClusterStateListener {
     private static final Logger logger = LogManager.getLogger(SigtermShutdownCleanupService.class);
     private static final long GRACE_PERIOD_SAFETY_PERCENTAGE = 10;
-    final ClusterService clusterService;
+    private final ThreadPool threadPool;
+    private final Executor executor;
     private final MasterServiceTaskQueue<CleanupSigtermShutdownTask> taskQueue;
 
     ConcurrentHashMap<String, Scheduler.ScheduledCancellable> cleanups = new ConcurrentHashMap<>();
 
     public SigtermShutdownCleanupService(ClusterService clusterService) {
-        this.clusterService = clusterService;
+        this.threadPool = clusterService.threadPool();
+        this.executor = threadPool.generic();
         this.taskQueue = clusterService.createTaskQueue(
             "shutdown-sigterm-cleaner",
             Priority.NORMAL,
@@ -106,17 +109,16 @@ public class SigtermShutdownCleanupService implements ClusterStateListener {
                 }
 
                 if (now == Long.MIN_VALUE) {
-                    now = clusterService.threadPool().absoluteTimeInMillis();
+                    now = threadPool.absoluteTimeInMillis();
                 }
 
                 cleanups.put(
                     nodeId,
-                    clusterService.threadPool()
-                        .schedule(
-                            new SubmitCleanupSigtermShutdown(taskQueue, nodeId, cleanups::remove),
-                            computeDelay(now, shutdown.getStartedAtMillis(), shutdown.getGracePeriod().millis()),
-                            ThreadPool.Names.GENERIC
-                        )
+                    threadPool.schedule(
+                        new SubmitCleanupSigtermShutdown(taskQueue, nodeId, cleanups::remove),
+                        computeDelay(now, shutdown.getStartedAtMillis(), shutdown.getGracePeriod().millis()),
+                        executor
+                    )
                 );
             }
         }

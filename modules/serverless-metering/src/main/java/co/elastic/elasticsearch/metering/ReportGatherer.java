@@ -28,12 +28,14 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.threadpool.Scheduler;
+import org.elasticsearch.threadpool.ThreadPool;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 class ReportGatherer {
@@ -41,8 +43,8 @@ class ReportGatherer {
 
     private final MeteringService service;
     private final Consumer<List<UsageRecord>> reporter;
-    private final Scheduler scheduler;
-    private final String executorName;
+    private final ThreadPool threadPool;
+    private final Executor executor;
     private final TimeValue reportPeriod;
     private final Duration reportPeriodDuration;
     private final StopWatch runTimer = new StopWatch();
@@ -53,14 +55,14 @@ class ReportGatherer {
     ReportGatherer(
         MeteringService service,
         Consumer<List<UsageRecord>> reporter,
-        Scheduler scheduler,
+        ThreadPool threadPool,
         String executorName,
         TimeValue reportPeriod
     ) {
         this.service = service;
         this.reporter = reporter;
-        this.scheduler = scheduler;
-        this.executorName = executorName;
+        this.threadPool = threadPool;
+        this.executor = threadPool.executor(executorName);
         this.reportPeriod = reportPeriod;
 
         reportPeriodDuration = Duration.ofNanos(reportPeriod.nanos());
@@ -71,7 +73,7 @@ class ReportGatherer {
     }
 
     void start() {
-        nextRun = scheduler.schedule(this::gatherReports, reportPeriod, executorName);
+        nextRun = threadPool.schedule(this::gatherReports, reportPeriod, executor);
     }
 
     boolean cancel() {
@@ -111,7 +113,7 @@ class ReportGatherer {
                 try {
                     // schedule the next run
                     // TODO: jitter within the expected schedules
-                    nextRun = scheduler.schedule(this::gatherReports, TimeValue.timeValueNanos(remainingNanos), executorName);
+                    nextRun = threadPool.schedule(this::gatherReports, TimeValue.timeValueNanos(remainingNanos), executor);
                 } catch (EsRejectedExecutionException e) {
                     nextRun = null;
                     if (e.isExecutorShutdown()) {

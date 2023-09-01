@@ -27,7 +27,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
-import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.util.List;
@@ -49,7 +48,7 @@ public class MeteringService extends AbstractLifecycleComponent {
 
     private final String nodeId;
     private final String projectId;
-    private final Scheduler scheduler;
+    private final ThreadPool threadPool;
     private final List<MetricsCollector> sources;
     private final TimeValue reportPeriod;
     private final Consumer<List<UsageRecord>> reporter;
@@ -61,11 +60,11 @@ public class MeteringService extends AbstractLifecycleComponent {
         Settings settings,
         Stream<MetricsCollector> sources,
         Consumer<List<UsageRecord>> reporter,
-        Scheduler scheduler
+        ThreadPool threadPool
     ) {
         this.nodeId = nodeId;
         this.projectId = ServerlessSharedSettings.PROJECT_ID.get(settings);
-        this.scheduler = scheduler;
+        this.threadPool = threadPool;
         this.sources = sources.toList();
         this.reportPeriod = REPORT_PERIOD.get(settings);
         this.reporter = reporter;
@@ -73,7 +72,7 @@ public class MeteringService extends AbstractLifecycleComponent {
 
     @Override
     protected void doStart() {
-        reportGatherer = new ReportGatherer(this, reporter, scheduler, ThreadPool.Names.GENERIC, reportPeriod);
+        reportGatherer = new ReportGatherer(this, reporter, threadPool, ThreadPool.Names.GENERIC, reportPeriod);
         reportGatherer.start();
     }
 

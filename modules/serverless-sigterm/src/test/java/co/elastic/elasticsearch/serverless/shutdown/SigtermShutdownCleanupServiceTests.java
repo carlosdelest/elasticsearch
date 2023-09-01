@@ -17,7 +17,6 @@
 
 package co.elastic.elasticsearch.serverless.shutdown;
 
-import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
@@ -33,6 +32,7 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterServiceTaskQueue;
 import org.elasticsearch.common.Priority;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Delayed;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiPredicate;
@@ -67,11 +68,11 @@ import static org.hamcrest.Matchers.theInstance;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
-@LuceneTestCase.AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/pull/821")
 public class SigtermShutdownCleanupServiceTests extends ESTestCase {
 
     private static final long GRACE_PERIOD = 60_000;
@@ -515,8 +516,9 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
     private static Mocks newMocks() {
         final var mocks = new Mocks(mock(ClusterService.class), mock(ThreadPool.class));
         when(mocks.clusterService.threadPool()).thenReturn(mocks.threadPool);
-        when(mocks.threadPool.schedule(any(SubmitCleanupSigtermShutdown.class), any(TimeValue.class), eq(ThreadPool.Names.GENERIC)))
-            .thenReturn(mock(Scheduler.ScheduledCancellable.class));
+        when(mocks.threadPool.generic()).thenReturn(EsExecutors.DIRECT_EXECUTOR_SERVICE);
+        doReturn(mock(Scheduler.ScheduledCancellable.class)).when(mocks.threadPool)
+            .schedule(any(SubmitCleanupSigtermShutdown.class), any(TimeValue.class), any(Executor.class));
         return mocks;
     }
 
@@ -561,7 +563,7 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
     private Schedule verifySchedule(ThreadPool threadPool, int times) {
         var shutdown = ArgumentCaptor.forClass(SigtermShutdownCleanupService.SubmitCleanupSigtermShutdown.class);
         var delay = ArgumentCaptor.forClass(TimeValue.class);
-        Mockito.verify(threadPool, times(times)).schedule(shutdown.capture(), delay.capture(), any(String.class));
+        Mockito.verify(threadPool, times(times)).schedule(shutdown.capture(), delay.capture(), any(Executor.class));
         var schedule = new Schedule(shutdown.getAllValues(), delay.getAllValues(), new HashMap<>());
         assertThat(schedule.shutdown, hasSize(schedule.delay.size()));
         for (int i = 0; i < schedule.shutdown.size(); i++) {
