@@ -1,6 +1,6 @@
 #!/bin/bash
 # drop page cache and kernel slab objects on linux
-GRADLEW="./gradlew --parallel --build-cache --no-watch-fs -Dorg.elasticsearch.build.cache.url=https://gradle-enterprise.elastic.co/cache/"
+GRADLEW="./gradlew --parallel --build-cache --no-watch-fs -Dorg.elasticsearch.build.cache.url=https://gradle-enterprise.elastic.co/cache/ -Dorg.elasticsearch.build.cache.push=true"
 [[ -x /usr/local/sbin/drop-caches ]] && sudo /usr/local/sbin/drop-caches
 rm -Rfv ~/.gradle/init.d
 mkdir -p ~/.gradle/init.d && cp -v .buildkite/init.gradle ~/.gradle/init.d
