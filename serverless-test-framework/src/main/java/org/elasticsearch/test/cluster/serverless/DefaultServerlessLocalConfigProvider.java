@@ -11,7 +11,10 @@ package org.elasticsearch.test.cluster.serverless;
 import org.elasticsearch.test.cluster.FeatureFlag;
 import org.elasticsearch.test.cluster.local.LocalClusterConfigProvider;
 import org.elasticsearch.test.cluster.local.LocalClusterSpecBuilder;
+import org.elasticsearch.test.cluster.local.LocalNodeSpecBuilder;
 import org.elasticsearch.test.cluster.local.distribution.DistributionType;
+
+import java.util.function.Consumer;
 
 /**
  * Default configuration applied to all serverless clusters.
@@ -29,17 +32,15 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             .setting("ingest.geoip.downloader.enabled", "false")
             .setting("serverless.sigterm.poll_interval", "1s")
             .feature(FeatureFlag.TIME_SERIES_MODE)
-            .withNode(
-                indexNodeSpec -> indexNodeSpec.name("index")
-                    .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
-                    .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
-                    .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
-            )
-            .withNode(
-                searchNodeSpec -> searchNodeSpec.name("search")
-                    .setting("node.roles", "[remote_cluster_client,search]")
-                    .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
-                    .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
-            );
+            .withNode(node("index", "[master,remote_cluster_client,ingest,index]"))
+            .withNode(node("search", "[remote_cluster_client,search]"));
     }
+
+    public static Consumer<? super LocalNodeSpecBuilder> node(String name, String nodeRoles) {
+        return indexNodeSpec -> indexNodeSpec.name(name)
+            .setting("node.roles", nodeRoles)
+            .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
+            .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB");
+    }
+
 }

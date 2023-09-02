@@ -1,6 +1,7 @@
 plugins {
     id("elasticsearch.build")
     id("elasticsearch.internal-cluster-test")
+    id("elasticsearch.internal-java-rest-test")
 }
 
 esplugin {
@@ -14,6 +15,12 @@ configurations {
         resolutionStrategy {
             preferProjectModules()
         }
+    }
+}
+
+tasks {
+    javaRestTest {
+        usesDefaultDistribution()
     }
 }
 
