@@ -23,6 +23,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.xpack.ml.MachineLearningExtension;
@@ -43,6 +44,9 @@ public class ServerlessMachineLearningExtension implements MachineLearningExtens
         Set.of(DiscoveryNodeRole.ML_ROLE),
         null
     );
+
+    private static final String[] ANALYTICS_DEST_INDEX_ALLOWED_SETTINGS = {
+        MapperService.INDEX_MAPPING_TOTAL_FIELDS_LIMIT_SETTING.getKey() };
 
     private static final Logger logger = LogManager.getLogger(ServerlessMachineLearningExtension.class);
 
@@ -93,5 +97,10 @@ public class ServerlessMachineLearningExtension implements MachineLearningExtens
         boolean isNlpEnabled = ServerlessMachineLearningPlugin.NLP_ENABLED.get(settings.get());
         logger.debug("isNlpEnabled returning [{}]", isNlpEnabled);
         return isNlpEnabled;
+    }
+
+    @Override
+    public String[] getAnalyticsDestIndexAllowedSettings() {
+        return ANALYTICS_DEST_INDEX_ALLOWED_SETTINGS;
     }
 }
