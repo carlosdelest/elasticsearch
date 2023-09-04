@@ -63,7 +63,7 @@ public class ClusterStateSecretsMetadata extends AbstractNamedDiffable<ClusterSt
     public ClusterStateSecretsMetadata(StreamInput in) throws IOException {
         this.success = in.readBoolean();
         this.version = in.readLong();
-        this.errorStackTrace = in.readStringList();
+        this.errorStackTrace = in.readStringCollectionAsList();
     }
 
     public static ClusterStateSecretsMetadata createSuccessful(long version) {
