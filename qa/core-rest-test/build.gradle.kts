@@ -180,6 +180,9 @@ tasks {
                 "index/91_metrics_no_subobjects/*", // depends on a legacy template
                 "cat.templates/*/*", // depends on a legacy templates
 
+                // Muted and tracked in https://github.com/elastic/elasticsearch/issues/99238
+                "search.vectors/90_sparse_vector/*",
+
             ).joinToString(",")
         )
     }
