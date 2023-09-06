@@ -21,14 +21,36 @@ import joptsimple.OptionSet;
 
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 public class ServerlessServerCli extends ServerCli {
+
     @Override
     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) throws Exception {
         terminal.println("Starting Serverless Elasticsearch...");
 
-        super.execute(terminal, options, env, processInfo);
+        Path defaultsFile = env.configFile().resolve("serverless-default-settings.yml");
+        if (Files.exists(defaultsFile) == false) {
+            throw new IllegalStateException("Missing serverless defaults");
+        }
+
+        Settings defaultSettings = Settings.builder().loadFromPath(defaultsFile).build();
+        Settings nodeSettings = env.settings();
+
+        for (String defaultSettingName : defaultSettings.names()) {
+            if (nodeSettings.hasValue(defaultSettingName)) {
+                String overrideValue = nodeSettings.get(defaultSettingName);
+                terminal.println("Serverless default for [%1s] is overridden to [%1s]".formatted(defaultSettingName, overrideValue));
+            }
+        }
+        Settings finalSettings = Settings.builder().put(defaultSettings).put(nodeSettings).build();
+        var newEnv = new Environment(finalSettings, env.configFile());
+
+        super.execute(terminal, options, newEnv, processInfo);
     }
 
     @Override

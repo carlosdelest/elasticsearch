@@ -25,7 +25,6 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
     public void apply(LocalClusterSpecBuilder<?> builder) {
         builder.distribution(DistributionType.DEFAULT)
             .secret("bootstrap.password", "x-pack-test-password")
-            .setting("stateless.enabled", "true")
             .setting("stateless.object_store.type", "fs")
             .setting("stateless.object_store.bucket", "stateless")
             .setting("stateless.object_store.base_path", "base_path")

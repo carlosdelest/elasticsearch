@@ -35,7 +35,6 @@ public class DockerClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
     @ClassRule
     public static GenericContainer<?> dockerContainer = new GenericContainer<>("elasticsearch-serverless:latest")
         .withCreateContainerCmdModifier(cmd -> cmd.getHostConfig().withMemory(2 * 1024 * 1024 * 1024L))
-        .withEnv("stateless.enabled", "true")
         .withEnv("stateless.object_store.bucket", "stateless")
         .withEnv("stateless.object_store.type", "fs")
         .withEnv("path.repo", "/usr/share/elasticsearch/repo")

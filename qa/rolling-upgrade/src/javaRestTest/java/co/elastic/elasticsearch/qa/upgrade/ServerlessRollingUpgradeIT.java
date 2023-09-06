@@ -31,6 +31,8 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .version(ServerlessBwcVersion.instance())
+        // need to set stateless enable explicitly until old version for rolling upgrade has the defaults file
+        .setting("stateless.enabled", "true")
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
         .user("admin-user", "x-pack-test-password")

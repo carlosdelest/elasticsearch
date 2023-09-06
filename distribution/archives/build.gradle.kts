@@ -113,6 +113,7 @@ distribution_archives {
                     }
                     into("config") {
                         from((project.extensions["jvmOptionsDir"] as File).parent)
+                        from("src/serverless-default-settings.yml")
                     }
                     into("lib/tools/serverless-server-cli") {
                         from(serverCli)
