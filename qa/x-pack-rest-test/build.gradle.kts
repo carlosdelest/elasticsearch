@@ -86,9 +86,6 @@ tasks {
             // - Legacy templates
             "analytics/multi_terms/*",
 
-            // Temporarily disable this until we fix a a bug in FLS with real-time-get on stateless
-            "security/authz_api_keys/20_field_level_security/*",
-
             // Muted in severless, awaitsfix https://github.com/elastic/elasticsearch-serverless/issues/826
             "dlm/10_usage/Test data stream lifecycle usage stats"
         ).joinToString(","))
