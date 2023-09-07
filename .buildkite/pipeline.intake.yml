@@ -38,6 +38,7 @@ steps:
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
 
   - label: ":k8s: :java: Run Elasticsearch E2E tests"
+    skip: "Failing due to vault authentication errors"
     trigger: elasticsearch-serverless-e2e-tests-${GITOPS_ENV}
     depends_on: docker-publish
     branches: main
