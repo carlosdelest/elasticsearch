@@ -42,8 +42,6 @@ tasks {
             "searchable_snapshots/*/*",
             // snapshot has a problem with shards type null
             "snapshot/*/*",
-            // terms_enum has most tests failing with "field [terms] doesn't have length [1]"
-            "terms_enum/*/*",
             // voting_only_node assumes data nodes
             "voting_only_node/*/*",
             // monitoring and watcher are not supported in serverless, and the license is fixed to "enterprise"
