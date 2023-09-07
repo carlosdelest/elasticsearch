@@ -32,8 +32,6 @@ tasks {
             "data_streams/*/*",
             // health expects a data_content tier
             "health/*/*",
-            // managing a license is not supported in serverless
-            "license/*/*",
             // this test asserts on ml node attributes that we don't reveal in serverless
             "ml/jobs_get_stats/Test get job stats after uploading data prompting the creation of some stats",
             // monitoring doesn't exist in serverless
@@ -42,8 +40,6 @@ tasks {
             "rollup/*/*",
             // searchable_snapshots doesn't exist in serverless
             "searchable_snapshots/*/*",
-            // security/authz asserts on cat API output which has changed
-            "security/authz/*/*",
             // snapshot has a problem with shards type null
             "snapshot/*/*",
             // terms_enum has most tests failing with "field [terms] doesn't have length [1]"
@@ -62,7 +58,9 @@ tasks {
             "spatial/70_script_doc_values/bounding box",
             "spatial/70_script_doc_values/geoshape value",
 
-            // Features not available on serverless (via API protections)
+            // Features not available on serverless (via API protections, etc)
+            // managing a license is not supported in serverless
+            "license/*/*",
             // Security users/roles
             "users/*/*",
             "roles/*/*",
@@ -72,6 +70,8 @@ tasks {
             "ml/post_data/*",
             // Deprecation
             "deprecation/*/*",
+            // Downsample
+            "security/authz/80_downsample/*",
 
             // Things that incidentally depend on endpoints that aren't available
             // - Deprecated ML deployment inference endpoint
@@ -80,14 +80,12 @@ tasks {
             "ml/jobs_get_stats/*",
             "ml/ml_anomalies_default_mappings/*",
             "ml/job_cat_apis/*",
-            // - Create user/role
-            "security/authz/14_cat_indices/*",
-            "security/authz/14_cat_indices/*/*",
             // - CCS/CCR access keys
             "api_key/50_cross_cluster/*",
             // - Internal API using native user
             "api_key/12_grant/*",
             "privileges/40_get_user_privs/*",
+            "security/authz/40_condtional_cluster_priv/*",
             // - Legacy templates
             "analytics/multi_terms/*",
 
