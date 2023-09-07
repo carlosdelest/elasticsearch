@@ -1,8 +1,3 @@
-agents:
-  provider: k8s
-  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
-  memory: "4G"
-
 env:
   CI_PIPELINE_ID: "${CI_PIPELINE_ID:-ess-dev-ci}"
   CLUSTER_NAME: "${CLUSTER_NAME:-${CI_PIPELINE_ID}}"

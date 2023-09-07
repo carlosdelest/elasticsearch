@@ -1,8 +1,3 @@
-agents:
-  provider: k8s
-  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
-  memory: "4G"
-
 env:
   MAX_DEPLOYMENT_AGE_IN_HOUR: "${MAX_DEPLOYMENT_AGE_IN_HOUR:-48}"
   BUILDKITE_DIR: ".buildkite"
@@ -15,3 +10,6 @@ env:
 steps:
   - label: ":k8s: cleanup elasticsearch stateless deployments and dev environments"
     command: "$$BUILDKITE_DIR/scripts/cleanup-ess-dev.sh"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"

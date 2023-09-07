@@ -1,8 +1,3 @@
-agents:
-  provider: "gcp"
-  machineType: "n1-standard-16"
-  image: family/elasticsearch-ubuntu-2022
-
 env:
   GITOPS_ENV: "${GITOPS_ENV:-dev}"
   GPCTL_CONFIG: "${GPCTL_CONFIG:-https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/dev.yaml}"
@@ -12,20 +7,36 @@ steps:
   - label: ":git: Validate elasticsearch submodule"
     branches: main
     command: ".buildkite/scripts/validate-submodule.sh"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
 
   - label: ":java: Run serverless Elasticsearch functional tests"
     if: build.env('GITOPS_ENV') == 'dev'
     command: ".buildkite/scripts/run-gradle.sh check"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
 
   - label: ":s3: Run AWS S3 third party tests"
     if: build.env('GITOPS_ENV') == 'dev'
     command: ".buildkite/scripts/run-s3-third-party-tests.sh"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
 
   - label: ":docker: Publish docker images"
     key: docker-publish
     branches: main
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
 
   - label: ":rocket: Run E2E tests to check the component update"
     if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main'
@@ -38,7 +49,6 @@ steps:
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
 
   - label: ":k8s: :java: Run Elasticsearch E2E tests"
-    skip: "Failing due to vault authentication errors"
     trigger: elasticsearch-serverless-e2e-tests-${GITOPS_ENV}
     depends_on: docker-publish
     branches: main
@@ -62,3 +72,7 @@ steps:
   - label: ":git: Push promoted build tags"
     branches: main
     command: ".buildkite/scripts/tag-promoted-commit.sh"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022

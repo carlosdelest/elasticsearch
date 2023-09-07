@@ -1,8 +1,3 @@
-agents:
-  provider: k8s
-  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
-  memory: "4G"
-
 env:
   BUILDKITE_DIR: ".buildkite"
   CI_PIPELINE_ID: "${CI_PIPELINE_ID:-ess-dev-ci}"
@@ -32,3 +27,6 @@ steps:
   - wait: ~
   - label: ":k8s: Setup proxies"
     command: "$BUILDKITE_DIR/scripts/setup-proxies.sh"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"

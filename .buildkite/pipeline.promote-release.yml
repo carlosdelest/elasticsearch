@@ -1,8 +1,6 @@
-agents:
-  provider: k8s
-  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
-  memory: "4G"
-
 steps:
   - label: ":git: Promote release build"
     command: ".buildkite/scripts/promote-release.sh"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"

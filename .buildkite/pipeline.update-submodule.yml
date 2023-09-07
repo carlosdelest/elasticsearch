@@ -1,17 +1,22 @@
-agents:
-  provider: "gcp"
-  machineType: "n1-standard-16"
-  image: family/elasticsearch-ubuntu-2022
-
 steps:
   - label: ":java: Run serverless Elasticsearch tests"
     command: ".buildkite/scripts/run-gradle.sh check"
-
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
   - label: ":s3: Run AWS S3 third party tests"
     command: ".buildkite/scripts/run-s3-third-party-tests.sh"
-
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
   - wait
 
   - label: ":git: Update elasticsearch submodule commit"
     if: 'build.env("UPDATE_SUBMODULE") != "false"'
     command: ".buildkite/scripts/update-es-submodule.sh"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022

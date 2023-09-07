@@ -1,10 +1,9 @@
-agents:
-  provider: "gcp"
-  machineType: "n1-standard-16"
-  image: family/elasticsearch-ubuntu-2022
-
 steps:
   - label: ":docker: Publish docker images"
     key: docker-publish
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022

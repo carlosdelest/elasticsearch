@@ -1,11 +1,10 @@
-agents:
-  provider: "gcp"
-  machineType: "n1-standard-16"
-  image: family/elasticsearch-ubuntu-2022
-
 steps:
   - label: ":gradle: Run snyk monitoring"
     branches: main
     command:
-        "export SNYK_TOKEN=$(vault read -field=snyk-token secret/ci/elastic-elasticsearch-serverless/snyk); \
-        .buildkite/scripts/run-gradle.sh uploadSnykDependencyGraph -PsnykTargetReference=main"
+      "export SNYK_TOKEN=$(vault read -field=snyk-token secret/ci/elastic-elasticsearch-serverless/snyk); \
+      .buildkite/scripts/run-gradle.sh uploadSnykDependencyGraph -PsnykTargetReference=main"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022

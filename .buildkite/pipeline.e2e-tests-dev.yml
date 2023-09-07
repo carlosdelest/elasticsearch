@@ -1,8 +1,3 @@
-agents:
-  provider: k8s
-  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
-  memory: "4G"
-
 env:
   DEFAULT_CLUSTER_ID: "ess-dev-ci"
   CI_PIPELINE_ID: "${CI_PIPELINE_ID:-${DEFAULT_CLUSTER_ID}}"
@@ -17,15 +12,19 @@ steps:
   - label: ":k8s: :argocd: Create E2E test environment & deploy services"
     key: create-k8s-cluster
     if: build.env('CI_PIPELINE_ID') != build.env('DEFAULT_CLUSTER_ID')
-    command:
-      "buildkite-agent pipeline upload .buildkite/pipeline.create-k8s-dev.yml"
+    command: "buildkite-agent pipeline upload .buildkite/pipeline.create-k8s-dev.yml"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
 
   - label: ":pipeline::arrow_up: Trigger deploy to development cluster"
     key: deploy-ess
-    command:
-        "buildkite-agent pipeline upload .buildkite/pipeline.deploy-dev.yml"
+    command: "buildkite-agent pipeline upload .buildkite/pipeline.deploy-dev.yml"
     depends_on:
       - step: create-k8s-cluster
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
 
   - label: ":java: Run serverless e2e tests"
     key: run-ess-e2e-tests
@@ -34,29 +33,32 @@ steps:
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
     command:
-        "vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem; \
-         export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url); \
-         export ESS_PROJECT_ID=$(buildkite-agent meta-data get ess-project-id); \
-         export ESS_USERNAME=$(buildkite-agent meta-data get ess-username); \
-         export ESS_PASSWORD=$(buildkite-agent meta-data get ess-password-encrypted | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem); \
-        .buildkite/scripts/run-gradle.sh :qa:e2e-test:javaRestTest"
+      "vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem; \
+      export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url); \
+      export ESS_PROJECT_ID=$(buildkite-agent meta-data get ess-project-id); \
+      export ESS_USERNAME=$(buildkite-agent meta-data get ess-username); \
+      export ESS_PASSWORD=$(buildkite-agent meta-data get ess-password-encrypted | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem); \
+      .buildkite/scripts/run-gradle.sh :qa:e2e-test:javaRestTest"
     depends_on:
       - step: deploy-ess
 
   - label: ":pipeline::arrow_up: Trigger undeploy from development cluster"
     key: undeploy-ess
-    command:
-      "buildkite-agent pipeline upload .buildkite/pipeline.undeploy-dev.yml"
+    command: "buildkite-agent pipeline upload .buildkite/pipeline.undeploy-dev.yml"
     depends_on:
       - step: run-ess-e2e-tests
     allow_dependency_failure: true
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
 
   - label: ":k8s: :argocd: Cleanup dedicated E2E test environment"
     key: delete-k8s-cluster
     if: build.env('CI_PIPELINE_ID') != build.env('DEFAULT_CLUSTER_ID')
-    command:
-      "buildkite-agent pipeline upload .buildkite/pipeline.cleanup-k8s-dev.yml"
+    command: "buildkite-agent pipeline upload .buildkite/pipeline.cleanup-k8s-dev.yml"
     depends_on:
       - step: undeploy-ess
     allow_dependency_failure: true
-
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"

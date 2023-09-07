@@ -1,8 +1,3 @@
-agents:
-  provider: k8s
-  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
-  memory: "4G"
-
 env:
   BUILDKITE_DIR: ".buildkite"
   DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-git-${BUILDKITE_COMMIT:0:12}}"
@@ -14,5 +9,7 @@ env:
 
 steps:
   - label: ":pipeline::arrow_up: E2E tests in ${TEST_ENV}"
-    command:
-      "buildkite-agent pipeline upload .buildkite/pipeline.e2e-tests-managed.yml"
+    command: "buildkite-agent pipeline upload .buildkite/pipeline.e2e-tests-managed.yml"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
