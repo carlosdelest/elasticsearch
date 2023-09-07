@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.ml.serverless.actionfilters;
 import co.elastic.elasticsearch.ml.serverless.ServerlessMachineLearningExtension;
 
 import org.elasticsearch.TransportVersion;
+import org.elasticsearch.TransportVersions;
 import org.elasticsearch.cluster.node.DiscoveryNodeUtils;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.io.stream.NamedWriteableAwareStreamInput;
@@ -293,7 +294,7 @@ public class GetTrainedModelsStatsResponseFilterTests extends ESTestCase {
                 randomNodeStats(DiscoveryNodeUtils.create(randomAlphaOfLength(10))),
                 // If the test fails then update the constant here to the latest transport version
                 // AFTER checking whether the rollupNodeStats method needs updating too.
-                stats -> roundTripInstance(stats, TransportVersion.V_8_500_053),
+                stats -> roundTripInstance(stats, TransportVersions.V_8_500_053),
                 null
             );
         }

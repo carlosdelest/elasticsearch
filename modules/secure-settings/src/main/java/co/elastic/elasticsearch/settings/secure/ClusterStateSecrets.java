@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.settings.secure;
 
 import org.elasticsearch.TransportVersion;
+import org.elasticsearch.TransportVersions;
 import org.elasticsearch.cluster.AbstractNamedDiffable;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.NamedDiff;
@@ -107,7 +108,7 @@ public class ClusterStateSecrets extends AbstractNamedDiffable<ClusterState.Cust
 
     @Override
     public TransportVersion getMinimalSupportedVersion() {
-        return TransportVersion.V_8_500_020;
+        return TransportVersions.V_8_500_020;
     }
 
     @Override
