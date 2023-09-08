@@ -162,7 +162,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             ListenerTimeouts.wrapWithTimeout(
                 threadPool,
                 request.timeout(),
-                ThreadPool.Names.GENERIC,
+                threadPool.generic(),
                 ActionListener.runAfter(listener, () -> countDownActionListener.onResponse(null)),
                 (ignore) -> {
                     listener.onFailure(new ElasticsearchTimeoutException("timed out after [" + request.timeout() + "]"));
