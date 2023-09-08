@@ -86,6 +86,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         return cluster.getHttpAddresses();
     }
 
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/863")
     public void testMeteringRecordsCanBeDeduplicated() throws Exception {
         // This test asserts the ingested doc metric for 1k documents sums up to consistent value
         // this test also asserts about an approximate value of index-size metrics.
