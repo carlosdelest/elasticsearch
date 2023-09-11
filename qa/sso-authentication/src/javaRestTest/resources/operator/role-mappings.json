@@ -1,0 +1,24 @@
+{
+  "metadata": {
+    "version": "1",
+    "compatibility": "8.4.0"
+  },
+  "state": {
+    "role_mappings": {
+      "elastic-cloud-sso-kibana-do-not-change": {
+        "rules": {
+          "all": [
+            { "field": { "realm.name": "cloud-saml-kibana" } }
+          ]
+        },
+        "enabled": true,
+        "role_templates": [
+          {
+            "template": "{\"source\":\"{{#tojson}}groups{{/tojson}}\"}",
+            "format": "json"
+          }
+        ]
+      }
+    }
+  }
+}

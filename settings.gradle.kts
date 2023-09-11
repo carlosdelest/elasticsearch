@@ -91,6 +91,7 @@ include(":qa:sigterm-shutdown")
 include(":qa:x-pack-rest-test")
 include(":qa:e2e-test")
 include(":qa:master-failover")
+include(":qa:sso-authentication")
 
 /*
  * Test Framework
