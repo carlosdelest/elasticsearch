@@ -116,42 +116,41 @@ To deploy a branch into a kubernetes cluster
    by publishing a docker snapshot into our internal docker registry and then using the serverless project api to deploy that snapshot to our serverless platform dev environment.
 
    The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/53#annotation-ess-public-url
+   The encrypted user password is also shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/173#annotation-ess-password-encrypted
 
-
-   Alternatively you can use the buildkite commandline interface (https://github.com/buildkite/cli) to trigger a deployment
+   Store both values in a env variable:
    ```
-   > bk build create --pipeline elastic/elasticsearch-serverless-deploy-dev --branch buildkite-dev-deploy-pipeline-setup
-   Triggering a build on pipeline elastic/elasticsearch-serverless-deploy-dev: Created #56 ✅
-   Check out your build at https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/56 🚀
-
-   # Resolve ess url from commandline using curl, jq, htmlq
-   > curl --silent -H "Authorization: Bearer bkua_a64eb34866110c2d205ff1e0bb37040c4b9c392b" "https://api.buildkite.com/v2/organizations/elastic/pipelines/elasticsearch-serverless-deploy-dev/builds/55/annotations" | jq '. | .[] | select(.context=="ess-public-url") | .body_html' | htmlq -t a
-
-   https://c56c73761b804a088ebdc6df94278e48.es.35.188.100.4.ip.es.io
+   export ESS_PUBLIC_URL=<URL_FROM_BUILD_INFO_BOX>
+   export ESS_ROOT_USERNAME=elastic
+   export ESS_ROOT_PASSWORD_ENCRYPTED="<ENCRYPTED_PASSWORD_FROM_BUILD_INFO_BOX>"
    ```
-2. To access that elasticsearch instance the username and password can be resolved from vault ci
 
-3. ```
-   export ESS_TEST_USERNAME=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field username secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
-   export ESS_TEST_PASSWORD=$(VAULT_ADDR=https://vault-ci-prod.elastic.dev vault read -field password secret/ci/elastic-elasticsearch-serverless/gcloud-integtest-dev-ess-credentials)
+2. to decrypt the elastic userpassword you need to resolve the encryption key from the ci vault instance and then decrypt the password
+   ```
+   vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > bk-es-key.pem;
 
-   curl -k -u $ESS_USERNAME:$ESS_PASSWORD https://c56c73761b804a088ebdc6df94278e48.es.35.188.100.4.ip.es.io
-   {
-      "name" : "es-es-search-656774785c-5gbqh",
-      "cluster_name" : "es",
-      "cluster_uuid" : "A3YYSejwTNWSABdAMbboDw",
-      "version" : {
-        "number" : "8.9.0-SNAPSHOT",
-        "build_flavor" : "default",
-        "build_type" : "docker",
-        "build_hash" : "9a89ea7405f295a1f55a3e483b11a6d2f9fd5dee",
-        "build_date" : "2023-06-06T12:46:41.749764546Z",
-        "build_snapshot" : true,
-        "lucene_version" : "9.7.0",
-        "minimum_wire_compatibility_version" : "7.17.0",
-        "minimum_index_compatibility_version" : "7.0.0"
-      },
-      "tagline" : "You Know, for Search"
+   export ESS_ROOT_PASSWORD=$(echo "$ESS_ROOT_PASSWORD_ENCRYPTED" | openssl base64 -d | openssl pkeyutl -decrypt -inkey bk-es-key.pem)
+   ```
+4. Now you should be able to access the ess instance via curl
+   ```
+
+   curl -k -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD $ESS_PUBLIC_URL
+    {
+    "name" : "serverless",
+    "cluster_name" : "b510f56edb87490aa00597c01e5f5a6a",
+    "cluster_uuid" : "2M0GMx2iS66pXc_fboiJfA",
+    "version" : {
+    "number" : "8.11.0",
+    "build_flavor" : "serverless",
+    "build_type" : "docker",
+    "build_hash" : "00000000",
+    "build_date" : "2023-10-31",
+    "build_snapshot" : false,
+    "lucene_version" : "9.7.0",
+    "minimum_wire_compatibility_version" : "8.11.0",
+    "minimum_index_compatibility_version" : "8.11.0"
+    },
+    "tagline" : "You Know, for Search"
     }
     ```
 
@@ -173,7 +172,7 @@ or
 
 To update an existing elasticsearch serverless dev deployment the update-dev buildkite pipeline at https://buildkite.com/elastic/elasticsearch-serverless-udpate-dev can be used.
 
-The pipeline must be triggered manually and requires an existing ess deployment. 
+The pipeline must be triggered manually and requires an existing ess deployment.
 
 When invoking manually the `PROJECT_ID` and `ESS_API_KEY` of the deployment to be updated must be passed as environment variable which can be configured in the new build buildkite pipeline dialog (https://buildkite.com/elastic/elasticsearch-serverless-udpate-dev#new).
 
@@ -196,7 +195,7 @@ The end to end tests can be run locally against a kubernetes based serverless pl
 ```
 > export ESS_PUBLIC_URL=<your ess deployment url>
 > export ESS_API_KEY_ENCRYPTED=<the encrypted ess api key of the deployment>
-> vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem 
+> vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem
 > export ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_ENCRYPTED | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem)`
 > ./gradlew :qa:e2e-test:javaRestTest
 ```
@@ -296,18 +295,18 @@ docker run --rm -d --name es03 --net elastic -p 9203:9203 -p 9303:9303 -e ES_JAV
 
 #### Running autoscaling E2E tests
 
-* Create your own cloud dev enviroment based on the [k8s-gitops-control](https://github.com/elastic/k8s-gitops-control-plane#local-development-environment) instructions. 
+* Create your own cloud dev enviroment based on the [k8s-gitops-control](https://github.com/elastic/k8s-gitops-control-plane#local-development-environment) instructions.
 
-There are a lot of prerequisites that need to be installed on your local machine in order to create an environment with just a `make dev-deploy` command. Reach out to the `platform-engineering-productivity` team if you have any issues. 
+There are a lot of prerequisites that need to be installed on your local machine in order to create an environment with just a `make dev-deploy` command. Reach out to the `platform-engineering-productivity` team if you have any issues.
 
 We test by default on AWS, see [Setting up AWS development environment](#setting-up-aws-development-environment) for the tips how to make sure you use the correct AWS configuration for creating own EKS cluster.
 
-* Create a dev Python environment for running [es-benchmarks](https://github.com/elastic/elasticsearch-benchmarks). 
+* Create a dev Python environment for running [es-benchmarks](https://github.com/elastic/elasticsearch-benchmarks).
 
-Reach out to the `es-perf` team if you have issues installing `pyenv` and building `esbench`. 
+Reach out to the `es-perf` team if you have issues installing `pyenv` and building `esbench`.
 Tip: don't forget to activate the environment with `source .venv/bin/activate`.
 
-* Use [serverless-on-k8s](https://github.com/elastic/elasticsearch-benchmarks/tree/master/tools/serverless-on-k8s) tool for deploying `elasticsearch-serverless` Docker images 
+* Use [serverless-on-k8s](https://github.com/elastic/elasticsearch-benchmarks/tree/master/tools/serverless-on-k8s) tool for deploying `elasticsearch-serverless` Docker images
 for performance testing.
 
 Switch `AWS_PROFILE` to `ecdev` by running `export AWS_PROFILE=ecdev` before using `serverless-on-k8s` in order to communicate with your EKS cluster.
@@ -320,7 +319,7 @@ Switch `AWS_PROFILE` to `ecdev` by running `export AWS_PROFILE=ecdev` before usi
 
 * Create a new ES namespace `./serverless-on-k8s.py create`
 
-The script will ask you whether you want to edit the deployment descriptors for ES services. Do edit them, because the defaults are too high for your development clusters. 
+The script will ask you whether you want to edit the deployment descriptors for ES services. Do edit them, because the defaults are too high for your development clusters.
 Set the disk limits to `100Gb`, memory limit to `8Gb` and the CPU limit to `4`.
 
 When the namespace is created, the script will print out an environment id and an URL that you will need to use for further interactions with the cluster.
@@ -339,7 +338,7 @@ It's a good idea to modify the track name and its parameters based on the type w
 
 * Make sure the dry-run mode for the autoscaler is disabled
 
-Run `kubectl get eas -n <esbench_env_id>` and check that the autoscaler is actually active. If it's not, disable the dry-run mode with `kubectl annotate eas es common.k8s.elastic.co/dry-run- -n <esbench_env_id>`. You can also run `kubectl --namespace=<esbench_env_id> get pods` and see whether the autoscaler started scaling pods to the initial state. If pods are being scaled, wait until all the pods are active and the cluster is in a stable state.  
+Run `kubectl get eas -n <esbench_env_id>` and check that the autoscaler is actually active. If it's not, disable the dry-run mode with `kubectl annotate eas es common.k8s.elastic.co/dry-run- -n <esbench_env_id>`. You can also run `kubectl --namespace=<esbench_env_id> get pods` and see whether the autoscaler started scaling pods to the initial state. If pods are being scaled, wait until all the pods are active and the cluster is in a stable state.
 
 * Execute the benchmark with `esbench execute --env-id=<esbench_env_id>`
 
@@ -353,9 +352,9 @@ kubectl --namespace=<esbench_env_id> get pods
 ```
 
 Check the status of the es-ingest and es-search pods from the point of view of the autoscaler
- 
+
 ```
-kubectl --namespace=<esbench_env_id> get eas/es -o=jsonpath='{.status}'  | jq 
+kubectl --namespace=<esbench_env_id> get eas/es -o=jsonpath='{.status}'  | jq
 ```
 
 Check the autoscaler logs to see that the autoscaler is checking the metrics and trying to autoscale the cluster
@@ -382,7 +381,7 @@ Login to the machine running the benchmark `esbench ssh --env-id=<esbench_env_id
 * Remove `factor: FIDO` from the `.okta-aws` config you had it set previously.
 * `esbench` and `gitops-control-plane` use different AWS profiles and accounts. You have to set up *both*. So, your `.okta-aws` should look like this
 
-```      
+```
 [default]
 base-url = elastic.okta.com
 app-link = https://elastic.okta.com/home/amazon_aws/0oabplp058WZVHLWM1t7/272
@@ -397,14 +396,14 @@ username = firstname.lastname@elastic.co
 duration = 43200
 role = arn:aws:iam::284141849446:role/saml/saml_cloud_developers
 ```
-    
-* Double check the `app-link` in your `ecdev` config in `.okta-aws`. It should be set to `https://elastic.okta.com/home/amazon_aws/0oaaibfi8ztk6zoVR1t7/272`. If you set the `app-link` correctly, `okta-awscli` will assign `arn:aws:iam::284141849446:role/saml/saml_cloud_developers` role.     
+
+* Double check the `app-link` in your `ecdev` config in `.okta-aws`. It should be set to `https://elastic.okta.com/home/amazon_aws/0oaaibfi8ztk6zoVR1t7/272`. If you set the `app-link` correctly, `okta-awscli` will assign `arn:aws:iam::284141849446:role/saml/saml_cloud_developers` role.
 * Make sure the `~/.aws/credentials` has *exact* lines for the `ecdev` profile.
-    
+
 ```
 [ecdev]
 role_arn = arn:aws:iam::444732909647:role/cross_account/developers
-source_profile = default   
+source_profile = default
 ```
 
 * If you need to use `gitops-control-plane`, generate `ecdev` AWS credentials with the `okta-awscli -o ecdev --profile=ecdev -f -s` command.

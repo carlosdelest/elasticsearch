@@ -86,6 +86,10 @@ echo "Elasticsearch cluster available via ${ES_ENDPOINT}" | buildkite-agent anno
 #ESS_API_KEY_ENCRYPTED=$(encrypt $ESS_API_KEY_ENCODED)
 ESS_ROOT_PASSWORD_ENCRYPTED=$(encrypt $ESS_ROOT_PASSWORD)
 
+# expose this via buildkite annotations to make it accessible to other es engineers
+echo "PROJECT_ID: ${PROJECT_ID}" | buildkite-agent annotate --style "info" --context "project-id"
+echo "ESS_ROOT_PASSWORD_ENCRYPTED: ${ESS_ROOT_PASSWORD_ENCRYPTED}" | buildkite-agent annotate --style "info" --context "ess-password-encrypted"
+
 buildkite-agent meta-data set "ess-project-id" "$PROJECT_ID"
 buildkite-agent meta-data set "ess-public-url" "$ES_ENDPOINT"
 #buildkite-agent meta-data set "ess-api-key-encrypted" "$ESS_API_KEY_ENCRYPTED"
