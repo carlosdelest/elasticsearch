@@ -43,14 +43,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -63,7 +66,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
 
     public void testGetMetrics() throws IOException {
         String indexName = "myIndex";
-        try (TestIndex testIndex = setUpIndicesService(indexName, 1, 1, 1)) {
+        try (TestIndex testIndex = setUpIndicesService(indexName, 1, 1, 1, 1)) {
             IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
                 testIndex.indicesService,
                 clusterSettings,
@@ -71,7 +74,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             );
             Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
 
-            assertThat(metrics.size(), is(1));
+            assertThat(metrics, hasSize(1));
             int shardIdInt = 0;
             var metric = (MetricsCollector.MetricValue) metrics.toArray()[0];
             assertThat(metric.measurementType(), equalTo(MetricsCollector.MeasurementType.SAMPLED));
@@ -84,7 +87,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
 
     public void testMultipleShards() throws IOException {
         String indexName = "myMultiShardIndex";
-        try (TestIndex testIndex = setUpIndicesService(indexName, 10, 2, 3)) {
+        try (TestIndex testIndex = setUpIndicesService(indexName, 1, 10, 2, 3)) {
             IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
                 testIndex.indicesService,
                 clusterSettings,
@@ -92,7 +95,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             );
             Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
 
-            assertThat(metrics.size(), is(10));
+            assertThat(metrics, hasSize(10));
             int shard = 0;
             for (MetricsCollector.MetricValue metric : metrics) {
                 assertThat(metric.measurementType(), equalTo(MetricsCollector.MeasurementType.SAMPLED));
@@ -107,7 +110,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
 
     public void testFailedShards() throws IOException {
         String indexName = "myMultiShardIndex";
-        try (TestIndex testIndex = setUpIndicesService(indexName, 10, 3, 9)) {
+        try (TestIndex testIndex = setUpIndicesService(indexName, 1, 10, 3, 9)) {
             int failedIndex = 7;
             var failed = testIndex.directories.get(failedIndex);
             for (var file : failed.listAll()) {
@@ -120,7 +123,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             );
             Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
 
-            assertThat(metrics.size(), is(10));
+            assertThat(metrics, hasSize(10));
             var hasPartial = hasEntry("partial", "" + true);
             int shard = 0;
             for (MetricsCollector.MetricValue metric : metrics) {
@@ -167,15 +170,163 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
         );
         Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
 
-        assertThat(metrics.size(), is(0));
+        assertThat(metrics, hasSize(0));
     }
 
-    private TestIndex setUpIndicesService(String indexName, int numShards, int commitsPerShard, int docsPerCommit) throws IOException {
+    public void testConcurrencyOneShardNoWait() throws InterruptedException, IOException {
+        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+
+        final int threadsCount = randomIntBetween(4, 10);
+        final int opsPerThread = randomIntBetween(100, 2000);
+
+        final int totalOps = opsPerThread * threadsCount;
+
+        String indexName = "myIndex";
+        try (TestIndex testIndex = setUpIndicesService(indexName, 1, 1, 2, 3)) {
+            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
+                testIndex.indicesService,
+                clusterSettings,
+                Settings.EMPTY
+            );
+
+            final long sequentialReadMetricSum = indexSizeMetricsCollector.getMetrics()
+                .stream()
+                .mapToLong(MetricsCollector.MetricValue::value)
+                .sum();
+
+            ConcurrencyTestUtils.runConcurrent(
+                threadsCount,
+                opsPerThread,
+                () -> 0,
+                () -> results.addAll(indexSizeMetricsCollector.getMetrics()),
+                logger::info
+            );
+
+            long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+            assertThat(results, hasSize(totalOps));
+            assertThat(valueSum, equalTo(opsPerThread * threadsCount * sequentialReadMetricSum));
+        }
+    }
+
+    public void testConcurrencyOneShardRandomWait() throws InterruptedException, IOException {
+        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+
+        final int threadsCount = randomIntBetween(4, 10);
+        final int opsPerThread = randomIntBetween(50, 200);
+
+        final int totalOps = opsPerThread * threadsCount;
+
+        String indexName = "myIndex";
+        try (TestIndex testIndex = setUpIndicesService(indexName, 1, 1, 2, 3)) {
+            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
+                testIndex.indicesService,
+                clusterSettings,
+                Settings.EMPTY
+            );
+
+            final long sequentialReadMetricSum = indexSizeMetricsCollector.getMetrics()
+                .stream()
+                .mapToLong(MetricsCollector.MetricValue::value)
+                .sum();
+
+            ConcurrencyTestUtils.runConcurrent(
+                threadsCount,
+                opsPerThread,
+                () -> randomIntBetween(0, 50),
+                () -> results.addAll(indexSizeMetricsCollector.getMetrics()),
+                logger::info
+            );
+
+            long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+            assertThat(results, hasSize(totalOps));
+            assertThat(valueSum, equalTo(opsPerThread * threadsCount * sequentialReadMetricSum));
+        }
+    }
+
+    public void testConcurrencyMultipleShardsRandomWait() throws InterruptedException, IOException {
+        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+
+        final int threadsCount = randomIntBetween(4, 10);
+        final int opsPerThread = randomIntBetween(50, 200);
+        final int numberOfShards = 10;
+
+        final int totalOps = opsPerThread * threadsCount * numberOfShards;
+
+        String indexName = "myIndex";
+        try (TestIndex testIndex = setUpIndicesService(indexName, 1, numberOfShards, 2, 3)) {
+            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
+                testIndex.indicesService,
+                clusterSettings,
+                Settings.EMPTY
+            );
+
+            final long sequentialReadMetricSum = indexSizeMetricsCollector.getMetrics()
+                .stream()
+                .mapToLong(MetricsCollector.MetricValue::value)
+                .sum();
+
+            ConcurrencyTestUtils.runConcurrent(
+                threadsCount,
+                opsPerThread,
+                () -> randomIntBetween(0, 50),
+                () -> results.addAll(indexSizeMetricsCollector.getMetrics()),
+                logger::info
+            );
+
+            long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+            assertThat(results, hasSize(totalOps));
+            assertThat(valueSum, equalTo(opsPerThread * threadsCount * sequentialReadMetricSum));
+        }
+    }
+
+    public void testConcurrencyMultipleIndicesRandomWait() throws InterruptedException, IOException {
+        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+
+        final int threadsCount = randomIntBetween(4, 10);
+        final int opsPerThread = randomIntBetween(20, 100);
+        final int numberOfIndexes = 5;
+        final int numberOfShards = 5;
+
+        final int totalOps = opsPerThread * threadsCount * numberOfIndexes * numberOfShards;
+
+        String indexName = "myIndex";
+        try (TestIndex testIndex = setUpIndicesService(indexName, numberOfIndexes, numberOfShards, 2, 3)) {
+            IndexSizeMetricsCollector indexSizeMetricsCollector = new IndexSizeMetricsCollector(
+                testIndex.indicesService,
+                clusterSettings,
+                Settings.EMPTY
+            );
+
+            final long sequentialReadMetricSum = indexSizeMetricsCollector.getMetrics()
+                .stream()
+                .mapToLong(MetricsCollector.MetricValue::value)
+                .sum();
+
+            ConcurrencyTestUtils.runConcurrent(
+                threadsCount,
+                opsPerThread,
+                () -> randomIntBetween(0, 50),
+                () -> results.addAll(indexSizeMetricsCollector.getMetrics()),
+                logger::info
+            );
+
+            long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+            assertThat(results, hasSize(totalOps));
+            assertThat(valueSum, equalTo(opsPerThread * threadsCount * sequentialReadMetricSum));
+        }
+    }
+
+    private TestIndex setUpIndicesService(String indexName, int numIndices, int numShards, int commitsPerShard, int docsPerCommit)
+        throws IOException {
         var indicesService = mock(IndicesService.class);
         TestIndex testIndex = new TestIndex(indicesService, new ArrayList<>(numShards * commitsPerShard), commitsPerShard);
 
         var indexService = mock(IndexService.class);
-        when(indicesService.iterator()).thenReturn(List.of(indexService).iterator());
+        when(indicesService.iterator()).then(a -> Collections.nCopies(numIndices, indexService).iterator());
 
         var index = mock(Index.class);
         when(indexService.index()).thenReturn(index);
@@ -195,7 +346,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             mockShards.add(shard);
         }
 
-        when(indexService.iterator()).thenReturn(mockShards.iterator());
+        when(indexService.iterator()).thenAnswer(a -> Collections.unmodifiableList(mockShards).iterator());
 
         return testIndex;
     }
