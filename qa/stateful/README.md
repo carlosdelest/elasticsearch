@@ -12,7 +12,7 @@ some caveats and exceptions (see below).
    using any "legacy" Gradle plugins.
 2. Ensure that the `elasticsearch.internal-test-artifact`, plugin
    is applied to the project build script.
-3. Add the project to [`settings.gradle.kts`](settings.gradle.kts):
+3. Add the project to [`settings.gradle.kts`](/settings.gradle.kts):
    ```kotlin
    includeStatefulTests(":path:to:project", includeYamlTests = true, includeJavaTests = true)
    ```
@@ -54,10 +54,20 @@ test cluster in the stateful test suite is also applied to the
 serverless cluster, with some exceptions:
 
 1. Security is always enabled and cannot be disabled. Unless
-   overriden, the test REST client will be configured to use a
-   default superuser with operator priviledges.
+   overridden, the test REST client will be configured to use a
+   default superuser with operator privileges.
 2. The number of nodes in the cluster cannot be altered, nor can
    new nodes be added. Serverless clusters have a predictable
    topology (search/index data tiers, etc).
 3. Settings cannot be applied to individual nodes.
 4. Non-string keystore entries are unsupported.
+
+### Ignoring missing settings in serverless
+
+Some settings are simply not available in serverless. Entire modules
+like ILM, Watcher, etc are completely missing in serverless. As a result,
+any attempt to set settings registered by those modules will cause
+the test cluster to fail to start. Rather than require upstream tests
+to account for this, or conditionally apply these settings, we simply
+ignore them when creating our serverless cluster. The list of these
+disallowed settings [exists here](/serverless-test-framework/src/main/java/org/elasticsearch/test/cluster/serverless/local/core/CoreServerlessLocalClusterSpecBuilder.java#L50).
