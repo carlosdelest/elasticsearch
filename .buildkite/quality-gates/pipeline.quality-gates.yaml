@@ -22,6 +22,15 @@ steps:
     agents:
       image: "docker.elastic.co/ci-agent-images/quality-gate-seedling:0.0.2"
 
+  - label: ":git: Push promoted build tags"
+    command: ".buildkite/scripts/tag-promoted-commit.sh"
+    env:
+      GITOPS_ENV: "${ENVIRONMENT}"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
+
 notify:
   - slack: "${TEAM_CHANNEL?}"
     if: build.branch == "main" && build.state == "failed"

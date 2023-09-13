@@ -70,7 +70,7 @@ steps:
         SERVICE_COMMIT_HASH: $BUILDKITE_COMMIT
 
   - label: ":git: Push promoted build tags"
-    branches: main
+    if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main'
     command: ".buildkite/scripts/tag-promoted-commit.sh"
     agents:
       provider: "gcp"

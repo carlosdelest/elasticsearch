@@ -1,10 +1,12 @@
 #!/bin/bash
 set -e
 
-# We read data from vault early to avoid vault token for ci job beeing expired later in the job 
+# We read data from vault early to avoid vault token for ci job beeing expired later in the job
+set +x
 DOCKER_REGISTRY_USERNAME="$(vault read -field=username secret/ci/elastic-elasticsearch-serverless/prod_docker_registry_credentials)"
 DOCKER_REGISTRY_PASSWORD="$(vault read -field=password secret/ci/elastic-elasticsearch-serverless/prod_docker_registry_credentials)"
-  
+set -x
+
 docker_login() {
   set +x
   echo $DOCKER_REGISTRY_PASSWORD | docker login -u $DOCKER_REGISTRY_USERNAME --password-stdin docker.elastic.co
