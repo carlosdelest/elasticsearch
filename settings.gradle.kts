@@ -97,3 +97,17 @@ include(":qa:sso-authentication")
  * Test Framework
  */
 include(":serverless-test-framework")
+
+
+/*
+ * Stateful ES QA Projects
+ */
+includeStatefulTests(":x-pack:plugin:eql:qa:rest", includeYamlTests = true, includeJavaTests = true)
+
+fun includeStatefulTests(projectPath: String, includeYamlTests: Boolean, includeJavaTests: Boolean) {
+    include(":qa:stateful${projectPath}")
+    gradle.projectsLoaded {
+        rootProject.findProject(":qa:stateful${projectPath}")?.extra?.set("includeYamlTests", includeYamlTests)
+        rootProject.findProject(":qa:stateful${projectPath}")?.extra?.set("includeJavaTests", includeJavaTests)
+    }
+}

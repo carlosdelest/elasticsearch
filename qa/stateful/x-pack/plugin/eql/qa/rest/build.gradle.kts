@@ -15,17 +15,16 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package org.elasticsearch.test.cluster.serverless.remote;
+tasks {
+    javaRestTest {
+        // RemoteClusterAwareEqlRestTestCase uses its own system properties for configuring security
+        systemProperty("tests.rest.cluster.remote.user", "stateful_rest_test_admin")
+        systemProperty("tests.rest.cluster.remote.password", "x-pack-test-password")
 
-public class ServerlessRemoteClusterSpecBuilder extends AbstractRemoteClusterSpecBuilder<RemoteServerlessElasticsearchCluster> {
+        // EQL Stats endpoint is disabled in serverless
+        exclude("**/EqlStatsIT.class")
 
-    public ServerlessRemoteClusterSpecBuilder() {
-        this.clusterAccess(new DefaultServerlessClusterAccessProvider());
+        // Assertions are failing due to discrepencies in exceptions when security is enabled
+        exclude("**/EqlRestValidationIT.class")
     }
-
-    @Override
-    public RemoteServerlessElasticsearchCluster build() {
-        return new DefaultRemoteServerlessElasticsearchCluster(clusterAccessProviders);
-    }
-
 }

@@ -46,7 +46,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
-import static org.elasticsearch.test.cluster.serverless.DefaultServerlessLocalConfigProvider.node;
+import static org.elasticsearch.test.cluster.serverless.local.DefaultServerlessLocalConfigProvider.node;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 

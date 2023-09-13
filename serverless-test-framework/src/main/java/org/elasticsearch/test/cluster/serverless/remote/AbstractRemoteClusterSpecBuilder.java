@@ -8,12 +8,10 @@
 
 package org.elasticsearch.test.cluster.serverless.remote;
 
-import org.elasticsearch.test.cluster.ElasticsearchCluster;
-
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class AbstractRemoteClusterSpecBuilder<T extends ElasticsearchCluster> extends AbstractRemoteSpecBuilder<
+public abstract class AbstractRemoteClusterSpecBuilder<T extends RemoteServerlessElasticsearchCluster> extends AbstractRemoteSpecBuilder<
     RemoteClusterSpecBuilder<T>> implements RemoteClusterSpecBuilder<T> {
 
     protected final List<ServerlessClusterAccessProvider> clusterAccessProviders = new ArrayList<>();

@@ -24,6 +24,7 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
+import org.elasticsearch.test.cluster.serverless.remote.RemoteServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
 
@@ -38,7 +39,7 @@ import javax.net.ssl.SSLContext;
 public abstract class AbstractServerlessE2eTest extends ESRestTestCase {
 
     @ClassRule
-    public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.remote().build();
+    public static RemoteServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.remote().build();
 
     protected void configureClient(RestClientBuilder builder, Settings settings) throws IOException {
         super.configureClient(builder, settings);

@@ -1,18 +1,27 @@
 /*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Elastic License
- * 2.0 and the Server Side Public License, v 1; you may not use this file except
- * in compliance with, at your election, the Elastic License 2.0 or the Server
- * Side Public License, v 1.
+ * ELASTICSEARCH CONFIDENTIAL
+ * __________________
+ *
+ * Copyright Elasticsearch B.V. All rights reserved.
+ *
+ * NOTICE:  All information contained herein is, and remains
+ * the property of Elasticsearch B.V. and its suppliers, if any.
+ * The intellectual and technical concepts contained herein
+ * are proprietary to Elasticsearch B.V. and its suppliers and
+ * may be covered by U.S. and Foreign Patents, patents in
+ * process, and are protected by trade secret or copyright
+ * law.  Dissemination of this information or reproduction of
+ * this material is strictly forbidden unless prior written
+ * permission is obtained from Elasticsearch B.V.
  */
 
-package org.elasticsearch.test.cluster.serverless;
+package org.elasticsearch.test.cluster.serverless.local;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.test.cluster.local.AbstractLocalClusterFactory;
-import org.elasticsearch.test.cluster.local.LocalClusterHandle;
+import org.elasticsearch.test.cluster.local.DefaultLocalClusterHandle;
 import org.elasticsearch.test.cluster.local.distribution.DistributionResolver;
 import org.elasticsearch.test.cluster.util.Version;
 
@@ -23,7 +32,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import static java.util.function.Predicate.not;
 
-public class ServerlessLocalClusterHandle extends LocalClusterHandle {
+public class ServerlessLocalClusterHandle extends DefaultLocalClusterHandle {
     private static final Logger LOGGER = LogManager.getLogger(ServerlessLocalClusterHandle.class);
 
     private final String name;
@@ -56,7 +65,8 @@ public class ServerlessLocalClusterHandle extends LocalClusterHandle {
             baseWorkingDir,
             distributionResolver,
             oldNode.getSpec(),
-            RandomStringUtils.randomAlphabetic(7)
+            RandomStringUtils.randomAlphabetic(7),
+            true
         );
 
         nodes.set(index, newNode);
@@ -79,7 +89,8 @@ public class ServerlessLocalClusterHandle extends LocalClusterHandle {
             baseWorkingDir,
             distributionResolver,
             oldNode.getSpec(),
-            RandomStringUtils.randomAlphabetic(7)
+            RandomStringUtils.randomAlphabetic(7),
+            true
         );
 
         LOGGER.info("Replacing node '{}' with node '{}'", oldNode.getName(), newNode.getName());

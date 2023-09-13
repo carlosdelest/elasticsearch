@@ -10,7 +10,9 @@ package org.elasticsearch.test.cluster.serverless;
 
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.LocalClusterSpecBuilder;
+import org.elasticsearch.test.cluster.serverless.local.ServerlessLocalClusterSpecBuilder;
 import org.elasticsearch.test.cluster.serverless.remote.RemoteClusterSpecBuilder;
+import org.elasticsearch.test.cluster.serverless.remote.RemoteServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.serverless.remote.ServerlessRemoteClusterSpecBuilder;
 import org.elasticsearch.test.cluster.util.Version;
 
@@ -32,7 +34,7 @@ public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
      *
      * @return a builder for a remote cluster deployed in a platform dev environment
      */
-    static RemoteClusterSpecBuilder<ServerlessElasticsearchCluster> remote() {
+    static RemoteClusterSpecBuilder<RemoteServerlessElasticsearchCluster> remote() {
         return new ServerlessRemoteClusterSpecBuilder();
     }
 

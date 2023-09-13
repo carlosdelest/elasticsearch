@@ -17,15 +17,7 @@
 
 package org.elasticsearch.test.cluster.serverless.remote;
 
-public class ServerlessRemoteClusterSpecBuilder extends AbstractRemoteClusterSpecBuilder<RemoteServerlessElasticsearchCluster> {
+import org.elasticsearch.test.cluster.ClusterHandle;
+import org.junit.rules.TestRule;
 
-    public ServerlessRemoteClusterSpecBuilder() {
-        this.clusterAccess(new DefaultServerlessClusterAccessProvider());
-    }
-
-    @Override
-    public RemoteServerlessElasticsearchCluster build() {
-        return new DefaultRemoteServerlessElasticsearchCluster(clusterAccessProviders);
-    }
-
-}
+public interface RemoteServerlessElasticsearchCluster extends TestRule, ClusterHandle {}

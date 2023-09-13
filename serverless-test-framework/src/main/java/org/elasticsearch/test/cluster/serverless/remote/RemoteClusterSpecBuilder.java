@@ -8,9 +8,9 @@
 
 package org.elasticsearch.test.cluster.serverless.remote;
 
-import org.elasticsearch.test.cluster.ElasticsearchCluster;
-
-public interface RemoteClusterSpecBuilder<T extends ElasticsearchCluster> extends RemoteSpecBuilder<RemoteClusterSpecBuilder<T>> {
+public interface RemoteClusterSpecBuilder<T extends RemoteServerlessElasticsearchCluster>
+    extends
+        RemoteSpecBuilder<RemoteClusterSpecBuilder<T>> {
 
     T build();
 
