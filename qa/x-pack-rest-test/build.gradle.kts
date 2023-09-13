@@ -32,6 +32,8 @@ tasks {
             "data_streams/*/*",
             // health expects a data_content tier
             "health/*/*",
+            // inference API isn't available in serverless yet...
+            "inference/*/*",
             // this test asserts on ml node attributes that we don't reveal in serverless
             "ml/jobs_get_stats/Test get job stats after uploading data prompting the creation of some stats",
             // monitoring doesn't exist in serverless
