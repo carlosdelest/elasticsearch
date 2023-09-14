@@ -41,7 +41,7 @@ public class ServerlessServerCli extends ServerCli {
         Settings defaultSettings = Settings.builder().loadFromPath(defaultsFile).build();
         Settings nodeSettings = env.settings();
 
-        for (String defaultSettingName : defaultSettings.names()) {
+        for (String defaultSettingName : defaultSettings.keySet()) {
             if (nodeSettings.hasValue(defaultSettingName)) {
                 String overrideValue = nodeSettings.get(defaultSettingName);
                 terminal.println("Serverless default for [%1s] is overridden to [%1s]".formatted(defaultSettingName, overrideValue));
