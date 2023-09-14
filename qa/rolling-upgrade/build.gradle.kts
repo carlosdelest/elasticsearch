@@ -29,5 +29,6 @@ tasks {
     javaRestTest {
         usesDefaultDistribution()
         usesBwcDistribution()
+        onlyIf("disabled") { !System.getProperty("tests.upgrade.skip", "false").toBoolean() }
     }
 }

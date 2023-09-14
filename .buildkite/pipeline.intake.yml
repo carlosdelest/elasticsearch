@@ -14,11 +14,14 @@ steps:
 
   - label: ":java: Run serverless Elasticsearch functional tests"
     if: build.env('GITOPS_ENV') == 'dev'
-    command: ".buildkite/scripts/run-gradle.sh check"
+    command: ".buildkite/scripts/run-gradle.sh check -Dtests.upgrade.skip=true"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+
+  - label: ":pipeline: :arrow_up: Upload upgrade test steps"
+    command: ".buildkite/scripts/run-upgrade-tests.sh"
 
   - label: ":s3: Run AWS S3 third party tests"
     if: build.env('GITOPS_ENV') == 'dev'

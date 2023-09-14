@@ -23,6 +23,7 @@ steps:
       image: "docker.elastic.co/ci-agent-images/quality-gate-seedling:0.0.2"
 
   - label: ":git: Push promoted build tags"
+    branches: main
     command: ".buildkite/scripts/tag-promoted-commit.sh"
     env:
       GITOPS_ENV: "${ENVIRONMENT}"

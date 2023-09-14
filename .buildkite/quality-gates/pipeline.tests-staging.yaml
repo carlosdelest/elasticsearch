@@ -9,3 +9,10 @@ steps:
       message: "${BUILDKITE_MESSAGE}"
       commit: "${BUILDKITE_COMMIT}"
       branch: "${BUILDKITE_BRANCH}"
+
+  - label: ":java: Verify upgrade from current production"
+    command: ".buildkite/scripts/run-gradle.sh :qa:rolling-upgrade:check -Dtests.bwc.tag=current_production"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
