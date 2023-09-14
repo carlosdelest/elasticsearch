@@ -102,6 +102,7 @@ include(":serverless-test-framework")
 /*
  * Stateful ES QA Projects
  */
+includeStatefulTests(":modules:aggregations", includeYamlTests = true, includeJavaTests = false)
 includeStatefulTests(":x-pack:plugin:eql:qa:rest", includeYamlTests = true, includeJavaTests = true)
 
 fun includeStatefulTests(projectPath: String, includeYamlTests: Boolean, includeJavaTests: Boolean) {
