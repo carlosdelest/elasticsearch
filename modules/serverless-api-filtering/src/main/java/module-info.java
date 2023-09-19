@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-module org.elasticsearch.api.filtering.serverless {
+module org.elasticsearch.serverless.apifiltering {
     requires org.elasticsearch.base;
     requires org.elasticsearch.server;
     requires org.elasticsearch.xcontent;
@@ -23,4 +23,6 @@ module org.elasticsearch.api.filtering.serverless {
 
     exports co.elastic.elasticsearch.api.filtering to org.elasticsearch.server;
     exports co.elastic.elasticsearch.api.validation to org.elasticsearch.server;
+
+    provides org.elasticsearch.plugins.internal.RestExtension with co.elastic.elasticsearch.api.filtering.ApiFilterRestExtension;
 }
