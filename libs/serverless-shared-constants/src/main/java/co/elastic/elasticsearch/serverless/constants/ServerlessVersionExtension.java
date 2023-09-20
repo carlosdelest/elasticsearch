@@ -15,9 +15,21 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-description = "A module of constant objects that can be shared across serverless components"
+package co.elastic.elasticsearch.serverless.constants;
 
-dependencies {
-    compileOnly("org.elasticsearch:server")
-    testImplementation("org.elasticsearch.test:framework")
+import org.elasticsearch.TransportVersion;
+import org.elasticsearch.index.IndexVersion;
+import org.elasticsearch.internal.VersionExtension;
+
+public class ServerlessVersionExtension implements VersionExtension {
+
+    @Override
+    public TransportVersion getCurrentTransportVersion(TransportVersion fallback) {
+        return TransportVersion.max(ServerlessTransportVersions.LATEST_DEFINED, fallback);
+    }
+
+    @Override
+    public IndexVersion getCurrentIndexVersion(IndexVersion fallback) {
+        return fallback;
+    }
 }

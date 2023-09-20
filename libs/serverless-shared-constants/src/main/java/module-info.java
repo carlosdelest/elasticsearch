@@ -24,4 +24,5 @@ module org.elasticsearch.serverless.constants {
     provides org.elasticsearch.plugins.internal.SettingsExtension
         with
             co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettingsExtension;
+    provides org.elasticsearch.internal.VersionExtension with co.elastic.elasticsearch.serverless.constants.ServerlessVersionExtension;
 }
