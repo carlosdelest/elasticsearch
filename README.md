@@ -99,7 +99,7 @@ If need be, you can pass additional settings to the test cluster via system prop
 prefix. For example:
 
 ```shell
-./gradlew :run -Dtests.es.security.enabled=false
+./gradlew :run -Dtests.es.xpack.security.enabled=false
 ```
 
 If you need to make further customizations, the cluster definition for this task [lives here](serverless-build-tools/src/main/kotlin/elasticsearch.serverless-run.gradle.kts).
