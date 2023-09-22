@@ -31,7 +31,6 @@ import java.util.jar.Manifest;
 
 public class ServerlessBuildExtension implements BuildExtension {
     private static final String FLAVOR = "serverless";
-    private static final String VERSION = "serverless";
 
     private static final Build INSTANCE;
     static {
@@ -54,7 +53,7 @@ public class ServerlessBuildExtension implements BuildExtension {
         }
         var str = String.format(Locale.ROOT, "[serverless][%s][%s]", hash, date);
 
-        INSTANCE = new Build(FLAVOR, Build.Type.DOCKER, hash, date, true, VERSION, VERSION, VERSION, str);
+        INSTANCE = new Build(FLAVOR, Build.Type.DOCKER, hash, date, true, hash, hash, hash, str);
     }
 
     static URL getCodeSourceLocation() {
