@@ -320,7 +320,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
         }
     }
 
-    private TestIndex setUpIndicesService(String indexName, int numIndices, int numShards, int commitsPerShard, int docsPerCommit)
+    static TestIndex setUpIndicesService(String indexName, int numIndices, int numShards, int commitsPerShard, int docsPerCommit)
         throws IOException {
         var indicesService = mock(IndicesService.class);
         TestIndex testIndex = new TestIndex(indicesService, new ArrayList<>(numShards * commitsPerShard), commitsPerShard);
@@ -361,7 +361,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
         }
     }
 
-    private Directory generateSegmentInfosDir(int id, int docsPerCommit, int commits) throws IOException {
+    private static Directory generateSegmentInfosDir(int id, int docsPerCommit, int commits) throws IOException {
         Directory dir = newFSDirectory(createTempDir());
         IndexWriterConfig iwc = newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE)
             .setOpenMode(IndexWriterConfig.OpenMode.CREATE);
