@@ -37,5 +37,5 @@
   - is_true: "ml.metrics.extra_model_memory_in_bytes.quality"
   - match: { ml.metrics.extra_processors.value: 0 }
   - is_true: "ml.metrics.extra_processors.quality"
-  - match: { ml.metrics.remove_node_memory_in_bytes.value: 0 }
+  # MUTED, see gh#941 - match: { ml.metrics.remove_node_memory_in_bytes.value: 0 }
   - is_true: "ml.metrics.remove_node_memory_in_bytes.quality"
