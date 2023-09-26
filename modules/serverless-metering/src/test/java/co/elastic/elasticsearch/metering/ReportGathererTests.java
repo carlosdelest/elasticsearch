@@ -17,15 +17,52 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.reports.UsageRecord;
+import co.elastic.elasticsearch.metrics.MetricsCollector;
+
+import org.elasticsearch.common.UUIDs;
+import org.elasticsearch.common.util.concurrent.DeterministicTaskQueue;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.threadpool.TestThreadPool;
+import org.elasticsearch.threadpool.ThreadPool;
+import org.junit.After;
+import org.junit.Before;
+import org.mockito.Mockito;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import static co.elastic.elasticsearch.metering.ReportGatherer.calculateSampleTimestamp;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.both;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.startsWith;
 
 public class ReportGathererTests extends ESTestCase {
+
+    private TestThreadPool threadPool;
+
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        threadPool = new TestThreadPool(getClass().getName());
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
+        threadPool = null;
+        super.tearDown();
+    }
 
     public void testCalculateSampleTimestamp() {
         assertThat(
@@ -50,5 +87,165 @@ public class ReportGathererTests extends ESTestCase {
         );
 
         expectThrows(AssertionError.class, () -> calculateSampleTimestamp(Instant.parse("2023-01-01T00:00:00Z"), Duration.ofHours(2)));
+    }
+
+    private static class GathererRecorder {
+
+        private record RecordedMetric(long value, String id) {}
+
+        AtomicReference<RecordedMetric> currentRecordedMetric = new AtomicReference<>();
+
+        Stream<MetricsCollector.MetricValue> generateAndRecordSingleMetric() {
+            var newRecord = new RecordedMetric(randomLong(), UUIDs.randomBase64UUID());
+
+            // assert last metrics where taken by `report`
+            var lastRecord = currentRecordedMetric.getAndSet(newRecord);
+            assertNull("There should not be a pending recorded metric", lastRecord);
+
+            // store and return new metrics
+            return Stream.of(
+                new MetricsCollector.MetricValue(
+                    MetricsCollector.MeasurementType.COUNTER,
+                    newRecord.id(),
+                    "type1",
+                    Map.of(),
+                    Map.of(),
+                    newRecord.value
+                )
+            );
+        }
+
+        void report(List<UsageRecord> records) {
+            // read last metric and clear it
+            var lastRecordedMetric = currentRecordedMetric.getAndSet(null);
+            assertNotNull("There should be a pending recorded metric", lastRecordedMetric);
+
+            // compare with last record
+            assertThat(
+                "ReportGatherer UsageRecord should match the last recorded metric",
+                records,
+                contains(
+                    allOf(
+                        transformedMatch(UsageRecord::id, startsWith(lastRecordedMetric.id)),
+                        transformedMatch(x -> x.usage().quantity(), equalTo(lastRecordedMetric.value))
+                    )
+                )
+            );
+        }
+    }
+
+    public void testReportGatheringAlwaysRunsOrderly() {
+
+        var recorder = new GathererRecorder();
+        var reportPeriodInMillis = randomFrom(1, 10, 200, 1000, 5000);
+        var runningTimeInMillis = TimeValue.timeValueSeconds(10).getMillis();
+
+        MeteringService service = Mockito.mock(MeteringService.class);
+        Mockito.when(service.getMetrics()).then(a -> recorder.generateAndRecordSingleMetric());
+        Mockito.when(service.nodeId()).thenReturn("nodeId");
+        Mockito.when(service.projectId()).thenReturn("projectId");
+
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+
+        var reportGatherer = new ReportGatherer(
+            service,
+            recorder::report,
+            deterministicTaskQueue.getThreadPool(),
+            ThreadPool.Names.GENERIC,
+            TimeValue.timeValueMillis(reportPeriodInMillis)
+        );
+
+        reportGatherer.start();
+
+        // Run/schedule the tasks in the queue for the given amount of time
+        while (deterministicTaskQueue.getCurrentTimeMillis() <= runningTimeInMillis) {
+            deterministicTaskQueue.runAllRunnableTasks();
+            deterministicTaskQueue.advanceTime();
+        }
+
+        reportGatherer.cancel();
+    }
+
+    public void testCancelIdempotent() {
+        MeteringService service = createMockMeteringService();
+
+        var reportGatherer = new ReportGatherer(service, x -> {}, threadPool, ThreadPool.Names.GENERIC, TimeValue.timeValueMillis(1));
+
+        reportGatherer.start();
+
+        boolean cancelledOnce = reportGatherer.cancel();
+        boolean cancelledTwice = reportGatherer.cancel();
+
+        // Calling cancel a first time should report cancelled=true. Calling a second time should report cancelled=false
+        // and have no other effect (no errors - do not throw)
+        assertTrue("Gathering should have been cancelled", cancelledOnce);
+        assertFalse("Calling cancel on an already cancelled ReportGatherer should have no effect", cancelledTwice);
+    }
+
+    public void testCancelCancels() {
+        MeteringService service = createMockMeteringService();
+
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+
+        var reportGatherer = new ReportGatherer(
+            service,
+            x -> {},
+            deterministicTaskQueue.getThreadPool(),
+            ThreadPool.Names.GENERIC,
+            TimeValue.timeValueMinutes(1)
+        );
+
+        reportGatherer.start();
+
+        assertThat(
+            "A first gatherReports task should have been scheduled",
+            deterministicTaskQueue,
+            both(transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(true))).and(
+                transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
+            )
+        );
+
+        deterministicTaskQueue.advanceTime();
+
+        assertThat(
+            "There should be a gatherReports task ready to run",
+            deterministicTaskQueue,
+            both(transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(true))).and(
+                transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(false))
+            )
+        );
+
+        deterministicTaskQueue.runRandomTask();
+
+        assertThat(
+            "A second gatherReports task should have been scheduled",
+            deterministicTaskQueue,
+            both(transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(true))).and(
+                transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
+            )
+        );
+
+        var cancelled = reportGatherer.cancel();
+
+        assertTrue("Gathering should have been cancelled", cancelled);
+
+        deterministicTaskQueue.advanceTime();
+        deterministicTaskQueue.runRandomTask();
+
+        assertThat(
+            "There should be no gatherReports task scheduled",
+            deterministicTaskQueue,
+            both(transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(false))).and(
+                transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
+            )
+        );
+    }
+
+    private static MeteringService createMockMeteringService() {
+        MeteringService service = Mockito.mock(MeteringService.class);
+        Mockito.when(service.getMetrics()).then(a -> Stream.empty());
+        Mockito.when(service.nodeId()).thenReturn("nodeId");
+        Mockito.when(service.projectId()).thenReturn("projectId");
+        return service;
     }
 }
