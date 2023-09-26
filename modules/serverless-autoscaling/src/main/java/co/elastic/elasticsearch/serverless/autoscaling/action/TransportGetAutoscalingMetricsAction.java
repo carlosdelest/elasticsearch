@@ -111,7 +111,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             GetIndexTierMetrics.INSTANCE,
             new GetIndexTierMetrics.Request(timeoutPerMetric),
             ActionListener.wrap(response -> indexTierMetricsRef.set(response.getMetrics()), e -> {
-                logger.debug("failed to retrieve index tier metrics", e);
+                logger.warn("failed to retrieve index tier metrics", e);
                 indexTierMetricsRef.set(new IndexTierMetrics(getFailureReason(e), wrapExceptionIfNecessary(e)));
             }),
             countDownListener
@@ -122,7 +122,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             GetSearchTierMetrics.INSTANCE,
             new GetSearchTierMetrics.Request(timeoutPerMetric),
             ActionListener.wrap(response -> searchTierMetricsRef.set(response.getMetrics()), e -> {
-                logger.debug("failed to retrieve search tier metrics", e);
+                logger.warn("failed to retrieve search tier metrics", e);
                 searchTierMetricsRef.set(new SearchTierMetrics(getFailureReason(e), wrapExceptionIfNecessary(e)));
             }),
             countDownListener
@@ -133,7 +133,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             GetMachineLearningTierMetrics.INSTANCE,
             new GetMachineLearningTierMetrics.Request(timeoutPerMetric),
             ActionListener.wrap(response -> machineLearningMetricsRef.set(response.getMetrics()), e -> {
-                logger.debug("failed to retrieve ml tier metrics", e);
+                logger.warn("failed to retrieve ml tier metrics", e);
                 machineLearningMetricsRef.set(new MachineLearningTierMetrics(getFailureReason(e), wrapExceptionIfNecessary(e)));
             }),
             countDownListener
