@@ -18,4 +18,5 @@ dependencies {
     implementation("org.elasticsearch.test:test-clusters")
     implementation("org.apache.logging.log4j:log4j-api:${versions["log4j"]}")
     implementation("org.apache.commons:commons-lang3:${versions["commons_lang3"]}")
+    implementation(project(":libs:serverless-build-info"))
 }
