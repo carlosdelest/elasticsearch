@@ -36,7 +36,6 @@ echo "--- Upload pipeline"
 PIPELINE=$(cat <<EOF
 steps:
   - group: ":arrow_up: Run upgrade tests"
-    if: build.env('GITOPS_ENV') == 'dev'
     steps:
 
 EOF
