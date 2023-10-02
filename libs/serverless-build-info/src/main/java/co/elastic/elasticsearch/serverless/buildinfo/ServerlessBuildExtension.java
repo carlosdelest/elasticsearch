@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.serverless.buildinfo;
 
 import org.elasticsearch.Build;
 import org.elasticsearch.common.io.FileSystemUtils;
+import org.elasticsearch.core.Tuple;
 import org.elasticsearch.internal.BuildExtension;
 
 import java.io.IOException;
@@ -34,29 +35,36 @@ public class ServerlessBuildExtension implements BuildExtension {
 
     private static final Build INSTANCE;
     static {
-        final String hash;
-        final String date;
-
         final URL url = getCodeSourceLocation();
-        final String urlStr = url == null ? "" : url.toString();
-        if (urlStr.startsWith("file:/")) {
-            try (JarInputStream jar = new JarInputStream(FileSystemUtils.openFileURLStream(url))) {
-                Manifest manifest = jar.getManifest();
-                hash = manifest.getMainAttributes().getValue("Change");
-                date = manifest.getMainAttributes().getValue("Build-Date");
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        } else {
-            hash = "unknown";
-            date = "unknown";
-        }
+        final Tuple<String, String> hashAndDate = getHashAndDate(url);
+
+        final String hash = hashAndDate.v1();
+        final String date = hashAndDate.v2();
+
         var str = String.format(Locale.ROOT, "[serverless][%s][%s]", hash, date);
 
         INSTANCE = new Build(FLAVOR, Build.Type.DOCKER, hash, date, true, hash, hash, hash, str);
     }
 
-    static URL getCodeSourceLocation() {
+    private static Tuple<String, String> getHashAndDate(URL codeSourceUrl) {
+        if (codeSourceUrl != null && codeSourceUrl.getProtocol().equalsIgnoreCase("file")) {
+            try (JarInputStream jar = new JarInputStream(FileSystemUtils.openFileURLStream(codeSourceUrl))) {
+                Manifest manifest = jar.getManifest();
+                // Manifest might be missing, or url does not point to a Jar file
+                if (manifest != null) {
+                    final var hash = manifest.getMainAttributes().getValue("Change");
+                    final var date = manifest.getMainAttributes().getValue("Build-Date");
+                    return Tuple.tuple(hash, date);
+                }
+
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+        return Tuple.tuple("unknown", "unknown");
+    }
+
+    private static URL getCodeSourceLocation() {
         final CodeSource codeSource = ServerlessBuildExtension.class.getProtectionDomain().getCodeSource();
         return codeSource == null ? null : codeSource.getLocation();
     }

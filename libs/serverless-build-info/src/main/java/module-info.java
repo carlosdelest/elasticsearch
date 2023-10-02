@@ -17,6 +17,7 @@
 
 module org.elasticsearch.serverless.buildinfo {
     requires org.elasticsearch.server;
+    requires org.elasticsearch.base;
 
     provides org.elasticsearch.internal.BuildExtension with co.elastic.elasticsearch.serverless.buildinfo.ServerlessBuildExtension;
 }

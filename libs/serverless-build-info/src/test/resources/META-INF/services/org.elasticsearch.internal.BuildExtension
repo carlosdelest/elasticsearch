@@ -1,0 +1,4 @@
+# In production, this service is loaded from the modules path. Tests use the classpath,
+# so we need to define the service provider here.
+
+co.elastic.elasticsearch.serverless.buildinfo.ServerlessBuildExtension
