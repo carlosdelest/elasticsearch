@@ -325,7 +325,7 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
-  description: Validate and update elasticsearch submodule commit
+  description: Validate updated elasticsearch submodule commit
   name: buildkite-pipeline-elasticsearch-serverless-update-submodule
 spec:
   type: buildkite-pipeline
@@ -335,8 +335,8 @@ spec:
     apiVersion: buildkite.elastic.dev/v1
     kind: Pipeline
     metadata:
-      name: elasticsearch-serverless / update submodule
-      description: ':git: Validate and update elasticsearch submodule commit'
+      name: elasticsearch-serverless / validate submodule
+      description: ':git: Validate elasticsearch submodule commit'
     spec:
       repository: elastic/elasticsearch-serverless
       pipeline_file: .buildkite/pipeline.update-submodule.yml
