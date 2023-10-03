@@ -1,11 +1,16 @@
 #!/bin/bash
 set -e
 
+if [[ "${BUILDKITE_BRANCH}" != "main" ]] && [[ "${BUILDKITE_BRANCH}" != release/* ]]; then
+  echo "Invalid release branch '${BUILDKITE_BRANCH}. Valid branches are 'main' or prefixed with 'release/'."
+  exit 1
+fi
+
 if [ -z "${PROMOTED_COMMIT}" ]; then
   echo "--- Determining promotion commit"
   INTAKE_PIPELINE_SLUG="elasticsearch-serverless-intake"
   BUILDKITE_API_TOKEN=$(vault read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
-  BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=main&state=passed" | jq '.[0] | {commit: .commit, url: .web_url}')
+  BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${BUILDKITE_BRANCH}&state=passed" | jq '.[0] | {commit: .commit, url: .web_url}')
   echo $BUILD_JSON
   PROMOTED_COMMIT=$(echo ${BUILD_JSON} | jq -r '.commit')
   PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
@@ -22,6 +27,7 @@ steps:
     trigger: elasticsearch-serverless-intake
     build:
       commit: "${PROMOTED_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
       env:
         GPCTL_CONFIG: https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/config.yaml
         GITOPS_ENV: qa

@@ -27,7 +27,7 @@ spec:
         everyone:
           access_level: READ_ONLY
       cancel_intermediate_builds: true
-      cancel_intermediate_builds_branch_filter: '!main'
+      cancel_intermediate_builds_branch_filter: '!main release/*'
       provider_settings:
         build_pull_request_forks: true
         publish_commit_status_per_step: true

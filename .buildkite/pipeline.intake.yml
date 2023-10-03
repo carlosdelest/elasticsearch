@@ -5,7 +5,7 @@ env:
 
 steps:
   - label: ":git: Validate elasticsearch submodule"
-    branches: main
+    branches: 'main release/*'
     command: ".buildkite/scripts/validate-submodule.sh"
     agents:
       provider: "gcp"
@@ -33,7 +33,7 @@ steps:
 
   - label: ":docker: Publish docker images"
     key: docker-publish
-    branches: main
+    branches: 'main release/*'
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
     agents:
@@ -42,7 +42,7 @@ steps:
       image: family/elasticsearch-ubuntu-2022
 
   - label: ":rocket: Run E2E tests to check the component update"
-    if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main'
+    if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^release\//)
     trigger: service-or-stack-update-e2e-tests
     depends_on: docker-publish
     build:
@@ -54,7 +54,7 @@ steps:
   - label: ":k8s: :java: Run Elasticsearch E2E tests"
     trigger: elasticsearch-serverless-e2e-tests-${GITOPS_ENV}
     depends_on: docker-publish
-    branches: main
+    branches: 'main release/*'
     build:
       message: "${BUILDKITE_MESSAGE}"
       commit: "${BUILDKITE_COMMIT}"
@@ -66,7 +66,7 @@ steps:
 
   - label: ":argo: Promote build using gpctl"
     trigger: gpctl-promote
-    branches: main
+    if: build.env('GITOPS_ENV') != 'dev' || build.branch == 'main'
     build:
       env:
         REMOTE_SERVICE_CONFIG: $GPCTL_CONFIG
