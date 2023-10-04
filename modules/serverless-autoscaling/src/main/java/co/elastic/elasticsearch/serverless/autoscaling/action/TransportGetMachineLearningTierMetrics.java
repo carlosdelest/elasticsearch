@@ -28,6 +28,7 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.ParentTaskAssigningClient;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.transport.TransportService;
@@ -46,7 +47,7 @@ public class TransportGetMachineLearningTierMetrics extends HandledTransportActi
         ClusterService clusterService,
         Client client
     ) {
-        super(GetMachineLearningTierMetrics.NAME, transportService, actionFilters, Request::new);
+        super(GetMachineLearningTierMetrics.NAME, transportService, actionFilters, Request::new, EsExecutors.DIRECT_EXECUTOR_SERVICE);
         this.clusterService = clusterService;
         this.client = client;
     }

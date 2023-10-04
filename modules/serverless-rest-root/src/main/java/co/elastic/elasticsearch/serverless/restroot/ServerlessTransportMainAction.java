@@ -26,6 +26,7 @@ import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.rest.root.MainAction;
 import org.elasticsearch.rest.root.MainRequest;
@@ -61,7 +62,7 @@ public class ServerlessTransportMainAction extends HandledTransportAction<MainRe
         ClusterService clusterService,
         Environment env
     ) {
-        super(MainAction.NAME, transportService, actionFilters, MainRequest::new);
+        super(MainAction.NAME, transportService, actionFilters, MainRequest::new, EsExecutors.DIRECT_EXECUTOR_SERVICE);
         this.clusterService = clusterService;
         this.projectId = new ClusterName(ServerlessSharedSettings.PROJECT_ID.get(env.settings()));
     }
