@@ -16,10 +16,14 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-  - command:
+
+  - label: ":hourglass: Wait 1 hour for environment health metrics"
+    command:
     - echo "Waiting for 60m for indicative health metrics"
     - sleep ${QA_GATE_WAIT_PERIOD:-3600}
+
   - wait
+
   - label: ":pipeline: Trigger Elasticsearch observability checks in Staging"
     trigger: serverless-quality-gates
     build:

@@ -5,7 +5,7 @@ env:
 
 steps:
   - label: ":git: Validate elasticsearch submodule"
-    branches: 'main release/*'
+    branches: 'main'
     command: ".buildkite/scripts/validate-submodule.sh"
     agents:
       provider: "gcp"
