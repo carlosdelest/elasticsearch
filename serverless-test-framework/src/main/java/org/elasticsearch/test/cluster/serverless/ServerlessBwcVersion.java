@@ -19,6 +19,11 @@ package org.elasticsearch.test.cluster.serverless;
 
 import org.elasticsearch.test.cluster.util.Version;
 
+/**
+ * An extension of {@link Version} that reports a hard-coded "0.0.0" version used for resolution purposes but inherits normal behavior
+ * for other methods like {@link #onOrAfter(String)} so that conditional logic that relies on knowing the stack version of the
+ * distribution can still work as intended.
+ */
 public class ServerlessBwcVersion extends Version {
     private static final String SERVERLESS_BWC_STACK_VERSION_SYSPROP = "tests.serverless.bwc_stack_version";
     private static final Version INSTANCE;

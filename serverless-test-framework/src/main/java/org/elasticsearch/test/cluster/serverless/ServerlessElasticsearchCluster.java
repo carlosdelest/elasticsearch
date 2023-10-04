@@ -19,7 +19,7 @@ import org.elasticsearch.test.cluster.util.Version;
 public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
 
     /**
-     * Creates a new {@link ServerlessLocalClusterSpecBuilder} for defining a locally orchestrated cluster. Local clusters use a locally built
+     * Creates a new {@link LocalClusterSpecBuilder} for defining a locally orchestrated cluster. Local clusters use a locally built
      * Elasticsearch distribution.
      *
      * @return a builder for a local cluster
@@ -29,7 +29,7 @@ public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
     }
 
     /**
-     * Creates a new {@link ServerlessLocalClusterSpecBuilder} for defining a remotely orchestrated cluster. Remote clusters do not
+     * Creates a new {@link RemoteClusterSpecBuilder} for defining a remotely orchestrated cluster. Remote clusters do not
      * use a locally built Elasticsearch distribution but a distribution deployed to k8s based dev environment before.
      *
      * @return a builder for a remote cluster deployed in a platform dev environment
