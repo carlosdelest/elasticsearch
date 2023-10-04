@@ -22,11 +22,10 @@ import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import org.elasticsearch.Build;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.rest.root.MainAction;
 import org.elasticsearch.rest.root.MainRequest;
@@ -34,7 +33,7 @@ import org.elasticsearch.rest.root.MainResponse;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
 
-public class ServerlessTransportMainAction extends HandledTransportAction<MainRequest, MainResponse> {
+public class ServerlessTransportMainAction extends TransportAction<MainRequest, MainResponse> {
 
     private static final String VERSION = "8.11.0";
     private static final String SERVERLESS_NAME = "serverless";
@@ -62,7 +61,7 @@ public class ServerlessTransportMainAction extends HandledTransportAction<MainRe
         ClusterService clusterService,
         Environment env
     ) {
-        super(MainAction.NAME, transportService, actionFilters, MainRequest::new, EsExecutors.DIRECT_EXECUTOR_SERVICE);
+        super(MainAction.NAME, actionFilters, transportService.getTaskManager());
         this.clusterService = clusterService;
         this.projectId = new ClusterName(ServerlessSharedSettings.PROJECT_ID.get(env.settings()));
     }
