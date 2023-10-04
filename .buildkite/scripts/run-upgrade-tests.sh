@@ -30,7 +30,8 @@ function environments_for() {
       fi
     done
 
-    echo -n ${environments[@]}
+    local result=$(printf ",%s" "${environments[@]}")
+    echo -n "${result:1}"
 }
 echo "--- Upload pipeline"
 PIPELINE=$(cat <<EOF
@@ -50,6 +51,9 @@ for commit in ${UNIQUE_COMMITS[@]}; do
           provider: "gcp"
           machineType: "n1-standard-16"
           image: family/elasticsearch-ubuntu-2022
+        notify:
+          - github_commit_status:
+              context: "elasticsearch-serverless/test upgrade from $(environments_for $commit)"
 EOF
 )
 done

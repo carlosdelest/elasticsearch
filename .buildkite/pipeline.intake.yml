@@ -19,6 +19,9 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+    notify:
+      - github_commit_status:
+          context: "elasticsearch-serverless/functional tests"
 
   - label: ":pipeline: :arrow_up: Upload upgrade test steps"
     command: ".buildkite/scripts/run-upgrade-tests.sh"
@@ -30,6 +33,9 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+    notify:
+      - github_commit_status:
+          context: "elasticsearch-serverless/third party tests"
 
   - label: ":docker: Publish docker images"
     key: docker-publish
