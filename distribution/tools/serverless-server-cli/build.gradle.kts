@@ -24,6 +24,9 @@ dependencies {
     compileOnly("org.elasticsearch:elasticsearch-cli")
     compileOnly("org.elasticsearch:server-cli")
 
+    // Bring in the serverless build info extension, so it is available also during bootstrap
+    implementation(project(":libs:serverless-build-info"))
+
     testImplementation("org.elasticsearch.test:framework")
     testImplementation("org.elasticsearch:server")
     testImplementation("org.elasticsearch:elasticsearch-cli")

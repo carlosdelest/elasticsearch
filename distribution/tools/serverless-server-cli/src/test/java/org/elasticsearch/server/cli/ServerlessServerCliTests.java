@@ -17,8 +17,10 @@
 
 package org.elasticsearch.server.cli;
 
+import co.elastic.elasticsearch.serverless.buildinfo.ServerlessBuildExtension;
 import joptsimple.OptionSet;
 
+import org.elasticsearch.Build;
 import org.elasticsearch.bootstrap.ServerArgs;
 import org.elasticsearch.cli.Command;
 import org.elasticsearch.cli.CommandTestCase;
@@ -52,6 +54,16 @@ public class ServerlessServerCliTests extends CommandTestCase {
         execute("-E", "foo.bar=override");
         assertThat(mockServer.args.nodeSettings().get("foo.bar"), equalTo("override"));
         assertThat(terminal.getOutput(), containsString("Serverless default for [foo.bar] is overridden to [override]"));
+    }
+
+    /**
+     * Tests that the CLI loads the correct extension for {@link org.elasticsearch.Build}, so that Build information is consistent with
+     * the one loaded by the cluster/server process. This is important e.g. to generate the correct command line, see
+     * {@link APMJvmOptions} for example.
+     */
+    public void testServerlessBuildExtensionLoaded() {
+        var serverlessExtensionBuild = new ServerlessBuildExtension().getCurrentBuild();
+        assertSame(serverlessExtensionBuild, Build.current());
     }
 
     private class MockServerlessProcess extends ServerProcess {
