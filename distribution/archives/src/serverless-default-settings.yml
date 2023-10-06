@@ -1,1 +1,2 @@
 stateless.enabled: true
+search.query_phase_parallel_collection_enabled: true
