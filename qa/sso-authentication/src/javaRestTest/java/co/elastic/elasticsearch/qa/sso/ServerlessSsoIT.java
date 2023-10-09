@@ -224,7 +224,7 @@ public final class ServerlessSsoIT extends ESRestTestCase {
 
         final Element element = XMLObjectSupport.marshall(authResponse);
         final StringWriter writer = new StringWriter();
-        samlFactory.getHardenedXMLTransformer().transform(new DOMSource(element), new StreamResult(writer));
+        SamlFactory.getHardenedXMLTransformer().transform(new DOMSource(element), new StreamResult(writer));
         final String xml = writer.toString();
         logger.info("SAML Authentication Response: {}", xml);
 
