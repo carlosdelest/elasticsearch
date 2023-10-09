@@ -4,3 +4,7 @@ steps:
     agents:
       image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
       memory: "4G"
+
+notify:
+  - slack: "#es-serverless-gitops"
+    if: build.state == "failed"
