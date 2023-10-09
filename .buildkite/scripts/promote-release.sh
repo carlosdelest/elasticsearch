@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-if [[ "${BUILDKITE_BRANCH}" != "main" ]] && [[ "${BUILDKITE_BRANCH}" != release/* ]]; then
-  echo "Invalid release branch '${BUILDKITE_BRANCH}. Valid branches are 'main' or prefixed with 'release/'."
+if [[ "${BUILDKITE_BRANCH}" != "main" ]] && [[ "${BUILDKITE_BRANCH}" != patch/* ]]; then
+  echo "Invalid release branch '${BUILDKITE_BRANCH}. Valid branches are 'main' or prefixed with 'patch/'."
   exit 1
 fi
 

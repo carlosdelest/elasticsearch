@@ -39,7 +39,7 @@ steps:
 
   - label: ":docker: Publish docker images"
     key: docker-publish
-    branches: 'main release/*'
+    branches: 'main patch/*'
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
     agents:
@@ -60,7 +60,7 @@ steps:
   - label: ":k8s: :java: Run Elasticsearch E2E tests"
     trigger: elasticsearch-serverless-e2e-tests-${GITOPS_ENV}
     depends_on: docker-publish
-    branches: 'main release/*'
+    branches: 'main patch/*'
     build:
       message: "${BUILDKITE_MESSAGE}"
       commit: "${BUILDKITE_COMMIT}"
