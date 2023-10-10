@@ -36,13 +36,7 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-    command:
-      "vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem; \
-      export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url); \
-      export ESS_PROJECT_ID=$(buildkite-agent meta-data get ess-project-id); \
-      export ESS_USERNAME=$(buildkite-agent meta-data get ess-username); \
-      export ESS_PASSWORD=$(buildkite-agent meta-data get ess-password-encrypted | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem); \
-      .buildkite/scripts/run-gradle.sh :qa:e2e-test:javaRestTest"
+    command: "$$BUILDKITE_DIR/scripts/run-e2e-tests.sh"
     depends_on:
       - step: deploy-ess
 
