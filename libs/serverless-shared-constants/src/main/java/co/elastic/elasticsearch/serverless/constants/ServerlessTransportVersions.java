@@ -33,6 +33,7 @@ public class ServerlessTransportVersions {
     static Set<Integer> IDS = new HashSet<>();
 
     public static final TransportVersion FIRST_SERVERLESS_CONSTANT = def(8_501_01_0);
+    public static final TransportVersion DUMMY_PRIMARY_RELOCATION_CHANGE = def(8_515_01_0);
     /*
      * STOP! READ THIS FIRST! No, really,
      *        ____ _____ ___  ____  _        ____  _____    _    ____    _____ _   _ ___ ____    _____ ___ ____  ____ _____ _
