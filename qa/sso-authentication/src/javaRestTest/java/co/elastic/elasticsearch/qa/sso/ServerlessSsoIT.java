@@ -109,6 +109,8 @@ public final class ServerlessSsoIT extends ESRestTestCase {
         .configFile("metadata.xml", Resource.fromClasspath("saml/metadata.xml"))
         .configFile("operator/settings.json", Resource.fromClasspath("operator/role-mappings.json"))
         .configFile("roles.yml", Resource.fromClasspath("roles.yml"))
+        // Logging enabled to debug https://github.com/elastic/elasticsearch-serverless/issues/898
+        .setting("logger.org.elasticsearch.xpack.security.authc.support.mapper", "TRACE")
         .build();
 
     private SamlFactory samlFactory;
@@ -152,6 +154,7 @@ public final class ServerlessSsoIT extends ESRestTestCase {
 
     public void testSamlAuthenticationAndAccess() throws Exception {
         waitForSearchableSecurityIndex();
+        waitForRoleMapping("elastic-cloud-sso-kibana-do-not-change"); // from role-mappings.json
 
         final UserInfo user = randomSamlUser();
         final Map<String, Object> responseBody = samlAuthenticate(user);
@@ -195,6 +198,18 @@ public final class ServerlessSsoIT extends ESRestTestCase {
                 fail("Failed to count docs in security index");
             }
         }, 45, TimeUnit.SECONDS);
+    }
+
+    private void waitForRoleMapping(String name) throws Exception {
+        assertBusy(() -> {
+            try {
+                final Request request = new Request("GET", "/_security/role_mapping/" + name);
+                adminClient().performRequest(request);
+            } catch (ResponseException e) {
+                logger.info("Failed to find role mapping [{}] - {}", name, e.toString());
+                fail("Failed to find role mapping " + name);
+            }
+        }, 20, TimeUnit.SECONDS);
     }
 
     private static void ignoreWarnings(Request req) {
