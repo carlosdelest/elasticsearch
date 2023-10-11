@@ -74,7 +74,7 @@ public class ServerlessDownsampleIT extends ESRestTestCase {
             // we install a template that configures the start/end time bounds and we index documents in the past as otherwise DSL will
             // wait for the `end_time` to lapse
             final Request indexTemplateWithTimeBoundaries = new Request("PUT", "_index_template/tsdb_index_template");
-            indexTemplateWithTimeBoundaries.setJsonEntity(getTemplateBodyWithTimeBounds());
+            indexTemplateWithTimeBoundaries.setJsonEntity(getTemplateBody(true));
             assertEquals(RestStatus.OK.getStatus(), client.performRequest(indexTemplateWithTimeBoundaries).getStatusLine().getStatusCode());
 
             assertEquals(
@@ -112,7 +112,7 @@ public class ServerlessDownsampleIT extends ESRestTestCase {
 
             // we need to remove the time boundaries from the index template before we roll over
             final Request removeTemplateTimeBoundaries = new Request("PUT", "_index_template/tsdb_index_template");
-            removeTemplateTimeBoundaries.setJsonEntity(getTemplateBodyWithoutTimeBounds());
+            removeTemplateTimeBoundaries.setJsonEntity(getTemplateBody(false));
             assertEquals(RestStatus.OK.getStatus(), client.performRequest(removeTemplateTimeBoundaries).getStatusLine().getStatusCode());
 
             assertEquals(
@@ -161,8 +161,17 @@ public class ServerlessDownsampleIT extends ESRestTestCase {
         }
     }
 
-    private String getTemplateBodyWithTimeBounds() {
-        return """
+    private String getTemplateBody(boolean withTimeBounds) {
+        String timeBoundsSettings = "";
+        if (withTimeBounds) {
+            timeBoundsSettings = """
+                            "time_series": {
+                              "start_time": "1986-01-08T23:40:53.384Z",
+                              "end_time": "2022-01-08T23:40:53.384Z"
+                            },
+                """;
+        }
+        return String.format(Locale.ROOT, """
             {
               "index_patterns": [ "tsdb_k8s_*" ],
               "data_stream": { },
@@ -199,10 +208,7 @@ public class ServerlessDownsampleIT extends ESRestTestCase {
                 "settings": {
                     "index": {
                         "mode": "time_series",
-                        "time_series": {
-                          "start_time": "1986-01-08T23:40:53.384Z",
-                          "end_time": "2022-01-08T23:40:53.384Z"
-                        },
+                        %s
                         "routing_path": ["id", "region"]
                     }
                 },
@@ -217,59 +223,6 @@ public class ServerlessDownsampleIT extends ESRestTestCase {
               },
               "composed_of": [ ]
             }
-            """;
-    }
-
-    private String getTemplateBodyWithoutTimeBounds() {
-        return """
-            {
-              "index_patterns": [ "tsdb_k8s_*" ],
-              "data_stream": { },
-              "template": {
-                "mappings": {
-                  "properties": {
-                    "@timestamp": {
-                      "type": "date"
-                    },
-                    "id": {
-                      "type": "keyword",
-                      "time_series_dimension": true
-                    },
-                    "region": {
-                      "type": "keyword",
-                      "time_series_dimension": true
-                    },
-                    "gauge": {
-                      "type": "double",
-                      "time_series_metric": "gauge"
-                    },
-                    "counter": {
-                      "type": "long",
-                      "time_series_metric": "counter"
-                    },
-                    "integer": {
-                      "type": "integer"
-                    },
-                    "keyword": {
-                        "type": "keyword"
-                    }
-                  }
-                },
-                "settings": {
-                    "index.mode": "time_series",
-                    "routing_path": ["id", "region"]
-                },
-                "lifecycle": {
-                  "downsampling": [
-                    {
-                      "after": "5s",
-                      "fixed_interval": "1h"
-                    }
-                  ]
-                }
-              },
-              "composed_of": [ ]
-            }
-            """;
+            """, timeBoundsSettings);
     }
 }
