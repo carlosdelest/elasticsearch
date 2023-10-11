@@ -31,7 +31,8 @@ import org.hamcrest.Matchers;
 import org.junit.ClassRule;
 
 import java.io.IOException;
-import java.time.ZoneOffset;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -59,85 +60,29 @@ public class ServerlessDownsampleIT extends ESRestTestCase {
     public void testDownsampleWithDSL() throws IOException, InterruptedException {
         try (RestClient client = client()) {
             // NOTE: here we need to make sure that DSL policies are checked frequently enough to start downsampling
-            // (data_streams.lifecycle.poll_interval) and that rollover takes place before wwe can actually downsample
-            // the datastream (cluster.lifecycle.default.rollover).
+            // (data_streams.lifecycle.poll_interval)
             final Request clusterSettings = new Request("PUT", "_cluster/settings");
             clusterSettings.setJsonEntity("""
                 {
                   "persistent": {
-                    "data_streams.lifecycle.poll_interval": "1s",
-                    "cluster.lifecycle.default.rollover": "max_docs=5"
+                    "data_streams.lifecycle.poll_interval": "1s"
                   }
                 }
                 """);
             assertEquals(RestStatus.OK.getStatus(), client.performRequest(clusterSettings).getStatusLine().getStatusCode());
 
-            final Request indexTemplate = new Request("PUT", "_index_template/tsdb_index_template");
-            indexTemplate.setJsonEntity("""
-                {
-                  "index_patterns": [ "tsdb_k8s_*" ],
-                  "data_stream": { },
-                  "template": {
-                    "mappings": {
-                      "properties": {
-                        "@timestamp": {
-                          "type": "date"
-                        },
-                        "id": {
-                          "type": "keyword",
-                          "time_series_dimension": true
-                        },
-                        "region": {
-                          "type": "keyword",
-                          "time_series_dimension": true
-                        },
-                        "gauge": {
-                          "type": "double",
-                          "time_series_metric": "gauge"
-                        },
-                        "counter": {
-                          "type": "long",
-                          "time_series_metric": "counter"
-                        },
-                        "integer": {
-                          "type": "integer"
-                        },
-                        "keyword": {
-                            "type": "keyword"
-                        }
-                      }
-                    },
-                    "settings": {
-                        "index.mode": "time_series"
-                    },
-                    "lifecycle": {
-                      "downsampling": [
-                        {
-                          "after": "5s",
-                          "fixed_interval": "1h"
-                        }
-                      ]
-                    }
-                  },
-                  "composed_of": [ ]
-                }
-                """);
-            assertEquals(RestStatus.OK.getStatus(), client.performRequest(indexTemplate).getStatusLine().getStatusCode());
+            // we install a template that configures the start/end time bounds and we index documents in the past as otherwise DSL will
+            // wait for the `end_time` to lapse
+            final Request indexTemplateWithTimeBoundaries = new Request("PUT", "_index_template/tsdb_index_template");
+            indexTemplateWithTimeBoundaries.setJsonEntity(getTemplateBodyWithTimeBounds());
+            assertEquals(RestStatus.OK.getStatus(), client.performRequest(indexTemplateWithTimeBoundaries).getStatusLine().getStatusCode());
 
             assertEquals(
                 RestStatus.OK.getStatus(),
                 client.performRequest(new Request("PUT", "_data_stream/tsdb_k8s_test")).getStatusLine().getStatusCode()
             );
 
-            ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-            // NOTE: here we adjust `now` so to avoid generating documents falling before and after the 1h fixed_interval boundary.
-            // We take advantage of the look_ahead_time to index documents a few minutes "in the future" in that case.
-            if (now.minusMinutes(1).getHour() != now.plusMinutes(1).getHour() || // crossing the hour boundary
-                now.minusMinutes(1).getDayOfWeek() != now.plusMinutes(1).getDayOfWeek() || // crossing the day boundary
-                now.minusMinutes(1).getMonth() != now.plusMinutes(1).getMonth() || // crossing the month boundary
-                now.minusMinutes(1).getYear() != now.plusMinutes(1).getYear()) { // crossing the year boundary
-                now = now.plusMinutes(5);
-            }
+            ZonedDateTime now = LocalDateTime.parse("1990-09-09T18:05:00").atZone(ZoneId.of("UTC"));
 
             final Request bulkIndex = new Request("PUT", "tsdb_k8s_test/_bulk");
             final String bulkRequests = """
@@ -164,6 +109,16 @@ public class ServerlessDownsampleIT extends ESRestTestCase {
                 )
             );
             assertEquals(RestStatus.OK.getStatus(), client.performRequest(bulkIndex).getStatusLine().getStatusCode());
+
+            // we need to remove the time boundaries from the index template before we roll over
+            final Request removeTemplateTimeBoundaries = new Request("PUT", "_index_template/tsdb_index_template");
+            removeTemplateTimeBoundaries.setJsonEntity(getTemplateBodyWithoutTimeBounds());
+            assertEquals(RestStatus.OK.getStatus(), client.performRequest(removeTemplateTimeBoundaries).getStatusLine().getStatusCode());
+
+            assertEquals(
+                RestStatus.OK.getStatus(),
+                client.performRequest(new Request("POST", "tsdb_k8s_test/_rollover")).getStatusLine().getStatusCode()
+            );
 
             assertTrue(waitUntil(() -> {
                 try {
@@ -204,5 +159,117 @@ public class ServerlessDownsampleIT extends ESRestTestCase {
                 )
             );
         }
+    }
+
+    private String getTemplateBodyWithTimeBounds() {
+        return """
+            {
+              "index_patterns": [ "tsdb_k8s_*" ],
+              "data_stream": { },
+              "template": {
+                "mappings": {
+                  "properties": {
+                    "@timestamp": {
+                      "type": "date"
+                    },
+                    "id": {
+                      "type": "keyword",
+                      "time_series_dimension": true
+                    },
+                    "region": {
+                      "type": "keyword",
+                      "time_series_dimension": true
+                    },
+                    "gauge": {
+                      "type": "double",
+                      "time_series_metric": "gauge"
+                    },
+                    "counter": {
+                      "type": "long",
+                      "time_series_metric": "counter"
+                    },
+                    "integer": {
+                      "type": "integer"
+                    },
+                    "keyword": {
+                        "type": "keyword"
+                    }
+                  }
+                },
+                "settings": {
+                    "index": {
+                        "mode": "time_series",
+                        "time_series": {
+                          "start_time": "1986-01-08T23:40:53.384Z",
+                          "end_time": "2022-01-08T23:40:53.384Z"
+                        },
+                        "routing_path": ["id", "region"]
+                    }
+                },
+                "lifecycle": {
+                  "downsampling": [
+                    {
+                      "after": "5s",
+                      "fixed_interval": "1h"
+                    }
+                  ]
+                }
+              },
+              "composed_of": [ ]
+            }
+            """;
+    }
+
+    private String getTemplateBodyWithoutTimeBounds() {
+        return """
+            {
+              "index_patterns": [ "tsdb_k8s_*" ],
+              "data_stream": { },
+              "template": {
+                "mappings": {
+                  "properties": {
+                    "@timestamp": {
+                      "type": "date"
+                    },
+                    "id": {
+                      "type": "keyword",
+                      "time_series_dimension": true
+                    },
+                    "region": {
+                      "type": "keyword",
+                      "time_series_dimension": true
+                    },
+                    "gauge": {
+                      "type": "double",
+                      "time_series_metric": "gauge"
+                    },
+                    "counter": {
+                      "type": "long",
+                      "time_series_metric": "counter"
+                    },
+                    "integer": {
+                      "type": "integer"
+                    },
+                    "keyword": {
+                        "type": "keyword"
+                    }
+                  }
+                },
+                "settings": {
+                    "index.mode": "time_series",
+                    "routing_path": ["id", "region"]
+                },
+                "lifecycle": {
+                  "downsampling": [
+                    {
+                      "after": "5s",
+                      "fixed_interval": "1h"
+                    }
+                  ]
+                }
+              },
+              "composed_of": [ ]
+            }
+            """;
     }
 }
