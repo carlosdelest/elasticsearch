@@ -16,8 +16,9 @@
 # permission is obtained from Elasticsearch B.V.
 
 set -euo pipefail
+source "$BUILDKITE_DIR/scripts/utils/misc.sh"
 
-API_KEY=$(vault read -field api-key "$VAULT_PATH_API_KEY")
+API_KEY=$(vault_with_retries read -field api-key "$VAULT_PATH_API_KEY")
 
 ALL_PROJECTS=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/elasticsearch")
 PROJECT_ID=$(echo $ALL_PROJECTS | jq -c --arg deploymentName "$DEPLOY_ID" '.items[] | select(.name == $deploymentName)' | jq -r '.id')

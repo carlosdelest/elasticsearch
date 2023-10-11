@@ -7,11 +7,12 @@
 #
 
 set -euo pipefail
+source "$BUILDKITE_DIR/scripts/utils/misc.sh"
 
 scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
 set +x
-data=$(vault read -format=json aws-elastic-ci-prod/creds/elasticsearch-ci-s3)
+data=$(vault_with_retries read -format=json aws-elastic-ci-prod/creds/elasticsearch-ci-s3)
 export stateless_aws_s3_access_key=$(echo $data | jq -r .data.access_key)
 export stateless_aws_s3_secret_key=$(echo $data | jq -r .data.secret_key)
 export stateless_aws_s3_session_token=$(echo $data | jq -r .data.security_token)

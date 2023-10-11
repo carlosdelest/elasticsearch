@@ -3,7 +3,7 @@ set -euo pipefail
 
 source "$BUILDKITE_DIR/scripts/utils/misc.sh"
 
-vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem
+vault_with_retries read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem
 export ESS_PUBLIC_URL=$(buildkite-agent meta-data get ess-public-url)
 export ESS_PROJECT_ID=$(buildkite-agent meta-data get ess-project-id)
 export ESS_USERNAME=$(buildkite-agent meta-data get ess-username)

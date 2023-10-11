@@ -1,14 +1,10 @@
 #!/bin/bash
 set -e
 
-# We read data from vault early to avoid vault token for ci job beeing expired later in the job 
-ENCRYPTION_KEY=$(vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption)
-
 retry() {
   local waitInS="$1" # First argument
   local retries="$2" # Second argument
   local command="$3" # Third argument
-
   # Run the command, and save the exit code
   exit_code=0
   $command || exit_code=$?
@@ -17,13 +13,20 @@ retry() {
   if [[ $exit_code -ne 0 && $retries -gt 0 ]]; then
     sleep $waitInS
     echo "Command not succesful"
-    
+
     retry $waitInS $(($retries - 1)) "$command"
   else
     # Return the exit code from the command
     return $exit_code
   fi
 }
+
+vault_with_retries() {
+  retry 5 5 "vault $*"
+}
+
+# We read data from vault early to avoid vault token for ci job beeing expired later in the job
+ENCRYPTION_KEY=$(vault_with_retries read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption)
 
 encrypt () {
   local message="$1"

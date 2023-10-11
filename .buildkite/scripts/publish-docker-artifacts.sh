@@ -3,6 +3,7 @@ set -e
 scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
 source $scripts_dir/utils/docker.sh
+
 GIT_ABBREV_COMMIT="${IMAGE_TAG:-git-${BUILDKITE_COMMIT:0:12}}"
 DOCKER_IMAGE=docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
 

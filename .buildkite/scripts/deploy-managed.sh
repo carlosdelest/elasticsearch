@@ -20,7 +20,7 @@ source "$BUILDKITE_DIR/scripts/utils/misc.sh"
 
 echo "--- Create Project via project-api in $TEST_ENV"
 
-API_KEY=$(vault read -field api-key "$VAULT_PATH_API_KEY")
+API_KEY=$(vault_with_retries read -field api-key "$VAULT_PATH_API_KEY")
 
 # Create es override if we have declared one. empty IMAGE_OVERRIDE env means using default with no override
 if [[ -z "${IMAGE_OVERRIDE}" ]]; then

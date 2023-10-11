@@ -2,6 +2,7 @@ env:
   GITOPS_ENV: "${GITOPS_ENV:-dev}"
   GPCTL_CONFIG: "${GPCTL_CONFIG:-https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/dev.yaml}"
   SKIP_DOCKER: "true"
+  BUILDKITE_DIR: ".buildkite"
 
 steps:
   - label: ":git: Validate elasticsearch submodule"

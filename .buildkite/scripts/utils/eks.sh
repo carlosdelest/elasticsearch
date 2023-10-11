@@ -1,3 +1,4 @@
+source "$BUILDKITE_DIR/scripts/utils/misc.sh"
 
 # The used service account
 export AWS_SERVICE_ACCOUNT_VAULT_PATH="aws-elastic-ci-prod/creds/ecdev-secret-engine-role"
@@ -10,7 +11,7 @@ export AWS_CREDS_FILE="/tmp/aws-creds.json"
 
 aws_auth() {
   echo "--- Reading AWS service account from Vault..."
-  vault read -format=json ${AWS_SERVICE_ACCOUNT_VAULT_PATH} ttl=12h > ${AWS_CREDS_FILE}
+  vault_with_retries read -format=json ${AWS_SERVICE_ACCOUNT_VAULT_PATH} ttl=12h > ${AWS_CREDS_FILE}
   export AWS_ACCESS_KEY_ID=$(cat "${AWS_CREDS_FILE}"| jq -r '.data.access_key')
   export AWS_SECRET_ACCESS_KEY=$(cat "${AWS_CREDS_FILE}"| jq -r '.data.secret_key')
   export AWS_SESSION_TOKEN=$(cat "${AWS_CREDS_FILE}"| jq -r '.data.security_token')
