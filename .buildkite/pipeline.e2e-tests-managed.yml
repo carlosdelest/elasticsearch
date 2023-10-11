@@ -25,6 +25,7 @@ steps:
 
   - label: ":k8s: Deploy serverless Elasticsearch"
     command: "$$BUILDKITE_DIR/scripts/deploy-managed.sh"
+    timeout_in_minutes: 30
     key: deploy-ess
     agents:
       image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
