@@ -72,28 +72,28 @@ retry 30 40 checkEssAvailability
 
 echo "Elasticsearch cluster available via $ES_ENDPOINT" | buildkite-agent annotate --style "info" --context "ess-public-url"
 
-echo "--- Creating Elasticsearch API key"
-ESS_API_KEY_RESPONSE=$(curl -H "Content-Type: application/json" -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD $ES_ENDPOINT/_security/api_key -XPOST -d"
-{
-  \"name\": \"elastic-test-user-api-key\",
-  \"expiration\": \"2d\",
-  \"metadata\": {
-    \"application\": \"ess-e2e-test\",
-    \"environment\": {
-       \"level\": 1,
-       \"trusted\": true,
-       \"tags\": [\"e2e\", \"$TEST_ENV\", \"ci\"]
-    }
-  }
-}")
+#echo "--- Creating Elasticsearch API key"
+#ESS_API_KEY_RESPONSE=$(curl -H "Content-Type: application/json" -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD $ES_ENDPOINT/_security/api_key -XPOST -d"
+#{
+#  \"name\": \"elastic-test-user-api-key\",
+#  \"expiration\": \"2d\",
+#  \"metadata\": {
+#    \"application\": \"ess-e2e-test\",
+#    \"environment\": {
+#       \"level\": 1,
+#       \"trusted\": true,
+#       \"tags\": [\"e2e\", \"$TEST_ENV\", \"ci\"]
+#    }
+#  }
+#}")
 
 
-ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_RESPONSE | jq -e -r '.encoded')
-ESS_API_KEY_ENCRYPTED=$(encrypt $ESS_API_KEY_ENCODED)
+#ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_RESPONSE | jq -e -r '.encoded')
+#ESS_API_KEY_ENCRYPTED=$(encrypt $ESS_API_KEY_ENCODED)
 ESS_ROOT_PASSWORD_ENCRYPTED=$(encrypt $ESS_ROOT_PASSWORD)
 
 buildkite-agent meta-data set "ess-project-id" "$PROJECT_ID"
 buildkite-agent meta-data set "ess-public-url" "$ES_ENDPOINT"
-buildkite-agent meta-data set "ess-api-key-encrypted" "$ESS_API_KEY_ENCRYPTED"
+#buildkite-agent meta-data set "ess-api-key-encrypted" "$ESS_API_KEY_ENCRYPTED"
 buildkite-agent meta-data set "ess-username" "$ESS_ROOT_USERNAME"
 buildkite-agent meta-data set "ess-password-encrypted" "$ESS_ROOT_PASSWORD_ENCRYPTED"
