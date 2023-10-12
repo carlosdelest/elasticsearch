@@ -7,7 +7,10 @@
 #
 
 set -euo pipefail
-source "$BUILDKITE_DIR/scripts/utils/misc.sh"
+
+scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+
+source $scripts_dir/utils/misc.sh
 
 scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 
