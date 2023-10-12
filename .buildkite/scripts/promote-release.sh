@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
-source "$BUILDKITE_DIR/scripts/utils/misc.sh"
+
+scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+source $scripts_dir/utils/misc.sh
 
 if [[ "${BUILDKITE_BRANCH}" != "main" ]] && [[ "${BUILDKITE_BRANCH}" != patch/* ]]; then
   echo "Invalid release branch '${BUILDKITE_BRANCH}. Valid branches are 'main' or prefixed with 'patch/'."
