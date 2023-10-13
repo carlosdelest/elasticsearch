@@ -454,6 +454,6 @@ spec:
         everyone:
           access_level: READ_ONLY
       schedules:
-        Daily:
+        Every Monday at 9am UTC:
           branch: main
-          cronline: "0 18 * * *"
+          cronline: "0 9 * * 1"
