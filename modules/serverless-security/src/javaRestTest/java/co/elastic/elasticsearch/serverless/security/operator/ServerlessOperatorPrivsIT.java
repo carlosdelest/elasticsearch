@@ -98,5 +98,16 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
                 + "exists but is not available when running in serverless mode\"}",
             EntityUtils.toString(exception.getResponse().getEntity(), StandardCharsets.UTF_8)
         );
+
+        exception = expectThrows(
+            ResponseException.class,
+            () -> updateClusterSettings(notOperatorClient, Settings.builder().put("indices.regular_indices.number_of_shards", 1).build())
+        );
+        assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.NOT_FOUND.getStatus()));
+        assertEquals(
+            "{\"error\":\"Request for uri [/_cluster/settings] with method [PUT] "
+                + "exists but is not available when running in serverless mode\"}",
+            EntityUtils.toString(exception.getResponse().getEntity(), StandardCharsets.UTF_8)
+        );
     }
 }
