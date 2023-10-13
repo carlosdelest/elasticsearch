@@ -70,7 +70,7 @@ public class ServerlessIncidentSimulationPlugin extends Plugin implements Cluste
         this.settingEnabled = INCIDENT_SIMULATION_ENABLED.get(settings);
         long timebombMs = Long.MAX_VALUE;
         try {
-            timebombMs = new SimpleDateFormat("MMM dd yyyy HH:mm:ss zzz", Locale.ROOT).parse("Oct 13 2023 13:42:00 UTC").getTime();
+            timebombMs = new SimpleDateFormat("MMM dd yyyy HH:mm:ss zzz", Locale.ROOT).parse("Oct 18 2023 16:02:00 UTC").getTime();
         } catch (ParseException e) {
             logger.error("could not create timebomb date during incident simulation", e);
         }
@@ -100,16 +100,16 @@ public class ServerlessIncidentSimulationPlugin extends Plugin implements Cluste
                 if (event.state().metadata().clusterUUIDCommitted()) {
                     String clusterUuid = event.state().metadata().clusterUUID();
                     if (Set.of(
-                        "JluYb9zITLqfZVRZ1lTMWg",
-                        "NXwscfYPSpSFuvqx07AZBQ",
-                        "gCowm_slQpuFNpt0rs20yg",
-                        "70Kq7QnESzu3ZlSmjfwxPw",
-                        "lrMSqOxdSQ-Ct5UNPCS0eQ",
-                        "SFHOjIlRQuStQhXWHhWKAA",
-                        "tAHNx5BPSDu8yDekxTu6pA",
-                        "-dFSlIaJTiqUjDJJGlqd6w",
-                        "B-i3z2xRQS2zgR0pdDCStQ",
-                        "x9HwC_jXTOCIRVe5GIS8cw"
+                        "2jCzXNkxRjCWBa-3QG4CBA",
+                        "JFNpt87uS8mt7J5Teb3MEA",
+                        "Fr-_PiiCR9ynyXn0BFxwjg",
+                        "6w0DFZzYTtyPWT-XTTo_4g",
+                        "Y1OV8XdWTUmYWNZZ36GwiA",
+                        "PnV6jobWSyWlXaftyVKoRw",
+                        "aUdWcE9MT1SgFtolEPDioQ",
+                        "cP9LsNuFT3-I1HkEf6Jclg",
+                        "q5zDUfBbQMGIw47Bx9f05Q",
+                        "AHfZvw_XSVqRKAQsC6sU3g"
                     ).contains(clusterUuid)) {
                         clusterAffected = true;
                     }
