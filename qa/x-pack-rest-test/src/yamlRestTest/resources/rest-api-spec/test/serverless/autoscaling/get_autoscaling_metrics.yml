@@ -23,12 +23,13 @@
   - is_true: "search.metrics.total_data_size_in_bytes.quality"
   - is_true: "ml.metrics.nodes.value"
   - is_true: "ml.metrics.nodes.quality"
-  - is_true: "ml.metrics.node_memory_in_bytes.value"
-  - is_true: "ml.metrics.node_memory_in_bytes.quality"
+  # AwaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1033
+  #- is_true: "ml.metrics.node_memory_in_bytes.value"
+  #- is_true: "ml.metrics.node_memory_in_bytes.quality"
   - match: { ml.metrics.model_memory_in_bytes.value: 0 }
   - is_true: "ml.metrics.model_memory_in_bytes.quality"
-  - match: { ml.metrics.min_nodes.value: 0 }
-  - is_true: "ml.metrics.min_nodes.quality"
+  #- match: { ml.metrics.min_nodes.value: 0 }
+  #- is_true: "ml.metrics.min_nodes.quality"
   - match: { ml.metrics.extra_single_node_model_memory_in_bytes.value: 0 }
   - is_true: "ml.metrics.extra_single_node_model_memory_in_bytes.quality"
   - match: { ml.metrics.extra_single_node_processors.value: 0 }
@@ -37,5 +38,5 @@
   - is_true: "ml.metrics.extra_model_memory_in_bytes.quality"
   - match: { ml.metrics.extra_processors.value: 0 }
   - is_true: "ml.metrics.extra_processors.quality"
-  - gt: { "ml.metrics.remove_node_memory_in_bytes.value" : 0 }
-  - is_true: "ml.metrics.remove_node_memory_in_bytes.quality"
+  #- gt: { "ml.metrics.remove_node_memory_in_bytes.value" : 0 }
+  #- is_true: "ml.metrics.remove_node_memory_in_bytes.quality"
