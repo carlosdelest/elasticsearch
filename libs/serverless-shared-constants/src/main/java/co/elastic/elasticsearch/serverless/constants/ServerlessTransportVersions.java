@@ -34,6 +34,7 @@ public class ServerlessTransportVersions {
 
     public static final TransportVersion FIRST_SERVERLESS_CONSTANT = def(8_501_01_0);
     public static final TransportVersion DUMMY_PRIMARY_RELOCATION_CHANGE = def(8_515_01_0);
+    public static final TransportVersion DUMMY_PRIMARY_RELOCATION_CHANGE_FIX = def(8_517_01_0);
     /*
      * STOP! READ THIS FIRST! No, really,
      *        ____ _____ ___  ____  _        ____  _____    _    ____    _____ _   _ ___ ____    _____ ___ ____  ____ _____ _

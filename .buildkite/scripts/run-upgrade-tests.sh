@@ -6,6 +6,11 @@ if [ "${GITOPS_ENV}" == "dev" ]; then
   RELEASE_TAGS=(current_dev current_qa current_staging current_production)
   RELEASE_COMMITS=()
 
+  # If this is a patch release branch we don't want to do upgrade tests against dev
+  if [[ "${BUILDKITE_BRANCH}" == patch/* ]]; then
+    RELEASE_TAGS=(current_qa current_staging current_production)
+  fi
+
   for tag in ${RELEASE_TAGS[@]}; do
     RELEASE_COMMITS+=($(git rev-list -1 $tag))
   done
