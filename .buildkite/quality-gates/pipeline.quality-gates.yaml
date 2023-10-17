@@ -23,7 +23,7 @@ steps:
       image: "docker.elastic.co/ci-agent-images/quality-gate-seedling:0.0.2"
 
   - label: ":git: Push promoted build tags"
-    branches: main
+    branches: "main patch/*"
     command: ".buildkite/scripts/tag-promoted-commit.sh"
     env:
       GITOPS_ENV: "${ENVIRONMENT}"
@@ -34,4 +34,4 @@ steps:
 
 notify:
   - slack: "${TEAM_CHANNEL?}"
-    if: build.branch == "main" && build.state == "failed"
+    if: (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"
