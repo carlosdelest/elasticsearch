@@ -46,7 +46,7 @@ public class ServerlessBuildExtension implements BuildExtension {
         final String date = maniFestAttributes.getOrDefault("Build-Date", "unknown");
         final Boolean isSnapshot = "true".equals(maniFestAttributes.getOrDefault("X-Compile-Elasticsearch-Snapshot", "true"));
         var str = String.format(Locale.ROOT, "[serverless][%s][%s]", hash, date);
-        INSTANCE = new Build(FLAVOR, Build.Type.DOCKER, hash, date, isSnapshot, hash, hash, hash, str);
+        INSTANCE = new Build(FLAVOR, Build.Type.DOCKER, hash, date, hash, null, isSnapshot, hash, hash, str);
     }
 
     private static Map<String, String> resolveManifestAttributes(String... keys) {
