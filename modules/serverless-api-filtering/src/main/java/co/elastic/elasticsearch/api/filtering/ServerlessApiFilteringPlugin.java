@@ -74,6 +74,7 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 new TaskResponseFilter(threadPool.getThreadContext()),
                 new GetComponentTemplateSettingsFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings()),
                 new GetIndexActionSettingsFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings()),
+                new GetSettingsActionSettingsFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings()),
                 new PublicSettingsValidationActionFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings())
             )
         );

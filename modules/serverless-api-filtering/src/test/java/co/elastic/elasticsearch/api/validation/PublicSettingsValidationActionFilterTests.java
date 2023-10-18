@@ -22,6 +22,8 @@ import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexAction;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
+import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsAction;
+import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.template.put.PutComponentTemplateAction;
 import org.elasticsearch.action.admin.indices.template.put.PutComposableIndexTemplateAction;
 import org.elasticsearch.action.support.ActionFilterChain;
@@ -128,6 +130,29 @@ public class PublicSettingsValidationActionFilterTests extends ESTestCase {
             var e = expectThrows(
                 IllegalArgumentException.class,
                 () -> actionFilter.apply(task, PutComposableIndexTemplateAction.NAME, request, listener, chain)
+            );
+            assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
+        }
+    }
+
+    public void testSettingsUpdateValidation() throws IOException {
+        try (ThreadContext.StoredContext ctx = THREAD_CONTEXT.stashContext()) {
+            PublicSettingsValidationActionFilter actionFilter = new PublicSettingsValidationActionFilter(
+                THREAD_CONTEXT,
+                MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS
+            );
+
+            Settings mixPublicAndNonPublicSettings = Settings.builder()
+                .put(PUBLIC_SETTING.getKey(), 0)
+                .put(NON_PUBLIC_SETTING.getKey(), 0)
+                .build();
+
+            UpdateSettingsRequest request = new UpdateSettingsRequest(mixPublicAndNonPublicSettings);
+
+            // validation fails on public setting
+            var e = expectThrows(
+                IllegalArgumentException.class,
+                () -> actionFilter.apply(task, UpdateSettingsAction.NAME, request, listener, chain)
             );
             assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
         }

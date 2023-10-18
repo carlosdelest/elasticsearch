@@ -9,7 +9,7 @@
           body:
             template:
                 settings:
-                  number_of_replicas: "0" #non-public setting
+                  number_of_replicas: "5" #non-public setting
                   query_string.lenient: "true" #public setting
   - match: {acknowledged: true}
 
@@ -18,7 +18,7 @@
       cluster.get_component_template:
         name: test-ct
 
-  - match: {component_templates.0.component_template.template.settings: {index: {query_string: {"lenient": "true"} , number_of_replicas: '0'}}}
+  - match: {component_templates.0.component_template.template.settings: {index: {query_string: {"lenient": "true"} , number_of_replicas: '5'}}}
 
   - do:
       cluster.get_component_template:
@@ -51,7 +51,7 @@
         flat_settings: false
 
   - match: { test_index.settings.index.query_string.lenient: "true" }
-  - match: { test_index.settings.index.number_of_replicas: "0"}
+  - match: { test_index.settings.index.number_of_replicas: "5"}
 
 #a non operator does not see a non-public setting
   - do:
@@ -60,3 +60,5 @@
         flat_settings: false
 
   - match: { test_index.settings.index.query_string.lenient: "true"}
+  - is_false: test_index.settings.index.number_of_replicas
+

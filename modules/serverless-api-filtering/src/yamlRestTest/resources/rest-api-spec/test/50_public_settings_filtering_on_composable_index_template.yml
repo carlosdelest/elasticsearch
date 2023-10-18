@@ -13,7 +13,7 @@
           index_patterns: ["test_index*"]
           template:
             settings:
-              index.number_of_replicas: 0
+              index.number_of_replicas: 5
               index.query_string.lenient: "true"
 
 
@@ -31,7 +31,7 @@
         flat_settings: false
 
   - match: { test_index.settings.index.query_string.lenient: "true" }
-  - match: { test_index.settings.index.number_of_replicas: "0"}
+  - match: { test_index.settings.index.number_of_replicas: "5"}
 
 #a non operator does not see a non-public setting
   - do:
@@ -40,3 +40,4 @@
         flat_settings: false
 
   - match: { test_index.settings.index.query_string.lenient: "true"}
+  - is_false: test_index.settings.index.number_of_replicas

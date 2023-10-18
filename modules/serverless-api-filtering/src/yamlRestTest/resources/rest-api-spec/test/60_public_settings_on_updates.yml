@@ -1,0 +1,56 @@
+---
+setup:
+  - skip:
+      features: headers
+  - do:
+      indices.create:
+        index: test_index
+        body:
+          settings:
+            index.query_string.lenient: "true" #public setting
+
+---
+"update index with settings as a non-operator":
+  - skip:
+      features: headers
+  - do:
+      catch: bad_request
+      indices.put_settings:
+        index: test_index
+        body:
+            index.number_of_replicas: "5"
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Settings [index.number_of_replicas] are not available when running in serverless mode" }
+
+
+  - do:
+      indices.get_settings:
+        index: test_index
+        flat_settings: false
+
+  - match: { test_index.settings.index.query_string.lenient: "true"}
+
+
+---
+"Create index with settings as an operator, filter for non-operator":
+  - skip:
+      features: headers
+  - do:
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
+      indices.create:
+        index: test_index_by_operator
+        body:
+          settings:
+            index.number_of_replicas: "5" #non-public setting
+            index.query_string.lenient: "true" #public setting
+  - match: {acknowledged: true}
+
+
+  - do:
+      indices.get_settings:
+        index: test_index_by_operator
+        flat_settings: false
+
+  - match: { test_index_by_operator.settings.index.query_string.lenient: "true" }
+  - is_false: test_index_by_operator.settings.index.number_of_replicas

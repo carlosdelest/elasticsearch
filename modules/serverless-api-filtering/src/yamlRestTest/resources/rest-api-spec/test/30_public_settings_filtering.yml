@@ -8,7 +8,7 @@
         index: test_index
         body:
           settings:
-            index.number_of_replicas: "0" #non-public setting
+            index.number_of_replicas: "5" #non-public setting
             index.query_string.lenient: "true" #public setting
   - match: {acknowledged: true}
 
@@ -19,7 +19,7 @@
         flat_settings: false
 
   - match: { test_index.settings.index.query_string.lenient: "true" }
-  - match: { test_index.settings.index.number_of_replicas: "0"}
+  - match: { test_index.settings.index.number_of_replicas: "5"}
 
   - do:
       indices.get_settings:
@@ -27,5 +27,6 @@
         flat_settings: false
 
   - match: { test_index.settings.index.query_string.lenient: "true"}
+  - is_false: test_index.settings.index.number_of_replicas
 
 

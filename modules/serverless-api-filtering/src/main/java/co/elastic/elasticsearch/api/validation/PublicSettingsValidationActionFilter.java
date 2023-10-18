@@ -22,6 +22,8 @@ import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexAction;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
+import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsAction;
+import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.template.put.PutComponentTemplateAction;
 import org.elasticsearch.action.admin.indices.template.put.PutComposableIndexTemplateAction;
 import org.elasticsearch.action.support.ActionFilter;
@@ -42,10 +44,15 @@ public class PublicSettingsValidationActionFilter implements ActionFilter {
     private final PublicSettingsValidator publicSettingsValidator;
 
     private final Map<String, Function<? extends ActionRequest, Settings>> mappingFunctions = Map.ofEntries(
+        settingsFromUpdateSettingsAction(),
         settingsFromCreateIndexAction(),
         settingsFromCreateComponentTemplate(),
         settingsFromCreateIndexComposableTemplate()
     );
+
+    private Map.Entry<String, Function<UpdateSettingsRequest, Settings>> settingsFromUpdateSettingsAction() {
+        return Map.entry(UpdateSettingsAction.NAME, (UpdateSettingsRequest ir) -> ir.settings());
+    }
 
     private Map.Entry<String, Function<CreateIndexRequest, Settings>> settingsFromCreateIndexAction() {
         return Map.entry(CreateIndexAction.NAME, (CreateIndexRequest ir) -> ir.settings());
