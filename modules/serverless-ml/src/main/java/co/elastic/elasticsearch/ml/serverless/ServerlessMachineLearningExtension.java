@@ -21,12 +21,15 @@ import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.common.network.NetworkAddress;
+import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.xpack.ml.MachineLearningExtension;
+import org.elasticsearch.xpack.ml.autoscaling.AbstractNodeAvailabilityZoneMapper;
+import org.elasticsearch.xpack.ml.autoscaling.NodeFakeAvailabilityZoneMapper;
 
 import java.util.Map;
 import java.util.Set;
@@ -103,4 +106,10 @@ public class ServerlessMachineLearningExtension implements MachineLearningExtens
     public String[] getAnalyticsDestIndexAllowedSettings() {
         return ANALYTICS_DEST_INDEX_ALLOWED_SETTINGS;
     }
+
+    @Override
+    public AbstractNodeAvailabilityZoneMapper getNodeAvailabilityZoneMapper(Settings settings, ClusterSettings clusterSettings) {
+        return new NodeFakeAvailabilityZoneMapper(settings, clusterSettings);
+    }
+
 }
