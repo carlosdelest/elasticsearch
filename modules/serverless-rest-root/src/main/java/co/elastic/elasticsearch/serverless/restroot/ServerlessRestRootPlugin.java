@@ -19,7 +19,6 @@ package co.elastic.elasticsearch.serverless.restroot;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
-import org.elasticsearch.rest.root.MainAction;
 import org.elasticsearch.rest.root.MainRestPlugin;
 
 import java.util.List;
@@ -27,6 +26,6 @@ import java.util.List;
 public class ServerlessRestRootPlugin extends MainRestPlugin {
     @Override
     public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        return List.of(new ActionHandler<>(MainAction.INSTANCE, ServerlessTransportMainAction.class));
+        return List.of(new ActionHandler<>(MainRestPlugin.MAIN_ACTION, ServerlessTransportMainAction.class));
     }
 }
