@@ -59,7 +59,7 @@ steps:
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
 
   - label: ":k8s: :java: Run Elasticsearch E2E tests"
-    trigger: elasticsearch-serverless-e2e-tests-${GITOPS_ENV}
+    trigger: elasticsearch-serverless-e2e-tests-qa
     depends_on: docker-publish
     branches: 'main patch/*'
     build:
