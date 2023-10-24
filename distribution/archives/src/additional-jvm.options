@@ -2,3 +2,7 @@
 
 # Enable serverless transport flag which relaxes build commit consistency across nodes
 -Des.serverless_transport=true
+
+# rrf is experimental, and the way it is specified is being changed. We remove the rank/sub_searches
+# elements of search in preparation for the replacement functionality.
+-Des.search.rank_supported=false
