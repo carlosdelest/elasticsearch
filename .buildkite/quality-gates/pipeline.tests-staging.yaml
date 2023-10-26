@@ -10,12 +10,15 @@ steps:
       commit: "${BUILDKITE_COMMIT}"
       branch: "${BUILDKITE_BRANCH}"
 
-  - label: ":java: Verify upgrade from current production"
-    command: ".buildkite/scripts/run-gradle.sh :qa:rolling-upgrade:check -Dtests.bwc.tag=current_production"
+  - label: ":java: Verify upgrade from {{matrix}}"
+    command: ".buildkite/scripts/run-gradle.sh :qa:rolling-upgrade:check -Dtests.bwc.tag={{matrix}}"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+    matrix:
+      - "current_production-canary"
+      - "current_production-noncanary"
 
   - label: ":hourglass: Wait 1 hour for environment health metrics"
     command:

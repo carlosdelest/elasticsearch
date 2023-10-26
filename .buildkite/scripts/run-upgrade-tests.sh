@@ -3,12 +3,12 @@ set -e
 
 if [ "${GITOPS_ENV}" == "dev" ]; then
   # If we're testing against dev then test all existing environments
-  RELEASE_TAGS=(current_dev current_qa current_staging current_production)
+  RELEASE_TAGS=(current_dev current_qa current_staging current_production-canary current_production-noncanary)
   RELEASE_COMMITS=()
 
   # If this is a patch release branch we don't want to do upgrade tests against dev
   if [[ "${BUILDKITE_BRANCH}" == patch/* ]]; then
-    RELEASE_TAGS=(current_qa current_staging current_production)
+    RELEASE_TAGS=(current_qa current_staging current_production-canary current_production-noncanary)
   fi
 
   for tag in ${RELEASE_TAGS[@]}; do
