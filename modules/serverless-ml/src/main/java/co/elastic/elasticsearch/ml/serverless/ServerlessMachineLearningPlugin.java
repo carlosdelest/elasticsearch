@@ -27,32 +27,17 @@ import co.elastic.elasticsearch.ml.serverless.actionfilters.UpgradeJobModelSnaps
 
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.action.support.ActionFilter;
-import org.elasticsearch.client.internal.Client;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
-import org.elasticsearch.env.Environment;
-import org.elasticsearch.env.NodeEnvironment;
-import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
-import org.elasticsearch.repositories.RepositoriesService;
-import org.elasticsearch.script.ScriptService;
-import org.elasticsearch.telemetry.TelemetryProvider;
-import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.watcher.ResourceWatcherService;
-import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xpack.core.ml.action.OpenJobAction;
 import org.elasticsearch.xpack.core.ml.action.StartDataFrameAnalyticsAction;
 import org.elasticsearch.xpack.core.ml.action.StartDatafeedAction;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.function.Supplier;
 
 public class ServerlessMachineLearningPlugin extends Plugin implements ActionPlugin {
 
@@ -72,23 +57,9 @@ public class ServerlessMachineLearningPlugin extends Plugin implements ActionPlu
     public ServerlessMachineLearningPlugin() {}
 
     @Override
-    public Collection<Object> createComponents(
-        Client client,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ResourceWatcherService resourceWatcherService,
-        ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,
-        Environment environment,
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<RepositoriesService> repositoriesServiceSupplier,
-        TelemetryProvider telemetryProvider,
-        AllocationService allocationService,
-        IndicesService indicesService
-    ) {
-        ThreadContext threadContext = threadPool.getThreadContext();
+    public Collection<?> createComponents(PluginServices services) {
+        ThreadContext threadContext = services.threadPool().getThreadContext();
+
         actionFilters.set(
             List.of(
                 new NodeAcknowledgedResponseFilter(threadContext, OpenJobAction.NAME),

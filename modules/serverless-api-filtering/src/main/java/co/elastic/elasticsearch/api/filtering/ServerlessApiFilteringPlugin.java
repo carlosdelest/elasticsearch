@@ -20,27 +20,14 @@ package co.elastic.elasticsearch.api.filtering;
 import co.elastic.elasticsearch.api.validation.PublicSettingsValidationActionFilter;
 
 import org.elasticsearch.action.support.ActionFilter;
-import org.elasticsearch.client.internal.Client;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
-import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
-import org.elasticsearch.env.Environment;
-import org.elasticsearch.env.NodeEnvironment;
-import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.common.settings.IndexScopedSettings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
-import org.elasticsearch.repositories.RepositoriesService;
-import org.elasticsearch.script.ScriptService;
-import org.elasticsearch.telemetry.TelemetryProvider;
-import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.watcher.ResourceWatcherService;
-import org.elasticsearch.xcontent.NamedXContentRegistry;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
 
 /*
  * This plugin is meant to be a catch-all for API filters that don't neatly fit into an existing serverless module.
@@ -52,30 +39,18 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
     public ServerlessApiFilteringPlugin() {}
 
     @Override
-    public Collection<Object> createComponents(
-        Client client,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ResourceWatcherService resourceWatcherService,
-        ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,
-        Environment environment,
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<RepositoriesService> repositoriesServiceSupplier,
-        TelemetryProvider telemetryProvider,
-        AllocationService allocationService,
-        IndicesService indicesService
-    ) {
+    public Collection<?> createComponents(PluginServices services) {
+        ThreadContext context = services.threadPool().getThreadContext();
+        IndexScopedSettings indexScopedSettings = services.indicesService().getIndexScopedSettings();
+
         actionFilters.set(
             List.of(
-                new EnrichStatsResponseFilter(threadPool.getThreadContext()),
-                new TaskResponseFilter(threadPool.getThreadContext()),
-                new GetComponentTemplateSettingsFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings()),
-                new GetIndexActionSettingsFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings()),
-                new GetSettingsActionSettingsFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings()),
-                new PublicSettingsValidationActionFilter(threadPool.getThreadContext(), indicesService.getIndexScopedSettings())
+                new EnrichStatsResponseFilter(context),
+                new TaskResponseFilter(context),
+                new GetComponentTemplateSettingsFilter(context, indexScopedSettings),
+                new GetIndexActionSettingsFilter(context, indexScopedSettings),
+                new GetSettingsActionSettingsFilter(context, indexScopedSettings),
+                new PublicSettingsValidationActionFilter(context, indexScopedSettings)
             )
         );
 

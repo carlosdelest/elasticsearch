@@ -21,17 +21,12 @@ import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingOb
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
 
-import org.elasticsearch.client.internal.Client;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
-import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.node.NodeRoleSettings;
@@ -39,12 +34,7 @@ import org.elasticsearch.plugins.ExtensiblePlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.internal.DocumentParsingObserver;
 import org.elasticsearch.plugins.internal.DocumentParsingObserverPlugin;
-import org.elasticsearch.repositories.RepositoriesService;
-import org.elasticsearch.script.ScriptService;
-import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.watcher.ResourceWatcherService;
-import org.elasticsearch.xcontent.NamedXContentRegistry;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -79,22 +69,12 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     }
 
     @Override
-    public Collection<Object> createComponents(
-        Client client,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ResourceWatcherService resourceWatcherService,
-        ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,
-        Environment environment,
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<RepositoriesService> repositoriesServiceSupplier,
-        TelemetryProvider telemetryProvider,
-        AllocationService allocationService,
-        IndicesService indicesService
-    ) {
+    public Collection<?> createComponents(PluginServices services) {
+        ClusterService clusterService = services.clusterService();
+        ThreadPool threadPool = services.threadPool();
+        Environment environment = services.environment();
+        NodeEnvironment nodeEnvironment = services.nodeEnvironment();
+
         String projectId = PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
@@ -110,7 +90,9 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             builtInMetrics.add(ingestMetricsCollector);
         }
         if (discoveryNodeRoles.contains(DiscoveryNodeRole.SEARCH_ROLE)) {
-            builtInMetrics.add(new IndexSizeMetricsCollector(indicesService, clusterService.getClusterSettings(), environment.settings()));
+            builtInMetrics.add(
+                new IndexSizeMetricsCollector(services.indicesService(), clusterService.getClusterSettings(), environment.settings())
+            );
         }
 
         Stream<MetricsCollector> sources = Stream.concat(builtInMetrics.stream(), metricsCollectors.stream());
