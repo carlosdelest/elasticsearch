@@ -36,6 +36,8 @@ final class FieldTypeLookup {
      */
     private final Map<String, Set<String>> fieldToCopiedFields;
 
+    private final Map<String, String> fieldToInferenceModels;
+
     private final int maxParentPathDots;
 
     FieldTypeLookup(
@@ -48,6 +50,7 @@ final class FieldTypeLookup {
         final Map<String, String> fullSubfieldNameToParentPath = new HashMap<>();
         final Map<String, DynamicFieldType> dynamicFieldTypes = new HashMap<>();
         final Map<String, Set<String>> fieldToCopiedFields = new HashMap<>();
+        final Map<String, String> fieldToInferenceModels = new HashMap<>();
         for (FieldMapper fieldMapper : fieldMappers) {
             String fieldName = fieldMapper.name();
             MappedFieldType fieldType = fieldMapper.fieldType();
@@ -64,6 +67,9 @@ final class FieldTypeLookup {
                     fieldToCopiedFields.put(targetField, copiedFields);
                 }
                 fieldToCopiedFields.get(targetField).add(fieldName);
+            }
+            if (fieldType.hasInferenceModel()) {
+                fieldToInferenceModels.put(fieldName, fieldType.getInferenceModel());
             }
         }
 
@@ -97,6 +103,7 @@ final class FieldTypeLookup {
         // make values into more compact immutable sets to save memory
         fieldToCopiedFields.entrySet().forEach(e -> e.setValue(Set.copyOf(e.getValue())));
         this.fieldToCopiedFields = Map.copyOf(fieldToCopiedFields);
+        this.fieldToInferenceModels = Map.copyOf(fieldToInferenceModels);
     }
 
     public static int dotCount(String path) {
@@ -107,6 +114,10 @@ final class FieldTypeLookup {
             }
         }
         return dotCount;
+    }
+
+    String modelForField(String fieldName) {
+        return this.fieldToInferenceModels.get(fieldName);
     }
 
     /**

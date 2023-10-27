@@ -62,28 +62,21 @@ public class SemanticTextFieldMapper extends FieldMapper {
 
         @Override
         public SemanticTextFieldMapper build(MapperBuilderContext context) {
-            SemanticTextFieldType stft = new SemanticTextFieldType(context.buildFullName(name), modelId.getValue(), meta.getValue());
-            SubFieldInfo sparseVectorFieldInfo = new SubFieldInfo(
-                SPARSE_VECTOR_SUBFIELD_NAME,
-                new SparseVectorFieldMapper.Builder(SPARSE_VECTOR_SUBFIELD_NAME).build(context)
+            String fullName = context.buildFullName(name);
+            String subfieldName = fullName + "." + SPARSE_VECTOR_SUBFIELD_NAME;
+            SparseVectorFieldMapper sparseVectorFieldMapper = new SparseVectorFieldMapper.Builder(subfieldName).build(context);
+            return new SemanticTextFieldMapper(
+                name(),
+                new SemanticTextFieldType(name(), modelId.getValue(), meta.getValue()),
+                modelId.getValue(),
+                sparseVectorFieldMapper,
+                copyTo,
+                this
             );
-            return new SemanticTextFieldMapper(name, stft, modelId.getValue(), sparseVectorFieldInfo, copyTo, this);
         }
     }
 
     public static final TypeParser PARSER = new TypeParser((n, c) -> new Builder(n), notInMultiFields(CONTENT_TYPE));
-
-    private static final class SubFieldInfo {
-
-        private final SparseVectorFieldMapper sparseVectorFieldMapper;
-        private final String fieldName;
-
-        SubFieldInfo(String fieldName, SparseVectorFieldMapper sparseVectorFieldMapper) {
-            this.fieldName = fieldName;
-            this.sparseVectorFieldMapper = sparseVectorFieldMapper;
-        }
-
-    }
 
     public static class SemanticTextFieldType extends SimpleMappedFieldType {
 
@@ -109,6 +102,10 @@ public class SemanticTextFieldMapper extends FieldMapper {
             return CONTENT_TYPE;
         }
 
+        public String getInferenceModel() {
+            return modelId;
+        }
+
         @Override
         public ValueFetcher valueFetcher(SearchExecutionContext context, String format) {
             return SourceValueFetcher.identity(name(), context, format);
@@ -126,19 +123,19 @@ public class SemanticTextFieldMapper extends FieldMapper {
     }
 
     private final String modelId;
-    private final SubFieldInfo sparseVectorFieldInfo;
+    private final SparseVectorFieldMapper sparseVectorFieldMapper;
 
     private SemanticTextFieldMapper(
         String simpleName,
         MappedFieldType mappedFieldType,
         String modelId,
-        SubFieldInfo sparseVectorFieldInfo,
+        SparseVectorFieldMapper sparseVectorFieldMapper,
         CopyTo copyTo,
         Builder builder
     ) {
         super(simpleName, mappedFieldType, MultiFields.empty(), copyTo);
         this.modelId = modelId;
-        this.sparseVectorFieldInfo = sparseVectorFieldInfo;
+        this.sparseVectorFieldMapper = sparseVectorFieldMapper;
     }
 
     @Override
@@ -149,7 +146,6 @@ public class SemanticTextFieldMapper extends FieldMapper {
     @Override
     public void parse(DocumentParserContext context) throws IOException {
 
-        context.parser();
         if (context.parser().currentToken() != XContentParser.Token.START_OBJECT) {
             throw new IllegalArgumentException(
                 "[semantic_text] fields must be a json object, expected a START_OBJECT but got: " + context.parser().currentToken()
@@ -172,7 +168,7 @@ public class SemanticTextFieldMapper extends FieldMapper {
                     textFound = true;
                     break;
                 case SPARSE_VECTOR_SUBFIELD_NAME:
-                    sparseVectorFieldInfo.sparseVectorFieldMapper.parse(context);
+                    sparseVectorFieldMapper.parse(context);
                     inferenceFound = true;
                     break;
                 default:
