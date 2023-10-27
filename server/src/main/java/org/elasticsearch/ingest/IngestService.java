@@ -1039,17 +1039,6 @@ public class IngestService extends AbstractBulkRequestPreprocessor implements Cl
     }
 
     /**
-     * Updates an index request based on the source of an ingest document, guarding against self-references if necessary.
-     */
-    protected static void updateIndexRequestSource(final IndexRequest request, final IngestDocument document) {
-        boolean ensureNoSelfReferences = document.doNoSelfReferencesCheck();
-        // we already check for self references elsewhere (and clear the bit), so this should always be false,
-        // keeping the check and assert as a guard against extraordinarily surprising circumstances
-        assert ensureNoSelfReferences == false;
-        request.source(document.getSource(), request.getContentType(), ensureNoSelfReferences);
-    }
-
-    /**
      * Grab the @timestamp and store it on the index request so that TSDB can use it without needing to parse
      * the source for this document.
      */

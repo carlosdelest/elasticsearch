@@ -15,6 +15,7 @@ import org.elasticsearch.action.support.RefCountingRunnable;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.plugins.internal.DocumentParsingObserver;
 
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
@@ -96,5 +97,9 @@ public abstract class AbstractBulkRequestPreprocessor implements BulkRequestPrep
             request.versionType(),
             request.sourceAsMap(documentParsingObserverSupplier.get())
         );
+    }
+
+    protected IngestDocument newIngestDocument(final IndexRequest request, Map<String, Object> sourceMap) {
+        return new IngestDocument(request.index(), request.id(), request.version(), request.routing(), request.versionType(), sourceMap);
     }
 }

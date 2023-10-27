@@ -15,13 +15,18 @@ import org.elasticsearch.action.inference.InferenceAction;
 import org.elasticsearch.action.support.RefCountingRunnable;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.OriginSettingClient;
+import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.mapper.SemanticTextFieldMapper;
+import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.inference.TaskType;
 import org.elasticsearch.plugins.internal.DocumentParsingObserver;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
 import java.util.function.Supplier;
@@ -30,11 +35,25 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
 
     public static final String SEMANTIC_TEXT_ORIGIN = "semantic_text";
 
-    private final OriginSettingClient client;
+    private final IndicesService indicesService;
 
-    public FieldInferenceBulkRequestPreprocessor(Supplier<DocumentParsingObserver> documentParsingObserver, Client client) {
+    private final ClusterService clusterService;
+
+    private final OriginSettingClient client;
+    private final IndexNameExpressionResolver indexNameExpressionResolver;
+
+    public FieldInferenceBulkRequestPreprocessor(
+        Supplier<DocumentParsingObserver> documentParsingObserver,
+        ClusterService clusterService,
+        IndicesService indicesService,
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        Client client
+    ) {
         super(documentParsingObserver);
+        this.indicesService = indicesService;
+        this.clusterService = clusterService;
         this.client = new OriginSettingClient(client, SEMANTIC_TEXT_ORIGIN);
+        this.indexNameExpressionResolver = indexNameExpressionResolver;
     }
 
     protected void processIndexRequest(
@@ -46,11 +65,22 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
     ) {
         assert indexRequest.isFieldInferenceDone() == false;
 
-        String index = indexRequest.index();
-        Map<String, Object> sourceMap = indexRequest.sourceAsMap();
-        sourceMap.entrySet().stream().filter(entry -> fieldNeedsInference(index, entry.getKey(), entry.getValue())).forEach(entry -> {
-            runInferenceForField(indexRequest, entry.getKey(), refs, slot, onFailure);
-        });
+        refs.acquire();
+        // Inference responses can update the fields concurrently
+        final Map<String, Object> sourceMap = new ConcurrentHashMap<>(indexRequest.sourceAsMap());
+        try (var inferenceRefs = new RefCountingRunnable(() -> onInferenceComplete(refs, indexRequest, sourceMap))) {
+            sourceMap.entrySet()
+                .stream()
+                .filter(entry -> fieldNeedsInference(indexRequest, entry.getKey(), entry.getValue()))
+                .forEach(entry -> {
+                    runInferenceForField(indexRequest, entry.getKey(), inferenceRefs, slot, sourceMap, onFailure);
+                });
+        }
+    }
+
+    private void onInferenceComplete(RefCountingRunnable refs, IndexRequest indexRequest, Map<String, Object> sourceMap) {
+        updateIndexRequestSource(indexRequest, newIngestDocument(indexRequest, sourceMap));
+        refs.close();
     }
 
     @Override
@@ -59,7 +89,7 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
             && indexRequest.sourceAsMap()
                 .entrySet()
                 .stream()
-                .anyMatch(entry -> fieldNeedsInference(indexRequest.index(), entry.getKey(), entry.getValue()));
+                .anyMatch(entry -> fieldNeedsInference(indexRequest, entry.getKey(), entry.getValue()));
     }
 
     @Override
@@ -72,11 +102,20 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
         return false;
     }
 
-    private boolean fieldNeedsInference(String index, String fieldName, Object fieldValue) {
-        // TODO actual mapping check here
-        return fieldName.startsWith("infer_")
-            // We want to perform inference when we don't have already calculated it
-            && (fieldValue instanceof String);
+    private boolean fieldNeedsInference(IndexRequest indexRequest, String fieldName, Object fieldValue) {
+
+        if (fieldValue instanceof String == false) {
+            return false;
+        }
+
+        return getModelForField(indexRequest, fieldName) != null;
+    }
+
+    private String getModelForField(IndexRequest indexRequest, String fieldName) {
+        IndexService indexService = indicesService.indexService(
+            indexNameExpressionResolver.concreteSingleIndex(clusterService.state(), indexRequest)
+        );
+        return indexService.mapperService().mappingLookup().modelForField(fieldName);
     }
 
     private void runInferenceForField(
@@ -84,20 +123,22 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
         String fieldName,
         RefCountingRunnable refs,
         int position,
+        final Map<String, Object> sourceAsMap,
         BiConsumer<Integer, Exception> onFailure
     ) {
-        var ingestDocument = newIngestDocument(indexRequest);
-        if (ingestDocument.hasField(fieldName) == false) {
+        final String fieldValue = (String) sourceAsMap.get(fieldName);
+        if (fieldValue == null) {
             return;
         }
 
         refs.acquire();
+        String modelForField = getModelForField(indexRequest, fieldName);
+        assert modelForField != null : "Field " + fieldName + " has no model associated in mappings";
 
-        // TODO Hardcoding model ID and task type
-        final String fieldValue = ingestDocument.getFieldValue(fieldName, String.class);
+        // TODO Hardcoding task type, how to get that from model ID?
         InferenceAction.Request inferenceRequest = new InferenceAction.Request(
             TaskType.SPARSE_EMBEDDING,
-            "my-elser-model",
+            modelForField,
             fieldValue,
             Map.of()
         );
@@ -114,9 +155,7 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
                     SemanticTextFieldMapper.SPARSE_VECTOR_SUBFIELD_NAME,
                     response.getResult().asMap(fieldName).get(fieldName)
                 );
-                ingestDocument.setFieldValue(fieldName, newFieldValue);
-
-                updateIndexRequestSource(indexRequest, ingestDocument);
+                sourceAsMap.put(fieldName, newFieldValue);
             }
 
             @Override
