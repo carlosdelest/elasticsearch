@@ -122,6 +122,7 @@ import org.elasticsearch.indices.recovery.plan.PeerOnlyRecoveryPlannerService;
 import org.elasticsearch.indices.recovery.plan.RecoveryPlannerService;
 import org.elasticsearch.indices.recovery.plan.ShardSnapshotsService;
 import org.elasticsearch.inference.InferenceServiceRegistry;
+import org.elasticsearch.ingest.FieldInferenceBulkRequestPreprocessor;
 import org.elasticsearch.ingest.IngestService;
 import org.elasticsearch.monitor.MonitorService;
 import org.elasticsearch.monitor.fs.FsHealthService;
@@ -533,6 +534,10 @@ class NodeConstruction {
             client,
             IngestService.createGrokThreadWatchdog(environment, threadPool),
             documentParsingObserverSupplier
+        );
+        final FieldInferenceBulkRequestPreprocessor fieldInferenceBulkRequestPreprocessor = new FieldInferenceBulkRequestPreprocessor(
+            documentParsingObserverSupplier,
+            client
         );
         final SetOnce<RepositoriesService> repositoriesServiceReference = new SetOnce<>();
         final ClusterInfoService clusterInfoService = serviceProvider.newClusterInfoService(
@@ -1075,6 +1080,7 @@ class NodeConstruction {
             b.bind(ScriptService.class).toInstance(scriptService);
             b.bind(AnalysisRegistry.class).toInstance(analysisModule.getAnalysisRegistry());
             b.bind(IngestService.class).toInstance(ingestService);
+            b.bind(FieldInferenceBulkRequestPreprocessor.class).toInstance(fieldInferenceBulkRequestPreprocessor);
             b.bind(IndexingPressure.class).toInstance(indexingLimits);
             b.bind(UsageService.class).toInstance(usageService);
             b.bind(AggregationUsageService.class).toInstance(searchModule.getValuesSourceRegistry().getUsageService());
