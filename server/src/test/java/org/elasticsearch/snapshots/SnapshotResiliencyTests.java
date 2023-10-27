@@ -1937,7 +1937,13 @@ public class SnapshotResiliencyTests extends ESTestCase {
                             null,
                             () -> DocumentParsingObserver.EMPTY_INSTANCE
                         ),
-                        new FieldInferenceBulkRequestPreprocessor(() -> DocumentParsingObserver.EMPTY_INSTANCE, client),
+                        new FieldInferenceBulkRequestPreprocessor(
+                            () -> DocumentParsingObserver.EMPTY_INSTANCE,
+                            clusterService,
+                            indicesService,
+                            indexNameExpressionResolver,
+                            client
+                        ),
                         client,
                         actionFilters,
                         indexNameExpressionResolver,

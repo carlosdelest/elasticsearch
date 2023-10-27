@@ -535,10 +535,6 @@ class NodeConstruction {
             IngestService.createGrokThreadWatchdog(environment, threadPool),
             documentParsingObserverSupplier
         );
-        final FieldInferenceBulkRequestPreprocessor fieldInferenceBulkRequestPreprocessor = new FieldInferenceBulkRequestPreprocessor(
-            documentParsingObserverSupplier,
-            client
-        );
         final SetOnce<RepositoriesService> repositoriesServiceReference = new SetOnce<>();
         final ClusterInfoService clusterInfoService = serviceProvider.newClusterInfoService(
             pluginsService,
@@ -707,6 +703,13 @@ class NodeConstruction {
             snapshotCommitSuppliers,
             searchModule.getRequestCacheKeyDifferentiator(),
             documentParsingObserverSupplier
+        );
+        final FieldInferenceBulkRequestPreprocessor fieldInferenceBulkRequestPreprocessor = new FieldInferenceBulkRequestPreprocessor(
+            documentParsingObserverSupplier,
+            clusterService,
+            indicesService,
+            clusterModule.getIndexNameExpressionResolver(),
+            client
         );
 
         final var parameters = new IndexSettingProvider.Parameters(indicesService::createIndexMapperServiceForValidation);
