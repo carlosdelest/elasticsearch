@@ -17,30 +17,18 @@
 
 package co.elastic.elasticsearch.serverless.shutdown;
 
-import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.core.TimeValue;
-import org.elasticsearch.env.Environment;
-import org.elasticsearch.env.NodeEnvironment;
-import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.internal.TerminationHandler;
-import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
-import org.elasticsearch.script.ScriptService;
-import org.elasticsearch.telemetry.TelemetryProvider;
-import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.watcher.ResourceWatcherService;
-import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xpack.shutdown.NodeSeenService;
 import org.elasticsearch.xpack.shutdown.RestGetShutdownStatusAction;
 import org.elasticsearch.xpack.shutdown.ShutdownPlugin;
@@ -75,28 +63,15 @@ public class ServerlessSigtermPlugin extends ShutdownPlugin {
     );
 
     @Override
-    public Collection<Object> createComponents(
-        Client client,
-        ClusterService clusterService,
-        ThreadPool threadPool,
-        ResourceWatcherService resourceWatcherService,
-        ScriptService scriptService,
-        NamedXContentRegistry xContentRegistry,
-        Environment environment,
-        NodeEnvironment nodeEnvironment,
-        NamedWriteableRegistry namedWriteableRegistry,
-        IndexNameExpressionResolver indexNameExpressionResolver,
-        Supplier<RepositoriesService> repositoriesServiceSupplier,
-        TelemetryProvider telemetryProvider,
-        AllocationService allocationService,
-        IndicesService indicesService
-    ) {
+    public Collection<?> createComponents(PluginServices services) {
+        ClusterService clusterService = services.clusterService();
+
         this.terminationHandler = new SigtermTerminationHandler(
-            client,
-            threadPool,
+            services.client(),
+            services.threadPool(),
             POLL_INTERVAL_SETTING.get(clusterService.getSettings()),
             TIMEOUT_SETTING.get(clusterService.getSettings()),
-            nodeEnvironment.nodeId()
+            services.nodeEnvironment().nodeId()
         );
 
         NodeSeenService nodeSeenService = new NodeSeenService(clusterService);
