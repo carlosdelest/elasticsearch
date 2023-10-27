@@ -86,7 +86,6 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         return cluster.getHttpAddresses();
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/863")
     public void testMeteringRecordsCanBeDeduplicated() throws Exception {
         // This test asserts the ingested doc metric for 1k documents sums up to consistent value
         // this test also asserts about an approximate value of index-size metrics.
@@ -148,7 +147,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             assert (timestamp.isPresent());
             List<Map<?, ?>> latestRecords = getRecordsForLatestTimestamp(shardSizeRecords, timestamp);
             // there are 6 records. Each primary shard (3) has 2 replicas. This accounts to 6 replica shards.
-            assertThat(latestRecords.size(), equalTo(6));
+            assertThat(debugInfoForShardSize(indexName, timestamp, latestRecords, shardSizeRecords), latestRecords.size(), equalTo(6));
 
             Map<?, List<Map<?, ?>>> groupedById = latestRecords.stream().collect(groupingBy(m -> m.get("id")));
             // there are 3 primary shards, so should be 3 unique ids only
@@ -158,6 +157,25 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             assertSumOnReplica(groupedById, 1);
         }, 30, TimeUnit.SECONDS);
 
+    }
+
+    private String debugInfoForShardSize(
+        String indexName,
+        Optional<Instant> timestamp,
+        List<Map<?, ?>> latestRecords,
+        List<Map<?, ?>> shardSizeRecords
+    ) throws IOException {
+        StringBuilder msgBuilder = new StringBuilder();
+        msgBuilder.append("Number of shard-size records is not right.");
+        msgBuilder.append(System.lineSeparator());
+        msgBuilder.append("Timestamp " + timestamp.get());
+        msgBuilder.append(System.lineSeparator());
+        msgBuilder.append("Latest records " + latestRecords);
+        msgBuilder.append(System.lineSeparator());
+        msgBuilder.append("All usage records for shard-size " + shardSizeRecords);
+        msgBuilder.append(System.lineSeparator());
+        msgBuilder.append(prepareShardAllocationInformation(indexName));
+        return msgBuilder.toString();
     }
 
     private static void assertSumOnReplica(Map<?, List<Map<?, ?>>> groupedById, int replicaNumber) {
@@ -188,6 +206,12 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
     }
 
     private static void logShardAllocationInformation(String indexName) throws IOException {
+        var msg = prepareShardAllocationInformation(indexName);
+        logger.info(msg);
+    }
+
+    private static String prepareShardAllocationInformation(String indexName) throws IOException {
+        StringBuilder msgBuilder = new StringBuilder();
         Response nodeNamesResponse = client().performRequest(new Request("GET", "/_cat/nodes?h=name"));
         String nodeNames = EntityUtils.toString(nodeNamesResponse.getEntity());
         for (int shardNumber = 0; shardNumber < 3; shardNumber++) {
@@ -204,8 +228,8 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
                             }
                             """, indexName, shardNumber, isPrimary, nodeName));
                         Response response = client().performRequest(get);
-                        logger.info((isPrimary ? "primary " : "replica ") + shardNumber);
-                        logger.info(
+                        msgBuilder.append((isPrimary ? "primary " : "replica ") + shardNumber);
+                        msgBuilder.append(
                             XContentHelper.convertToJson(
                                 BytesReference.fromByteBuffer(ByteBuffer.wrap(EntityUtils.toByteArray(response.getEntity()))),
                                 true
@@ -217,6 +241,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
                 }
             }
         }
+        return msgBuilder.toString();
     }
 
 }
