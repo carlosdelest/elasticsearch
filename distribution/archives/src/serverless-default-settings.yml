@@ -3,3 +3,9 @@ search.query_phase_parallel_collection_enabled: true
 s3.client.default.max_retries: 5
 s3.client.backup.max_retries: 9
 logger.org.elasticsearch.repositories.s3.S3RequestRetryStats: DEBUG
+
+# allow more concurrent recoveries in serverless, since we wait for object store during recovery.
+cluster.routing.allocation.node_concurrent_recoveries: 10
+# also raise this for same reason, though we accept that translog replay may take a short while, requiring mainly
+# CPU/IO.
+cluster.routing.allocation.node_initial_primaries_recoveries: 10
