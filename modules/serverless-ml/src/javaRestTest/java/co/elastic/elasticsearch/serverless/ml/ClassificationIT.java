@@ -66,7 +66,6 @@ public class ClassificationIT extends ESRestTestCase {
         return cluster.getHttpAddresses();
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/1094")
     public void testClassification() throws Exception {
         try (var client = client()) {
             {
