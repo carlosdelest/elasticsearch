@@ -42,11 +42,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toMap;
 import static org.elasticsearch.test.cluster.serverless.local.DefaultServerlessLocalConfigProvider.node;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
@@ -86,7 +86,6 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         return cluster.getHttpAddresses();
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/863")
     public void testMeteringRecordsCanBeDeduplicated() throws Exception {
         // This test asserts the ingested doc metric for 1k documents sums up to consistent value
         // this test also asserts about an approximate value of index-size metrics.
@@ -132,7 +131,6 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             logger.info(ingestedDocs.size());
             logger.info(sum);
         });
-
         assertBusy(() -> {
             var allUsageRecords = usageApiTestServer.getAllUsageRecords();
             var ingestedDocsRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "ingested-doc");
@@ -140,15 +138,20 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             assertThat(ingestedDocsRecords, empty());
 
             var shardSizeRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "shard-size");
-
             // there might be records from multiple metering.report_period. We are interested in the latest
             // because the replication might take time and also some nodes might be reporting with a delay
 
-            Optional<Instant> timestamp = getLatestUsageTimestamp(shardSizeRecords);
-            assert (timestamp.isPresent());
-            List<Map<?, ?>> latestRecords = getRecordsForLatestTimestamp(shardSizeRecords, timestamp);
-            // there are 6 records. Each primary shard (3) has 2 replicas. This accounts to 6 replica shards.
-            assertThat(debugInfoForShardSize(indexName, timestamp, latestRecords, shardSizeRecords), latestRecords.size(), equalTo(6));
+            // we are expecting 6 records in a full batch. 3 primaries per each replica.
+            var latestTimestampWithSixRecords = getLatestFullBatch(shardSizeRecords, 6);
+            List<Map<?, ?>> latestRecords = latestTimestampWithSixRecords.getValue();
+            logger.info(
+                debugInfoForShardSize(
+                    indexName,
+                    latestTimestampWithSixRecords.getKey(),
+                    latestTimestampWithSixRecords.getValue(),
+                    shardSizeRecords
+                )
+            );
 
             Map<?, List<Map<?, ?>>> groupedById = latestRecords.stream().collect(groupingBy(m -> m.get("id")));
             // there are 3 primary shards, so should be 3 unique ids only
@@ -156,20 +159,19 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             // each primary is duplicated (replicated) twice
             assertSumOnReplica(groupedById, 0);
             assertSumOnReplica(groupedById, 1);
+
         }, 30, TimeUnit.SECONDS);
 
     }
 
     private String debugInfoForShardSize(
         String indexName,
-        Optional<Instant> timestamp,
+        Instant timestamp,
         List<Map<?, ?>> latestRecords,
         List<Map<?, ?>> shardSizeRecords
     ) throws IOException {
         StringBuilder msgBuilder = new StringBuilder();
-        msgBuilder.append("Number of shard-size records is not right.");
-        msgBuilder.append(System.lineSeparator());
-        msgBuilder.append("Timestamp " + timestamp.get());
+        msgBuilder.append("Latest timestamp with 6 records " + timestamp);
         msgBuilder.append(System.lineSeparator());
         msgBuilder.append("Latest records " + latestRecords);
         msgBuilder.append(System.lineSeparator());
@@ -194,16 +196,14 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         return ingestedDocs.stream().mapToInt(m -> (Integer) ((Map<?, ?>) m.get("usage")).get("quantity")).sum();
     }
 
-    private static List<Map<?, ?>> getRecordsForLatestTimestamp(List<Map<?, ?>> metric, Optional<Instant> timestamp) {
-        return metric.stream().filter(m -> m.get("usage_timestamp").equals(timestamp.get().toString())).collect(Collectors.toList());
-    }
-
-    private static Optional<Instant> getLatestUsageTimestamp(List<Map<?, ?>> metric) {
-        return metric.stream()
-            .map(m -> m.get("usage_timestamp"))
-            .map(t -> Instant.parse((String) t))
-            .sorted(Comparator.reverseOrder())
-            .findFirst();
+    private static Map.Entry<Instant, List<Map<?, ?>>> getLatestFullBatch(List<Map<?, ?>> metric, int expectedNumberOfRecords) {
+        Map<?, List<Map<?, ?>>> groupedByTimestamp = metric.stream().collect(groupingBy(m -> m.get("usage_timestamp")));
+        Map<Instant, List<Map<?, ?>>> fullBatchesOnly = groupedByTimestamp.entrySet()
+            .stream()
+            .filter(e -> e.getValue().size() == expectedNumberOfRecords)
+            .collect(toMap(e -> Instant.parse((String) e.getKey()), Map.Entry::getValue));
+        assert fullBatchesOnly.size() > 0;
+        return fullBatchesOnly.entrySet().stream().max(Comparator.comparing(Map.Entry::getKey)).get();
     }
 
     private static void logShardAllocationInformation(String indexName) throws IOException {
