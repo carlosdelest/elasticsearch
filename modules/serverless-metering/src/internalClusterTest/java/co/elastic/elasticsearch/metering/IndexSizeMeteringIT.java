@@ -56,7 +56,7 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         startNodes();
 
         var plugins = StreamSupport.stream(internalCluster().getInstances(PluginsService.class).spliterator(), false)
-            .flatMap(ps -> ps.filterPlugins(MeteringPlugin.class).stream())
+            .flatMap(ps -> ps.filterPlugins(MeteringPlugin.class))
             .toList();
         assertThat(plugins, not(empty()));
     }
