@@ -20,10 +20,13 @@ package co.elastic.elasticsearch.settings.secure;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.SimpleBatchedExecutor;
+import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterServiceTaskQueue;
 import org.elasticsearch.common.Priority;
@@ -35,12 +38,15 @@ import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
-public class FileSecureSettingsService extends AbstractFileWatchingService {
+public class FileSecureSettingsService extends AbstractFileWatchingService implements ClusterStateListener {
 
     private static final Logger logger = LogManager.getLogger(FileSecureSettingsService.class);
 
@@ -48,13 +54,65 @@ public class FileSecureSettingsService extends AbstractFileWatchingService {
     private final ClusterService clusterService;
     private final MasterServiceTaskQueue<SecretsUpdateTask> updateQueue;
     private final MasterServiceTaskQueue<ErrorUpdateTask> errorQueue;
+    private volatile boolean active = false;
 
     public FileSecureSettingsService(ClusterService clusterService, Environment environment) {
-        super(clusterService, LocallyMountedSecrets.resolveSecretsFile(environment));
+        super(LocallyMountedSecrets.resolveSecretsFile(environment));
         this.clusterService = clusterService;
         this.updateQueue = clusterService.createTaskQueue("secure_settings", Priority.NORMAL, new SecretsTaskExecutor());
         this.errorQueue = clusterService.createTaskQueue("secure_settings_errors", Priority.NORMAL, new ErrorTaskExecutor());
         this.environment = environment;
+    }
+
+    @Override
+    protected void doStart() {
+        // We start the file watcher when we know we are master from a cluster state change notification.
+        // We need the additional active flag, since cluster state can change after we've shutdown the service
+        // causing the watcher to start again.
+        this.active = Files.exists(watchedFileDir().getParent());
+        if (active == false) {
+            // we don't have a config directory, we can't possibly launch the file settings service
+            return;
+        }
+        if (DiscoveryNode.isMasterNode(clusterService.getSettings())) {
+            clusterService.addListener(this);
+        }
+    }
+
+    @Override
+    protected void doStop() {
+        this.active = false;
+        super.doStop();
+    }
+
+    @Override
+    public final void clusterChanged(ClusterChangedEvent event) {
+        ClusterState clusterState = event.state();
+        if (clusterState.nodes().isLocalNodeElectedMaster()) {
+            synchronized (this) {
+                if (watching() || active == false) {
+                    refreshExistingFileStateIfNeeded(clusterState);
+                    return;
+                }
+                startWatcher();
+            }
+        } else if (event.previousState().nodes().isLocalNodeElectedMaster()) {
+            stopWatcher();
+        }
+    }
+
+    private void refreshExistingFileStateIfNeeded(ClusterState clusterState) {
+        if (watching()) {
+            // TODO: shouldRefreshFileState(clusterState): this was omitted when copying from FileSettingsService
+            // but it should probably also apply to secure settings?
+            if (Files.exists(watchedFile())) {
+                try {
+                    Files.setLastModifiedTime(watchedFile(), FileTime.from(Instant.now()));
+                } catch (IOException e) {
+                    logger.warn("encountered I/O error trying to update file settings timestamp", e);
+                }
+            }
+        }
     }
 
     /**
