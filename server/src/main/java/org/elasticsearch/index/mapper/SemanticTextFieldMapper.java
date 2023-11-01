@@ -146,42 +146,12 @@ public class SemanticTextFieldMapper extends FieldMapper {
     @Override
     public void parse(DocumentParserContext context) throws IOException {
 
-        if (context.parser().currentToken() != XContentParser.Token.START_OBJECT) {
+        if (context.parser().currentToken() != XContentParser.Token.VALUE_STRING) {
             throw new IllegalArgumentException(
-                "[semantic_text] fields must be a json object, expected a START_OBJECT but got: " + context.parser().currentToken()
+                "[semantic_text] fields must be a text value but got: " + context.parser().currentToken()
             );
         }
-
-        boolean textFound = false;
-        boolean inferenceFound = false;
-        for (XContentParser.Token token = context.parser().nextToken(); token != XContentParser.Token.END_OBJECT; token = context.parser()
-            .nextToken()) {
-            if (token != XContentParser.Token.FIELD_NAME) {
-                throw new IllegalArgumentException("[semantic_text] fields expect an object with field names, found " + token);
-            }
-
-            String fieldName = context.parser().currentName();
-            XContentParser.Token valueToken = context.parser().nextToken();
-            switch (fieldName) {
-                case TEXT_SUBFIELD_NAME:
-                    context.doc().add(new StringField(name() + TEXT_SUBFIELD_NAME, context.parser().textOrNull(), Field.Store.NO));
-                    textFound = true;
-                    break;
-                case SPARSE_VECTOR_SUBFIELD_NAME:
-                    sparseVectorFieldMapper.parse(context);
-                    inferenceFound = true;
-                    break;
-                default:
-                    throw new IllegalArgumentException("Unexpected subfield value: " + fieldName);
-            }
-        }
-
-        if (textFound == false) {
-            throw new IllegalArgumentException("[semantic_text] value does not contain [" + TEXT_SUBFIELD_NAME + "] subfield");
-        }
-        if (inferenceFound == false) {
-            throw new IllegalArgumentException("[semantic_text] value does not contain [" + SPARSE_VECTOR_SUBFIELD_NAME + "] subfield");
-        }
+        context.doc().add(new StringField(name(), context.parser().textOrNull(), Field.Store.NO));
     }
 
     @Override

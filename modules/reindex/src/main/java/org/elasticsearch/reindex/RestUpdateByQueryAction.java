@@ -71,6 +71,8 @@ public class RestUpdateByQueryAction extends AbstractBulkByQueryRestHandler<Upda
         consumers.put("script", o -> internal.setScript(Script.parse(o)));
         consumers.put("max_docs", s -> setMaxDocsValidateIdentical(internal, ((Number) s).intValue()));
 
+        // TODO There surely must be a better way of doing this
+        request.params().put("_source_includes", "*");
         parseInternalRequest(internal, request, namedWriteableRegistry, consumers);
 
         internal.setPipeline(request.param("pipeline"));

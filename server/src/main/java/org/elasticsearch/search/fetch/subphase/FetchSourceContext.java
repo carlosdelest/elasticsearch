@@ -15,6 +15,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.core.Booleans;
 import org.elasticsearch.core.Nullable;
+import org.elasticsearch.index.mapper.SemanticTextInferenceFieldMapper;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.search.lookup.SourceFilter;
 import org.elasticsearch.xcontent.ParseField;
@@ -124,7 +125,8 @@ public class FetchSourceContext implements Writeable, ToXContentObject {
         if (fetchSource != null || sourceIncludes != null || sourceExcludes != null) {
             return FetchSourceContext.of(fetchSource == null || fetchSource, sourceIncludes, sourceExcludes);
         }
-        return null;
+
+        return FetchSourceContext.of(true, null, new String[]{SemanticTextInferenceFieldMapper.FIELD_NAME});
     }
 
     public static FetchSourceContext fromXContent(XContentParser parser) throws IOException {
