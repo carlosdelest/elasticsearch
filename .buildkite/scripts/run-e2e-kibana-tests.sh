@@ -24,7 +24,7 @@ steps:
         commit: "${KIBANA_COMMIT}"
         branch: "${KIBANA_BRANCH}"
         env:
-          ES_SERVERLESS_IMAGE: "${IMAGE_OVERRIDE}"
+          ES_SERVERLESS_IMAGE: "${ES_SERVERLESS_IMAGE}"
           SKIP_CYPRESS: "1"
           FTR_EXTRA_ARGS: "--include-tag=esGate"
 EOF

@@ -3,6 +3,8 @@ env:
   GPCTL_CONFIG: "${GPCTL_CONFIG:-https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/dev.yaml}"
   SKIP_DOCKER: "true"
   BUILDKITE_DIR: ".buildkite"
+  IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
+  ES_SERVERLESS_IMAGE: "${ES_SERVERLESS_IMAGE-docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}}"
 
 steps:
   - label: ":git: Validate elasticsearch submodule"
@@ -56,7 +58,7 @@ steps:
       env:
         NAMESPACE: elasticsearch-ci
         IMAGE_NAME: elasticsearch-serverless
-        IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
+        IMAGE_TAG: "${IMAGE_TAG}"
 
   - label: ":rocket: Run Kibana E2E tests"
     if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//)
