@@ -8,6 +8,8 @@
 
 package org.elasticsearch.ingest;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.index.IndexRequest;
@@ -34,6 +36,7 @@ import java.util.function.Supplier;
 
 public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPreprocessor {
 
+    private static final Logger logger = LogManager.getLogger(FieldInferenceBulkRequestPreprocessor.class);
     public static final String SEMANTIC_TEXT_ORIGIN = "semantic_text";
 
     private final IndicesService indicesService;
@@ -99,11 +102,6 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
     }
 
     private boolean fieldNeedsInference(IndexRequest indexRequest, String fieldName, Object fieldValue) {
-
-        if (fieldValue instanceof String == false) {
-            return false;
-        }
-
         return getModelForField(indexRequest, fieldName) != null;
     }
 
@@ -147,13 +145,17 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
         String fieldName = fieldNames.get(0);
         List<String> nextFieldNames = fieldNames.subList(1, fieldNames.size());
         final String fieldValue = ingestDocument.getFieldValue(fieldName, String.class);
-        if (fieldValue == null) {
+        Object existingInference = ingestDocument.getFieldValue(SemanticTextInferenceFieldMapper.FIELD_NAME + "." + fieldName, Object.class, true);
+        if (fieldValue == null || existingInference != null) {
             // Run inference for next field
+            logger.info("Skipping inference for field [" + fieldName + "]");
             runInferenceForFields(indexRequest, nextFieldNames, ref, position, ingestDocument, onFailure);
+            return;
         }
 
         String modelForField = getModelForField(indexRequest, fieldName);
         assert modelForField != null : "Field " + fieldName + " has no model associated in mappings";
+        logger.info("Calculating inference for field [" + fieldName + "]");
 
         // TODO Hardcoding task type, how to get that from model ID?
         InferenceAction.Request inferenceRequest = new InferenceAction.Request(
