@@ -58,6 +58,13 @@ steps:
         IMAGE_NAME: elasticsearch-serverless
         IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
 
+  - label: ":rocket: Run Kibana E2E tests"
+    if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//)
+    command: ".buildkite/scripts/run-e2e-kibana-tests.sh"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
+
   - label: ":k8s: :java: Run Elasticsearch E2E tests"
     trigger: elasticsearch-serverless-e2e-tests-qa
     depends_on: docker-publish
