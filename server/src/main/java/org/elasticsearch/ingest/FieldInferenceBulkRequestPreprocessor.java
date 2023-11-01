@@ -20,12 +20,11 @@ import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.index.Index;
-import org.elasticsearch.index.mapper.SemanticTextFieldMapper;
+import org.elasticsearch.index.mapper.SemanticTextInferenceFieldMapper;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.inference.TaskType;
 import org.elasticsearch.plugins.internal.DocumentParsingObserver;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -67,14 +66,15 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
         assert indexRequest.isFieldInferenceDone() == false;
 
         IngestDocument ingestDocument = newIngestDocument(indexRequest);
-        List<String> fieldNames = ingestDocument.getSource().entrySet()
+        List<String> fieldNames = ingestDocument.getSource()
+            .entrySet()
             .stream()
             .filter(entry -> fieldNeedsInference(indexRequest, entry.getKey(), entry.getValue()))
             .map(Map.Entry::getKey)
             .toList();
 
         // Runs inference sequentially. This makes easier sync and removes the problem of having multiple
-        //   BulkItemResponses for a single bulk request in TransportBulkAction.unwrappingSingleItemBulkResponse
+        // BulkItemResponses for a single bulk request in TransportBulkAction.unwrappingSingleItemBulkResponse
         runInferenceForFields(indexRequest, fieldNames, refs.acquire(), slot, ingestDocument, onFailure);
 
     }
@@ -166,14 +166,11 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
         client.execute(InferenceAction.INSTANCE, inferenceRequest, new ActionListener<>() {
             @Override
             public void onResponse(InferenceAction.Response response) {
-                // Transform into two subfields, one with the actual text and other with the inference
-                Map<String, Object> newFieldValue = new HashMap<>();
-                newFieldValue.put(SemanticTextFieldMapper.TEXT_SUBFIELD_NAME, fieldValue);
-                newFieldValue.put(
-                        SemanticTextFieldMapper.SPARSE_VECTOR_SUBFIELD_NAME,
-                        response.getResult().asMap(fieldName).get(fieldName)
+                // Transform into another top-level subfield
+                ingestDocument.setFieldValue(
+                    SemanticTextInferenceFieldMapper.FIELD_NAME + "." + fieldName,
+                    response.getResult().asMap(fieldName).get(fieldName)
                 );
-                ingestDocument.setFieldValue(fieldName, newFieldValue);
 
                 // Run inference for next fields
                 runInferenceForFields(indexRequest, nextFieldNames, ref, position, ingestDocument, onFailure);
@@ -183,8 +180,8 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
             public void onFailure(Exception e) {
                 // Wrap exception in an illegal argument exception, as there is a problem with the model or model config
                 onFailure.accept(
-                        position,
-                        new IllegalArgumentException("Error performing inference for field [" + fieldName + "]: " + e.getMessage(), e)
+                    position,
+                    new IllegalArgumentException("Error performing inference for field [" + fieldName + "]: " + e.getMessage(), e)
                 );
                 ref.close();
             }

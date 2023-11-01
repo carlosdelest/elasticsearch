@@ -106,12 +106,25 @@ public class RootObjectMapper extends ObjectMapper {
 
         @Override
         public RootObjectMapper build(MapperBuilderContext context) {
+            // Check whether we should add field inference mapper
+            // TODO Find a better place for doing this
+            Map<String, Mapper> mappers = buildMappers(context);
+            boolean hasInference = mappers.values()
+                .stream()
+                .anyMatch(mapper -> mapper.typeName().equals(SemanticTextFieldMapper.CONTENT_TYPE));
+
+            if (hasInference) {
+                SemanticTextInferenceFieldMapper semanticTextInferenceFieldMapper = new SemanticTextInferenceFieldMapper.Builder().build(
+                    context
+                );
+                mappers.put(semanticTextInferenceFieldMapper.simpleName(), semanticTextInferenceFieldMapper);
+            }
             return new RootObjectMapper(
                 name,
                 enabled,
                 subobjects,
                 dynamic,
-                buildMappers(context),
+                mappers,
                 runtimeFields,
                 dynamicDateTimeFormatters,
                 dynamicTemplates,
