@@ -19,6 +19,7 @@ configurations {
 }
 
 dependencies {
+    yamlRestTestImplementation(project(":modules:stateless"))
     yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
     yamlRestTestImplementation(testArtifact(xpackModule("core")))
     compileOnly(xpackModule("core"))

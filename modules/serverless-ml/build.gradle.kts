@@ -27,6 +27,7 @@ dependencies {
 
     internalClusterTestImplementation(testArtifact(xpackModule("ml")))
 
+    yamlRestTestImplementation(project(":modules:stateless"))
     yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
     yamlRestTestImplementation(testArtifact(xpackModule("core")))
     yamlRestTestImplementation(testArtifact(xpackModule("ml")))

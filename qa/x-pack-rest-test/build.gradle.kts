@@ -11,6 +11,7 @@ plugins {
 }
 
 dependencies {
+    yamlRestTestImplementation(project(":modules:stateless"))
     yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
     yamlRestTestRuntimeOnly(testArtifact(xpackModule("core")))
     yamlRestTestRuntimeOnly(testArtifact("org.elasticsearch.plugin.security.qa:service-account", "javaRestTest"))

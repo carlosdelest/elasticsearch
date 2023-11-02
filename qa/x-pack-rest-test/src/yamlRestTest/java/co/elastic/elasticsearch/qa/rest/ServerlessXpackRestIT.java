@@ -8,6 +8,8 @@
 
 package co.elastic.elasticsearch.qa.rest;
 
+import co.elastic.elasticsearch.stateless.objectstore.gc.ObjectStoreGCTask;
+
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
@@ -18,6 +20,8 @@ import org.elasticsearch.test.rest.yaml.ClientYamlTestClient;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestExecutionContext;
 import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
 import org.junit.ClassRule;
+
+import java.util.function.Predicate;
 
 public class ServerlessXpackRestIT extends AbstractXPackRestTest {
 
@@ -48,6 +52,11 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
 
     public ServerlessXpackRestIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);
+    }
+
+    @Override
+    protected Predicate<String> waitForPendingTasksFilter() {
+        return super.waitForPendingTasksFilter().or(task -> task.contains(ObjectStoreGCTask.TASK_NAME));
     }
 
     @Override

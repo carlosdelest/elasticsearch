@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.rest;
 
+import co.elastic.elasticsearch.stateless.objectstore.gc.ObjectStoreGCTask;
+
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
@@ -25,6 +27,8 @@ import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
 import org.junit.ClassRule;
+
+import java.util.function.Predicate;
 
 public class ServerlessLicenseRestIT extends AbstractXPackRestTest {
 
@@ -45,6 +49,11 @@ public class ServerlessLicenseRestIT extends AbstractXPackRestTest {
 
     public ServerlessLicenseRestIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);
+    }
+
+    @Override
+    protected Predicate<String> waitForPendingTasksFilter() {
+        return super.waitForPendingTasksFilter().or(task -> task.contains(ObjectStoreGCTask.TASK_NAME));
     }
 
     @Override

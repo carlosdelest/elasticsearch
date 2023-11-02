@@ -10,6 +10,7 @@ esplugin {
 }
 
 dependencies {
+    yamlRestTestImplementation(project(":modules:stateless"))
     yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
     yamlRestTestRuntimeOnly(testArtifact(xpackModule("core")))
     compileOnly(xpackModule("core"))

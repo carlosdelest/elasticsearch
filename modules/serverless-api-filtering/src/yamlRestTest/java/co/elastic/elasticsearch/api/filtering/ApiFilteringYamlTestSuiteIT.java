@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.api.filtering;
 
+import co.elastic.elasticsearch.stateless.objectstore.gc.ObjectStoreGCTask;
+
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
 import org.elasticsearch.common.settings.SecureString;
@@ -28,6 +30,8 @@ import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
 import org.junit.ClassRule;
+
+import java.util.function.Predicate;
 
 public class ApiFilteringYamlTestSuiteIT extends AbstractXPackRestTest {
     private static final String OPERATOR_USER = "x_pack_rest_user";
@@ -45,6 +49,11 @@ public class ApiFilteringYamlTestSuiteIT extends AbstractXPackRestTest {
 
     public ApiFilteringYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);
+    }
+
+    @Override
+    protected Predicate<String> waitForPendingTasksFilter() {
+        return super.waitForPendingTasksFilter().or(task -> task.contains(ObjectStoreGCTask.TASK_NAME));
     }
 
     @Override

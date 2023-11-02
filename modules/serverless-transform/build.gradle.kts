@@ -25,6 +25,7 @@ dependencies {
 
     testImplementation(testArtifact(xpackModule("core")))
 
+    yamlRestTestImplementation(project(":modules:stateless"))
     yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
     yamlRestTestImplementation(testArtifact(xpackModule("core")))
 }
