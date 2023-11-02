@@ -58,7 +58,8 @@ public class GetComposableIndexTemplateSettingsFilter extends ApiFilteringAction
             t.metadata(),
             t.getDataStreamTemplate(),
             t.getAllowAutoCreate(),
-            t.getIgnoreMissingComponentTemplates()
+            t.getIgnoreMissingComponentTemplates(),
+            t.deprecated()
         );
     }
 

@@ -26,5 +26,8 @@ tasks {
 
         // Assertions are failing due to discrepencies in exceptions when security is enabled
         exclude("**/EqlRestValidationIT.class")
+
+        // Tests use a shared cluster
+        maxParallelForks = 1
     }
 }
