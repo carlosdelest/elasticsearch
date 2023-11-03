@@ -10,9 +10,10 @@ INTAKE_PIPELINE_SLUG="kibana-elasticsearch-serverless-verify-and-promote"
 BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
 BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${KIBANA_BRANCH}&state=passed" | jq '. | map(. | select(.creator == null)) | .[0] | {commit: .commit, url: .web_url}')
 KIBANA_COMMIT=$(echo ${BUILD_JSON} | jq -r '.commit')
+PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
 
 echo "Last succesful kibana e2e test build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --style "info" --context "e2e-test-base"
-echo "Kibana: : $KIBANA_COMMIT / $KIBANA_BRANCH" | buildkite-agent annotate --style "info" --context "kibana-version"
+echo "Kibana: $KIBANA_COMMIT / $KIBANA_BRANCH" | buildkite-agent annotate --style "info" --context "kibana-version"
 
 echo "--- Trigger kibana e2e tests"
 cat <<EOF | buildkite-agent pipeline upload
