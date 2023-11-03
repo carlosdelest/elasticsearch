@@ -11,16 +11,15 @@ steps:
     branches: 'main'
     command: ".buildkite/scripts/validate-submodule.sh"
     agents:
-      provider: "gcp"
-      machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
 
   - label: ":java: Run serverless Elasticsearch functional tests"
     if: build.env('GITOPS_ENV') == 'dev'
     command: ".buildkite/scripts/run-gradle.sh check -Dtests.upgrade.skip=true"
     agents:
       provider: "gcp"
-      machineType: "n1-standard-16"
+      machineType: "n1-standard-32"
       image: family/elasticsearch-ubuntu-2022
     notify:
       - github_commit_status:
@@ -92,6 +91,5 @@ steps:
     if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main'
     command: ".buildkite/scripts/tag-promoted-commit.sh"
     agents:
-      provider: "gcp"
-      machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
