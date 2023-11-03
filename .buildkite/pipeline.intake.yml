@@ -91,5 +91,6 @@ steps:
     if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main'
     command: ".buildkite/scripts/tag-promoted-commit.sh"
     agents:
-      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
-      memory: "4G"
+      provider: "gcp"
+      machineType: "n1-standard-4"
+      image: family/elasticsearch-ubuntu-2022
