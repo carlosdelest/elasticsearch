@@ -39,8 +39,6 @@ import org.elasticsearch.env.Environment;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.attribute.FileTime;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -91,27 +89,12 @@ public class FileSecureSettingsService extends AbstractFileWatchingService imple
         if (clusterState.nodes().isLocalNodeElectedMaster()) {
             synchronized (this) {
                 if (watching() || active == false) {
-                    refreshExistingFileStateIfNeeded(clusterState);
                     return;
                 }
                 startWatcher();
             }
         } else if (event.previousState().nodes().isLocalNodeElectedMaster()) {
             stopWatcher();
-        }
-    }
-
-    private void refreshExistingFileStateIfNeeded(ClusterState clusterState) {
-        if (watching()) {
-            // TODO: shouldRefreshFileState(clusterState): this was omitted when copying from FileSettingsService
-            // but it should probably also apply to secure settings?
-            if (Files.exists(watchedFile())) {
-                try {
-                    Files.setLastModifiedTime(watchedFile(), FileTime.from(Instant.now()));
-                } catch (IOException e) {
-                    logger.warn("encountered I/O error trying to update file settings timestamp", e);
-                }
-            }
         }
     }
 
