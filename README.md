@@ -104,19 +104,16 @@ prefix. For example:
 
 If you need to make further customizations, the cluster definition for this task [lives here](serverless-build-tools/src/main/kotlin/elasticsearch.serverless-run.gradle.kts).
 
-### Running in a kubernetes based serverless platform dev environment
+### Deploy snapshot into in QA environment
 
-To run Serverless Elasticsearch in a kubernetes cluster environment you can use predifined buildkite pipelines. The main
-branch and working branches are supported.
+To deploy a branch snapshot into QA
 
-To deploy a branch into a kubernetes cluster
+1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa
+   This deploys a snapshot from the selected branch into our QA environment (see https://docs.elastic.dev/serverless/qa)
+   by publishing a docker snapshot into our internal docker registry and then using the serverless project api to deploy that snapshot to our serverless platform QA environment.
 
-1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev
-   This deploys the selected branch into a kubernetes based dev environment (see https://docs.elastic.dev/serverless/dev-env)
-   by publishing a docker snapshot into our internal docker registry and then using the serverless project api to deploy that snapshot to our serverless platform dev environment.
-
-   The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/53#annotation-ess-public-url
-   The encrypted user password is also shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-dev/builds/173#annotation-ess-password-encrypted
+   The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa/builds/3#annotation-ess-public-url
+   The encrypted user password is also shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa/builds/4#annotation-ess-password-encrypted
 
    Store both values in a env variable:
    ```
@@ -154,48 +151,41 @@ To deploy a branch into a kubernetes cluster
     }
     ```
 
-After its usage cleanup the ess deployment by triggering the undeploy-dev pipeline at https://buildkite.com/elastic/elasticsearch-serverless-undeploy-dev. Choose the same branch and commit you've created the deployment earlier. Alternatively you can use the buildkite commandline interface and run
+After its usage cleanup the ess deployment by triggering the undeploy-qa pipeline at https://buildkite.com/elastic/elasticsearch-serverless-undeploy-qa. Choose the same branch used for deployment earlier. By 
+default the last deployed project from that branch. To undeploy a specific project, the project id must be passed via environment variables to the pipeline as PROJECT_ID. 
+
+Alternatively you can use the buildkite commandline interface to undeploy your project by running
 
 ```
-# for deleting a deployment from the head of this branch
-> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch
+# for deleting the latest deployment from this branch
+> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-qa --branch my-branch
 ```
 
-or
+### Update an elasticsearch serverless platform QA environment deployment
 
-```
-# for deleting a deployment of a certain commit
-> bk build create --pipeline elastic/elasticsearch-serverless-undeploy-dev --branch my-branch --commit b150520767e3
-```
+To update an existing elasticsearch serverless QA deployment the update-dev buildkite pipeline at https://buildkite.com/elastic/elasticsearch-serverless-udpate-qa can be used.
 
-### Update an elasticsearch serverless platform dev environment deployment
+The pipeline must be triggered from the same branch as the deploy qa was executed. The last deployed project by https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa will be updated.
 
-To update an existing elasticsearch serverless dev deployment the update-dev buildkite pipeline at https://buildkite.com/elastic/elasticsearch-serverless-udpate-dev can be used.
-
-The pipeline must be triggered manually and requires an existing ess deployment.
-
-When invoking manually the `PROJECT_ID` and `ESS_API_KEY` of the deployment to be updated must be passed as environment variable which can be configured in the new build buildkite pipeline dialog (https://buildkite.com/elastic/elasticsearch-serverless-udpate-dev#new).
-
-
-### Running end to end tests against a kubernetes based serverless platform dev environment
+### Running end to end tests against a kubernetes based serverless platform QA environment
 
 We have a set of end to end tests that run against a kubernetes based serverless platform dev environment.
-Those tests live in the `:qa:e2e-test` subproject and are run against a dev deployment in this
-pipeline: https://buildkite.com/elastic/elasticsearch-serverless-e2e-tests
+Those tests live in the `:qa:e2e-test` subproject and are run against a QA deployment in this
+pipeline: https://buildkite.com/elastic/elasticsearch-serverless-e2e-tests-qa
 
-The end to end tests can be run locally against a kubernetes based serverless platform dev deployment by
+The end to end tests can be run locally against a kubernetes based serverless platform QA deployment by
 
-1. Deploying a branch into a kubernetes cluster as described above
+1. Deploying a branch snapshot into QA as described above
 2. Resolve deployment url as decribed above and export it as `ESS_PUBLIC_URL` env environment
 3. Resolve the elasticsearch encrypted api key from the buildkite UI and export to `ESS_API_KEY_ENCRYPTED`
-4. Resolve the ci encryption key from vault and store it in a file
+4. Resolve the ci encryption key from elastic vault (https://secrets.elastic.co:8200) and store it in a file
 5. Export the encoded api key in an env variable.
 6. Run `./gradlew :qa:e2e-test:javaRestTest` to invoke the end to end tests.
 
 ```
 > export ESS_PUBLIC_URL=<your ess deployment url>
 > export ESS_API_KEY_ENCRYPTED=<the encrypted ess api key of the deployment>
-> vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > key.pem
+> vault read -field private-key secret/elasticsearch-team/delivery-encryption > key.pem
 > export ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_ENCRYPTED | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem)`
 > ./gradlew :qa:e2e-test:javaRestTest
 ```

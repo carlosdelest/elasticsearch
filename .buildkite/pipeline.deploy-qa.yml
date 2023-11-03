@@ -1,6 +1,29 @@
-agents:
-  image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.2"
-  memory: "4G"
+env:
+  BUILDKITE_DIR: ".buildkite"
+  IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
+  DEPLOY_ID: "${DEPLOY_ID:-ess-ci-${IMAGE_TAG}}"
+  VAULT_PATH_API_KEY: "secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-qa-creds"
+  ENV_URL: "https://global.qa.cld.elstc.co"
+  AWS_REGION: "aws-eu-west-1"
+  TEST_ENV: "qa"
+  IMAGE_OVERRIDE: "${IMAGE_OVERRIDE-docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}}"
+
 steps:
-  - label: "Example Test"
-    command: echo "Hello!"
+  - label: ":docker: Publish docker test images"
+    trigger: elasticsearch-serverless-publish-docker
+    key: docker-publish
+    build:
+      message: "${BUILDKITE_MESSAGE}"
+      commit: "${BUILDKITE_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
+      env:
+        IMAGE_TAG: "${IMAGE_TAG}"
+
+  - label: ":rocket: Deploy to ${TEST_ENV}"
+    command: "$$BUILDKITE_DIR/scripts/deploy-managed.sh"
+    timeout_in_minutes: 30
+    depends_on:
+      - step: docker-publish
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"

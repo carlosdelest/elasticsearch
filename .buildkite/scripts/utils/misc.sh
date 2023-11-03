@@ -40,6 +40,10 @@ decrypt () {
   local message="$1"
   local keyFile="encrypt.pem"
   echo "$ENCRYPTION_KEY" > $keyFile
-  retValue=$(echo $message | openssl pkeyutl -decrypt -inkey $keyFile | openssl base64 -d)
+  retValue=$(echo $message | openssl base64 -d | openssl pkeyutl -decrypt -inkey $keyFile)
   echo "$retValue"
+}
+
+checkEssAvailability() {
+    curl -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD "$ES_ENDPOINT/_cluster/health" | jq -e 'select(.status == "green")'
 }

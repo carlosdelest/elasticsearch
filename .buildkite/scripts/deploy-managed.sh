@@ -63,10 +63,6 @@ PROJ_INFO=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverle
 
 ES_ENDPOINT=$(echo $PROJ_INFO | jq -r '.endpoints.elasticsearch')
 
-checkEssAvailability() {
-    curl -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD "$ES_ENDPOINT/_cluster/health" | jq -e 'select(.status == "green")'
-}
-
 # wait for a maximum of 20 minutes
 retry 30 40 checkEssAvailability
 
@@ -87,10 +83,13 @@ echo "Elasticsearch cluster available via $ES_ENDPOINT" | buildkite-agent annota
 #  }
 #}")
 
-
 #ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_RESPONSE | jq -e -r '.encoded')
 #ESS_API_KEY_ENCRYPTED=$(encrypt $ESS_API_KEY_ENCODED)
 ESS_ROOT_PASSWORD_ENCRYPTED=$(encrypt $ESS_ROOT_PASSWORD)
+
+# expose this via buildkite annotations to make it accessible to other es engineers
+echo "PROJECT_ID: ${PROJECT_ID}" | buildkite-agent annotate --style "info" --context "project-id"
+echo "ESS_ROOT_PASSWORD_ENCRYPTED: ${ESS_ROOT_PASSWORD_ENCRYPTED}" | buildkite-agent annotate --style "info" --context "ess-password-encrypted"
 
 buildkite-agent meta-data set "ess-project-id" "$PROJECT_ID"
 buildkite-agent meta-data set "ess-public-url" "$ES_ENDPOINT"
