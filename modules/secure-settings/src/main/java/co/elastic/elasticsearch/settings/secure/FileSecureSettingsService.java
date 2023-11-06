@@ -20,17 +20,14 @@ package co.elastic.elasticsearch.settings.secure;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ExceptionsHelper;
-import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.SimpleBatchedExecutor;
-import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterServiceTaskQueue;
 import org.elasticsearch.common.Priority;
-import org.elasticsearch.common.file.AbstractFileWatchingService;
+import org.elasticsearch.common.file.MasterNodeFileWatchingService;
 import org.elasticsearch.common.settings.LocallyMountedSecrets;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
@@ -38,13 +35,12 @@ import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
-public class FileSecureSettingsService extends AbstractFileWatchingService implements ClusterStateListener {
+public class FileSecureSettingsService extends MasterNodeFileWatchingService {
 
     private static final Logger logger = LogManager.getLogger(FileSecureSettingsService.class);
 
@@ -52,50 +48,13 @@ public class FileSecureSettingsService extends AbstractFileWatchingService imple
     private final ClusterService clusterService;
     private final MasterServiceTaskQueue<SecretsUpdateTask> updateQueue;
     private final MasterServiceTaskQueue<ErrorUpdateTask> errorQueue;
-    private volatile boolean active = false;
 
     public FileSecureSettingsService(ClusterService clusterService, Environment environment) {
-        super(LocallyMountedSecrets.resolveSecretsFile(environment));
+        super(clusterService, LocallyMountedSecrets.resolveSecretsFile(environment));
         this.clusterService = clusterService;
         this.updateQueue = clusterService.createTaskQueue("secure_settings", Priority.NORMAL, new SecretsTaskExecutor());
         this.errorQueue = clusterService.createTaskQueue("secure_settings_errors", Priority.NORMAL, new ErrorTaskExecutor());
         this.environment = environment;
-    }
-
-    @Override
-    protected void doStart() {
-        // We start the file watcher when we know we are master from a cluster state change notification.
-        // We need the additional active flag, since cluster state can change after we've shutdown the service
-        // causing the watcher to start again.
-        this.active = Files.exists(watchedFileDir().getParent());
-        if (active == false) {
-            // we don't have a config directory, we can't possibly launch the file settings service
-            return;
-        }
-        if (DiscoveryNode.isMasterNode(clusterService.getSettings())) {
-            clusterService.addListener(this);
-        }
-    }
-
-    @Override
-    protected void doStop() {
-        this.active = false;
-        super.doStop();
-    }
-
-    @Override
-    public final void clusterChanged(ClusterChangedEvent event) {
-        ClusterState clusterState = event.state();
-        if (clusterState.nodes().isLocalNodeElectedMaster()) {
-            synchronized (this) {
-                if (watching() || active == false) {
-                    return;
-                }
-                startWatcher();
-            }
-        } else if (event.previousState().nodes().isLocalNodeElectedMaster()) {
-            stopWatcher();
-        }
     }
 
     /**
