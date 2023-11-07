@@ -27,6 +27,7 @@ import org.elasticsearch.cli.CommandTestCase;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.common.settings.SecureString;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.env.Environment;
 import org.junit.Before;
 
@@ -36,18 +37,29 @@ import java.nio.file.Path;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 
 public class ServerlessServerCliTests extends CommandTestCase {
 
+    private Path defaultSettingsFile;
+    private Path cgroupFs;
+    private Path cpuShares;
+    private int availableProcessors;
     private final MockServerlessProcess mockServer = new MockServerlessProcess();
 
     @Before
     public void setupMockConfig() throws IOException {
         Files.createFile(configDir.resolve("log4j2.properties"));
+        defaultSettingsFile = configDir.resolve("serverless-default-settings.yml");
+        Files.writeString(defaultSettingsFile, "");
+        cgroupFs = createTempDir();
+        cpuShares = cgroupFs.resolve("cpu/cpu.shares");
+        Files.createDirectories(cpuShares.getParent());
+        Files.writeString(cpuShares, "1024");
+        availableProcessors = 2;
     }
 
     public void testDefaultsOverridden() throws Exception {
-        Path defaultSettingsFile = configDir.resolve("serverless-default-settings.yml");
         Files.writeString(defaultSettingsFile, """
             foo.bar: a-default
             """);
@@ -64,6 +76,59 @@ public class ServerlessServerCliTests extends CommandTestCase {
     public void testServerlessBuildExtensionLoaded() {
         var serverlessExtensionBuild = new ServerlessBuildExtension().getCurrentBuild();
         assertSame(serverlessExtensionBuild, Build.current());
+    }
+
+    public void testOvercommitDefaults() throws Exception {
+        executeOvercommit(1.0);
+        // defaults to no overcommit
+        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("1.0"));
+        assertThat(mockServer.args.nodeSettings().hasValue(ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR.getKey()), is(false));
+
+        availableProcessors = 1;
+        executeOvercommit(1.0);
+        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("1.0"));
+    }
+
+    public void testOvercommit() throws Exception {
+        // 512 share * 1.5 = 768 / 1024 = 0.75
+        Files.writeString(cpuShares, "512");
+        executeOvercommit(1.5);
+        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("0.75"));
+
+        // 512 share * 4 = 2048 / 1024 = 2.0
+        executeOvercommit(4.0);
+        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("2.0"));
+    }
+
+    public void testOvercommitIgnoredOutsideLinux() throws Exception {
+        sysprops.put("os.name", "MacOS");
+        executeOvercommit(1.0);
+        assertThat(mockServer.args.nodeSettings().hasValue(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), is(false));
+    }
+
+    public void testOvercommitErrorNodeProcessorsExists() {
+        var e = expectThrows(
+            IllegalStateException.class,
+            () -> execute("-E", "node.processors=2", "-E", ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR.getKey() + "=1.0")
+        );
+        assertThat(e.getMessage(), containsString("node.processors must not be present"));
+    }
+
+    public void testOvercommitErrorCpuSharesMissing() throws Exception {
+        Files.delete(cpuShares);
+        var e = expectThrows(IllegalStateException.class, () -> executeOvercommit(1.0));
+        assertThat(e.getMessage(), containsString("cgroups v1 cpu.shares must be set in serverless"));
+    }
+
+    public void testOvercommitCappedByAvailable() throws Exception {
+        Files.writeString(cpuShares, "2049");
+        executeOvercommit(1.0);
+        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("2.0"));
+        assertThat(terminal.getOutput(), containsString("Capping cpu overcommit to (2)."));
+    }
+
+    private void executeOvercommit(double overcommit) throws Exception {
+        execute("-E", ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR.getKey() + "=" + overcommit);
     }
 
     private class MockServerlessProcess extends ServerProcess {
@@ -117,6 +182,16 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
             @Override
             void syncPlugins(Terminal terminal, Environment env, ProcessInfo processInfo) throws Exception {}
+
+            @Override
+            protected Path getCgroupFs() {
+                return cgroupFs;
+            }
+
+            @Override
+            protected int getAvailableProcessors() {
+                return availableProcessors;
+            }
         };
     }
 }
