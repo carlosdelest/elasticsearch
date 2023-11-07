@@ -366,6 +366,7 @@ import org.elasticsearch.xpack.ml.process.MlControllerHolder;
 import org.elasticsearch.xpack.ml.process.MlMemoryTracker;
 import org.elasticsearch.xpack.ml.process.NativeController;
 import org.elasticsearch.xpack.ml.process.NativeStorageProvider;
+import org.elasticsearch.xpack.ml.queries.SemanticQueryBuilder;
 import org.elasticsearch.xpack.ml.queries.TextExpansionQueryBuilder;
 import org.elasticsearch.xpack.ml.rest.RestDeleteExpiredDataAction;
 import org.elasticsearch.xpack.ml.rest.RestMlInfoAction;
@@ -1688,6 +1689,11 @@ public class MachineLearning extends Plugin
                 TextExpansionQueryBuilder.NAME,
                 TextExpansionQueryBuilder::new,
                 TextExpansionQueryBuilder::fromXContent
+            ),
+            new QuerySpec<QueryBuilder>(
+                SemanticQueryBuilder.NAME,
+                SemanticQueryBuilder::new,
+                SemanticQueryBuilder::fromXContent
             )
         );
     }
