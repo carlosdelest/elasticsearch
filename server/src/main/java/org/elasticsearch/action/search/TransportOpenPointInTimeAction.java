@@ -123,6 +123,7 @@ public class TransportOpenPointInTimeAction extends HandledTransportAction<OpenP
             Map<String, AliasFilter> aliasFilter,
             Map<String, Float> concreteIndexBoosts,
             boolean preFilter,
+            boolean runCoordinatorPhase,
             ThreadPool threadPool,
             SearchResponse.Clusters clusters
         ) {

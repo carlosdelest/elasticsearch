@@ -17,6 +17,8 @@ import org.elasticsearch.index.shard.IndexLongFieldRange;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 
 import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.LongSupplier;
 
 /**
@@ -27,8 +29,11 @@ import java.util.function.LongSupplier;
  * don't hold queried data. See IndexMetadata#getTimestampRange() for more details
  */
 public class CoordinatorRewriteContext extends QueryRewriteContext {
+    @Nullable
     private final IndexLongFieldRange indexLongFieldRange;
+    @Nullable
     private final DateFieldMapper.DateFieldType timestampFieldType;
+    private final Map<String, Set<String>> fieldNamesToInferenceModel;
 
     public CoordinatorRewriteContext(
         XContentParserConfiguration parserConfig,
@@ -55,6 +60,34 @@ public class CoordinatorRewriteContext extends QueryRewriteContext {
         );
         this.indexLongFieldRange = indexLongFieldRange;
         this.timestampFieldType = timestampFieldType;
+        this.fieldNamesToInferenceModel = Map.of();
+    }
+
+    public CoordinatorRewriteContext(
+        XContentParserConfiguration parserConfig,
+        Client client,
+        LongSupplier nowInMillis,
+        Map<String, Set<String>> fieldNamesToInferenceModel
+    ) {
+        super(
+            parserConfig,
+            client,
+            nowInMillis,
+            null,
+            MappingLookup.EMPTY,
+            Collections.emptyMap(),
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+        this.indexLongFieldRange = null;
+        this.timestampFieldType = null;
+        this.fieldNamesToInferenceModel = fieldNamesToInferenceModel;
     }
 
     long getMinTimestamp() {
@@ -81,5 +114,10 @@ public class CoordinatorRewriteContext extends QueryRewriteContext {
     @Override
     public CoordinatorRewriteContext convertToCoordinatorRewriteContext() {
         return this;
+    }
+
+    @Nullable
+    public Set<String> inferenceModelsForFieldName(String fieldName) {
+        return fieldNamesToInferenceModel.get(fieldName);
     }
 }

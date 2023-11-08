@@ -13,9 +13,12 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.DateFieldMapper;
+import org.elasticsearch.index.mapper.StringFieldType;
 import org.elasticsearch.index.shard.IndexLongFieldRange;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -42,7 +45,7 @@ public class CoordinatorRewriteContextProvider {
     }
 
     @Nullable
-    public CoordinatorRewriteContext getCoordinatorRewriteContext(Index index) {
+    public CoordinatorRewriteContext getCoordinatorRewriteContextForIndex(Index index) {
         var clusterState = clusterStateSupplier.get();
         var indexMetadata = clusterState.metadata().index(index);
 
@@ -62,5 +65,10 @@ public class CoordinatorRewriteContextProvider {
         }
 
         return new CoordinatorRewriteContext(parserConfig, client, nowInMillis, timestampRange, dateFieldType);
+    }
+
+    @Nullable
+    public CoordinatorRewriteContext getCoordinatorRewriteContextForModels(Map<String, Set<String>> fieldToModelIds) {
+        return new CoordinatorRewriteContext(parserConfig, client, nowInMillis, fieldToModelIds);
     }
 }

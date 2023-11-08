@@ -80,12 +80,13 @@ public class SemanticTextFieldMapper extends FieldMapper {
 
     public static class SemanticTextFieldType extends SimpleMappedFieldType {
 
-        private SparseVectorFieldType sparseVectorFieldType;
+        private final SparseVectorFieldType sparseVectorFieldType;
 
         private final String modelId;
 
         public SemanticTextFieldType(String name, String modelId, Map<String, String> meta) {
             super(name, true, false, false, TextSearchInfo.NONE, meta);
+            this.sparseVectorFieldType = new SparseVectorFieldType(name + "." + SPARSE_VECTOR_SUBFIELD_NAME, meta);
             this.modelId = modelId;
         }
 

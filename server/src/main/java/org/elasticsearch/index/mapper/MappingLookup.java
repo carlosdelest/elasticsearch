@@ -495,4 +495,8 @@ public final class MappingLookup {
     public String modelForField(String fieldName) {
         return fieldTypeLookup.modelForField(fieldName);
     }
+
+    public Map<String, String> modelsForFields() {
+        return fieldTypeLookup.modelsForFields();
+    }
 }

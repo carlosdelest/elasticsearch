@@ -18,9 +18,10 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.index.mapper.SemanticTextFieldMapper;
 import org.elasticsearch.index.query.AbstractQueryBuilder;
+import org.elasticsearch.index.query.CoordinatorRewriteContext;
+import org.elasticsearch.index.query.CoordinatorRewriteableQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.index.query.SearchExecutionContext;
 import org.elasticsearch.inference.InferenceResults;
 import org.elasticsearch.inference.TaskType;
@@ -32,12 +33,13 @@ import org.elasticsearch.xpack.core.ml.inference.results.TextExpansionResults;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import static org.elasticsearch.TransportVersions.SEMANTIC_TEXT_FIELD_ADDED;
 import static org.elasticsearch.xpack.core.ClientHelper.ML_ORIGIN;
 import static org.elasticsearch.xpack.core.ClientHelper.executeAsyncWithOrigin;
 
-public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuilder> {
+public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuilder> implements CoordinatorRewriteableQueryBuilder {
 
     public static final String NAME = "semantic_query";
 
@@ -72,7 +74,7 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
     }
 
     @Override
-    protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+    protected QueryBuilder doCoordinatorRewrite(CoordinatorRewriteContext coordinatorRewriteContext) {
         if (inferenceResultsSupplier != null) {
             if (inferenceResultsSupplier.get() == null) {
                 // Inference still not returned
@@ -81,20 +83,27 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
             return inferenceResultsToQuery(fieldName, inferenceResultsSupplier.get());
         }
 
-        String modelName = queryRewriteContext.modelNameForField(fieldName);
-        if (modelName == null) {
+        Set<String> modelNames = coordinatorRewriteContext.inferenceModelsForFieldName(fieldName);
+        if (modelNames == null) {
             throw new IllegalArgumentException(
                 "field [" + fieldName + "] is not a " + SemanticTextFieldMapper.CONTENT_TYPE + " field type"
             );
-
         }
+
+        if (modelNames.size() > 1) {
+            throw new IllegalArgumentException("field [" + fieldName + "] has multiple models associated to it on different indices. " +
+                "A single model needs to be associated to the field in all the indices that contain it");
+        }
+
         // TODO Hardcoding task type
-        InferenceAction.Request inferenceRequest = new InferenceAction.Request(TaskType.SPARSE_EMBEDDING, modelName, query, Map.of());
+        String modelId = modelNames.iterator().next();
+        InferenceAction.Request inferenceRequest = new InferenceAction.Request(TaskType.SPARSE_EMBEDDING, modelId, query, Map.of());
 
         SetOnce<InferenceResults> inferenceResultsSupplier = new SetOnce<>();
-        queryRewriteContext.registerAsyncAction((client, listener) -> {
+        coordinatorRewriteContext.registerAsyncAction((client, listener) -> {
             executeAsyncWithOrigin(client, ML_ORIGIN, InferenceAction.INSTANCE, inferenceRequest, ActionListener.wrap(inferenceResponse -> {
                 inferenceResultsSupplier.set(inferenceResponse.getResult());
+                listener.onResponse(null);
             }, listener::onFailure));
         });
 
