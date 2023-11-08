@@ -21,7 +21,6 @@ import joptsimple.OptionSet;
 
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
-import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.env.Environment;
@@ -34,7 +33,7 @@ import java.util.Locale;
 
 public class ServerlessServerCli extends ServerCli {
 
-    static final Setting<Double> PROCESSORS_OVERCOMMIT_FACTOR = Setting.doubleSetting("serverless.processors_overcommit_factor", 1.0, 1.0);
+    static final String PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP = "es.serverless.processors_overcommit_factor";
 
     @Override
     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) throws Exception {
@@ -56,9 +55,9 @@ public class ServerlessServerCli extends ServerCli {
         }
         Settings.Builder finalSettingsBuilder = Settings.builder().put(defaultSettings).put(nodeSettings);
         boolean isLinux = processInfo.sysprops().get("os.name").startsWith("Linux");
-        if (isLinux && PROCESSORS_OVERCOMMIT_FACTOR.exists(nodeSettings)) {
+        if (isLinux && processInfo.sysprops().containsKey(PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP)) {
             // cgroups only apply to production on linux, no local development
-            double overcommit = PROCESSORS_OVERCOMMIT_FACTOR.get(nodeSettings);
+            double overcommit = Double.parseDouble(processInfo.sysprops().get(PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP));
             addNodeProcessors(finalSettingsBuilder, overcommit, terminal);
         }
 
@@ -85,7 +84,7 @@ public class ServerlessServerCli extends ServerCli {
             throw new IllegalStateException("cgroups v1 cpu.shares must be set in serverless");
         }
 
-        int shares = Integer.parseInt(Files.readString(sharesFile));
+        int shares = Integer.parseInt(Files.readString(sharesFile).strip());
         double vcpus = shares / 1024.0;
         double allocated = vcpus * overcommit;
 
@@ -106,8 +105,6 @@ public class ServerlessServerCli extends ServerCli {
             allocated = available;
         }
 
-        // remove the special overcommit setting since it is not known by the server
-        builder.remove(PROCESSORS_OVERCOMMIT_FACTOR.getKey());
         builder.put(EsExecutors.NODE_PROCESSORS_SETTING.getKey(), allocated);
     }
 

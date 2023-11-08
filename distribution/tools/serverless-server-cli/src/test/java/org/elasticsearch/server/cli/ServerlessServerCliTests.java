@@ -55,7 +55,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
         cgroupFs = createTempDir();
         cpuShares = cgroupFs.resolve("cpu/cpu.shares");
         Files.createDirectories(cpuShares.getParent());
-        Files.writeString(cpuShares, "1024");
+        Files.writeString(cpuShares, "1024\n"); // mimic the extra whitespace that may appear in the cgroup fs files
         availableProcessors = 2;
     }
 
@@ -82,7 +82,6 @@ public class ServerlessServerCliTests extends CommandTestCase {
         executeOvercommit(1.0);
         // defaults to no overcommit
         assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("1.0"));
-        assertThat(mockServer.args.nodeSettings().hasValue(ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR.getKey()), is(false));
 
         availableProcessors = 1;
         executeOvercommit(1.0);
@@ -91,7 +90,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
     public void testOvercommit() throws Exception {
         // 512 share * 1.5 = 768 / 1024 = 0.75
-        Files.writeString(cpuShares, "512");
+        Files.writeString(cpuShares, "512\n");
         executeOvercommit(1.5);
         assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("0.75"));
 
@@ -107,10 +106,8 @@ public class ServerlessServerCliTests extends CommandTestCase {
     }
 
     public void testOvercommitErrorNodeProcessorsExists() {
-        var e = expectThrows(
-            IllegalStateException.class,
-            () -> execute("-E", "node.processors=2", "-E", ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR.getKey() + "=1.0")
-        );
+        sysprops.put(ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP, Double.toString(1.0));
+        var e = expectThrows(IllegalStateException.class, () -> execute("-E", "node.processors=2"));
         assertThat(e.getMessage(), containsString("node.processors must not be present"));
     }
 
@@ -121,14 +118,15 @@ public class ServerlessServerCliTests extends CommandTestCase {
     }
 
     public void testOvercommitCappedByAvailable() throws Exception {
-        Files.writeString(cpuShares, "2049");
+        Files.writeString(cpuShares, "2049\n");
         executeOvercommit(1.0);
         assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("2.0"));
         assertThat(terminal.getOutput(), containsString("Capping cpu overcommit to (2)."));
     }
 
     private void executeOvercommit(double overcommit) throws Exception {
-        execute("-E", ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR.getKey() + "=" + overcommit);
+        sysprops.put(ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP, Double.toString(overcommit));
+        execute();
     }
 
     private class MockServerlessProcess extends ServerProcess {
