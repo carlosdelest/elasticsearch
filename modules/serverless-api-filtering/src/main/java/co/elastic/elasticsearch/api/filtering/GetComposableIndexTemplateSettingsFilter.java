@@ -49,18 +49,7 @@ public class GetComposableIndexTemplateSettingsFilter extends ApiFilteringAction
     }
 
     private ComposableIndexTemplate mapComponentTemplate(ComposableIndexTemplate t) {
-        return new ComposableIndexTemplate(
-            t.indexPatterns(),
-            mapTemplate(t.template()),
-            t.composedOf(),
-            t.priority(),
-            t.version(),
-            t.metadata(),
-            t.getDataStreamTemplate(),
-            t.getAllowAutoCreate(),
-            t.getIgnoreMissingComponentTemplates(),
-            t.deprecated()
-        );
+        return ComposableIndexTemplate.builder().template(mapTemplate(t.template())).build();
     }
 
     private Template mapTemplate(Template template) {
