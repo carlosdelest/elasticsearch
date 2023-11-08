@@ -145,7 +145,7 @@ public class FieldInferenceBulkRequestPreprocessor extends AbstractBulkRequestPr
         String fieldName = fieldNames.get(0);
         List<String> nextFieldNames = fieldNames.subList(1, fieldNames.size());
         final String fieldValue = ingestDocument.getFieldValue(fieldName, String.class);
-        Object existingInference = ingestDocument.getFieldValue(SemanticTextInferenceFieldMapper.FIELD_NAME + "." + fieldName, Object.class, true);
+        Object existingInference = ingestDocument.getFieldValue(fieldName + "." + SemanticTextFieldMapper.SPARSE_VECTOR_SUBFIELD_NAME, Object.class, true);
         if (fieldValue == null || existingInference != null) {
             // Run inference for next field
             logger.info("Skipping inference for field [" + fieldName + "]");
