@@ -30,6 +30,7 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.XContentHelper;
+import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
@@ -39,25 +40,24 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
 import static org.elasticsearch.test.cluster.serverless.local.DefaultServerlessLocalConfigProvider.node;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.lessThan;
 
 public class Metering1kDocsRestTestIT extends ESRestTestCase {
 
     private static final Logger logger = LogManager.getLogger(MeteringRestTestIT.class);
 
     static int REPORT_PERIOD = 5;
+    String indexName = "test_index_1";
 
     @ClassRule
     public static UsageApiTestServer usageApiTestServer = new UsageApiTestServer();
@@ -86,16 +86,15 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         return cluster.getHttpAddresses();
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/863")
     public void testMeteringRecordsCanBeDeduplicated() throws Exception {
         // This test asserts the ingested doc metric for 1k documents sums up to consistent value
-        // this test also asserts about an approximate value of index-size metrics.
-        // the exact value is not possible to be asserted as shards might be forcemerged at different time
+        // this test also asserts about an exact value of index-size metrics. To make sure, that assertion
+        // is consistent a shard has to be merged to a 1 segment. Then a value from /_cat/segments
+        // is used as an expected value
         Settings settings = Settings.builder()
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 3)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2)
             .build();
-        String indexName = "test_index_1";
         createIndex(indexName, settings);
 
         // ingest more docs so that each shard has some
@@ -113,8 +112,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
 
         ensureGreen(indexName);
 
-        client().performRequest(new Request("POST", "/" + indexName + "/_flush"));
-        client().performRequest(new Request("POST", "/" + indexName + "/_forcemerge"));
+        client().performRequest(new Request("POST", "/" + indexName + "/_forcemerge?flush=true"));
 
         logShardAllocationInformation(indexName);
 
@@ -139,6 +137,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             assertThat(ingestedDocsRecords, empty());
 
             var shardSizeRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "shard-size");
+
             // there might be records from multiple metering.report_period. We are interested in the latest
             // because the replication might take time and also some nodes might be reporting with a delay
 
@@ -154,15 +153,87 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
                 )
             );
 
-            Map<?, List<Map<?, ?>>> groupedById = latestRecords.stream().collect(groupingBy(m -> m.get("id")));
-            // there are 3 primary shards, so should be 3 unique ids only
-            assertThat(groupedById.size(), equalTo(3));
-            // each primary is duplicated (replicated) twice
-            assertSumOnReplica(groupedById, 0);
-            assertSumOnReplica(groupedById, 1);
+            // those are the expected values taken from the /_cat/segments api
+            // we are asserting that there will be only 1 segment per shard and taking its sizeInBytes
+            Map<String, Map<Integer, Integer>> nodeToShardToSize = getExpectedReplicaSizes();
+
+            Map<String, List<Map<?, ?>>> groupByNode = groupByNodeName(latestRecords);
+            // there are 2 replicas, so records should be from 2 nodes only
+            assertThat(groupByNode.size(), equalTo(2));
+            assertThat(groupByNode.keySet(), equalTo(nodeToShardToSize.keySet()));
+
+            Iterator<String> iterator = groupByNode.keySet().iterator();
+            var searchNodeId1 = iterator.next();
+            var searchNodeId2 = iterator.next();
+
+            // there are 3 primary shards, so should be 3 unique ids per each node
+            assertThat(groupByNode.get(searchNodeId1).size(), equalTo(3));
+            assertThat(groupByNode.get(searchNodeId2).size(), equalTo(3));
+
+            // all the quantities reported on a replicas should be the same as from _cat/segments api
+            assertThat(
+                groupByNode + " vs + " + nodeToShardToSize,
+                shardNumberToSize(groupByNode.get(searchNodeId1)),
+                equalTo(nodeToShardToSize.get(searchNodeId1))
+            );
+            assertThat(
+                groupByNode + " vs + " + nodeToShardToSize,
+                shardNumberToSize(groupByNode.get(searchNodeId2)),
+                equalTo(nodeToShardToSize.get(searchNodeId2))
+            );
 
         }, 30, TimeUnit.SECONDS);
 
+    }
+
+    private Map<Integer, Integer> shardNumberToSize(List<Map<?, ?>> usageRecords) {
+        Map<Integer, Integer> shardNumberToSize = new HashMap<>();
+        usageRecords.forEach(record -> {
+            var shardNumber = Integer.parseInt((String) XContentMapValues.extractValue("source.metadata.shard", record));
+            var shardSize = (int) XContentMapValues.extractValue("usage.quantity", record);
+            shardNumberToSize.put(shardNumber, shardSize);
+        });
+        return shardNumberToSize;
+    }
+
+    private Map<String, List<Map<?, ?>>> groupByNodeName(List<Map<?, ?>> latestRecords) {
+        Map<String, List<Map<?, ?>>> usagesByNodeName = new HashMap<>();
+        latestRecords.forEach(record -> {
+            String nodeName = (String) XContentMapValues.extractValue("source.id", record);
+            List<Map<?, ?>> recordsForNodeName = usagesByNodeName.computeIfAbsent(nodeName, k -> new ArrayList<>());
+            recordsForNodeName.add(record);
+        });
+        return usagesByNodeName;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Map<Integer, Integer>> getExpectedReplicaSizes() throws IOException {
+
+        Map<String, Object> indices = entityAsMap(client().performRequest(new Request("GET", indexName + "/_segments")));
+
+        Map<String, List<Map<String, ?>>> shards = (Map<String, List<Map<String, ?>>>) XContentMapValues.extractValue(
+            "indices." + indexName + ".shards",
+            indices
+        );
+
+        Map<String, Map<Integer, Integer>> nodeToShardNumberToSize = new HashMap<>();
+        shards.forEach((shardNumber, shardCopies) -> {
+            shardCopies.forEach(shardCopyInfo -> {
+                // skipping primaries info
+                if (((boolean) XContentMapValues.extractValue("routing.primary", shardCopyInfo)) == false) {
+                    var nodeName = (String) XContentMapValues.extractValue("routing.node", shardCopyInfo);
+
+                    var segments = (Map<String, ?>) XContentMapValues.extractValue("segments", shardCopyInfo);
+                    assert segments.size() == 1;// important, we expect segments to be merged to 1
+                    Map<Integer, Integer> shardNumberToSize = nodeToShardNumberToSize.computeIfAbsent(nodeName, k -> new HashMap<>());
+                    var segment = (Map<String, ?>) segments.values().iterator().next();
+                    shardNumberToSize.put(Integer.parseInt(shardNumber), (Integer) segment.get("size_in_bytes"));
+                }
+
+            });
+        });
+
+        return nodeToShardNumberToSize;
     }
 
     private String debugInfoForShardSize(
@@ -182,17 +253,6 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         return msgBuilder.toString();
     }
 
-    private static void assertSumOnReplica(Map<?, List<Map<?, ?>>> groupedById, int replicaNumber) {
-        List<Map<?, ?>> recordsOnReplica1 = groupedById.entrySet()
-            .stream()
-            .map(e -> e.getValue().get(replicaNumber))
-            .collect(Collectors.toList());
-        int sum = sumQuantity(recordsOnReplica1);
-        int error = 1000;// TODO what should be a safe value? test runs were around 42xxx
-        assertThat(sum, greaterThan(42252 - error));
-        assertThat(sum, lessThan(42252 + error));
-    }
-
     private static int sumQuantity(List<Map<?, ?>> ingestedDocs) {
         return ingestedDocs.stream().mapToInt(m -> (Integer) ((Map<?, ?>) m.get("usage")).get("quantity")).sum();
     }
@@ -204,7 +264,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             .filter(e -> e.getValue().size() == expectedNumberOfRecords)
             .collect(toMap(e -> Instant.parse((String) e.getKey()), Map.Entry::getValue));
         assert fullBatchesOnly.size() > 0;
-        return fullBatchesOnly.entrySet().stream().max(Comparator.comparing(Map.Entry::getKey)).get();
+        return fullBatchesOnly.entrySet().stream().max(Map.Entry.comparingByKey()).get();
     }
 
     private static void logShardAllocationInformation(String indexName) throws IOException {
@@ -245,5 +305,4 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         }
         return msgBuilder.toString();
     }
-
 }
