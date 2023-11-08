@@ -19,3 +19,7 @@ cluster.max_shards_per_node: 5000
 # poll can actually run.
 serverless.sigterm.timeout: 590s
 serverless.sigterm.poll_interval: 59s
+
+# Remediation for ES-7057; caches the last successfully loaded role mappings and returns these if security index
+# is unavailable
+xpack.security.authz.store.role_mappings.last_load_cache.enabled: true
