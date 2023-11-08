@@ -51,6 +51,7 @@ import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.query.CoordinatorRewriteContextProvider;
+import org.elasticsearch.index.query.CoordinatorRewriteableQueryBuilder;
 import org.elasticsearch.index.query.InnerHitContextBuilder;
 import org.elasticsearch.index.query.MatchAllQueryBuilder;
 import org.elasticsearch.index.query.MatchNoneQueryBuilder;
@@ -1734,6 +1735,13 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         }
         AggregatorFactories.Builder aggregations = source.aggregations();
         return aggregations == null || aggregations.mustVisitAllDocs() == false;
+    }
+
+    public static boolean canRewriteInCoordinator(SearchSourceBuilder source) {
+        if (source == null) {
+            return false;
+        }
+        return source.subSearches().stream().anyMatch(sqwb -> sqwb.getQueryBuilder() instanceof CoordinatorRewriteableQueryBuilder);
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })

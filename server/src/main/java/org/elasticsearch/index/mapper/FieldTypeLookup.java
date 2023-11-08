@@ -120,6 +120,10 @@ final class FieldTypeLookup {
         return this.fieldToInferenceModels.get(fieldName);
     }
 
+    Map<String, String> modelsForFields() {
+        return this.fieldToInferenceModels;
+    }
+
     /**
      * Returns the mapped field type for the given field name.
      */

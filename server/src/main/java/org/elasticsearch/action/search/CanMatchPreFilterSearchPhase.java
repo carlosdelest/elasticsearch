@@ -165,7 +165,7 @@ final class CanMatchPreFilterSearchPhase extends SearchPhase {
                 continue;
             }
             boolean canMatch = true;
-            CoordinatorRewriteContext coordinatorRewriteContext = coordinatorRewriteContextProvider.getCoordinatorRewriteContext(
+            CoordinatorRewriteContext coordinatorRewriteContext = coordinatorRewriteContextProvider.getCoordinatorRewriteContextForIndex(
                 request.shardId().getIndex()
             );
             if (coordinatorRewriteContext != null) {

@@ -1118,6 +1118,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             Collections.unmodifiableMap(aliasFilter),
             concreteIndexBoosts,
             preFilterSearchShards,
+            SearchService.canRewriteInCoordinator(searchRequest.source()),
             threadPool,
             clusters
         ).start();
@@ -1210,6 +1211,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             Map<String, AliasFilter> aliasFilter,
             Map<String, Float> concreteIndexBoosts,
             boolean preFilter,
+            boolean runCoordinatorPhase,
             ThreadPool threadPool,
             SearchResponse.Clusters clusters
         );
@@ -1234,10 +1236,38 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             Map<String, AliasFilter> aliasFilter,
             Map<String, Float> concreteIndexBoosts,
             boolean preFilter,
+            boolean runCoordinatorPhase,
             ThreadPool threadPool,
             SearchResponse.Clusters clusters
         ) {
-            if (preFilter) {
+            if (runCoordinatorPhase) {
+                return new CoordinatorQueryRewriteSearchPhase(
+                    logger,
+                    searchRequest,
+                    shardIterators,
+                    threadPool.executor(ThreadPool.Names.SEARCH_COORDINATION),
+                    searchService.getIndicesService(),
+                    searchService.getCoordinatorRewriteContextProvider(timeProvider::absoluteStartMillis),
+                    listener.delegateFailureAndWrap((l, newSearchRequest) -> {
+                        SearchPhase action = newSearchPhase(
+                            task,
+                            newSearchRequest,
+                            executor,
+                            shardIterators,
+                            timeProvider,
+                            connectionLookup,
+                            clusterState,
+                            aliasFilter,
+                            concreteIndexBoosts,
+                            preFilter,
+                            false,
+                            threadPool,
+                            clusters
+                        );
+                        action.start();
+                    }
+                ));
+            } else if (preFilter) {
                 return new CanMatchPreFilterSearchPhase(
                     logger,
                     searchTransportService,
@@ -1262,6 +1292,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                             clusterState,
                             aliasFilter,
                             concreteIndexBoosts,
+                            false,
                             false,
                             threadPool,
                             clusters
