@@ -24,10 +24,14 @@ import org.elasticsearch.gradle.ElasticsearchDistribution;
 import org.elasticsearch.gradle.Version;
 import org.elasticsearch.gradle.distribution.ElasticsearchDistributionTypes;
 import org.elasticsearch.gradle.internal.InternalDistributionDownloadPlugin;
-import org.elasticsearch.gradle.util.GradleUtils;
-import org.gradle.api.NamedDomainObjectContainer;
+import org.gradle.api.GradleException;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.artifacts.Dependency;
+
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Extension of {@link InternalDistributionDownloadPlugin} which registers a {@link DistributionResolution} for resolving
@@ -43,20 +47,31 @@ public class ServerlessDistributionDownloadPlugin implements Plugin<Project> {
     public void apply(Project project) {
         project.getPlugins().apply(InternalDistributionDownloadPlugin.class);
 
-        NamedDomainObjectContainer<DistributionResolution> resolutions = DistributionDownloadPlugin.getRegistrationsContainer(project);
+        Collection<DistributionResolution> resolutions = DistributionDownloadPlugin.getRegistrationsContainer(project);
         registerDistributionResolver(resolutions);
     }
 
-    private static void registerDistributionResolver(NamedDomainObjectContainer<DistributionResolution> resolutions) {
-        resolutions.register("serverless_bwc", distributionResolution -> distributionResolution.setResolver((project, distribution) -> {
+    private static void registerDistributionResolver(Collection<DistributionResolution> resolutions) {
+        DistributionResolution serverlessBwcResolution = new DistributionResolution("serverless_bwc");
+        serverlessBwcResolution.setResolver((project, distribution) -> {
             if (SERVERLESS_BWC_VERSION.equals(Version.fromString(distribution.getVersion()))) {
                 return new InternalDistributionDownloadPlugin.ProjectBasedDistributionDependency(
-                    config -> GradleUtils.projectDependency(project, ":distribution:bwc", projectConfigurationName(distribution))
+                    config -> projectDependency(project, ":distribution:bwc", projectConfigurationName(distribution))
                 );
             }
-
             return null;
-        }));
+        });
+        resolutions.add(serverlessBwcResolution);
+    }
+
+    private static Dependency projectDependency(Project project, String projectPath, String projectConfig) {
+        if (project.findProject(projectPath) == null) {
+            throw new GradleException("no project [" + projectPath + "], project names: " + project.getRootProject().getAllprojects());
+        }
+        Map<String, Object> depConfig = new HashMap<>();
+        depConfig.put("path", projectPath);
+        depConfig.put("configuration", projectConfig);
+        return project.getDependencies().project(depConfig);
     }
 
     private static String projectConfigurationName(ElasticsearchDistribution distribution) {
