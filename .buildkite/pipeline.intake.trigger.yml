@@ -1,0 +1,3 @@
+steps:
+  - label: Trigger intake pipeline
+    command: .buildkite/scripts/trigger-intake-pipeline.sh
