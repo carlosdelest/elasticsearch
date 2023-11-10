@@ -401,3 +401,4 @@ source_profile = default
 * If you need to use `esbench`, generate `elastic-dev` AWS credentials with the `okta-awscli -o default --profile=elastic-dev -f -s` command.
 * Verify that the `elastic-dev` credentials work by running the `aws s3 ls --profile elastic-dev` command.
 * If you want to run AWS third party tests on your development machine, create an own bucket with `aws s3 mb s3://<<your_bucket_name>> --region <<your_region>>`. You can the use it by passing the bucket name and region name via the `-Ds3.test.bucket` and `-Ds3.test.region` system properties.
+
