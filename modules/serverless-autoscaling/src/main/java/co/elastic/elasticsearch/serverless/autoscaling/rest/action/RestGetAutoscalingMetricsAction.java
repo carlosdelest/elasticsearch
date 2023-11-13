@@ -60,4 +60,9 @@ public class RestGetAutoscalingMetricsAction extends BaseRestHandler {
             new RestToXContentListener<>(channel)
         );
     }
+
+    @Override
+    public boolean canTripCircuitBreaker() {
+        return false;
+    }
 }

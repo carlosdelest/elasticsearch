@@ -47,7 +47,14 @@ public class TransportGetMachineLearningTierMetrics extends HandledTransportActi
         ClusterService clusterService,
         Client client
     ) {
-        super(GetMachineLearningTierMetrics.NAME, transportService, actionFilters, Request::new, EsExecutors.DIRECT_EXECUTOR_SERVICE);
+        super(
+            GetMachineLearningTierMetrics.NAME,
+            false,
+            transportService,
+            actionFilters,
+            Request::new,
+            EsExecutors.DIRECT_EXECUTOR_SERVICE
+        );
         this.clusterService = clusterService;
         this.client = client;
     }

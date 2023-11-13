@@ -47,6 +47,7 @@ public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetI
     ) {
         super(
             GetIndexTierMetrics.NAME,
+            false,
             transportService,
             clusterService,
             threadPool,

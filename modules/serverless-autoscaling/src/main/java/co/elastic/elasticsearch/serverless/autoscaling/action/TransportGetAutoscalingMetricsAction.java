@@ -74,6 +74,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
     ) {
         super(
             GetAutoscalingMetricsAction.NAME,
+            false,
             transportService,
             clusterService,
             threadPool,
