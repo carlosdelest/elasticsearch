@@ -100,6 +100,7 @@ distribution_archives {
                     exclude("*/modules/x-pack-core/x-pack-template-resources*.jar")
                     exclude("*/modules/x-pack-esql")
                     exclude("*/modules/rest-root")
+                    exclude("*/modules/health-shards-availability")
                     includeEmptyDirs = false
                 }
                 into("elasticsearch") {
