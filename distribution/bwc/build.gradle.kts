@@ -17,24 +17,24 @@ apply {
     plugin(InternalBwcGitPlugin::class)
 }
 
-val checkoutDirectory = file("${buildDir}/checkout")
+val checkoutDirectory = layout.buildDirectory.dir("checkout")
 val bwcTag = providers.systemProperty("tests.bwc.tag").getOrElse("current_dev")
 val remote = providers.systemProperty("tests.bwc.remote").getOrElse("git@github.com:elastic/elasticsearch-serverless.git")
 
 configure<BwcGitExtension> {
-    checkoutDir.set(checkoutDirectory)
+    checkoutDir = checkoutDirectory.map(Directory::getAsFile)
     bwcBranch = provider { "main" }
 }
 tasks {
     // Create a task for initializing elasticsearch git submodule
     val initSubmodule by registering(LoggedExec::class) {
         dependsOn("createClone")
-        workingDir.set(checkoutDirectory)
+        workingDir = checkoutDirectory.map(Directory::getAsFile)
         commandLine("git", "submodule", "update", "--init", "--reference", "${rootDir}/elasticsearch")
     }
 
     named("addRemote") {
-        extra.set("remote", remote)
+        extra["remote"] = remote
     }
 
     named("fetchLatest") {
@@ -42,12 +42,13 @@ tasks {
     }
 
     named("checkoutBwcBranch") {
-        extra.set("refspec", bwcTag)
+        extra["refspec"] = bwcTag
         doLast {
-            File("${checkoutDirectory}/elasticsearch/build-tools-internal/version.properties").bufferedReader().use { reader ->
-                val version = Properties().apply { load(reader) }.getProperty("elasticsearch")
-                extra.set("stackVersion", version)
-            }
+            checkoutDirectory.get().file("elasticsearch/build-tools-internal/version.properties").asFile.bufferedReader()
+                .use { reader ->
+                    val version = Properties().apply { load(reader) }.getProperty("elasticsearch")
+                    extra["stackVersion"] = version
+                }
         }
     }
 }
@@ -55,20 +56,20 @@ tasks {
 // Register tasks and artifacts for backward compatibility testing
 project(":distribution:archives").subprojects.map(Project::getName).forEach { distributionProject ->
     val buildTaskName = "buildBwc" + distributionProject.split("-").joinToString(transform = String::capitalized, separator = "")
-    val artifactDestination = "${checkoutDirectory}/distribution/archives/${distributionProject}/build/install"
+    val artifactDestination = checkoutDirectory.map { it.dir("distribution/archives/${distributionProject}/build/install") }
     val buildTaskProvider = tasks.register(buildTaskName, LoggedExec::class) {
         dependsOn("checkoutBwcBranch")
-        workingDir.set(checkoutDirectory)
-        indentingConsoleOutput.set(provider { project.file("${buildDir}/refspec").readText().substring(0, 7) })
+        workingDir = checkoutDirectory.map(Directory::getAsFile)
+        indentingConsoleOutput = layout.buildDirectory.file("refspec").map { it.asFile.readText().substring(0, 7) }
 
-        inputs.file("${buildDir}/refspec")
+        inputs.file(layout.buildDirectory.file("refspec"))
         outputs.dir(artifactDestination)
 
         if (OS.current() == OS.WINDOWS) {
-            executable.set("cmd")
-            args("/C", "call", File(checkoutDirectory, "gradlew").toString())
+            executable = "cmd"
+            args("/C", "call", checkoutDirectory.map { it.file("gradlew").asFile.toString() })
         } else {
-            executable.set(File(checkoutDirectory, "gradlew").toString())
+            executable = checkoutDirectory.map { it.file("gradlew").asFile.toString() }
         }
 
         args("-Dscan.tag.NESTED")
@@ -85,7 +86,7 @@ project(":distribution:archives").subprojects.map(Project::getName).forEach { di
         args(":distribution:archives:${distributionProject}:extractedAssemble")
     }
     val artifactConfiguration = configurations.create("bwc_${distributionProject}")
-    artifacts.add(artifactConfiguration.name, File(artifactDestination)) {
+    artifacts.add(artifactConfiguration.name, artifactDestination) {
         name = "elasticsearch"
         builtBy(buildTaskProvider)
         type = "directory"

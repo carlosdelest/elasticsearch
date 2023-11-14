@@ -8,7 +8,7 @@ plugins {
 }
 
 val copyDistributionDefaults by tasks.registering(Sync::class) {
-    into("$buildDir/contents")
+    into(layout.buildDirectory.dir("contents"))
 }
 
 project(":modules").subprojects.forEach { distro.copyModule(copyDistributionDefaults, it) }

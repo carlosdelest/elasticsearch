@@ -49,8 +49,6 @@ fun StandaloneRestIntegTestTask.usesBwcDistribution() {
     // Fetch the actual "stack" version of the BWC distribution and pass it into the tests as a system property
     val systemProperties = extensions.getByType(SystemPropertyCommandLineArgumentProvider::class.java)
     systemProperties.systemProperty("tests.serverless.bwc_stack_version") {
-        project.tasks.getByPath(":distribution:bwc:checkoutBwcBranch").extra.get(
-            "stackVersion"
-        ).toString()
+        project.tasks.getByPath(":distribution:bwc:checkoutBwcBranch").extra["stackVersion"].toString()
     }
 }

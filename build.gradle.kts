@@ -33,18 +33,6 @@ allprojects {
 
     apply(plugin = "elasticsearch.formatting")
 
-    configurations {
-        all {
-            resolutionStrategy.dependencySubstitution {
-                substitute(module("org.elasticsearch.distribution.integ-test-zip:elasticsearch")).using(variant(module("org.elasticsearch.distribution.integ-test-zip:integ-test-zip:${version}")) {
-                    attributes {
-                        attribute(Attribute.of("composite", Boolean::class.javaObjectType), true)
-                    }
-                })
-            }
-        }
-    }
-
     tasks {
         register("resolveAllDependencies", ResolveAllDependencies::class) {
             configs = project.configurations

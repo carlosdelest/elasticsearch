@@ -56,7 +56,7 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
     }
 
     val transformTask = tasks.register<Sync>("transform${baseName}DockerContext") {
-        into("${buildDir}/docker-context/${architecture.name}")
+        into(layout.buildDirectory.dir("docker-context/${architecture.name}"))
         from(upstreamContext) {
             exclude("elasticsearch-*/**")
             eachFile {
@@ -74,7 +74,7 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
         dockerContext.fileProvider(transformTask.map { it.destinationDir })
         isNoCache = BuildParams.isCi()
         baseImages = arrayOf(DockerBase.DEFAULT.image)
-        platform.set(architecture.dockerPlatform)
+        platform = architecture.dockerPlatform
         tags = if (architecture == Architecture.current()) {
             arrayOf("elasticsearch-serverless:${architecture.classifier}", "elasticsearch-serverless:latest")
         } else {
