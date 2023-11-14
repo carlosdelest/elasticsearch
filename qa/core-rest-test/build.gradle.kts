@@ -79,6 +79,9 @@ tasks {
                 "indices.stats/90_global_ordinals/*",
                 "indices.stats/60_field_usage/Field usage stats",
 
+                // AwaitsFix: https://github.com/elastic/elasticsearch-serverless/issues/1150
+                "indices.stats/20_translog/Translog stats on closed indices",
+
                 // Temporarily Muted due to refresh_interval change
                 "indices.put_settings/all_path_options/put settings in prefix* index",
                 "indices.put_settings/all_path_options/put settings per index",
