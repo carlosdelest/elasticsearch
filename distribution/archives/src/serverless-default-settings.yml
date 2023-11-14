@@ -23,3 +23,7 @@ serverless.sigterm.poll_interval: 59s
 # Remediation for ES-7057; caches the last successfully loaded role mappings and returns these if security index
 # is unavailable
 xpack.security.authz.store.role_mappings.last_load_cache.enabled: true
+
+tracing.apm.agent.server_url: http://apm-server.elastic-agent:8200
+telemetry.metrics.enabled: true
+tracing.apm.agent.metrics_interval: 60s

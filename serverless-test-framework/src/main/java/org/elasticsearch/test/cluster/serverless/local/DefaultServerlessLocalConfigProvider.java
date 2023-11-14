@@ -39,6 +39,7 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             .setting("stateless.object_store.base_path", "base_path")
             .setting("ingest.geoip.downloader.enabled", "false")
             .setting("serverless.sigterm.poll_interval", "1s")
+            .setting("telemetry.metrics.enabled", "false")
             .feature(FeatureFlag.TIME_SERIES_MODE)
             .withNode(node("index", "[master,remote_cluster_client,ingest,index]"))
             .withNode(node("search", "[remote_cluster_client,search]"));
