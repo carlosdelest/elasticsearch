@@ -20,7 +20,7 @@ source "$BUILDKITE_DIR/scripts/utils/misc.sh"
 
 API_KEY=$(vault_with_retries read -field api-key "$VAULT_PATH_API_KEY")
 
-PROJECT_ID=${PROJECT_ID:-}
+PROJECT_ID=${PROJECT_ID:-$(buildkite-agent meta-data get ess-project-id --default '')}
 if [ -z "${PROJECT_ID}" ]; then
     if [ "${BUILDKITE_PIPELINE_SLUG}" == "elasticsearch-serverless-undeploy-qa" ]; then
         echo "--- Resolve project id from latest deployment build from build"
