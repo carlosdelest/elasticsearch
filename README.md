@@ -122,11 +122,11 @@ To deploy a branch snapshot into QA
    export ESS_ROOT_PASSWORD_ENCRYPTED="<ENCRYPTED_PASSWORD_FROM_BUILD_INFO_BOX>"
    ```
 
-2. to decrypt the elastic userpassword you need to resolve the encryption key from the ci vault instance and then decrypt the password
+2. to decrypt the elastic userpassword you need to resolve the encryption key from vault and then decrypt the password
    ```
-   vault read -field private-key secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-encryption > bk-es-key.pem;
+   > vault read -field private-key secret/elasticsearch-team/delivery-encryption > key.pem;
 
-   export ESS_ROOT_PASSWORD=$(echo "$ESS_ROOT_PASSWORD_ENCRYPTED" | openssl base64 -d | openssl pkeyutl -decrypt -inkey bk-es-key.pem)
+   export ESS_ROOT_PASSWORD=$(echo "$ESS_ROOT_PASSWORD_ENCRYPTED" | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem)
    ```
 4. Now you should be able to access the ess instance via curl
    ```
@@ -151,8 +151,8 @@ To deploy a branch snapshot into QA
     }
     ```
 
-After its usage cleanup the ess deployment by triggering the undeploy-qa pipeline at https://buildkite.com/elastic/elasticsearch-serverless-undeploy-qa. Choose the same branch used for deployment earlier. By 
-default the last deployed project from that branch. To undeploy a specific project, the project id must be passed via environment variables to the pipeline as PROJECT_ID. 
+After its usage cleanup the ess deployment by triggering the undeploy-qa pipeline at https://buildkite.com/elastic/elasticsearch-serverless-undeploy-qa. Choose the same branch used for deployment earlier. By
+default the last deployed project from that branch. To undeploy a specific project, the project id must be passed via environment variables to the pipeline as PROJECT_ID.
 
 Alternatively you can use the buildkite commandline interface to undeploy your project by running
 
