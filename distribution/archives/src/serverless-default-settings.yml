@@ -13,6 +13,10 @@ cluster.routing.allocation.node_initial_primaries_recoveries: 10
 # users so we have some control. Finally, if this does not work, we would likely like to investigate it.
 cluster.max_shards_per_node: 5000
 
+# New default value for target merge factor after rollover in order to reduce heap usage of open readers
+# May want to revisit after ES-7337
+data_streams.lifecycle.target.merge.policy.merge_factor: 8
+
 # TEMPORARY: until CP-3935 is resolved, the controller will force kill nodes shutting down after 10 minutes
 # this override temporarily sets the ES timeout to less than 10 minutes so that we ensure (1) that we log that
 # we breached the timeout and (2) that the polling aligns so that we don't timeout just before the last
