@@ -20,6 +20,7 @@ apply {
 val checkoutDirectory = layout.buildDirectory.dir("checkout")
 val bwcTag = providers.systemProperty("tests.bwc.tag").getOrElse("current_dev")
 val remote = providers.systemProperty("tests.bwc.remote").getOrElse("git@github.com:elastic/elasticsearch-serverless.git")
+val bwcTestingEnabled = !System.getProperty("tests.upgrade.skip", "false").toBoolean()
 
 configure<BwcGitExtension> {
     checkoutDir = checkoutDirectory.map(Directory::getAsFile)
@@ -58,7 +59,10 @@ project(":distribution:archives").subprojects.map(Project::getName).forEach { di
     val buildTaskName = "buildBwc" + distributionProject.split("-").joinToString(transform = String::capitalized, separator = "")
     val artifactDestination = checkoutDirectory.map { it.dir("distribution/archives/${distributionProject}/build/install") }
     val buildTaskProvider = tasks.register(buildTaskName, LoggedExec::class) {
-        dependsOn("checkoutBwcBranch")
+        onlyIf("bwc testing disabled") { bwcTestingEnabled }
+        if (bwcTestingEnabled) {
+            dependsOn("checkoutBwcBranch")
+        }
         workingDir = checkoutDirectory.map(Directory::getAsFile)
         indentingConsoleOutput = layout.buildDirectory.file("refspec").map { it.asFile.readText().substring(0, 7) }
 
