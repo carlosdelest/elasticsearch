@@ -46,16 +46,15 @@ public class GetComposableIndexTemplateSettingsFilterTests extends ESTestCase {
                 .put(NON_PUBLIC_SETTING.getKey(), 0)
                 .build();
 
-            ComposableIndexTemplate ct = new ComposableIndexTemplate(
-                List.of(),
-                new Template(mixPublicAndNonPublicSettings, null, null),
-                List.of(),
-                1L,
-                1L,
-                Map.of(),
-                null,
-                false
-            );
+            ComposableIndexTemplate ct = ComposableIndexTemplate.builder()
+                .indexPatterns(List.of())
+                .template(new Template(mixPublicAndNonPublicSettings, null, null))
+                .componentTemplates(List.of())
+                .priority(1L)
+                .version(1L)
+                .metadata(Map.of())
+                .allowAutoCreate(false)
+                .build();
 
             GetComposableIndexTemplateAction.Response response = new GetComposableIndexTemplateAction.Response(Map.of("name", ct));
 
@@ -70,16 +69,15 @@ public class GetComposableIndexTemplateSettingsFilterTests extends ESTestCase {
 
     public void testGetComponentTemplateWithoutSettings() throws Exception {
         try (ThreadContext.StoredContext ctx = THREAD_CONTEXT.stashContext()) {
-            ComposableIndexTemplate ct = new ComposableIndexTemplate(
-                List.of(),
-                new Template(null, null, null),
-                List.of(),
-                1L,
-                1L,
-                Map.of(),
-                null,
-                false
-            );
+            ComposableIndexTemplate ct = ComposableIndexTemplate.builder()
+                .indexPatterns(List.of())
+                .template(new Template(null, null, null))
+                .componentTemplates(List.of())
+                .priority(1L)
+                .version(1L)
+                .metadata(Map.of())
+                .allowAutoCreate(false)
+                .build();
             GetComposableIndexTemplateAction.Response response = new GetComposableIndexTemplateAction.Response(Map.of("name", ct));
 
             GetComposableIndexTemplateAction.Response newResponse = filter.filterResponse(response);

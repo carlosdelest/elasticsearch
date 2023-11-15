@@ -113,16 +113,15 @@ public class PublicSettingsValidationActionFilterTests extends ESTestCase {
                 .put(NON_PUBLIC_SETTING.getKey(), 0)
                 .build();
 
-            ComposableIndexTemplate ct = new ComposableIndexTemplate(
-                List.of(),
-                new Template(mixPublicAndNonPublicSettings, null, null),
-                List.of(),
-                1L,
-                1L,
-                Map.of(),
-                null,
-                false
-            );
+            ComposableIndexTemplate ct = ComposableIndexTemplate.builder()
+                .indexPatterns(List.of())
+                .template(new Template(mixPublicAndNonPublicSettings, null, null))
+                .componentTemplates(List.of())
+                .priority(1L)
+                .version(1L)
+                .metadata(Map.of())
+                .allowAutoCreate(false)
+                .build();
 
             PutComposableIndexTemplateAction.Request request = new PutComposableIndexTemplateAction.Request("my-ct").indexTemplate(ct);
 
