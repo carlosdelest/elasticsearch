@@ -153,6 +153,8 @@ tasks {
                 "indices.put_index_template/15_composition/*",
                 "indices.simulate_index_template/10_basic/Simulate index matches overlapping legacy and composable templates",
                 "indices.simulate_template/*/*",
+                "simulate.ingest/10_basic/Test index templates with pipelines",
+                "simulate.ingest/10_basic/Test bad pipeline substitution",
                 // - Field Mappings
                 "indices.get_field_mapping/*/*",
                 // - Clone
