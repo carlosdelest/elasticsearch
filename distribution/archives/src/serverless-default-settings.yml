@@ -17,6 +17,10 @@ cluster.max_shards_per_node: 5000
 # May want to revisit after ES-7337
 data_streams.lifecycle.target.merge.policy.merge_factor: 8
 
+# Lower max. merged segment default size for time-based indices to avoid exceeding the disk space on small indexing
+#  node instances
+indices.merge.policy.max_time_based_merged_segment: 20gb
+
 # TEMPORARY: until CP-3935 is resolved, the controller will force kill nodes shutting down after 10 minutes
 # this override temporarily sets the ES timeout to less than 10 minutes so that we ensure (1) that we log that
 # we breached the timeout and (2) that the polling aligns so that we don't timeout just before the last
