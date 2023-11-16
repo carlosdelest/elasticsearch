@@ -54,10 +54,6 @@ tasks {
             // https://github.com/elastic/elasticsearch-serverless/issues/652
             "security/settings/10_update_security_settings/Test update and get security settings API",
 
-            // These spatial tests fail because serverless uses a multi-node setup
-            // See https://github.com/elastic/elasticsearch/issues/99266
-            "spatial/70_script_doc_values/geoshape value",
-
             // Features not available on serverless (via API protections, etc)
             // managing a license is not supported in serverless
             "license/*/*",
