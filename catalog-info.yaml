@@ -27,6 +27,7 @@ spec:
         everyone:
           access_level: READ_ONLY
       cancel_intermediate_builds: false
+      skip_intermediate_builds: false
       provider_settings:
         trigger_mode: none
         build_branches: true
