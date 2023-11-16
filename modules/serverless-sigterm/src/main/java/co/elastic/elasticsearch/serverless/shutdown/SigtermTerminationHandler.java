@@ -107,7 +107,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
                 logger.info(format("node ready for shutdown with status %s", status.overallStatus()));
                 latch.countDown();
             } else {
-                logger.debug("polled for shutdown status: {}", status);
+                logger.info("polled for shutdown status: {}", status);
                 lastStatus.set(status);
                 threadPool.schedule(() -> pollStatusAndLoop(latch, lastStatus), pollInterval, threadPool.generic());
             }
