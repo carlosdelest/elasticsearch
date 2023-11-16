@@ -360,6 +360,7 @@ spec:
     spec:
       repository: elastic/elasticsearch-serverless
       pipeline_file: ./.buildkite/quality-gates/pipeline.quality-gates.yaml
+      skip_intermediate_builds: false
       provider_settings:
         trigger_mode: none
       teams:
