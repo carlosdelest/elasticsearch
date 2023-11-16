@@ -104,7 +104,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
                                     .setStartedAtMillis(randomNonNegativeLong())
                                     .setGracePeriod(timeout)
                                     .build(),
-                                new ShutdownShardMigrationStatus(finishedWithStatus, 0),
+                                new ShutdownShardMigrationStatus(finishedWithStatus, 0, 0, 0),
                                 new ShutdownPersistentTasksStatus(),
                                 new ShutdownPluginsStatus(true)
                             )
@@ -193,7 +193,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
                                     .setStartedAtMillis(randomNonNegativeLong())
                                     .setGracePeriod(timeout)
                                     .build(),
-                                new ShutdownShardMigrationStatus(status, 0),
+                                new ShutdownShardMigrationStatus(status, 0, 0, 0),
                                 new ShutdownPersistentTasksStatus(),
                                 new ShutdownPluginsStatus(true)
                             )
