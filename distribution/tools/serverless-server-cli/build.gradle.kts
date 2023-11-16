@@ -24,8 +24,9 @@ dependencies {
     compileOnly("org.elasticsearch:elasticsearch-cli")
     compileOnly("org.elasticsearch:server-cli")
 
-    // Bring in the serverless build info extension, so it is available also during bootstrap
-    implementation(project(":libs:serverless-build-info"))
+    // serverless libs are placed on the server classpath, so they are already present at runtime
+    compileOnly(project(":libs:serverless-build-info"))
+    compileOnly(project(":libs:serverless-shared-constants"))
 
     testImplementation("org.elasticsearch.test:framework")
     testImplementation("org.elasticsearch:server")

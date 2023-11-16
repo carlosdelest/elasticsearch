@@ -17,6 +17,7 @@
 
 package org.elasticsearch.server.cli;
 
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import joptsimple.OptionSet;
 
 import org.elasticsearch.cli.ProcessInfo;
@@ -34,6 +35,7 @@ import java.util.Locale;
 public class ServerlessServerCli extends ServerCli {
 
     static final String PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP = "es.serverless.processors_overcommit_factor";
+    static final String APM_PROJECT_ID_SETTING = "tracing.apm.agent.global_labels.project_id";
 
     @Override
     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) throws Exception {
@@ -59,6 +61,11 @@ public class ServerlessServerCli extends ServerCli {
             // cgroups only apply to production on linux, no local development
             double overcommit = Double.parseDouble(processInfo.sysprops().get(PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP));
             addNodeProcessors(finalSettingsBuilder, overcommit, terminal);
+        }
+
+        // copy project id to apm attributes, but be lenient for tests that don't set project id...
+        if (ServerlessSharedSettings.PROJECT_ID.exists(nodeSettings)) {
+            finalSettingsBuilder.put(APM_PROJECT_ID_SETTING, ServerlessSharedSettings.PROJECT_ID.get(nodeSettings));
         }
 
         var newEnv = new Environment(finalSettingsBuilder.build(), env.configFile());
