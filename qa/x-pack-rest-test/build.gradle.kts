@@ -31,6 +31,8 @@ tasks {
             "aggregate-metrics/*/*",
             // data_streams uses searchable_snapshots
             "data_streams/*/*",
+            // esql is not available in serverless yet
+            "esql/*/*",
             // health expects a data_content tier
             "health/*/*",
             // inference API isn't available in serverless yet...
