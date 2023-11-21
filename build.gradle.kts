@@ -15,6 +15,7 @@ plugins {
     id("elasticsearch.versions")
     id("elasticsearch.internal-testclusters")
     id("elasticsearch.serverless-run")
+    id("elasticsearch.runtime-jdk-provision")
 }
 
 allprojects {
