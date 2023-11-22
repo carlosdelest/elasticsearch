@@ -27,7 +27,7 @@ steps:
   - label: ":hourglass: Wait 1 hour for environment health metrics"
     command:
     - echo "Waiting for 60m for indicative health metrics"
-    - sleep ${QA_GATE_WAIT_PERIOD:-3600}
+    - sleep ${QA_GATE_WAIT_PERIOD:-600}
 
   - wait
 
