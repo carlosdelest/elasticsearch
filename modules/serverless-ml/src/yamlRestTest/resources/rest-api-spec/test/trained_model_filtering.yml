@@ -71,6 +71,7 @@ teardown:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
       ml.infer_trained_model:
         model_id: "test_model"
+        timeout: "30s"
         body: >
           {
             "docs": [
@@ -83,6 +84,7 @@ teardown:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
       ml.infer_trained_model:
         model_id: "test_model"
+        timeout: "30s"
         body: >
           {
             "docs": [
@@ -95,6 +97,7 @@ teardown:
         Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" # x_pack_rest_user, an operator
       ml.infer_trained_model:
         model_id: "test_model"
+        timeout: "30s"
         body: >
           {
             "docs": [
@@ -117,6 +120,7 @@ teardown:
   - do:
       ml.infer_trained_model:
         model_id: "test_model"
+        timeout: "30s"
         body: >
           {
             "docs": [
@@ -127,6 +131,7 @@ teardown:
   - do:
       ml.infer_trained_model:
         model_id: "test_model"
+        timeout: "30s"
         body: >
           {
             "docs": [
@@ -137,6 +142,7 @@ teardown:
   - do:
       ml.infer_trained_model:
         model_id: "test_model"
+        timeout: "30s"
         body: >
           {
             "docs": [
