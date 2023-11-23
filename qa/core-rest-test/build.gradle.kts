@@ -185,6 +185,10 @@ tasks {
                 "index/91_metrics_no_subobjects/*", // depends on a legacy template
                 "cat.templates/*/*", // depends on a legacy templates
 
+                // Tests relying on version filters - need to be ported to feature filters (ES-7317)
+                "indices.open/10_basic/?wait_for_active_shards=index-setting is deprecated",
+                "indices.open/10_basic/Close index with wait_for_active_shards set to all",
+
             ).joinToString(",")
         )
     }
