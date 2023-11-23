@@ -47,13 +47,25 @@ echo "PROJECT API CREATE RESPONSE: $CREATE_RESULT"
 PROJECT_ID=$(echo $CREATE_RESULT | jq -e -r '.id')
 
 # resolve credentials from reset credentials call
-CRED_RESULT=$(curl -H "Authorization: ApiKey $API_KEY" \
+echo '--- Creating project'
+
+resetCredentials() {
+    CRED_RESULT=$(curl -H "Authorization: ApiKey $API_KEY" \
       -H "Content-Type: application/json" \
       "${ENV_URL}/api/v1/serverless/projects/elasticsearch/$PROJECT_ID/_reset-credentials" \
       -XPOST)
+    
+    CREDCHECK=$((echo $CRED_RESULT | jq -e -r '.username') &> 0 && echo "true" || echo "false")
+    if [ $CREDCHECK == "false" ]; then
+        echo "Resetting credentials failed. Response: $CRED_RESULT"
+    fi
 
-ESS_ROOT_USERNAME=$(echo $CRED_RESULT | jq -e -r '.username')
-ESS_ROOT_PASSWORD=$(echo $CRED_RESULT | jq -e -r '.password')
+    ESS_ROOT_USERNAME=$(echo $CRED_RESULT | jq -e -r '.username')
+    ESS_ROOT_PASSWORD=$(echo $CRED_RESULT | jq -e -r '.password')
+}
+
+echo '--- Resetting credentials'
+retry 5 5 resetCredentials
 
 # wait for the project namespace to be created
 
