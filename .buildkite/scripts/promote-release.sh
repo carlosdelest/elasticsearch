@@ -13,7 +13,7 @@ if [ -z "${PROMOTED_COMMIT}" ]; then
   echo "--- Determining promotion commit"
   INTAKE_PIPELINE_SLUG="elasticsearch-serverless-intake"
   BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
-  BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${BUILDKITE_BRANCH}&state=passed" | jq '.[0] | {commit: .commit, url: .web_url}')
+  BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${BUILDKITE_BRANCH}&state=passed" | jq '. | map(select(.env.GITOPS_ENV == "dev")) | .[0] | {commit: .commit, url: .web_url}')
   echo $BUILD_JSON
   PROMOTED_COMMIT=$(echo ${BUILD_JSON} | jq -r '.commit')
   PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
