@@ -34,6 +34,7 @@ public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
+        .setting("indices.disk.interval", "-1") // Disable IndexingDiskController to avoid scewing stats
         .user("admin-user", "x-pack-test-password")
         .build();
 
