@@ -3,9 +3,6 @@
     "settings": {
       "index": {
         "codec": "best_compression",
-        "query": {
-          "default_field": ["message"]
-        },
         "mapping": {
           "ignore_malformed": true
         },
