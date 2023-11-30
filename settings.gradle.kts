@@ -108,6 +108,7 @@ includeStatefulTests(":modules:aggregations", includeYamlTests = true, includeJa
 includeStatefulTests(":modules:data-streams", includeYamlTests = true, includeJavaTests = true)
 includeStatefulTests(":modules:ingest-common", includeYamlTests = true, includeJavaTests = false)
 includeStatefulTests(":x-pack:plugin:eql:qa:rest", includeYamlTests = true, includeJavaTests = true)
+includeStatefulTests(":x-pack:plugin:sql:qa:server:single-node", includeYamlTests = false, includeJavaTests = true)
 includeStatefulTests(":x-pack:plugin:downsample:qa:rest", includeYamlTests = true, includeJavaTests = false)
 
 fun includeStatefulTests(projectPath: String, includeYamlTests: Boolean, includeJavaTests: Boolean) {
