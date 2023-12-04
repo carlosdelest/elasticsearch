@@ -18,6 +18,9 @@ package co.elastic.elasticsearch.serverless.autoscaling.action;
 
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.transport.CapturingTransport;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -35,14 +38,22 @@ public class TransportGetTierMetricsTests extends ESTestCase {
 
     private ClusterService clusterService;
     private TransportService transportService;
-    private ActionFilters actionFilters = new ActionFilters(Set.of());
 
     @Override
     @Before
     public void setUp() throws Exception {
         super.setUp();
         var threadPool = Mockito.mock(ThreadPool.class);
-        clusterService = createClusterService(threadPool);
+        clusterService = createClusterService(
+            threadPool,
+            new ClusterSettings(
+                Settings.EMPTY,
+                Sets.addToCopy(
+                    ClusterSettings.BUILT_IN_CLUSTER_SETTINGS,
+                    TransportGetAutoscalingMetricsAction.AUTOSCALING_METRICS_ENABLED_SETTING
+                )
+            )
+        );
         transportService = new CapturingTransport().createTransportService(
             clusterService.getSettings(),
             threadPool,
@@ -51,6 +62,7 @@ public class TransportGetTierMetricsTests extends ESTestCase {
             null,
             Collections.emptySet()
         );
+        ActionFilters actionFilters = new ActionFilters(Set.of());
 
         new TransportGetAutoscalingMetricsAction(transportService, clusterService, threadPool, actionFilters, null, null);
         new TransportGetMachineLearningTierMetrics(transportService, actionFilters, clusterService, null);

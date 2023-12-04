@@ -41,6 +41,7 @@ import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.tasks.Task;
@@ -53,6 +54,18 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAction<Request, Response> {
+    public static final Setting<Boolean> AUTOSCALING_METRICS_ENABLED_SETTING = Setting.boolSetting(
+        "serverless.autoscaling.enabled",
+        true,
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+    private static final String AUTOSCALING_NOT_ENABLED_MSG = "Autoscaling is not enabled";
+    private static final Response NOT_ENABLED_RESPONSE = new Response(
+        new IndexTierMetrics(AUTOSCALING_NOT_ENABLED_MSG, null),
+        new SearchTierMetrics(AUTOSCALING_NOT_ENABLED_MSG, null),
+        new MachineLearningTierMetrics(AUTOSCALING_NOT_ENABLED_MSG, null)
+    );
 
     private static final Logger logger = LogManager.getLogger(TransportGetAutoscalingMetricsAction.class);
 
@@ -62,6 +75,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
 
     private final ClusterService clusterService;
     private final Client client;
+    private volatile boolean autoscalingEnabled;
 
     @Inject
     public TransportGetAutoscalingMetricsAction(
@@ -86,10 +100,17 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
         );
         this.clusterService = clusterService;
         this.client = client;
+        clusterService.getClusterSettings()
+            .initializeAndWatch(AUTOSCALING_METRICS_ENABLED_SETTING, enabled -> this.autoscalingEnabled = enabled);
     }
 
     @Override
     protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<Response> listener) {
+        if (autoscalingEnabled == false) {
+            listener.onResponse(NOT_ENABLED_RESPONSE);
+            return;
+        }
+
         var parentTaskId = new TaskId(clusterService.localNode().getId(), task.getId());
         var parentTaskAssigningClient = new ParentTaskAssigningClient(client, parentTaskId);
 

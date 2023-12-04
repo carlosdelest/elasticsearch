@@ -40,3 +40,54 @@
   - is_true: "ml.metrics.extra_processors.quality"
   #- gt: { "ml.metrics.remove_node_memory_in_bytes.value" : 0 }
   #- is_true: "ml.metrics.remove_node_memory_in_bytes.quality"
+---
+"Test disable autoscaling metrics":
+  - do:
+      cluster.put_settings:
+        flat_settings: true
+        body:
+          persistent:
+            serverless.autoscaling.enabled: false
+
+  - do:
+      _internal.get_serverless_autoscaling_metrics: {}
+
+  - match: { index.failure.reason: "Autoscaling is not enabled" }
+  - match: { index.failure.reason: "Autoscaling is not enabled" }
+  - match: { index.failure.reason: "Autoscaling is not enabled" }
+
+  - is_false: "index.metrics.node_memory_in_bytes.value"
+  - is_false: "index.metrics.node_memory_in_bytes.quality"
+  - is_false: "index.metrics.total_memory_in_bytes.value"
+  - is_false: "index.metrics.total_memory_in_bytes.quality"
+  - is_false: "index.metrics.indexing_load.0.value"
+  - is_false: "index.metrics.indexing_load.0.quality"
+  - is_false: "search.metrics.node_memory_in_bytes.value"
+  - is_false: "search.metrics.node_memory_in_bytes.quality"
+  - is_false: "search.metrics.total_memory_in_bytes.value"
+  - is_false: "search.metrics.total_memory_in_bytes.quality"
+  - is_false: "ml.metrics.nodes.value"
+  - is_false: "ml.metrics.nodes.quality"
+
+  - do:
+      cluster.put_settings:
+        flat_settings: true
+        body:
+          persistent:
+            serverless.autoscaling.enabled: true
+
+  - do:
+      _internal.get_serverless_autoscaling_metrics: {}
+
+  - is_true: "index.metrics.node_memory_in_bytes.value"
+  - is_true: "index.metrics.node_memory_in_bytes.quality"
+  - is_true: "index.metrics.total_memory_in_bytes.value"
+  - is_true: "index.metrics.total_memory_in_bytes.quality"
+  - is_true: "index.metrics.indexing_load.0.value"
+  - is_true: "index.metrics.indexing_load.0.quality"
+  - is_true: "search.metrics.node_memory_in_bytes.value"
+  - is_true: "search.metrics.node_memory_in_bytes.quality"
+  - is_true: "search.metrics.total_memory_in_bytes.value"
+  - is_true: "search.metrics.total_memory_in_bytes.quality"
+  - is_true: "ml.metrics.nodes.value"
+  - is_true: "ml.metrics.nodes.quality"

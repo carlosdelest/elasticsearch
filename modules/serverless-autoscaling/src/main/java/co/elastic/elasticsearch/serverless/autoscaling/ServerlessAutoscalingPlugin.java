@@ -33,6 +33,7 @@ import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.IndexScopedSettings;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.plugins.ActionPlugin;
@@ -42,6 +43,8 @@ import org.elasticsearch.rest.RestHandler;
 
 import java.util.List;
 import java.util.function.Supplier;
+
+import static co.elastic.elasticsearch.serverless.autoscaling.action.TransportGetAutoscalingMetricsAction.AUTOSCALING_METRICS_ENABLED_SETTING;
 
 /**
  * Plugin that provides actions for autoscaling
@@ -72,5 +75,10 @@ public class ServerlessAutoscalingPlugin extends Plugin implements ActionPlugin 
         Supplier<DiscoveryNodes> nodesInCluster
     ) {
         return List.of(new RestGetAutoscalingMetricsAction());
+    }
+
+    @Override
+    public List<Setting<?>> getSettings() {
+        return List.of(AUTOSCALING_METRICS_ENABLED_SETTING);
     }
 }
