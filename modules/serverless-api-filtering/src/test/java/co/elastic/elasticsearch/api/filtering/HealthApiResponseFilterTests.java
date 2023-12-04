@@ -28,6 +28,7 @@ import org.elasticsearch.health.HealthIndicatorResult;
 import org.elasticsearch.health.HealthStatus;
 import org.elasticsearch.health.ImpactArea;
 import org.elasticsearch.health.SimpleHealthIndicatorDetails;
+import org.elasticsearch.health.node.DiskHealthIndicatorService;
 import org.elasticsearch.test.ESTestCase;
 
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 
 public class HealthApiResponseFilterTests extends ESTestCase {
@@ -55,7 +57,7 @@ public class HealthApiResponseFilterTests extends ESTestCase {
                             randomAlphaOfLength(30),
                             randomAlphaOfLength(50),
                             randomAlphaOfLength(50),
-                            randomFrom(HealthApiResponseFilter.OVERRIDE_HELP_URL.keySet())
+                            randomFrom(HealthApiResponseFilter.ShardsAvailabilityHealthIndicatorFilter.OVERRIDE_HELP_URL.keySet())
                         ),
                         List.of()
                     )
@@ -102,7 +104,9 @@ public class HealthApiResponseFilterTests extends ESTestCase {
                 for (int j = 0; j < original.diagnosisList().size(); j++) {
                     Diagnosis originalDiagnosis = original.diagnosisList().get(j);
                     Diagnosis filteredDiagnosis = filtered.diagnosisList().get(j);
-                    if (HealthApiResponseFilter.OVERRIDE_HELP_URL.containsKey(originalDiagnosis.definition().helpURL())) {
+                    if (HealthApiResponseFilter.ShardsAvailabilityHealthIndicatorFilter.OVERRIDE_HELP_URL.containsKey(
+                        originalDiagnosis.definition().helpURL()
+                    )) {
                         assertThat(filteredDiagnosis.affectedResources(), equalTo(originalDiagnosis.affectedResources()));
                         assertThat(filteredDiagnosis.definition().id(), equalTo(originalDiagnosis.definition().id()));
                         assertThat(filteredDiagnosis.definition().action(), equalTo(originalDiagnosis.definition().action()));
@@ -110,7 +114,11 @@ public class HealthApiResponseFilterTests extends ESTestCase {
                         assertThat(filteredDiagnosis.definition().indicatorName(), equalTo(originalDiagnosis.definition().indicatorName()));
                         assertThat(
                             filteredDiagnosis.definition().helpURL(),
-                            equalTo(HealthApiResponseFilter.OVERRIDE_HELP_URL.get(originalDiagnosis.definition().helpURL()))
+                            equalTo(
+                                HealthApiResponseFilter.ShardsAvailabilityHealthIndicatorFilter.OVERRIDE_HELP_URL.get(
+                                    originalDiagnosis.definition().helpURL()
+                                )
+                            )
                         );
                     } else {
                         assertThat(filteredDiagnosis, equalTo(originalDiagnosis));
@@ -120,6 +128,37 @@ public class HealthApiResponseFilterTests extends ESTestCase {
                 assertThat(filtered, equalTo(original));
             }
         }
+    }
+
+    public void testDiskHealthIndicatorFilter() {
+        String name = DiskHealthIndicatorService.NAME;
+        Diagnosis originalDiagnosis = new Diagnosis(
+            new Diagnosis.Definition(
+                name,
+                randomBoolean() ? "add_disk_capacity_data_nodes" : "add_disk_capacity",
+                randomAlphaOfLength(50),
+                randomAlphaOfLength(50),
+                randomAlphaOfLength(50)
+            ),
+            List.of()
+        );
+        List<Diagnosis> diagnoses = List.of(originalDiagnosis);
+        HealthIndicatorResult result = new HealthIndicatorResult(
+            name,
+            randomHealthStatus(),
+            randomAlphaOfLength(20),
+            randomDetails(),
+            randomImpacts(name),
+            diagnoses
+        );
+        HealthIndicatorResult filtered = HealthApiResponseFilter.DiskHealthIndicatorFilter.filter(result);
+        Diagnosis filteredDiagnosis = filtered.diagnosisList().get(0);
+        assertThat(filteredDiagnosis.affectedResources(), equalTo(originalDiagnosis.affectedResources()));
+        assertThat(filteredDiagnosis.definition().id(), equalTo(originalDiagnosis.definition().id()));
+        assertThat(filteredDiagnosis.definition().action(), containsString("Please, look into the logs to figure out what went wrong."));
+        assertThat(filteredDiagnosis.definition().cause(), equalTo(originalDiagnosis.definition().cause()));
+        assertThat(filteredDiagnosis.definition().indicatorName(), equalTo(originalDiagnosis.definition().indicatorName()));
+        assertThat(filteredDiagnosis.definition().helpURL(), equalTo(HealthApiResponseFilter.DiskHealthIndicatorFilter.UPDATED_HELP_URL));
     }
 
     private static HealthStatus randomHealthStatus() {
