@@ -35,8 +35,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.elasticsearch.core.Strings.format;
-
 /**
  * This class actually implements the logic that's invoked when Elasticsearch receives a sigterm - that is, issuing a Put Shutdown request
  * for this node and periodically checking the Get Shutdown Status API for this node until it's done.
@@ -104,7 +102,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
             SingleNodeShutdownStatus status = res.getShutdownStatuses().get(0);
             if (status.overallStatus().equals(SingleNodeShutdownMetadata.Status.COMPLETE)
                 || status.overallStatus().equals(SingleNodeShutdownMetadata.Status.STALLED)) {
-                logger.info(format("node ready for shutdown with status %s", status.overallStatus()));
+                logger.info("node ready for shutdown with status [{}]: {}", status.overallStatus(), status);
                 latch.countDown();
             } else {
                 logger.info("polled for shutdown status: {}", status);
