@@ -88,6 +88,8 @@ task.
 ./gradlew :run
 ```
 
+The cluster will have security enabled. There are 2 users, `elastic-admin` and `elastic-user`, both with the password `elastic-password`.
+
 If you want to debug your running cluster you can add the `--debug-jvm` flag. Before doing so ensure you start
 three debug run configurations in IntelliJ. These are created for you on project import. You'll need to start
 "Debug Elasticsearch" as well as the matching "node 2" and "node 3" run configurations to start debuggers for
