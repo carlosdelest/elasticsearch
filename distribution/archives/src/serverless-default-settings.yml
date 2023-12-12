@@ -35,3 +35,5 @@ xpack.security.authz.store.role_mappings.last_load_cache.enabled: true
 tracing.apm.agent.server_url: http://apm-server.elastic-agent:8200
 telemetry.metrics.enabled: true
 tracing.apm.agent.metrics_interval: 60s
+tracing.apm.enabled: true
+tracing.apm.agent.transaction_sample_rate: 0.10
