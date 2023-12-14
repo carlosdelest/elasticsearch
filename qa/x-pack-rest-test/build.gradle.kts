@@ -78,6 +78,10 @@ tasks {
             "ml/jobs_get_stats/*",
             "ml/ml_anomalies_default_mappings/*",
             "ml/job_cat_apis/*",
+
+            // Learning to rank is disabled in serverless
+            "ml/learning_to_rank_rescorer/*",
+
             // - CCS/CCR access keys
             "api_key/50_cross_cluster/*",
             // - Internal API using native user
