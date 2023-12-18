@@ -294,7 +294,7 @@ public class GetTrainedModelsStatsResponseFilterTests extends ESTestCase {
                 randomNodeStats(DiscoveryNodeUtils.create(randomAlphaOfLength(10))),
                 // If the test fails then update the constant here to the latest transport version
                 // AFTER checking whether the rollupNodeStats method needs updating too.
-                stats -> roundTripInstance(stats, TransportVersions.V_8_500_053),
+                stats -> roundTripInstance(stats, TransportVersions.V_8_500_061),
                 null
             );
         }
