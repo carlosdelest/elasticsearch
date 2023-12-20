@@ -12,6 +12,7 @@ import co.elastic.elasticsearch.stateless.objectstore.gc.ObjectStoreGCTask;
 
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
+import org.elasticsearch.Version;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
@@ -67,12 +68,18 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
     @Override
     protected ClientYamlTestExecutionContext createRestTestExecutionContext(
         ClientYamlTestCandidate clientYamlTestCandidate,
-        ClientYamlTestClient clientYamlTestClient
+        ClientYamlTestClient clientYamlTestClient,
+        final Version esVersion,
+        final Predicate<String> clusterFeaturesPredicate,
+        final String os
     ) {
         return new ClientYamlTestExecutionContext(
             clientYamlTestCandidate,
             clientYamlTestClient,
             randomizeContentType(),
+            esVersion,
+            clusterFeaturesPredicate,
+            os,
             (api, path) -> (api.getName().equals("ml.infer_trained_model") && path.deprecated()) == false
         );
     }

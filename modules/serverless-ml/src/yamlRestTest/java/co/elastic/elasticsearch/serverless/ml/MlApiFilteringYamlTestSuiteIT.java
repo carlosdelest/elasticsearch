@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.stateless.objectstore.gc.ObjectStoreGCTask;
 
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
+import org.elasticsearch.Version;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
@@ -87,12 +88,18 @@ public class MlApiFilteringYamlTestSuiteIT extends AbstractXPackRestTest {
     @Override
     protected ClientYamlTestExecutionContext createRestTestExecutionContext(
         ClientYamlTestCandidate clientYamlTestCandidate,
-        ClientYamlTestClient clientYamlTestClient
+        ClientYamlTestClient clientYamlTestClient,
+        final Version esVersion,
+        final Predicate<String> clusterFeaturesPredicate,
+        final String os
     ) {
         return new ClientYamlTestExecutionContext(
             clientYamlTestCandidate,
             clientYamlTestClient,
             randomizeContentType(),
+            esVersion,
+            clusterFeaturesPredicate,
+            os,
             (api, path) -> (api.getName().equals("ml.infer_trained_model") && path.deprecated()) == false
         );
     }
