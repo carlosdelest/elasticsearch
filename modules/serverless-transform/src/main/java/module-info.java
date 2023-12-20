@@ -19,6 +19,7 @@ module org.elasticsearch.serverless.transform {
     requires org.apache.logging.log4j;
     requires org.apache.lucene.core;
 
+    requires org.elasticsearch.base;
     requires org.elasticsearch.logging;
     requires org.elasticsearch.server;
     requires org.elasticsearch.transform;

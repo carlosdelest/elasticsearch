@@ -18,10 +18,13 @@
 package co.elastic.elasticsearch.serverless.transform;
 
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.xpack.transform.TransformExtension;
 
 public class ServerlessTransformExtension implements TransformExtension {
+
+    private static final TimeValue MIN_FREQUENCY = TimeValue.timeValueSeconds(5);
 
     @Override
     public boolean includeNodeInfo() {
@@ -36,5 +39,10 @@ public class ServerlessTransformExtension implements TransformExtension {
     @Override
     public Settings getTransformDestinationIndexSettings() {
         return Settings.EMPTY;
+    }
+
+    @Override
+    public TimeValue getMinFrequency() {
+        return MIN_FREQUENCY;
     }
 }
