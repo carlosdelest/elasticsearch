@@ -21,13 +21,13 @@ import co.elastic.elasticsearch.stateless.objectstore.gc.ObjectStoreGCTask;
 
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
-import org.elasticsearch.Version;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
+import org.elasticsearch.test.rest.TestFeatureService;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestClient;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestExecutionContext;
@@ -37,6 +37,7 @@ import org.junit.After;
 import org.junit.ClassRule;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.function.Predicate;
 
 public class MlApiFilteringYamlTestSuiteIT extends AbstractXPackRestTest {
@@ -89,17 +90,17 @@ public class MlApiFilteringYamlTestSuiteIT extends AbstractXPackRestTest {
     protected ClientYamlTestExecutionContext createRestTestExecutionContext(
         ClientYamlTestCandidate clientYamlTestCandidate,
         ClientYamlTestClient clientYamlTestClient,
-        final Version esVersion,
-        final Predicate<String> clusterFeaturesPredicate,
-        final String os
+        Set<String> nodesVersions,
+        TestFeatureService testFeatureService,
+        Set<String> osList
     ) {
         return new ClientYamlTestExecutionContext(
             clientYamlTestCandidate,
             clientYamlTestClient,
             randomizeContentType(),
-            esVersion,
-            clusterFeaturesPredicate,
-            os,
+            nodesVersions,
+            testFeatureService,
+            osList,
             (api, path) -> (api.getName().equals("ml.infer_trained_model") && path.deprecated()) == false
         );
     }

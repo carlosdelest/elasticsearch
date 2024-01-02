@@ -12,16 +12,17 @@ import co.elastic.elasticsearch.stateless.objectstore.gc.ObjectStoreGCTask;
 
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
-import org.elasticsearch.Version;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
+import org.elasticsearch.test.rest.TestFeatureService;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestClient;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestExecutionContext;
 import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
 import org.junit.ClassRule;
 
+import java.util.Set;
 import java.util.function.Predicate;
 
 public class ServerlessXpackRestIT extends AbstractXPackRestTest {
@@ -69,19 +70,18 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
     protected ClientYamlTestExecutionContext createRestTestExecutionContext(
         ClientYamlTestCandidate clientYamlTestCandidate,
         ClientYamlTestClient clientYamlTestClient,
-        final Version esVersion,
-        final Predicate<String> clusterFeaturesPredicate,
-        final String os
+        Set<String> nodesVersions,
+        TestFeatureService testFeatureService,
+        Set<String> osList
     ) {
         return new ClientYamlTestExecutionContext(
             clientYamlTestCandidate,
             clientYamlTestClient,
             randomizeContentType(),
-            esVersion,
-            clusterFeaturesPredicate,
-            os,
+            nodesVersions,
+            testFeatureService,
+            osList,
             (api, path) -> (api.getName().equals("ml.infer_trained_model") && path.deprecated()) == false
         );
     }
-
 }
