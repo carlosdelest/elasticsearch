@@ -92,7 +92,10 @@ tasks {
             "analytics/multi_terms/*",
 
             // Muted in severless, awaitsfix https://github.com/elastic/elasticsearch-serverless/issues/826
-            "dlm/10_usage/Test data stream lifecycle usage stats"
+            "dlm/10_usage/Test data stream lifecycle usage stats",
+            // Muted in Serverless, awaitsfix https://github.com/elastic/elasticsearch-serverless/issues/1308
+            "profiling/*/*"
+
         ).joinToString(","))
     }
 }
