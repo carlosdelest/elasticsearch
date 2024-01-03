@@ -50,7 +50,7 @@ steps:
       image: family/elasticsearch-ubuntu-2022
 
   - label: ":rocket: Run E2E tests to check the component update"
-    if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^release\//)
+    if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//)
     trigger: service-or-stack-update-e2e-tests
     depends_on: docker-publish
     build:

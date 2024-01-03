@@ -409,3 +409,7 @@ spec:
         ml-core: {}
         everyone:
           access_level: READ_ONLY
+      schedules:
+        Every Monday at 9am UTC:
+          branch: main
+          cronline: "0 9 * * 1"
