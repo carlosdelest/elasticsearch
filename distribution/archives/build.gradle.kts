@@ -93,7 +93,6 @@ distribution_archives {
                     exclude("*/modules/x-pack-monitoring")
                     exclude("*/modules/x-pack-ilm")
                     exclude("*/modules/x-pack-rollup")
-                    exclude("*/modules/x-pack-profiling")
                     exclude("*/modules/x-pack-shutdown")
                     exclude("*/modules/x-pack-watcher")
                     // this jar is redefined, see libs/serverless-xpack-template-resources

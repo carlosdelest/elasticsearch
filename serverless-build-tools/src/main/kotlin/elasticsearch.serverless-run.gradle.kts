@@ -15,6 +15,7 @@ val runCluster by testClusters.registering {
     setting("stateless.object_store.base_path", "base_path")
     setting("ingest.geoip.downloader.enabled", "false")
     setting("xpack.ml.enabled", "true")
+    setting("xpack.profiling.enabled", "false")
     setting("xpack.security.enabled", "true")
     setting("xpack.watcher.enabled", "false")
     setting("xpack.security.operator_privileges.enabled", "true")

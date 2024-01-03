@@ -31,6 +31,7 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("yamlRestTest")
         .setting("xpack.ml.enabled", "true")
+        .setting("xpack.profiling.enabled", "true")
         .setting("xpack.security.enabled", "true")
         .setting("xpack.watcher.enabled", "false")
         // Integration tests are supposed to enable/disable exporters before/after each test
