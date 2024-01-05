@@ -30,8 +30,6 @@ import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
 import org.junit.ClassRule;
 
-import java.util.List;
-
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 
 public class ServerlessFleetRestIT extends ESClientYamlSuiteTestCase {
@@ -57,16 +55,11 @@ public class ServerlessFleetRestIT extends ESClientYamlSuiteTestCase {
         return cluster.getHttpAddresses();
     }
 
+    @Override
     protected Settings getGlobalTemplateSettings(boolean defaultShardsFeature) {
-        // Temporary workaround to let serverless compile with main repo changes
-        List<String> features = defaultShardsFeature ? List.of("default_shards") : List.of();
-        return this.getGlobalTemplateSettings(features);
-    }
-
-    protected Settings getGlobalTemplateSettings(List<String> features) {
-        final Settings defaultSettings = super.getGlobalTemplateSettings(features);
+        final Settings defaultSettings = super.getGlobalTemplateSettings(defaultShardsFeature);
         assertThat(IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.get(defaultSettings), lessThanOrEqualTo(1));
-        if (features.contains("default_shards")) {
+        if (defaultShardsFeature) {
             return defaultSettings;
         }
         return Settings.builder()
