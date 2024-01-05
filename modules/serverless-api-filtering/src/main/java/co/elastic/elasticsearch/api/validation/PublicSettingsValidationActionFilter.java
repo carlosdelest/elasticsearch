@@ -22,7 +22,7 @@ import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexAction;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
-import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsAction;
+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.template.put.PutComponentTemplateAction;
 import org.elasticsearch.action.admin.indices.template.put.PutComposableIndexTemplateAction;
@@ -51,7 +51,7 @@ public class PublicSettingsValidationActionFilter implements ActionFilter {
     );
 
     private Map.Entry<String, Function<UpdateSettingsRequest, Settings>> settingsFromUpdateSettingsAction() {
-        return Map.entry(UpdateSettingsAction.NAME, (UpdateSettingsRequest ir) -> ir.settings());
+        return Map.entry(TransportUpdateSettingsAction.TYPE.name(), (UpdateSettingsRequest ir) -> ir.settings());
     }
 
     private Map.Entry<String, Function<CreateIndexRequest, Settings>> settingsFromCreateIndexAction() {

@@ -22,7 +22,7 @@ import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexAction;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
-import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsAction;
+import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.template.put.PutComponentTemplateAction;
 import org.elasticsearch.action.admin.indices.template.put.PutComposableIndexTemplateAction;
@@ -151,7 +151,7 @@ public class PublicSettingsValidationActionFilterTests extends ESTestCase {
             // validation fails on public setting
             var e = expectThrows(
                 IllegalArgumentException.class,
-                () -> actionFilter.apply(task, UpdateSettingsAction.NAME, request, listener, chain)
+                () -> actionFilter.apply(task, TransportUpdateSettingsAction.TYPE.name(), request, listener, chain)
             );
             assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
         }
