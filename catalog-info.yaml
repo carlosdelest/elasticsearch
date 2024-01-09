@@ -387,7 +387,7 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
-  name: buildkite-pipeline-elasticsearch-serverless-emergency-quality-gates
+  name: bk-pipeline-elasticsearch-serverless-emergency-quality-gates
   description: Promotion quality gates for emergency serverless Elasticsearch releases
   links:
     - title: Pipeline
@@ -464,7 +464,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
   description: Elasticsearch serverless emergency release promotion
-  name: buildkite-pipeline-elasticsearch-serverless-promote-emergency-release
+  name: bk-pipeline-elasticsearch-serverless-promote-emergency-release
 spec:
   type: buildkite-pipeline
   owner: group:elasticsearch-team
