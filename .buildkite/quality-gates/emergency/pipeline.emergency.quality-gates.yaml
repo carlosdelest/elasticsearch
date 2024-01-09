@@ -1,0 +1,37 @@
+# This pipeline serves as the entry point for your service's quality gates definitions. When
+# properly configured, it will be invoked automatically as part of the automated
+# promotion process once a new version was rolled out in one of the various cloud stages.
+#
+# The updated environment is provided via ENVIRONMENT variable. The seedling
+# step will branch and execute pipeline snippets at the following location:
+# .buildkite/quality-gates/pipeline.emergency.tests-qa.yaml
+# .buildkite/quality-gates/pipeline.emergency.tests-staging.yaml
+# .buildkite/quality-gates/pipeline.emergency.tests-production.yaml
+#
+# Docs: https://docs.elastic.dev/serverless/qualitygates
+
+env:
+  ENVIRONMENT: ${ENVIRONMENT?}
+  TEAM_CHANNEL: "#es-serverless-gitops"
+
+steps:
+  - label: ":pipeline::grey_question::seedling: Trigger Elasticsearch Tests for ${ENVIRONMENT}"
+    env:
+      QG_PIPELINE_LOCATION: ".buildkite/quality-gates"
+    command: "make -C /agent run-environment-tests"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/quality-gate-seedling:0.0.3"
+
+  - label: ":git: Push promoted build tags"
+    branches: "main patch/*"
+    command: ".buildkite/scripts/tag-promoted-commit.sh"
+    env:
+      GITOPS_ENV: "${ENVIRONMENT}"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
+
+notify:
+  - slack: "${TEAM_CHANNEL?}"
+    if: (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"

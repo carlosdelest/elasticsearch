@@ -1,0 +1,20 @@
+# These pipeline steps constitute the quality gate for your service within the QA environment.
+# Incorporate any necessary additional logic to validate the service's integrity. A failure in
+# this pipeline build will prevent further progression to the subsequent stage.
+
+steps:
+  - label: ":pipeline: Trigger Elasticsearch E2E tests in QA"
+    trigger: elasticsearch-serverless-e2e-tests-qa
+    build:
+      message: "${BUILDKITE_MESSAGE}"
+      commit: "${BUILDKITE_COMMIT}"
+      branch: "${BUILDKITE_BRANCH}"
+      env:
+        IMAGE_OVERRIDE: ""
+
+  - label: ":java: Verify upgrade from current staging"
+    command: ".buildkite/scripts/run-gradle.sh :qa:rolling-upgrade:check -Dtests.bwc.tag=current_staging"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022

@@ -75,7 +75,7 @@ steps:
       commit: "${BUILDKITE_COMMIT}"
       branch: "${BUILDKITE_BRANCH}"
       env:
-        SKIP_DOCKER: "true"
+        SKIP_DOCKER: "${SKIP_DOCKER}"
 
   - wait
 
