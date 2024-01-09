@@ -28,14 +28,12 @@ import org.elasticsearch.core.TimeValue;
 import java.io.IOException;
 import java.util.Objects;
 
-public class GetIndexTierMetrics extends ActionType<GetIndexTierMetrics.Response> {
-    public static final GetIndexTierMetrics INSTANCE = new GetIndexTierMetrics();
+public class GetIndexTierMetrics {
     public static final String TIER_NAME = "index";
     public static final String NAME = "cluster:internal/serverless/autoscaling/get_serverless_" + TIER_NAME + "_tier_metrics";
+    public static final ActionType<Response> INSTANCE = ActionType.localOnly(NAME);
 
-    public GetIndexTierMetrics() {
-        super(NAME, Response::new);
-    }
+    private GetIndexTierMetrics() {/* no instances */}
 
     public static class Request extends AbstractTierMetricsRequest<Request> {
         Request(TimeValue timeout) {

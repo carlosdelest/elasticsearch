@@ -27,15 +27,13 @@ import org.elasticsearch.core.TimeValue;
 
 import java.io.IOException;
 
-public class GetMachineLearningTierMetrics extends ActionType<GetMachineLearningTierMetrics.Response> {
+public class GetMachineLearningTierMetrics {
 
-    public static final GetMachineLearningTierMetrics INSTANCE = new GetMachineLearningTierMetrics();
     public static final String TIER_NAME = "ml";
     public static final String NAME = "cluster:internal/serverless/autoscaling/get_serverless_" + TIER_NAME + "_tier_metrics";
+    public static final ActionType<GetMachineLearningTierMetrics.Response> INSTANCE = ActionType.localOnly(NAME);
 
-    public GetMachineLearningTierMetrics() {
-        super(NAME, Response::new);
-    }
+    private GetMachineLearningTierMetrics() {/* no instances */}
 
     public static class Request extends AbstractTierMetricsRequest<Request> {
         Request(TimeValue timeout) {

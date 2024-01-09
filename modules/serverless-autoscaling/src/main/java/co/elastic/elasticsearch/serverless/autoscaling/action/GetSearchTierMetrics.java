@@ -27,15 +27,13 @@ import org.elasticsearch.core.TimeValue;
 
 import java.io.IOException;
 
-public class GetSearchTierMetrics extends ActionType<GetSearchTierMetrics.Response> {
+public class GetSearchTierMetrics {
 
-    public static final GetSearchTierMetrics INSTANCE = new GetSearchTierMetrics();
     public static final String TIER_NAME = "search";
     public static final String NAME = "cluster:internal/serverless/autoscaling/get_serverless_" + TIER_NAME + "_tier_metrics";
+    public static final ActionType<Response> INSTANCE = ActionType.localOnly(NAME);
 
-    public GetSearchTierMetrics() {
-        super(NAME, Response::new);
-    }
+    public GetSearchTierMetrics() {/* no instances */}
 
     public static class Request extends AbstractTierMetricsRequest<Request> {
         Request(TimeValue timeout) {

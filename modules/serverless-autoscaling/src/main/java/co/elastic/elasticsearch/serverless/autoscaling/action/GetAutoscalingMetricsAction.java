@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.serverless.autoscaling.action;
 
 import co.elastic.elasticsearch.serverless.autoscaling.MachineLearningTierMetrics;
-import co.elastic.elasticsearch.serverless.autoscaling.action.GetAutoscalingMetricsAction.Response;
 import co.elastic.elasticsearch.stateless.autoscaling.indexing.IndexTierMetrics;
 import co.elastic.elasticsearch.stateless.autoscaling.search.SearchTierMetrics;
 
@@ -40,14 +39,12 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
 
-public class GetAutoscalingMetricsAction extends ActionType<Response> {
+public class GetAutoscalingMetricsAction {
 
-    public static final GetAutoscalingMetricsAction INSTANCE = new GetAutoscalingMetricsAction();
     public static final String NAME = "cluster:admin/serverless/autoscaling/get_serverless_autoscaling_metrics";
+    public static final ActionType<Response> INSTANCE = ActionType.localOnly(NAME);
 
-    public GetAutoscalingMetricsAction() {
-        super(NAME, Response::new);
-    }
+    private GetAutoscalingMetricsAction() {/* no instances */}
 
     public static class Request extends AcknowledgedRequest<Request> {
 
