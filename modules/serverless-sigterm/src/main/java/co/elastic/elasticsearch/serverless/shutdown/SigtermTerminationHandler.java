@@ -20,6 +20,9 @@ package co.elastic.elasticsearch.serverless.shutdown;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.admin.indices.recovery.RecoveryAction;
+import org.elasticsearch.action.admin.indices.recovery.RecoveryRequest;
+import org.elasticsearch.action.admin.indices.recovery.RecoveryResponse;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.OriginSettingClient;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
@@ -72,10 +75,41 @@ public class SigtermTerminationHandler implements TerminationHandler {
         try {
             boolean latchReachedZero = latch.await(timeout.millis(), TimeUnit.MILLISECONDS);
             if (latchReachedZero == false && timeout.millis() != 0) {
+                maybeLogDetailedRecoveryStatus(lastStatus.get());
                 logger.warn("timed out waiting for graceful shutdown, shutting down anyway, last status: {}", lastStatus.get());
             }
         } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
             throw new RuntimeException(ex);
+        }
+    }
+
+    private void maybeLogDetailedRecoveryStatus(SingleNodeShutdownStatus lastStatus) {
+        if (lastStatus.migrationStatus().getShardsRemaining() == 0) {
+            return;
+        }
+        logger.info("Timed out waiting for graceful shutdown, retrieving current recoveries status");
+
+        CountDownLatch latch = new CountDownLatch(1);
+        var request = new RecoveryRequest();
+        request.activeOnly(true);
+        client.execute(RecoveryAction.INSTANCE, request, ActionListener.releaseAfter(new ActionListener<>() {
+            @Override
+            public void onResponse(RecoveryResponse recoveryResponse) {
+                logger.warn("Ongoing recoveries: {}", recoveryResponse);
+            }
+
+            @Override
+            public void onFailure(Exception ex) {
+                logger.error("Failed to get recoveries status", ex);
+            }
+        }, latch::countDown));
+
+        try {
+            latch.await(); // no need for a timeout, if this takes too long the node will shutdown anyways
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
         }
     }
 
