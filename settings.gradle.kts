@@ -57,6 +57,7 @@ include(":modules:serverless-transform")
 include(":modules:serverless-metering")
 include(":modules:serverless-api-filtering")
 include(":modules:serverless-health-shards-availability")
+include(":modules:serverless-snapshots")
 
 
 /*
