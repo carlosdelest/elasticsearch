@@ -55,8 +55,9 @@ steps:
     depends_on: docker-publish
     build:
       env:
-        SERVICE: elasticsearch
-        VERSION: "${BUILDKITE_COMMIT:0:12}"
+        NAMESPACE: elasticsearch-ci
+        IMAGE_NAME: elasticsearch-serverless
+        IMAGE_TAG: "${IMAGE_TAG}"
 
   - label: ":rocket: Run Kibana E2E tests"
     if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//)
