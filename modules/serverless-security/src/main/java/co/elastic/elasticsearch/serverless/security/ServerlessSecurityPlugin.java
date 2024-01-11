@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.serverless.security;
 
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
@@ -95,8 +96,9 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
     }
 
     @Override
-    public List<RestHandler> getRestHandlers(
+    public Collection<RestHandler> getRestHandlers(
         Settings settings,
+        NamedWriteableRegistry namedWriteableRegistry,
         RestController restController,
         ClusterSettings clusterSettings,
         IndexScopedSettings indexScopedSettings,
@@ -107,5 +109,4 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         restController.getApiProtections().setEnabled(true);
         return List.of();
     }
-
 }
