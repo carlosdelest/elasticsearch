@@ -95,6 +95,7 @@ distribution_archives {
                     exclude("*/modules/x-pack-rollup")
                     exclude("*/modules/x-pack-shutdown")
                     exclude("*/modules/x-pack-watcher")
+                    exclude("*/modules/snapshot-based-recoveries")
                     // this jar is redefined, see libs/serverless-xpack-template-resources
                     exclude("*/modules/x-pack-core/x-pack-template-resources*.jar")
                     exclude("*/modules/x-pack-esql")

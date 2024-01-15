@@ -41,3 +41,6 @@ tracing.apm.agent.transaction_sample_rate: 0.10
 # Enforce that profiling is turned off by default in Serverless and needs to be turned on explicitly (will only happen
 # for observability projects).
 xpack.profiling.enabled: false
+
+# Shards always recover from the object store in Serverless
+indices.recovery.use_snapshots: false
