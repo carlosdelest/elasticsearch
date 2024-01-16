@@ -228,6 +228,28 @@ public class TransportRestoreProjectAction extends HandledTransportAction<Restor
     }
 
     /**
+     * Enables or disables universal profiling index management.
+     */
+    private void setProfilingIndexManagementEnabled(boolean enabled, ActionListener<Void> listener) {
+        if (enabled) {
+            logger.info("enabling profiling index management");
+        } else {
+            logger.info("disabling profiling index management");
+        }
+        // Universal Profiling index management defaults to enabled on Serverless, so we explicitly disable it,
+        // but then implicitly re-enable it
+        Settings.Builder enabledSettings = enabled
+            ? Settings.builder().putNull("xpack.profiling.templates.enabled")
+            : Settings.builder().put("xpack.profiling.templates.enabled", false);
+        client.admin()
+            .cluster()
+            .prepareUpdateSettings()
+            .setPersistentSettings(enabledSettings)
+            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
+            .execute(ignoreResult(listener));
+    }
+
+    /**
      * Enables or disables ML upgrade mode.
      */
     private void setMlUpgradeMode(boolean enabled, ActionListener<Void> listener) {
@@ -303,6 +325,12 @@ public class TransportRestoreProjectAction extends HandledTransportAction<Restor
                     .<Void>andThen(restoreExecutor, threadContext, (l, ignored) -> {
                         setMlUpgradeMode(true, l);
                         undoOperations.add(l2 -> setMlUpgradeMode(false, l2));
+                    })
+
+                    // disable universal profiling
+                    .<Void>andThen(restoreExecutor, threadContext, (l, ignored) -> {
+                        setProfilingIndexManagementEnabled(false, l);
+                        undoOperations.add(l2 -> setProfilingIndexManagementEnabled(true, l2));
                     })
 
                     // enable destructive actions by wildcard
