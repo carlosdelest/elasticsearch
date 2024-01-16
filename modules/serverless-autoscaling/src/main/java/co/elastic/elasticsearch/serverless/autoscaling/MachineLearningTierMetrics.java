@@ -22,7 +22,6 @@ import co.elastic.elasticsearch.stateless.autoscaling.AutoscalingMetrics;
 import co.elastic.elasticsearch.stateless.autoscaling.MetricQuality;
 
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.TransportVersions;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.xcontent.XContentBuilder;
@@ -47,22 +46,12 @@ public class MachineLearningTierMetrics extends AbstractBaseTierMetrics implemen
 
     public MachineLearningTierMetrics(StreamInput in) throws IOException {
         super(in);
-        if (in.getTransportVersion().before(TransportVersions.V_8_500_063)) {
-            this.autoscalingResources = new MlAutoscalingStats(in);
-            return;
-        }
-
         this.autoscalingResources = in.readOptionalWriteable(MlAutoscalingStats::new);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        if (out.getTransportVersion().before(TransportVersions.V_8_500_063)) {
-            autoscalingResources.writeTo(out);
-            return;
-        }
-
         out.writeOptionalWriteable(autoscalingResources);
     }
 
