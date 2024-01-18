@@ -7,7 +7,7 @@ steps:
     if: build.env("ENVIRONMENT") == "production-canary"
     command:
       - echo "Waiting for 60m for indicative health metrics"
-      - sleep ${PROD_CANARY_GATE_WAIT_PERIOD:-3600}
+      - sleep ${PROD_CANARY_GATE_WAIT_PERIOD:-86400}
 
   - wait
 
@@ -20,7 +20,7 @@ steps:
         TARGET_ENV: production
         CHECK_LOG_ERROR_RATE: true
         MAX_ERROR_PERCENT: 10
-        QUERY_WINDOW: 60m
+        QUERY_WINDOW: 24h
         LOG_LEVEL_ERROR_VALUE: ERROR
         SERVICE: elasticsearch
         SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
