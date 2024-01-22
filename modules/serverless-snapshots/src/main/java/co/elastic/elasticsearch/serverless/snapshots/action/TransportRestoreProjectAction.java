@@ -250,6 +250,29 @@ public class TransportRestoreProjectAction extends HandledTransportAction<Restor
     }
 
     /**
+     * Enables or disables APM index management.
+     */
+    private void setAPMIndexManagementEnabled(boolean enabled, ActionListener<Void> listener) {
+        if (enabled) {
+            logger.info("enabling APM index management");
+        } else {
+            logger.info("disabling APM index management");
+        }
+        // APM index management defaults to enabled if the xpack apm-data plugin is
+        // enabled, which is the case on Serverless; so we explicitly disable it,
+        // but then implicitly re-enable it
+        Settings.Builder enabledSettings = enabled
+            ? Settings.builder().putNull("xpack.apm_data.registry.enabled")
+            : Settings.builder().put("xpack.apm_data.registry.enabled", false);
+        client.admin()
+            .cluster()
+            .prepareUpdateSettings()
+            .setPersistentSettings(enabledSettings)
+            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
+            .execute(ignoreResult(listener));
+    }
+
+    /**
      * Enables or disables ML upgrade mode.
      */
     private void setMlUpgradeMode(boolean enabled, ActionListener<Void> listener) {
@@ -331,6 +354,12 @@ public class TransportRestoreProjectAction extends HandledTransportAction<Restor
                     .<Void>andThen(restoreExecutor, threadContext, (l, ignored) -> {
                         setProfilingIndexManagementEnabled(false, l);
                         undoOperations.add(l2 -> setProfilingIndexManagementEnabled(true, l2));
+                    })
+
+                    // disable apm_data registry
+                    .<Void>andThen(restoreExecutor, threadContext, (l, ignored) -> {
+                        setAPMIndexManagementEnabled(false, l);
+                        undoOperations.add(l2 -> setAPMIndexManagementEnabled(true, l2));
                     })
 
                     // enable destructive actions by wildcard
