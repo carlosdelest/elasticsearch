@@ -3,10 +3,10 @@
 # this pipeline build will prevent further progression to the subsequent stage.
 
 steps:
-  - label: ":hourglass: Wait 1 hour for environment health metrics"
+  - label: ":hourglass: Wait 24 hours for environment health metrics"
     if: build.env("ENVIRONMENT") == "production-canary"
     command:
-      - echo "Waiting for 60m for indicative health metrics"
+      - echo "Waiting for 24h for indicative health metrics"
       - sleep ${PROD_CANARY_GATE_WAIT_PERIOD:-86400}
 
   - wait
