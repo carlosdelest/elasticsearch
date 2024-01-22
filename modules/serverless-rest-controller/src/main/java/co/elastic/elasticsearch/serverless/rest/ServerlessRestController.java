@@ -23,7 +23,7 @@ import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestController;
-import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.rest.RestInterceptor;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.telemetry.tracing.Tracer;
@@ -31,7 +31,6 @@ import org.elasticsearch.usage.UsageService;
 import org.elasticsearch.xcontent.MediaType;
 
 import java.util.function.Predicate;
-import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
 public class ServerlessRestController extends RestController {
@@ -40,13 +39,13 @@ public class ServerlessRestController extends RestController {
     static final Predicate<String> VERSION_VALIDATOR = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$").asMatchPredicate();
 
     public ServerlessRestController(
-        UnaryOperator<RestHandler> handlerWrapper,
+        RestInterceptor restInterceptor,
         NodeClient client,
         CircuitBreakerService circuitBreakerService,
         UsageService usageService,
         Tracer tracer
     ) {
-        super(handlerWrapper, client, circuitBreakerService, usageService, tracer);
+        super(restInterceptor, client, circuitBreakerService, usageService, tracer);
     }
 
     @Override

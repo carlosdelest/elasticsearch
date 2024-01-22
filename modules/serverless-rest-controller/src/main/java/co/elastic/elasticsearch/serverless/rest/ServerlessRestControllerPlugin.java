@@ -22,27 +22,25 @@ import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.interceptor.RestServerActionPlugin;
 import org.elasticsearch.rest.RestController;
-import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.rest.RestInterceptor;
 import org.elasticsearch.telemetry.tracing.Tracer;
 import org.elasticsearch.usage.UsageService;
-
-import java.util.function.UnaryOperator;
 
 public class ServerlessRestControllerPlugin extends Plugin implements RestServerActionPlugin {
 
     @Override
     public RestController getRestController(
-        UnaryOperator<RestHandler> handlerWrapper,
+        RestInterceptor interceptor,
         NodeClient client,
         CircuitBreakerService circuitBreakerService,
         UsageService usageService,
         Tracer tracer
     ) {
-        return new ServerlessRestController(handlerWrapper, client, circuitBreakerService, usageService, tracer);
+        return new ServerlessRestController(interceptor, client, circuitBreakerService, usageService, tracer);
     }
 
     @Override
-    public UnaryOperator<RestHandler> getRestHandlerInterceptor(ThreadContext threadContext) {
+    public RestInterceptor getRestHandlerInterceptor(ThreadContext threadContext) {
         return null;
     }
 }
