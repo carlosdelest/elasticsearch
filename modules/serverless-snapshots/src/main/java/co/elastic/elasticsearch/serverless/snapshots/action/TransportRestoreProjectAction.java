@@ -28,15 +28,14 @@ import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotR
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.datastreams.DeleteDataStreamAction;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.RefCountingListener;
 import org.elasticsearch.action.support.SubscribableListener;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.search.sort.SortOrder;
@@ -76,12 +75,9 @@ import static java.util.stream.Collectors.joining;
  * One feature this API provides over the underlying snapshot API is that it will look up a "most recent successful snapshot" for you,
  * which you can ask it to do by specifying <code>_latest_success</code> as the snapshot to restore.
  */
-public class TransportRestoreProjectAction extends HandledTransportAction<RestoreSnapshotRequest, RestoreSnapshotResponse> {
+public class TransportRestoreProjectAction extends TransportAction<RestoreSnapshotRequest, RestoreSnapshotResponse> {
 
-    public static final ActionType<RestoreSnapshotResponse> TYPE = new ActionType<>(
-        "cluster:admin/snapshot/project_restore",
-        RestoreSnapshotResponse::new
-    );
+    public static final ActionType<RestoreSnapshotResponse> TYPE = ActionType.localOnly("cluster:admin/snapshot/project_restore");
 
     private static final Logger logger = LogManager.getLogger(TransportRestoreProjectAction.class);
 
@@ -95,7 +91,7 @@ public class TransportRestoreProjectAction extends HandledTransportAction<Restor
 
     @Inject
     public TransportRestoreProjectAction(TransportService transportService, ActionFilters actionFilters, Client client) {
-        super(TYPE.name(), transportService, actionFilters, RestoreSnapshotRequest::new, EsExecutors.DIRECT_EXECUTOR_SERVICE);
+        super(TYPE.name(), actionFilters, transportService.getTaskManager());
         this.client = client;
         final var threadPool = transportService.getThreadPool();
         this.restoreExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
