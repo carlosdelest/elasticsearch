@@ -23,15 +23,15 @@ steps:
   - label: "Trigger synthetic tests"
     trigger: "esbench-serverless-synthetic-test"
     async: true
-    
+
   - label: ":hourglass: Wait 1 hour for environment health metrics"
+    key: staging_bake_period
     command:
     - echo "Waiting for 60m for indicative health metrics"
     - sleep ${QA_GATE_WAIT_PERIOD:-3600}
 
-  - wait
-
   - label: ":pipeline: Trigger Elasticsearch observability checks in Staging"
+    depends_on: staging_bake_period
     trigger: serverless-quality-gates
     build:
       message: "${BUILDKITE_MESSAGE}"

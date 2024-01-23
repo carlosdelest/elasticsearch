@@ -5,14 +5,14 @@
 steps:
   - label: ":hourglass: Wait 24 hours for environment health metrics"
     if: build.env("ENVIRONMENT") == "production-canary"
+    key: production_bake_period
     command:
       - echo "Waiting for 24h for indicative health metrics"
       - sleep ${PROD_CANARY_GATE_WAIT_PERIOD:-86400}
 
-  - wait
-
   - label: ":pipeline: Trigger Elasticsearch observability checks in Production"
     if: build.env("ENVIRONMENT") == "production-canary"
+    depends_on: production_bake_period
     trigger: serverless-quality-gates
     build:
       message: "${BUILDKITE_MESSAGE}"
