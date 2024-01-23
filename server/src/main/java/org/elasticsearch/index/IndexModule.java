@@ -112,6 +112,12 @@ public final class IndexModule {
         Property.NodeScope
     );
 
+    public static final Setting<Boolean> INDEX_STORE_DIRECT_IO_SETTING = Setting.boolSetting(
+        "index.store.direct_io",
+        false,
+        Property.IndexScope
+    );
+
     public static final Setting<String> INDEX_RECOVERY_TYPE_SETTING = new Setting<>(
         "index.recovery.type",
         "",

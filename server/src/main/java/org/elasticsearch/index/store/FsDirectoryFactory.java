@@ -8,6 +8,7 @@
 
 package org.elasticsearch.index.store;
 
+import org.apache.lucene.misc.store.DirectIODirectory;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.FileSwitchDirectory;
@@ -61,23 +62,32 @@ public class FsDirectoryFactory implements IndexStorePlugin.DirectoryFactory {
             type = IndexModule.Type.fromSettingsKey(storeType);
         }
         Set<String> preLoadExtensions = new HashSet<>(indexSettings.getValue(IndexModule.INDEX_STORE_PRE_LOAD_SETTING));
+        FSDirectory directory = null;
         switch (type) {
             case HYBRIDFS:
                 // Use Lucene defaults
-                final FSDirectory primaryDirectory = FSDirectory.open(location, lockFactory);
-                if (primaryDirectory instanceof MMapDirectory mMapDirectory) {
-                    return new HybridDirectory(lockFactory, setPreload(mMapDirectory, lockFactory, preLoadExtensions));
-                } else {
-                    return primaryDirectory;
+                directory = FSDirectory.open(location, lockFactory);
+                if (directory instanceof MMapDirectory mMapDirectory) {
+                    directory = new HybridDirectory(lockFactory, setPreload(mMapDirectory, lockFactory, preLoadExtensions));
                 }
+                break;
             case MMAPFS:
-                return setPreload(new MMapDirectory(location, lockFactory), lockFactory, preLoadExtensions);
+                directory = setPreload(new MMapDirectory(location, lockFactory), lockFactory, preLoadExtensions);
+                break;
             case SIMPLEFS:
             case NIOFS:
-                return new NIOFSDirectory(location, lockFactory);
+                directory = new NIOFSDirectory(location, lockFactory);
+                break;
             default:
                 throw new AssertionError("unexpected built-in store type [" + type + "]");
         }
+
+        final boolean useDirectIO = indexSettings.getValue(IndexModule.INDEX_STORE_DIRECT_IO_SETTING);
+        if (useDirectIO) {
+            return new DirectIODirectory(directory);
+        }
+
+        return directory;
     }
 
     public static MMapDirectory setPreload(MMapDirectory mMapDirectory, LockFactory lockFactory, Set<String> preLoadExtensions)
