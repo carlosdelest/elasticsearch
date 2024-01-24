@@ -74,7 +74,7 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
         dockerContext.fileProvider(transformTask.map { it.destinationDir })
         isNoCache = BuildParams.isCi()
         baseImages = arrayOf(DockerBase.DEFAULT.image)
-        platform = architecture.dockerPlatform
+        platforms = setOf(architecture.dockerPlatform)
         tags = if (architecture == Architecture.current()) {
             arrayOf("elasticsearch-serverless:${architecture.classifier}", "elasticsearch-serverless:latest")
         } else {
