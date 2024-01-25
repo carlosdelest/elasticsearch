@@ -120,7 +120,7 @@ public class MeteringReporterTests extends ESTestCase {
             "id1",
             Instant.now(),
             new UsageMetrics("type", null, 1, null, null, null, null),
-            new UsageSource("id", "instanceId", null)
+            new UsageSource("es-id", "instanceId", null)
         );
 
         try (MeteringReporter reporter = new MeteringReporter(settings, threadPool)) {
@@ -144,7 +144,7 @@ public class MeteringReporterTests extends ESTestCase {
                     "id" + i,
                     Instant.now(),
                     new UsageMetrics("type", null, 1, null, null, null, null),
-                    new UsageSource("id", "instanceId", null)
+                    new UsageSource("es-id", "instanceId", null)
                 )
             )
             .toList();
@@ -177,7 +177,7 @@ public class MeteringReporterTests extends ESTestCase {
             "id1",
             Instant.now(),
             new UsageMetrics("type", null, 1, null, null, null, null),
-            new UsageSource("id", "instanceId", null)
+            new UsageSource("es-id", "instanceId", null)
         );
 
         try (MeteringReporter reporter = new MeteringReporter(settings, threadPool)) {
@@ -196,7 +196,7 @@ public class MeteringReporterTests extends ESTestCase {
             "id1",
             Instant.now(),
             new UsageMetrics("type", null, 1, null, null, null, null),
-            new UsageSource("id", "instanceId", null)
+            new UsageSource("es-id", "instanceId", null)
         );
 
         try (MeteringReporter reporter = new MeteringReporter(settings, threadPool)) {

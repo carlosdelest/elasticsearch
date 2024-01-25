@@ -52,6 +52,7 @@ public record UsageSource(String id, String instanceGroupId, @Nullable Map<Strin
 
     public UsageSource {
         Objects.requireNonNull(id);
+        assert id.startsWith("es-");
         Objects.requireNonNull(instanceGroupId);
     }
 

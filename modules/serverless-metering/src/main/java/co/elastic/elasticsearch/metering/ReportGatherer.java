@@ -48,6 +48,7 @@ class ReportGatherer {
     private final TimeValue reportPeriod;
     private final Duration reportPeriodDuration;
     private final StopWatch runTimer = new StopWatch();
+    private final String sourceId;
 
     private volatile boolean cancel;
     private volatile Scheduler.Cancellable nextRun;
@@ -70,6 +71,7 @@ class ReportGatherer {
         if (reportPeriodDuration.multipliedBy(Duration.ofHours(1).dividedBy(reportPeriodDuration)).equals(Duration.ofHours(1)) == false) {
             throw new IllegalArgumentException(Strings.format("Report period [%s] needs to fit evenly into 1 hour", reportPeriod));
         }
+        this.sourceId = "es-" + service.nodeId();
     }
 
     void start() {
@@ -173,7 +175,7 @@ class ReportGatherer {
             generateId(metric, now),
             now,
             new UsageMetrics(type, null, count, reportPeriod, null, settings, null),
-            new UsageSource(service.nodeId(), service.projectId(), metadata)
+            new UsageSource(sourceId, service.projectId(), metadata)
         );
     }
 
@@ -191,7 +193,7 @@ class ReportGatherer {
             generateId(metric, timestamp),
             timestamp,
             new UsageMetrics(type, null, value, reportPeriod, null, settings, null),
-            new UsageSource(service.nodeId(), service.projectId(), metadata)
+            new UsageSource(sourceId, service.projectId(), metadata)
         );
     }
 }

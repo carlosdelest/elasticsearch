@@ -221,7 +221,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             shardCopies.forEach(shardCopyInfo -> {
                 // skipping primaries info
                 if (((boolean) XContentMapValues.extractValue("routing.primary", shardCopyInfo)) == false) {
-                    var nodeName = (String) XContentMapValues.extractValue("routing.node", shardCopyInfo);
+                    var nodeName = "es-" + XContentMapValues.extractValue("routing.node", shardCopyInfo);
 
                     var segments = (Map<String, ?>) XContentMapValues.extractValue("segments", shardCopyInfo);
                     assert segments.size() == 1;// important, we expect segments to be merged to 1

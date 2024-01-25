@@ -155,7 +155,7 @@ public class MeteringServiceTests extends ESTestCase {
             records,
             everyItem(
                 allOf(
-                    transformedMatch(r -> r.source().id(), equalTo(NODE_ID)),
+                    transformedMatch(r -> r.source().id(), equalTo("es-" + NODE_ID)),
                     transformedMatch(r -> r.source().instanceGroupId(), equalTo(PROJECT_ID))
                 )
             )
