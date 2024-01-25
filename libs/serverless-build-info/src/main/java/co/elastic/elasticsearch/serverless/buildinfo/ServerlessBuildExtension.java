@@ -81,4 +81,9 @@ public class ServerlessBuildExtension implements BuildExtension {
     public Build getCurrentBuild() {
         return INSTANCE;
     }
+
+    @Override
+    public boolean hasReleaseVersioning() {
+        return false;
+    }
 }
