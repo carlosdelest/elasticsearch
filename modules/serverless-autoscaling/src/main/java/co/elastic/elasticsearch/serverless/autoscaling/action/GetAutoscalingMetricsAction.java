@@ -42,7 +42,7 @@ import java.util.Objects;
 public class GetAutoscalingMetricsAction {
 
     public static final String NAME = "cluster:admin/serverless/autoscaling/get_serverless_autoscaling_metrics";
-    public static final ActionType<Response> INSTANCE = ActionType.localOnly(NAME);
+    public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
     private GetAutoscalingMetricsAction() {/* no instances */}
 

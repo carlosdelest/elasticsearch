@@ -31,7 +31,7 @@ public class GetSearchTierMetrics {
 
     public static final String TIER_NAME = "search";
     public static final String NAME = "cluster:internal/serverless/autoscaling/get_serverless_" + TIER_NAME + "_tier_metrics";
-    public static final ActionType<Response> INSTANCE = ActionType.localOnly(NAME);
+    public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
     public GetSearchTierMetrics() {/* no instances */}
 

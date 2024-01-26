@@ -31,7 +31,7 @@ import java.util.Objects;
 public class GetIndexTierMetrics {
     public static final String TIER_NAME = "index";
     public static final String NAME = "cluster:internal/serverless/autoscaling/get_serverless_" + TIER_NAME + "_tier_metrics";
-    public static final ActionType<Response> INSTANCE = ActionType.localOnly(NAME);
+    public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
     private GetIndexTierMetrics() {/* no instances */}
 

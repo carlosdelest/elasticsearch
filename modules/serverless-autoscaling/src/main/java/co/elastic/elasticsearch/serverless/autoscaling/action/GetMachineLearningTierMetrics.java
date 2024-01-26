@@ -31,7 +31,7 @@ public class GetMachineLearningTierMetrics {
 
     public static final String TIER_NAME = "ml";
     public static final String NAME = "cluster:internal/serverless/autoscaling/get_serverless_" + TIER_NAME + "_tier_metrics";
-    public static final ActionType<GetMachineLearningTierMetrics.Response> INSTANCE = ActionType.localOnly(NAME);
+    public static final ActionType<GetMachineLearningTierMetrics.Response> INSTANCE = new ActionType<>(NAME);
 
     private GetMachineLearningTierMetrics() {/* no instances */}
 

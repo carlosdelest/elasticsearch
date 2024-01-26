@@ -77,7 +77,7 @@ import static java.util.stream.Collectors.joining;
  */
 public class TransportRestoreProjectAction extends TransportAction<RestoreSnapshotRequest, RestoreSnapshotResponse> {
 
-    public static final ActionType<RestoreSnapshotResponse> TYPE = ActionType.localOnly("cluster:admin/snapshot/project_restore");
+    public static final ActionType<RestoreSnapshotResponse> TYPE = new ActionType<>("cluster:admin/snapshot/project_restore");
 
     private static final Logger logger = LogManager.getLogger(TransportRestoreProjectAction.class);
 
