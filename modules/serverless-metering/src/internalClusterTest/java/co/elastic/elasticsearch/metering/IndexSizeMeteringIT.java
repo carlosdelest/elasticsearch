@@ -75,7 +75,7 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        waitUntil(() -> receivedMetrics().isEmpty() == false);
+        waitUntil(() -> receivedMetrics().stream().anyMatch(l -> l.stream().anyMatch(u -> u.id().startsWith("shard-size"))));
         assertThat(receivedMetrics(), not(empty()));
         UsageRecord metric = getUsageRecords("shard-size");
 
