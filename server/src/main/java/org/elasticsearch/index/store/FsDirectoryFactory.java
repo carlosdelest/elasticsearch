@@ -84,7 +84,9 @@ public class FsDirectoryFactory implements IndexStorePlugin.DirectoryFactory {
 
         final boolean useDirectIO = indexSettings.getValue(IndexModule.INDEX_STORE_DIRECT_IO_SETTING);
         if (useDirectIO) {
-            return new DirectIODirectory(directory);
+            return new DirectIODirectory(directory,
+                indexSettings.getValue(IndexModule.INDEX_STORE_DIRECT_IO_READ_DIRECT_SETTING),
+                indexSettings.getValue(IndexModule.INDEX_STORE_DIRECT_IO_MERGES_SETTING));
         }
 
         return directory;

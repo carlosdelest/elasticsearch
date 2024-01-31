@@ -118,6 +118,18 @@ public final class IndexModule {
         Property.IndexScope
     );
 
+    public static final Setting<Boolean> INDEX_STORE_DIRECT_IO_MERGES_SETTING = Setting.boolSetting(
+        "index.store.direct_io_merges",
+        true,
+        Property.IndexScope
+    );
+
+    public static final Setting<Boolean> INDEX_STORE_DIRECT_IO_READ_DIRECT_SETTING = Setting.boolSetting(
+        "index.store.direct_io_read_direct",
+        true,
+        Property.IndexScope
+    );
+
     public static final Setting<String> INDEX_RECOVERY_TYPE_SETTING = new Setting<>(
         "index.recovery.type",
         "",

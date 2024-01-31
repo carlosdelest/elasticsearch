@@ -158,6 +158,8 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         BitsetFilterCache.INDEX_LOAD_RANDOM_ACCESS_FILTERS_EAGERLY_SETTING,
         IndexModule.INDEX_STORE_TYPE_SETTING,
         IndexModule.INDEX_STORE_DIRECT_IO_SETTING,
+        IndexModule.INDEX_STORE_DIRECT_IO_MERGES_SETTING,
+        IndexModule.INDEX_STORE_DIRECT_IO_READ_DIRECT_SETTING,
         IndexModule.INDEX_STORE_PRE_LOAD_SETTING,
         IndexModule.INDEX_RECOVERY_TYPE_SETTING,
         IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING,
