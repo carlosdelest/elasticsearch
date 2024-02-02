@@ -112,7 +112,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
 
         ensureGreen(indexName);
 
-        client().performRequest(new Request("POST", "/" + indexName + "/_forcemerge?flush=true"));
+        forceMerge();
 
         logShardAllocationInformation(indexName);
 
@@ -184,6 +184,13 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
 
         }, 30, TimeUnit.SECONDS);
 
+    }
+
+    private void forceMerge() throws IOException {
+        Request request = new Request("POST", "/" + indexName + "/_forcemerge");
+        request.addParameter("max_num_segments", "1");
+        request.addParameter("flush", "true");
+        client().performRequest(request);
     }
 
     private Map<Integer, Integer> shardNumberToSize(List<Map<?, ?>> usageRecords) {
