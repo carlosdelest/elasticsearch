@@ -35,7 +35,7 @@ import java.util.Locale;
 public class ServerlessServerCli extends ServerCli {
 
     static final String PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP = "es.serverless.processors_overcommit_factor";
-    static final String APM_PROJECT_ID_SETTING = "tracing.apm.agent.global_labels.project_id";
+    static final String APM_PROJECT_ID_SETTING = "telemetry.agent.global_labels.project_id";
 
     @Override
     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) throws Exception {

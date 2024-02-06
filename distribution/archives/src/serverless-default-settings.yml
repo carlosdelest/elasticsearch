@@ -30,11 +30,11 @@ serverless.sigterm.poll_interval: 59s
 # is unavailable
 xpack.security.authz.store.role_mappings.last_load_cache.enabled: true
 
-tracing.apm.agent.server_url: http://apm-server.elastic-agent:8200
+telemetry.agent.server_url: http://apm-server.elastic-agent:8200
 telemetry.metrics.enabled: true
-tracing.apm.agent.metrics_interval: 60s
-tracing.apm.enabled: true
-tracing.apm.agent.transaction_sample_rate: 0.10
+telemetry.agent.metrics_interval: 60s
+telemetry.tracing.enabled: true
+telemetry.agent.transaction_sample_rate: 0.10
 
 # Enforce that profiling is turned off by default in Serverless and needs to be turned on explicitly (will only happen
 # for observability projects).
