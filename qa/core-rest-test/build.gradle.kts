@@ -177,6 +177,9 @@ tasks {
                 // - Legacy _knn_search
                 "search.vectors/40_knn_search/kNN search in _knn_search endpoint",
                 "search.vectors/40_knn_search/kNN search with filter in _knn_search endpoint",
+                // - Resolve/cluster
+                "indices.resolve_cluster/*/*",
+                "indices.resolve_cluster/*/*/*",
 
                 // Tests that depend on unavailable features (if possible, we should fix test)
                 "index/91_metrics_no_subobjects/*", // depends on a legacy template
