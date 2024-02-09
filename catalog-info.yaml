@@ -477,7 +477,7 @@ spec:
       description: ":warning::ship: Promote emergency serverless release"
     spec:
       repository: elastic/elasticsearch-serverless
-      pipeline_file: .buildkite/pipeline.promote-release.yml
+      pipeline_file: .buildkite/pipeline.promote-emergency-release.yml
       provider_settings:
         trigger_mode: none
       teams:

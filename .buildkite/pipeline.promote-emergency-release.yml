@@ -1,0 +1,13 @@
+env:
+  GPCTL_CONFIG: "https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/emergency.yaml"
+
+steps:
+  - label: ":git: Promote emergency release build"
+    command: ".buildkite/scripts/promote-release.sh"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
+
+notify:
+  - slack: "#es-serverless-gitops"
+    if: build.state == "failed"

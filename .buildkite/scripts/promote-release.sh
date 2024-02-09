@@ -4,6 +4,8 @@ set -e
 scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 source $scripts_dir/utils/misc.sh
 
+GPCTL_CONFIG="${GPCTL_CONFIG:-https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/config.yaml}"
+
 if [[ "${BUILDKITE_BRANCH}" != "main" ]] && [[ "${BUILDKITE_BRANCH}" != patch/* ]]; then
   echo "Invalid release branch '${BUILDKITE_BRANCH}. Valid branches are 'main' or prefixed with 'patch/'."
   exit 1
@@ -32,6 +34,6 @@ steps:
       commit: "${PROMOTED_COMMIT}"
       branch: "${BUILDKITE_BRANCH}"
       env:
-        GPCTL_CONFIG: https://raw.githubusercontent.com/elastic/serverless-gitops/main/gen/gpctl/elasticsearch/config.yaml
+        GPCTL_CONFIG: ${GPCTL_CONFIG}
         GITOPS_ENV: qa
 EOF
