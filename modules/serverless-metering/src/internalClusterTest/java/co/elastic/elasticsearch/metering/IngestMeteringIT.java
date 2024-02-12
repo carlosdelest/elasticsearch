@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.ingest.PutPipelineRequest;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
@@ -32,6 +33,8 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.xcontent.XContentType;
+import org.junit.After;
+import org.junit.Before;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -46,6 +49,21 @@ import static org.hamcrest.Matchers.startsWith;
 public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
     protected static final int DEFAULT_SEARCH_POWER = 200;
+    Map<String, Object> expectedDefaultAttributes = Map.of(
+        "boost_window",
+        (int) DEFAULT_BOOST_WINDOW.seconds(),
+        "search_power",
+        DEFAULT_SEARCH_POWER
+    );
+    Map<String, Object> expectedOverriddenAttributes = Map.of(
+        "boost_window",
+        (int) TimeValue.timeValueDays(3).seconds(),
+        "search_power",
+        1234
+    );
+    Settings.Builder overrideSettings = Settings.builder()
+        .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), TimeValue.timeValueDays(3))
+        .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), 1234);
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
@@ -67,47 +85,102 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         );
     }
 
-    public void testIngestMetricsAreRecordedThroughIndexing() throws InterruptedException, IOException {
-        startNodes();
-        Map<String, Object> settings = Map.of("boost_window", (int) DEFAULT_BOOST_WINDOW.seconds(), "search_power", DEFAULT_SEARCH_POWER);
-        // a usage record is reported when using raw bulk apis
+    @Before
+    public void setup() {
+        createNewFieldPipeline();
+    }
+
+    @After
+    public void cleanup() {
+        receivedMetrics().clear();
+        assertAcked(
+            clusterAdmin().prepareUpdateSettings()
+                .setPersistentSettings(Settings.builder().putNull("*"))
+                .setTransientSettings(Settings.builder().putNull("*"))
+        );
+    }
+
+    public void testIngestMetricsAreRecordedThroughBulk() throws InterruptedException, IOException {
         String indexName = "idx1";
+
+        startNodes();
         createIndex(indexName);
-        client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();// size 3*char+int (long size)
+        // size 3*char+int (long size)
+        client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
         waitUntil(() -> receivedMetrics().isEmpty() == false);
         assertThat(receivedMetrics(), not(empty()));
 
-        UsageRecord usageRecord = getUsageRecords("ingested-doc:" + indexName);
+        UsageRecord usageRecord = getFirstReceivedRecord("ingested-doc:" + indexName);
+        assertUsageRecord(indexName, usageRecord, expectedDefaultAttributes);
 
-        assertUsageRecord(indexName, usageRecord, settings);
-
+        // change settings propagated to usage records
         ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.transientSettings(
-            Settings.builder().put("serverless.search.boost_window", TimeValue.timeValueDays(3)).put("serverless.search.search_power", 1234)
-        );
+        updateSettingsRequest.transientSettings(overrideSettings);
         assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
         receivedMetrics().clear();
 
-        client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();// size 3*char+int (long size)
+        // size 3*char+int (long size)
+        client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
-        // the same value is reported when using ingest pipelines
+        waitUntil(() -> receivedMetrics().isEmpty() == false);
+        assertThat(receivedMetrics(), not(empty()));
+        usageRecord = getFirstReceivedRecord("ingested-doc:" + indexName);
+        assertUsageRecord(indexName, usageRecord, expectedOverriddenAttributes);
+
+    }
+
+    public void testIngestMetricsAreRecordedThroughIngestPipelines() throws InterruptedException, IOException {
         String indexName2 = "idx2";
-        createPipeline("pipeline");
+        startNodes();
+        createIndex(indexName2);
+
         client().index(
-            new IndexRequest(indexName2).setPipeline("pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")// size 3*char+int (long
-                                                                                                                    // size)
+            // size 3*char+int (long size), pipeline added fields not included
+            new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
         ).actionGet();
 
         waitUntil(() -> receivedMetrics().isEmpty() == false);
         assertThat(receivedMetrics(), not(empty()));
+        UsageRecord usageRecord = getFirstReceivedRecord("ingested-doc:" + indexName2);
+        assertUsageRecord(indexName2, usageRecord, expectedDefaultAttributes);
 
-        usageRecord = getUsageRecords("ingested-doc:" + indexName2);
-        assertUsageRecord(
-            indexName2,
-            usageRecord,
-            Map.of("boost_window", (int) TimeValue.timeValueDays(3).seconds(), "search_power", 1234)
-        );
+        // change settings propagated to usage records
+        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
+        updateSettingsRequest.transientSettings(overrideSettings);
+        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
+        receivedMetrics().clear();
+
+        client().index(
+            // size 3*char+int (long size), pipeline added fields not included
+            new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
+        ).actionGet();
+
+        waitUntil(() -> receivedMetrics().isEmpty() == false);
+        assertThat(receivedMetrics(), not(empty()));
+        usageRecord = getFirstReceivedRecord("ingested-doc:" + indexName2);
+        assertUsageRecord(indexName2, usageRecord, expectedOverriddenAttributes);
+    }
+
+    public void testDocumentFailingInPipelineNotReported() throws InterruptedException, IOException {
+        String indexName3 = "idx3";
+        startNodes();
+        createIndex(indexName3);
+        createFailPipeline();
+
+        client().bulk(
+            new BulkRequest().add(
+                new IndexRequest(indexName3).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
+            )
+                // size 3*char+int (long size), but it uses a fail pipeline
+                .add(new IndexRequest(indexName3).setPipeline("fail_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c"))
+        ).actionGet();
+
+        waitUntil(() -> receivedMetrics().isEmpty() == false);
+        assertThat(receivedMetrics(), not(empty()));
+        UsageRecord usageRecord = getFirstReceivedRecord("ingested-doc:" + indexName3);
+        // even though 2 documents were in bulk request, we will only have 1 reported
+        assertUsageRecord(indexName3, usageRecord, expectedDefaultAttributes);
     }
 
     private static void assertUsageRecord(String indexName, UsageRecord metric, Map<String, Object> settings) {
@@ -119,7 +192,22 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         settings.forEach((k, v) -> assertThat(metric.usage().es().get(k), equalTo(v)));
     }
 
-    private void createPipeline(String pipeline) {
+    private void createFailPipeline() {
+        final BytesReference pipelineBody = new BytesArray("""
+            {
+              "processors": [
+                {
+                   "fail": {
+                     "message": "always fail"
+                   }
+                 }
+              ]
+            }
+            """);
+        clusterAdmin().putPipeline(new PutPipelineRequest("fail_pipeline", pipelineBody, XContentType.JSON)).actionGet();
+    }
+
+    private void createNewFieldPipeline() {
         final BytesReference pipelineBody = new BytesArray("""
             {
               "processors": [
@@ -138,6 +226,6 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
               ]
             }
             """);
-        clusterAdmin().putPipeline(new PutPipelineRequest(pipeline, pipelineBody, XContentType.JSON)).actionGet();
+        clusterAdmin().putPipeline(new PutPipelineRequest("new_field_pipeline", pipelineBody, XContentType.JSON)).actionGet();
     }
 }

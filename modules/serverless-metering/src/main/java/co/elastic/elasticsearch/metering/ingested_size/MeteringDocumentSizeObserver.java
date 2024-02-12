@@ -17,20 +17,20 @@
 
 package co.elastic.elasticsearch.metering.ingested_size;
 
-import co.elastic.elasticsearch.metering.IngestMetricsCollector;
-
-import org.elasticsearch.plugins.internal.DocumentParsingObserver;
+import org.elasticsearch.plugins.internal.DocumentSizeObserver;
 import org.elasticsearch.xcontent.XContentParser;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-public class MeteringDocumentParsingObserver implements DocumentParsingObserver {
-    private final AtomicLong counter = new AtomicLong();
-    private final IngestMetricsCollector ingestMetricsCollector;
-    private String indexName = null;
+public class MeteringDocumentSizeObserver implements DocumentSizeObserver {
+    private final AtomicLong counter;
 
-    public MeteringDocumentParsingObserver(IngestMetricsCollector ingestMetricsCollector) {
-        this.ingestMetricsCollector = ingestMetricsCollector;
+    public MeteringDocumentSizeObserver() {
+        this(0L);
+    }
+
+    protected MeteringDocumentSizeObserver(long initValue) {
+        this.counter = new AtomicLong(initValue);
     }
 
     @Override
@@ -39,13 +39,8 @@ public class MeteringDocumentParsingObserver implements DocumentParsingObserver 
     }
 
     @Override
-    public void setIndexName(String indexName) {
-        this.indexName = indexName;
-    }
-
-    @Override
-    public void close() {
-        ingestMetricsCollector.addIngestedDocValue(indexName, counter.get());
+    public long normalisedBytesParsed() {
+        return counter.get();
     }
 
 }

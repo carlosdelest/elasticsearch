@@ -51,6 +51,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
@@ -73,7 +74,8 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
             try {
-                received.add(toUsageRecordMaps(exchange.getRequestBody()));
+                List<UsageRecord> usageRecordMaps = toUsageRecordMaps(exchange.getRequestBody());
+                received.add(usageRecordMaps);
             } catch (RuntimeException e) {
                 logger.warn("failed to parse request", e);
             }
@@ -134,7 +136,11 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
         }
     }
 
-    protected UsageRecord getUsageRecords(String prefix) {
+    protected List<UsageRecord> getReceivedRecords(String prefix) {
+        return receivedMetrics().stream().flatMap(List::stream).filter(m -> m.id().startsWith(prefix)).collect(Collectors.toList());
+    }
+
+    protected UsageRecord getFirstReceivedRecord(String prefix) {
         List<List<UsageRecord>> recordLists = new ArrayList<>();
         receivedMetrics().drainTo(recordLists);
 

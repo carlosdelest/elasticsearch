@@ -77,7 +77,7 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> receivedMetrics().stream().anyMatch(l -> l.stream().anyMatch(u -> u.id().startsWith("shard-size"))));
         assertThat(receivedMetrics(), not(empty()));
-        UsageRecord metric = getUsageRecords("shard-size");
+        UsageRecord metric = getFirstReceivedRecord("shard-size");
 
         String idPRefix = "shard-size:" + indexName + ":0";
         assertThat(metric.id(), startsWith(idPRefix));
@@ -95,7 +95,7 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> receivedMetrics().isEmpty() == false);
         assertThat(receivedMetrics(), not(empty()));
-        metric = getUsageRecords("shard-size");
+        metric = getFirstReceivedRecord("shard-size");
         assertThat(metric.id(), startsWith(idPRefix));
         assertThat(metric.usage().type(), equalTo("es_indexed_data"));
         assertThat(metric.usage().quantity(), greaterThan(0L));

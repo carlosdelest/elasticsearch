@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingObserver;
+import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
 
@@ -32,15 +32,14 @@ import org.elasticsearch.logging.Logger;
 import org.elasticsearch.node.NodeRoleSettings;
 import org.elasticsearch.plugins.ExtensiblePlugin;
 import org.elasticsearch.plugins.Plugin;
-import org.elasticsearch.plugins.internal.DocumentParsingObserver;
-import org.elasticsearch.plugins.internal.DocumentParsingObserverPlugin;
+import org.elasticsearch.plugins.internal.DocumentParsingProvider;
+import org.elasticsearch.plugins.internal.DocumentParsingProviderPlugin;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_ID;
@@ -48,7 +47,7 @@ import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSett
 /**
  * Plugin responsible for starting up all serverless metering classes.
  */
-public class MeteringPlugin extends Plugin implements ExtensiblePlugin, DocumentParsingObserverPlugin {
+public class MeteringPlugin extends Plugin implements ExtensiblePlugin, DocumentParsingProviderPlugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
 
@@ -124,13 +123,18 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         IOUtils.close(reporter, service);
     }
 
+    IngestMetricsCollector getIngestMetricsCollector() {
+        return ingestMetricsCollector;
+    }
+
     /**
-     * this method is called before the createComponents and passed down to other services
-     * the get on a supplier is only called upon parsing. so after createComponent
-     * Therefore the instance created in createComponents should be volatile
+     * This method is called during node construction to allow for injection.
+     * The DocumentParsingSupplier instance depends on ingestMetricsCollector created during {@link #createComponents}.
+     * The DocumentParsingSupplier instance is being used after the {@link #createComponents}, therefore ingestMetricsCollector
+     * should be stored in a volatile field.
      */
     @Override
-    public Supplier<DocumentParsingObserver> getDocumentParsingObserverSupplier() {
-        return () -> new MeteringDocumentParsingObserver(ingestMetricsCollector);
+    public DocumentParsingProvider getDocumentParsingSupplier() {
+        return new MeteringDocumentParsingProvider(this::getIngestMetricsCollector);
     }
 }
