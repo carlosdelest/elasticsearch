@@ -113,11 +113,11 @@ public class CohereServiceSettings implements ServiceSettings {
         return uri;
     }
 
-    public Optional<SimilarityMeasure> similarity() {
+    public SimilarityMeasure similarity() {
         return Optional.ofNullable(similarity);
     }
 
-    public Optional<Integer> dimensions() {
+    public Integer dimensions() {
         return Optional.ofNullable(dimensions);
     }
 

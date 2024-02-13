@@ -24,11 +24,13 @@ import org.elasticsearch.inference.InferenceServiceRegistry;
 import org.elasticsearch.inference.InputType;
 import org.elasticsearch.inference.Model;
 import org.elasticsearch.inference.ModelRegistry;
+import org.elasticsearch.inference.ModelSettings;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -49,7 +51,7 @@ public class BulkShardRequestInferenceProvider {
     public static final String TEXT_SUBFIELD_NAME = "text";
 
     // Contains the inference result when it's a sparse vector
-    public static final String SPARSE_VECTOR_SUBFIELD_NAME = "sparse_embedding";
+    public static final String MODEL_INFO_FIELD = "model";
 
     private final ClusterState clusterState;
     private final Map<String, InferenceProvider> inferenceProvidersMap;
@@ -266,25 +268,10 @@ public class BulkShardRequestInferenceProvider {
                                 );
                             }
 
-                            Map<String, Object> inferenceFieldResult;
-                            try {
-                                inferenceFieldResult = (Map<String, Object>) rootInferenceFieldMap.computeIfAbsent(
-                                    inferenceFieldName,
-                                    k -> new HashMap<>()
-                                );
-                            } catch (ClassCastException e) {
-                                onBulkItemFailure.apply(
-                                    bulkItemRequest,
-                                    itemIndex,
-                                    new IllegalArgumentException(
-                                        "Inference result field [" + ROOT_INFERENCE_FIELD + "." + inferenceFieldName + "] is not an object"
-                                    )
-                                );
-                                return;
-                            }
-                            // TODO Add model info
-                            // TODO Check model changed, etc
+                            Map<String, Object> inferenceFieldResult = new LinkedHashMap<>();
+                            inferenceFieldResult.putAll(new ModelSettings(inferenceProvider.model).asMap());
                             inferenceFieldResult.putAll(results.asMap());
+                            rootInferenceFieldMap.put(inferenceFieldName, inferenceFieldResult);
                         }
 
                         @Override

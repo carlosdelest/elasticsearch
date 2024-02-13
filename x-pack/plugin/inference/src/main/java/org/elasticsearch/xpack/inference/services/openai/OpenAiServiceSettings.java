@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 
 import static org.elasticsearch.xpack.inference.services.ServiceFields.DIMENSIONS;
 import static org.elasticsearch.xpack.inference.services.ServiceFields.MAX_INPUT_TOKENS;
@@ -112,12 +111,12 @@ public class OpenAiServiceSettings implements ServiceSettings {
         return organizationId;
     }
 
-    public Optional<SimilarityMeasure> similarity() {
-        return Optional.ofNullable(similarity);
+    public SimilarityMeasure similarity() {
+        return similarity;
     }
 
-    public Optional<Integer> dimensions() {
-        return Optional.ofNullable(dimensions);
+    public Integer dimensions() {
+        return dimensions;
     }
 
     public Integer maxInputTokens() {

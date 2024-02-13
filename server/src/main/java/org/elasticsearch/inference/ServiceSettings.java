@@ -11,16 +11,14 @@ package org.elasticsearch.inference;
 import org.elasticsearch.common.io.stream.VersionedNamedWriteable;
 import org.elasticsearch.xcontent.ToXContentObject;
 
-import java.util.Optional;
-
 public interface ServiceSettings extends ToXContentObject, VersionedNamedWriteable {
 
-    default Optional<SimilarityMeasure> similarity() {
-        return Optional.empty();
+    default SimilarityMeasure similarity() {
+        return null;
     }
 
-    default Optional<Integer> dimensions() {
-        return Optional.empty();
+    default Integer dimensions() {
+        return null;
     }
 
 }
