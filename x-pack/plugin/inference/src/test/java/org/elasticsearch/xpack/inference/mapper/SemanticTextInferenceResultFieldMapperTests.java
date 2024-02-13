@@ -51,8 +51,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
-import static org.elasticsearch.action.bulk.BulkShardRequestInferenceProvider.SPARSE_VECTOR_SUBFIELD_NAME;
 import static org.elasticsearch.action.bulk.BulkShardRequestInferenceProvider.TEXT_SUBFIELD_NAME;
+import static org.elasticsearch.xpack.core.inference.results.ChunkedSparseEmbeddingResults.CHUNK_EMBEDDINGS_FIELD_NAME;
 import static org.hamcrest.Matchers.containsString;
 
 public class SemanticTextInferenceResultFieldMapperTests extends MetadataMapperTestCase {
@@ -214,7 +214,7 @@ public class SemanticTextInferenceResultFieldMapperTests extends MetadataMapperT
                     )
                 )
             );
-            assertThat(ex.getMessage(), containsString("Missing required subfields: [" + SPARSE_VECTOR_SUBFIELD_NAME + "]"));
+            assertThat(ex.getMessage(), containsString("Missing required subfields: [" + CHUNK_EMBEDDINGS_FIELD_NAME + "]"));
         }
         {
             DocumentParsingException ex = expectThrows(
@@ -252,7 +252,7 @@ public class SemanticTextInferenceResultFieldMapperTests extends MetadataMapperT
             );
             assertThat(
                 ex.getMessage(),
-                containsString("Missing required subfields: [" + SPARSE_VECTOR_SUBFIELD_NAME + ", " + TEXT_SUBFIELD_NAME + "]")
+                containsString("Missing required subfields: [" + CHUNK_EMBEDDINGS_FIELD_NAME + ", " + TEXT_SUBFIELD_NAME + "]")
             );
         }
     }
@@ -432,7 +432,7 @@ public class SemanticTextInferenceResultFieldMapperTests extends MetadataMapperT
                     if (sparseVectorSubfieldOptions.includeEmbedding() == false) {
                         embeddingMap.remove(SparseEmbeddingResults.Embedding.EMBEDDING);
                     }
-                    subfieldMap.put(SPARSE_VECTOR_SUBFIELD_NAME, embeddingMap);
+                    subfieldMap.put(CHUNK_EMBEDDINGS_FIELD_NAME, embeddingMap);
                 }
                 if (includeTextSubfield) {
                     subfieldMap.put(TEXT_SUBFIELD_NAME, text);
@@ -454,7 +454,7 @@ public class SemanticTextInferenceResultFieldMapperTests extends MetadataMapperT
         mappingBuilder.startObject(semanticTextFieldName);
         mappingBuilder.field("type", "nested");
         mappingBuilder.startObject("properties");
-        mappingBuilder.startObject(SPARSE_VECTOR_SUBFIELD_NAME);
+        mappingBuilder.startObject(CHUNK_EMBEDDINGS_FIELD_NAME);
         mappingBuilder.startObject("properties");
         mappingBuilder.startObject(SparseEmbeddingResults.Embedding.EMBEDDING);
         mappingBuilder.field("type", "sparse_vector");
@@ -479,7 +479,7 @@ public class SemanticTextInferenceResultFieldMapperTests extends MetadataMapperT
             queryBuilder.add(
                 new BooleanClause(
                     new TermQuery(
-                        new Term(path + "." + SPARSE_VECTOR_SUBFIELD_NAME + "." + SparseEmbeddingResults.Embedding.EMBEDDING, token)
+                        new Term(path + "." + CHUNK_EMBEDDINGS_FIELD_NAME + "." + SparseEmbeddingResults.Embedding.EMBEDDING, token)
                     ),
                     BooleanClause.Occur.MUST
                 )
@@ -500,7 +500,7 @@ public class SemanticTextInferenceResultFieldMapperTests extends MetadataMapperT
             new VisitedChildDocInfo(
                 childDoc.getPath(),
                 childDoc.getFields(
-                    childDoc.getPath() + "." + SPARSE_VECTOR_SUBFIELD_NAME + "." + SparseEmbeddingResults.Embedding.EMBEDDING
+                    childDoc.getPath() + "." + CHUNK_EMBEDDINGS_FIELD_NAME + "." + SparseEmbeddingResults.Embedding.EMBEDDING
                 ).size()
             )
         );

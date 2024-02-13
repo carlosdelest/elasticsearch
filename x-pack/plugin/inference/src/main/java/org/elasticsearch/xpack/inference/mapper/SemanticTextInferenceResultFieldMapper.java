@@ -10,7 +10,6 @@ package org.elasticsearch.xpack.inference.mapper;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.index.IndexVersion;
-import org.elasticsearch.index.mapper.BooleanFieldMapper;
 import org.elasticsearch.index.mapper.DocumentParserContext;
 import org.elasticsearch.index.mapper.DocumentParsingException;
 import org.elasticsearch.index.mapper.FieldMapper;
@@ -25,25 +24,25 @@ import org.elasticsearch.index.mapper.SourceValueFetcher;
 import org.elasticsearch.index.mapper.TextFieldMapper;
 import org.elasticsearch.index.mapper.TextSearchInfo;
 import org.elasticsearch.index.mapper.ValueFetcher;
+import org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper;
 import org.elasticsearch.index.mapper.vectors.SparseVectorFieldMapper;
 import org.elasticsearch.index.query.SearchExecutionContext;
+import org.elasticsearch.inference.ModelSettings;
+import org.elasticsearch.inference.SimilarityMeasure;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
-import org.elasticsearch.script.ScriptCompiler;
 import org.elasticsearch.xcontent.XContentParser;
-import org.elasticsearch.xpack.core.inference.results.SparseEmbeddingResults;
+import org.elasticsearch.xpack.core.inference.results.ChunkedSparseEmbeddingResults;
+import org.elasticsearch.xpack.core.inference.results.ChunkedTextEmbeddingResults;
+import org.elasticsearch.xpack.core.ml.inference.results.ChunkedNlpInferenceResults;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.elasticsearch.action.bulk.BulkShardRequestInferenceProvider.SPARSE_VECTOR_SUBFIELD_NAME;
-import static org.elasticsearch.action.bulk.BulkShardRequestInferenceProvider.TEXT_SUBFIELD_NAME;
+import static org.elasticsearch.action.bulk.BulkShardRequestInferenceProvider.ROOT_INFERENCE_FIELD;
 
 /**
  * A mapper for the {@code _semantic_text_inference} field.
@@ -102,15 +101,12 @@ import static org.elasticsearch.action.bulk.BulkShardRequestInferenceProvider.TE
  */
 public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper {
     public static final String CONTENT_TYPE = "_semantic_text_inference";
-    public static final String NAME = "_semantic_text_inference";
+    public static final String NAME = ROOT_INFERENCE_FIELD;
     public static final TypeParser PARSER = new FixedTypeParser(c -> new SemanticTextInferenceResultFieldMapper());
 
-    private static final Map<List<String>, Set<String>> REQUIRED_SUBFIELDS_MAP = Map.of(
-        List.of(),
-        Set.of(SPARSE_VECTOR_SUBFIELD_NAME, TEXT_SUBFIELD_NAME)
-    );
-
     private static final Logger logger = LogManager.getLogger(SemanticTextInferenceResultFieldMapper.class);
+
+    private static final Set<String> REQUIRED_SUBFIELDS = Set.of(ChunkedNlpInferenceResults.TEXT, ChunkedNlpInferenceResults.INFERENCE);
 
     static class SemanticTextInferenceFieldType extends MappedFieldType {
         private static final MappedFieldType INSTANCE = new SemanticTextInferenceFieldType();
@@ -146,10 +142,10 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
             throw new DocumentParsingException(parser.getTokenLocation(), "Expected a START_OBJECT, got " + parser.currentToken());
         }
 
-        parseInferenceResults(context);
+        parseAllFields(context);
     }
 
-    private static void parseInferenceResults(DocumentParserContext context) throws IOException {
+    private static void parseAllFields(DocumentParserContext context) throws IOException {
         XContentParser parser = context.parser();
         MapperBuilderContext mapperBuilderContext = MapperBuilderContext.root(false, false);
         for (XContentParser.Token token = parser.nextToken(); token != XContentParser.Token.END_OBJECT; token = parser.nextToken()) {
@@ -157,32 +153,66 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
                 throw new DocumentParsingException(parser.getTokenLocation(), "Expected a FIELD_NAME, got " + token);
             }
 
-            parseFieldInferenceResults(context, mapperBuilderContext);
+            parseSingleField(context, mapperBuilderContext);
         }
     }
 
-    private static void parseFieldInferenceResults(DocumentParserContext context, MapperBuilderContext mapperBuilderContext)
-        throws IOException {
+    private static void parseSingleField(DocumentParserContext context, MapperBuilderContext mapperBuilderContext) throws IOException {
 
-        String fieldName = context.parser().currentName();
+        XContentParser parser = context.parser();
+        String fieldName = parser.currentName();
         Mapper mapper = context.getMapper(fieldName);
         if (mapper == null || SemanticTextFieldMapper.CONTENT_TYPE.equals(mapper.typeName()) == false) {
             throw new DocumentParsingException(
-                context.parser().getTokenLocation(),
+                parser.getTokenLocation(),
                 Strings.format("Field [%s] is not registered as a %s field type", fieldName, SemanticTextFieldMapper.CONTENT_TYPE)
             );
         }
-
-        parseFieldInferenceResultsArray(context, mapperBuilderContext, fieldName);
+        parser.nextToken();
+        parseFieldResults(context, mapperBuilderContext, fieldName);
     }
 
-    private static void parseFieldInferenceResultsArray(
+    private static void parseFieldResults(DocumentParserContext context, MapperBuilderContext mapperBuilderContext, String fieldName)
+        throws IOException {
+        XContentParser parser = context.parser();
+        if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
+            throw new DocumentParsingException(parser.getTokenLocation(), "Expected a START_OBJECT, got " + parser.currentToken());
+        }
+        parser.nextToken();
+        ModelSettings modelSettings = ModelSettings.parse(parser);
+        for (XContentParser.Token token = parser.nextToken(); token != XContentParser.Token.END_OBJECT; token = parser.nextToken()) {
+            if (token != XContentParser.Token.FIELD_NAME) {
+                throw new DocumentParsingException(parser.getTokenLocation(), "Expected a FIELD_NAME, got " + token);
+            }
+
+            String currentName = parser.currentName();
+
+            if (ChunkedSparseEmbeddingResults.CHUNK_EMBEDDINGS_FIELD_NAME.equals(currentName)) {
+                NestedObjectMapper nestedObjectMapper = createSparseEmbeddingsObjectMapper(context, mapperBuilderContext, fieldName);
+                parseFieldInferenceChunks(context, mapperBuilderContext, fieldName, modelSettings, nestedObjectMapper);
+            } else if (ChunkedTextEmbeddingResults.CHUNK_EMBEDDINGS_FIELD_NAME.equals(currentName)) {
+                NestedObjectMapper nestedObjectMapper = createTextEmbeddingsObjectMapper(
+                    context,
+                    mapperBuilderContext,
+                    fieldName,
+                    modelSettings
+                );
+                parseFieldInferenceChunks(context, mapperBuilderContext, fieldName, modelSettings, nestedObjectMapper);
+            } else {
+                logger.debug("Skipping unrecognized field name [" + currentName + "]");
+                advancePastCurrentFieldName(parser);
+            }
+        }
+    }
+
+    private static void parseFieldInferenceChunks(
         DocumentParserContext context,
         MapperBuilderContext mapperBuilderContext,
-        String fieldName
+        String fieldName,
+        ModelSettings modelSettings,
+        NestedObjectMapper nestedObjectMapper
     ) throws IOException {
         XContentParser parser = context.parser();
-        NestedObjectMapper nestedObjectMapper = createNestedObjectMapper(context, mapperBuilderContext, fieldName);
 
         if (parser.nextToken() != XContentParser.Token.START_ARRAY) {
             throw new DocumentParsingException(parser.getTokenLocation(), "Expected a START_ARRAY, got " + parser.currentToken());
@@ -190,14 +220,14 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
 
         for (XContentParser.Token token = parser.nextToken(); token != XContentParser.Token.END_ARRAY; token = parser.nextToken()) {
             DocumentParserContext nestedContext = context.createNestedContext(nestedObjectMapper);
-            parseFieldInferenceResultElement(nestedContext, nestedObjectMapper, new LinkedList<>());
+            parseFieldInferenceChunkElement(nestedContext, nestedObjectMapper, modelSettings);
         }
     }
 
-    private static void parseFieldInferenceResultElement(
+    private static void parseFieldInferenceChunkElement(
         DocumentParserContext context,
         ObjectMapper objectMapper,
-        LinkedList<String> subfieldPath
+        ModelSettings modelSettings
     ) throws IOException {
         XContentParser parser = context.parser();
         DocumentParserContext childContext = context.createChildContext(objectMapper);
@@ -222,14 +252,9 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
                 continue;
             }
 
-            if (childMapper instanceof FieldMapper) {
+            if (childMapper instanceof FieldMapper fieldMapper) {
                 parser.nextToken();
-                ((FieldMapper) childMapper).parse(childContext);
-            } else if (childMapper instanceof ObjectMapper) {
-                parser.nextToken();
-                subfieldPath.push(currentName);
-                parseFieldInferenceResultElement(childContext, (ObjectMapper) childMapper, subfieldPath);
-                subfieldPath.pop();
+                fieldMapper.parse(childContext);
             } else {
                 // This should never happen, but fail parsing if it does so that it's not a silent failure
                 throw new DocumentParsingException(
@@ -239,29 +264,25 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
             }
         }
 
-        Set<String> requiredSubfields = REQUIRED_SUBFIELDS_MAP.get(subfieldPath);
-        if (requiredSubfields != null && visitedSubfields.containsAll(requiredSubfields) == false) {
-            Set<String> missingSubfields = requiredSubfields.stream()
+        if (REQUIRED_SUBFIELDS.containsAll(visitedSubfields) == false) {
+            Set<String> missingSubfields = REQUIRED_SUBFIELDS.stream()
                 .filter(s -> visitedSubfields.contains(s) == false)
                 .collect(Collectors.toSet());
             throw new DocumentParsingException(parser.getTokenLocation(), "Missing required subfields: " + missingSubfields);
         }
     }
 
-    private static NestedObjectMapper createNestedObjectMapper(
+    private static NestedObjectMapper createSparseEmbeddingsObjectMapper(
         DocumentParserContext context,
         MapperBuilderContext mapperBuilderContext,
         String fieldName
     ) {
         IndexVersion indexVersionCreated = context.indexSettings().getIndexVersionCreated();
-        ObjectMapper.Builder sparseVectorMapperBuilder = new ObjectMapper.Builder(
-            SPARSE_VECTOR_SUBFIELD_NAME,
-            ObjectMapper.Defaults.SUBOBJECTS
-        ).add(
-            new BooleanFieldMapper.Builder(SparseEmbeddingResults.Embedding.IS_TRUNCATED, ScriptCompiler.NONE, false, indexVersionCreated)
-        ).add(new SparseVectorFieldMapper.Builder(SparseEmbeddingResults.Embedding.EMBEDDING));
+        SparseVectorFieldMapper.Builder sparseVectorMapperBuilder = new SparseVectorFieldMapper.Builder(
+            ChunkedNlpInferenceResults.INFERENCE
+        );
         TextFieldMapper.Builder textMapperBuilder = new TextFieldMapper.Builder(
-            TEXT_SUBFIELD_NAME,
+            ChunkedNlpInferenceResults.TEXT,
             indexVersionCreated,
             context.indexAnalyzers()
         ).index(false).store(false);
@@ -271,6 +292,52 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
             context.indexSettings().getIndexVersionCreated()
         );
         nestedBuilder.add(sparseVectorMapperBuilder).add(textMapperBuilder);
+
+        return nestedBuilder.build(mapperBuilderContext);
+    }
+
+    private static NestedObjectMapper createTextEmbeddingsObjectMapper(
+        DocumentParserContext context,
+        MapperBuilderContext mapperBuilderContext,
+        String fieldName,
+        ModelSettings modelSettings
+    ) {
+        IndexVersion indexVersionCreated = context.indexSettings().getIndexVersionCreated();
+        DenseVectorFieldMapper.Builder denseVectorMapperBuilder = new DenseVectorFieldMapper.Builder(
+            ChunkedNlpInferenceResults.INFERENCE,
+            indexVersionCreated
+        );
+        SimilarityMeasure similarity = modelSettings.similarity();
+        if (similarity != null) {
+            switch (similarity) {
+                case COSINE:
+                    denseVectorMapperBuilder.similarity(DenseVectorFieldMapper.VectorSimilarity.COSINE);
+                    break;
+                case DOT_PRODUCT:
+                    denseVectorMapperBuilder.similarity(DenseVectorFieldMapper.VectorSimilarity.DOT_PRODUCT);
+                    break;
+                default:
+                    throw new IllegalArgumentException(
+                        "Unknown similarity measure for field [" + fieldName + "] in model settings: " + similarity
+                    );
+            }
+        }
+        Integer dimensions = modelSettings.dimensions();
+        if (dimensions == null) {
+            throw new IllegalArgumentException("Model settings for field [" + fieldName + "] must contain dimensions");
+        }
+        denseVectorMapperBuilder.dimensions(dimensions);
+        TextFieldMapper.Builder textMapperBuilder = new TextFieldMapper.Builder(
+            ChunkedNlpInferenceResults.TEXT,
+            indexVersionCreated,
+            context.indexAnalyzers()
+        ).index(false).store(false);
+
+        NestedObjectMapper.Builder nestedBuilder = new NestedObjectMapper.Builder(
+            fieldName,
+            context.indexSettings().getIndexVersionCreated()
+        );
+        nestedBuilder.add(denseVectorMapperBuilder).add(textMapperBuilder);
 
         return nestedBuilder.build(mapperBuilderContext);
     }
