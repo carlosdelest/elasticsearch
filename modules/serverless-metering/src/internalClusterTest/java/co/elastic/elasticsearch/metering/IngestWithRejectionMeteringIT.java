@@ -27,6 +27,7 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentSizeObserver;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
@@ -56,6 +57,7 @@ import java.util.concurrent.TimeUnit;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
+@LuceneTestCase.AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/1419")
 public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase {
 
     private static final int ITEMS_IN_BULK = 100;
