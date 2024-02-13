@@ -22,6 +22,7 @@ import java.util.Objects;
 public class ChunkedSparseEmbeddingResults implements ChunkedInferenceServiceResults {
 
     public static final String NAME = "chunked_sparse_embedding_results";
+    public static final String CHUNK_EMBEDDINGS_FIELD_NAME = "sparse_embedding_chunk";
 
     public static ChunkedSparseEmbeddingResults ofMlResult(ChunkedTextExpansionResults mlInferenceResults) {
         return new ChunkedSparseEmbeddingResults(mlInferenceResults.getChunks());
@@ -39,12 +40,17 @@ public class ChunkedSparseEmbeddingResults implements ChunkedInferenceServiceRes
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startArray("sparse_embedding_chunk");
+        builder.startArray(CHUNK_EMBEDDINGS_FIELD_NAME);
         for (ChunkedTextExpansionResults.ChunkedResult chunk : chunkedResults) {
             chunk.toXContent(builder, params);
         }
         builder.endArray();
         return builder;
+    }
+
+    @Override
+    public Map<String, Object> asMap() {
+        return Map.of(CHUNK_EMBEDDINGS_FIELD_NAME, chunkedResults.stream().map(ChunkedTextExpansionResults.ChunkedResult::asMap).toList());
     }
 
     @Override
@@ -60,16 +66,6 @@ public class ChunkedSparseEmbeddingResults implements ChunkedInferenceServiceRes
     @Override
     public List<? extends InferenceResults> transformToCoordinationFormat() {
         throw new UnsupportedOperationException("Chunked results are not returned in the coordindated action");
-    }
-
-    @Override
-    public List<? extends InferenceResults> transformToLegacyFormat() {
-        throw new UnsupportedOperationException("Chunked results are not returned in the legacy format");
-    }
-
-    @Override
-    public Map<String, Object> asMap() {
-        throw new UnsupportedOperationException("Chunked results are not returned in the a map format");
     }
 
     @Override

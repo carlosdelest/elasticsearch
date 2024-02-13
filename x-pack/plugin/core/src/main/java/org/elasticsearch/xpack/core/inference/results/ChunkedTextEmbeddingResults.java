@@ -12,6 +12,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.inference.ChunkedInferenceServiceResults;
 import org.elasticsearch.inference.InferenceResults;
 import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xpack.core.ml.inference.results.ChunkedTextEmbeddingResults.EmbeddingChunk;
 
 import java.io.IOException;
 import java.util.List;
@@ -21,6 +22,7 @@ import java.util.Objects;
 public class ChunkedTextEmbeddingResults implements ChunkedInferenceServiceResults {
 
     public static final String NAME = "chunked_text_embedding_service_results";
+    public static final String CHUNK_EMBEDDINGS_FIELD_NAME = "text_embedding_chunk";
 
     public static ChunkedTextEmbeddingResults ofMlResult(
         org.elasticsearch.xpack.core.ml.inference.results.ChunkedTextEmbeddingResults mlInferenceResults
@@ -28,23 +30,23 @@ public class ChunkedTextEmbeddingResults implements ChunkedInferenceServiceResul
         return new ChunkedTextEmbeddingResults(mlInferenceResults.getChunks());
     }
 
-    private final List<org.elasticsearch.xpack.core.ml.inference.results.ChunkedTextEmbeddingResults.EmbeddingChunk> chunks;
+    private final List<EmbeddingChunk> chunks;
 
     public ChunkedTextEmbeddingResults(
-        List<org.elasticsearch.xpack.core.ml.inference.results.ChunkedTextEmbeddingResults.EmbeddingChunk> chunks
+        List<EmbeddingChunk> chunks
     ) {
         this.chunks = chunks;
     }
 
     public ChunkedTextEmbeddingResults(StreamInput in) throws IOException {
         this.chunks = in.readCollectionAsList(
-            org.elasticsearch.xpack.core.ml.inference.results.ChunkedTextEmbeddingResults.EmbeddingChunk::new
+            EmbeddingChunk::new
         );
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startArray("text_embedding_chunk");
+        builder.startArray(CHUNK_EMBEDDINGS_FIELD_NAME);
         for (var embedding : chunks) {
             embedding.toXContent(builder, params);
         }
@@ -74,7 +76,7 @@ public class ChunkedTextEmbeddingResults implements ChunkedInferenceServiceResul
 
     @Override
     public Map<String, Object> asMap() {
-        throw new UnsupportedOperationException("Chunked results are not returned in the a map format");
+        return Map.of(CHUNK_EMBEDDINGS_FIELD_NAME, chunks.stream().map(EmbeddingChunk::asMap).toList());
     }
 
     @Override

@@ -8,6 +8,18 @@
 
 package org.elasticsearch.inference;
 
+import java.util.List;
+
 public interface ChunkedInferenceServiceResults extends InferenceServiceResults {
+
+    @Override
+    default List<? extends InferenceResults> transformToCoordinationFormat() {
+        throw new UnsupportedOperationException("Chunked results are not returned in the coordindated action");
+    }
+
+    @Override
+    default List<? extends InferenceResults> transformToLegacyFormat() {
+        throw new UnsupportedOperationException("Chunked results are not returned in the legacy format");
+    }
 
 }

@@ -8,12 +8,13 @@
 package org.elasticsearch.xpack.core.ml.inference.results;
 
 import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.inference.ChunkedInferenceServiceResults;
 
 import java.io.IOException;
 
-public abstract class ChunkedNlpInferenceResults extends NlpInferenceResults {
+public abstract class ChunkedNlpInferenceResults extends NlpInferenceResults implements ChunkedInferenceServiceResults {
 
-    static String TEXT = "text";
+static String TEXT = "text";
     static String INFERENCE = "inference";
 
     ChunkedNlpInferenceResults(boolean isTruncated) {
