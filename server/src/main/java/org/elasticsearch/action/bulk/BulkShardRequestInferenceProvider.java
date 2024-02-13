@@ -17,10 +17,10 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.TriConsumer;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.inference.InferenceResults;
+import org.elasticsearch.inference.ChunkedInferenceServiceResults;
+import org.elasticsearch.inference.ChunkingOptions;
 import org.elasticsearch.inference.InferenceService;
 import org.elasticsearch.inference.InferenceServiceRegistry;
-import org.elasticsearch.inference.InferenceServiceResults;
 import org.elasticsearch.inference.InputType;
 import org.elasticsearch.inference.Model;
 import org.elasticsearch.inference.ModelRegistry;
@@ -90,7 +90,13 @@ public class BulkShardRequestInferenceProvider {
                         var service = inferenceServiceRegistry.getService(unparsedModel.service());
                         if (service.isEmpty() == false) {
                             InferenceProvider inferenceProvider = new InferenceProvider(
-                                service.get().parsePersistedConfig(inferenceId, unparsedModel.taskType(), unparsedModel.settings()),
+                                service.get()
+                                    .parsePersistedConfigWithSecrets(
+                                        inferenceId,
+                                        unparsedModel.taskType(),
+                                        unparsedModel.settings(),
+                                        unparsedModel.secrets()
+                                    ),
                                 service.get()
                             );
                             inferenceProviderMap.put(inferenceId, inferenceProvider);
@@ -105,7 +111,7 @@ public class BulkShardRequestInferenceProvider {
                     }
                 };
 
-                modelRegistry.getModel(inferenceId, ActionListener.releaseAfter(modelLoadingListener, refs.acquire()));
+                modelRegistry.getModelWithSecrets(inferenceId, ActionListener.releaseAfter(modelLoadingListener, refs.acquire()));
             }
         }
     }
@@ -245,66 +251,60 @@ public class BulkShardRequestInferenceProvider {
                     );
                     return;
                 }
-                ActionListener<InferenceServiceResults> inferenceResultsListener = new ActionListener<>() {
-                    @Override
-                    public void onResponse(InferenceServiceResults results) {
-                        if (results == null) {
-                            onBulkItemFailure.apply(
-                                bulkItemRequest,
-                                itemIndex,
-                                new IllegalArgumentException(
-                                    "No inference results retrieved for model ID " + modelId + " in document " + docWriteRequest.id()
-                                )
-                            );
-                        }
+                // TODO We won't batch until chunkedInfer has batching support
+                for (String inferenceFieldName : inferenceFieldNames) {
+                    ActionListener<ChunkedInferenceServiceResults> inferenceResultsListener = new ActionListener<>() {
+                        @Override
+                        public void onResponse(ChunkedInferenceServiceResults results) {
+                            if (results == null) {
+                                onBulkItemFailure.apply(
+                                    bulkItemRequest,
+                                    itemIndex,
+                                    new IllegalArgumentException(
+                                        "No inference results retrieved for model ID " + modelId + " in document " + docWriteRequest.id()
+                                    )
+                                );
+                            }
 
-                        int i = 0;
-                        for (InferenceResults inferenceResults : results.transformToLegacyFormat()) {
-                            String fieldName = inferenceFieldNames.get(i++);
-                            List<Map<String, Object>> inferenceFieldResultList;
+                            Map<String, Object> inferenceFieldResult;
                             try {
-                                inferenceFieldResultList = (List<Map<String, Object>>) rootInferenceFieldMap.computeIfAbsent(
-                                    fieldName,
-                                    k -> new ArrayList<>()
+                                inferenceFieldResult = (Map<String, Object>) rootInferenceFieldMap.computeIfAbsent(
+                                    inferenceFieldName,
+                                    k -> new HashMap<>()
                                 );
                             } catch (ClassCastException e) {
                                 onBulkItemFailure.apply(
                                     bulkItemRequest,
                                     itemIndex,
                                     new IllegalArgumentException(
-                                        "Inference result field [" + ROOT_INFERENCE_FIELD + "." + fieldName + "] is not an object"
+                                        "Inference result field [" + ROOT_INFERENCE_FIELD + "." + inferenceFieldName + "] is not an object"
                                     )
                                 );
                                 return;
                             }
-                            // Remove previous inference results if any
-                            inferenceFieldResultList.clear();
-
-                            // TODO Check inference result type to change subfield name
-                            var inferenceFieldMap = Map.of(
-                                SPARSE_VECTOR_SUBFIELD_NAME,
-                                inferenceResults.asMap("output").get("output"),
-                                TEXT_SUBFIELD_NAME,
-                                docMap.get(fieldName)
-                            );
-                            inferenceFieldResultList.add(inferenceFieldMap);
+                            // TODO Add model info
+                            // TODO Check model changed, etc
+                            inferenceFieldResult.putAll(results.asMap());
                         }
-                    }
 
-                    @Override
-                    public void onFailure(Exception e) {
-                        onBulkItemFailure.apply(bulkItemRequest, itemIndex, e);
-                    }
-                };
-                inferenceProvider.service()
-                    .infer(
-                        inferenceProvider.model,
-                        inferenceFieldNames.stream().map(docMap::get).map(String::valueOf).collect(Collectors.toList()),
-                        // TODO check for additional settings needed
-                        Map.of(),
-                        InputType.INGEST,
-                        ActionListener.releaseAfter(inferenceResultsListener, docRef.acquire())
-                    );
+                        @Override
+                        public void onFailure(Exception e) {
+                            onBulkItemFailure.apply(bulkItemRequest, itemIndex, e);
+                        }
+                    };
+
+                    inferenceProvider.service()
+                        .chunkedInfer(
+                            inferenceProvider.model,
+                            List.of(String.valueOf(docMap.get(inferenceFieldName))),
+                            // TODO check for additional settings needed
+                            Map.of(),
+                            InputType.INGEST,
+                            new ChunkingOptions(null, null),
+                            ActionListener.releaseAfter(inferenceResultsListener, docRef.acquire())
+                        );
+                }
+
             }
         }
     }
