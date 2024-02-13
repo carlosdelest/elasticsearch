@@ -10,7 +10,6 @@ package org.elasticsearch.xpack.core.inference.results;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.inference.ChunkedInferenceServiceResults;
-import org.elasticsearch.inference.InferenceResults;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xpack.core.ml.inference.results.ChunkedTextExpansionResults;
 
@@ -61,11 +60,6 @@ public class ChunkedSparseEmbeddingResults implements ChunkedInferenceServiceRes
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeCollection(chunkedResults);
-    }
-
-    @Override
-    public List<? extends InferenceResults> transformToCoordinationFormat() {
-        throw new UnsupportedOperationException("Chunked results are not returned in the coordindated action");
     }
 
     @Override
