@@ -10,7 +10,6 @@ package org.elasticsearch.xpack.core.ml.inference.results;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
-import org.elasticsearch.inference.InferenceResultChunk;
 import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 
@@ -24,7 +23,7 @@ import java.util.stream.Collectors;
 
 public class ChunkedTextEmbeddingResults extends ChunkedNlpInferenceResults {
 
-    public record EmbeddingChunk(String matchedText, double[] embedding) implements Writeable, ToXContentObject, InferenceResultChunk {
+    public record EmbeddingChunk(String matchedText, double[] embedding) implements Writeable, ToXContentObject {
 
         public EmbeddingChunk(StreamInput in) throws IOException {
             this(in.readString(), in.readDoubleArray());

@@ -9,7 +9,8 @@ package org.elasticsearch.xpack.core.ml.inference.results;
 
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.inference.InferenceResultChunk;
+import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 
 import java.io.IOException;
@@ -23,7 +24,9 @@ public class ChunkedTextExpansionResults extends ChunkedNlpInferenceResults {
     public static final String NAME = "chunked_text_expansion_result";
 
     public record ChunkedResult(String matchedText, List<TextExpansionResults.WeightedToken> weightedTokens)
-        implements InferenceResultChunk {
+        implements
+        Writeable,
+        ToXContentObject {
 
         public ChunkedResult(StreamInput in) throws IOException {
             this(in.readString(), in.readCollectionAsList(TextExpansionResults.WeightedToken::new));
