@@ -15,13 +15,14 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.inference.ModelConfigurations;
 import org.elasticsearch.inference.ServiceSettings;
+import org.elasticsearch.inference.SimilarityMeasure;
 import org.elasticsearch.xcontent.XContentBuilder;
-import org.elasticsearch.xpack.inference.common.SimilarityMeasure;
 
 import java.io.IOException;
 import java.net.URI;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import static org.elasticsearch.xpack.inference.services.ServiceFields.DIMENSIONS;
 import static org.elasticsearch.xpack.inference.services.ServiceFields.MAX_INPUT_TOKENS;
@@ -111,12 +112,12 @@ public class OpenAiServiceSettings implements ServiceSettings {
         return organizationId;
     }
 
-    public SimilarityMeasure similarity() {
-        return similarity;
+    public Optional<SimilarityMeasure> similarity() {
+        return Optional.ofNullable(similarity);
     }
 
-    public Integer dimensions() {
-        return dimensions;
+    public Optional<Integer> dimensions() {
+        return Optional.ofNullable(dimensions);
     }
 
     public Integer maxInputTokens() {
