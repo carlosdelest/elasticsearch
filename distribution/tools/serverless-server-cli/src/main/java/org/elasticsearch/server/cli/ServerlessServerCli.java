@@ -20,22 +20,52 @@ package org.elasticsearch.server.cli;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import joptsimple.OptionSet;
 
+import org.elasticsearch.bootstrap.ServerArgs;
+import org.elasticsearch.cli.ExitCodes;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
+import org.elasticsearch.cli.UserException;
+import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.core.CheckedConsumer;
+import org.elasticsearch.core.IOUtils;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.env.Environment;
 
 import java.io.IOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class ServerlessServerCli extends ServerCli {
 
     static final String PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP = "es.serverless.processors_overcommit_factor";
     static final String APM_PROJECT_ID_SETTING = "telemetry.agent.global_labels.project_id";
+    static final String DIAGNOSTICS_TARGET_PATH_SYSPROP = "es.serverless.path.diagnostics";
+    private static final String DEFAULT_DIAGNOSTICS_TARGET_PATH = "/mnt/elastic/diagnostics";
+    static final String HEAP_DUMP_PATH_JVM_OPT = "-XX:HeapDumpPath=";
+    static final String REPLAY_DATA_FILE_JVM_OPT = "-XX:ReplayDataFile=";
+    private static final DateTimeFormatter ZIP_FILE_SUFFIX_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+        .withZone(ZoneId.from(ZoneOffset.UTC));
+
+    static final CheckedConsumer<Integer, UserException> NO_OP_EXIT_ACTION = exitCode -> {};
+    CheckedConsumer<Integer, UserException> onExitDiagnosticsAction = NO_OP_EXIT_ACTION;
 
     @Override
     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) throws Exception {
@@ -71,6 +101,163 @@ public class ServerlessServerCli extends ServerCli {
         var newEnv = new Environment(finalSettingsBuilder.build(), env.configFile());
 
         super.execute(terminal, options, newEnv, processInfo);
+    }
+
+    void moveDiagnosticsToTargetPath(
+        int exitCode,
+        Path targetPath,
+        Path heapDumpDataDir,
+        Path replayDir,
+        Path logsDir,
+        Settings settings,
+        Terminal terminal
+    ) throws UserException {
+        try {
+            // We do not look for a specific exitCode. The exit code for a OOME error should be 3 (https://ela.st/oome-exit-code) but it is
+            // undocumented and so it seems better not to rely on it. Instead, we just look for a non-normal exit and for the presence
+            // of a dump file
+            if (exitCode == ExitCodes.OK) {
+                terminal.println("Process terminated with 0 exit code, skipping post-exit diagnostic collection");
+                return;
+            }
+            var dumpFiles = FileSystemUtils.files(heapDumpDataDir, "*.hprof*");
+            if (dumpFiles.length == 0) {
+                terminal.println("No hprof files found, skipping post-exit diagnostic collection");
+                return;
+            }
+
+            Path[] replayFiles = new Path[0];
+            if (replayDir.equals(logsDir) == false) {
+                // Replay files will be already included in logs
+                if (Files.isDirectory(replayDir) == false) {
+                    terminal.errorPrintln(
+                        Strings.format("%s is not a valid directory. The diagnostic file will not contain replay files.", replayDir)
+                    );
+                } else {
+                    replayFiles = FileSystemUtils.files(replayDir, "replay_*.log");
+                }
+            }
+
+            String zipFileName = "";
+            if (ServerlessSharedSettings.PROJECT_ID.exists(settings)) {
+                zipFileName += ServerlessSharedSettings.PROJECT_ID.get(settings) + "_";
+            }
+            final String nodeName = settings.get("node.name");
+            if (nodeName != null) {
+                zipFileName += nodeName + "_";
+            }
+            zipFileName += ZIP_FILE_SUFFIX_FORMATTER.format(Instant.now());
+
+            Path zip = targetPath.resolve(zipFileName + ".zip");
+
+            try (ZipOutputStream stream = new ZipOutputStream(Files.newOutputStream(zip))) {
+                for (Path dumpFile : dumpFiles) {
+                    String target = heapDumpDataDir.relativize(dumpFile).toString();
+                    stream.putNextEntry(new ZipEntry(target));
+                    Files.copy(dumpFile, stream);
+                }
+
+                for (Path replayFile : replayFiles) {
+                    String target = replayDir.relativize(replayFile).toString();
+                    stream.putNextEntry(new ZipEntry(target));
+                    Files.copy(replayFile, stream);
+                }
+
+                if (Files.isDirectory(logsDir) == false) {
+                    terminal.errorPrintln(
+                        Strings.format("%s is not a valid directory. The diagnostic file will not contain log files.", logsDir)
+                    );
+                } else {
+                    Files.walkFileTree(logsDir, new SimpleFileVisitor<>() {
+                        @Override
+                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                            String target = "logs/" + logsDir.relativize(file);
+                            stream.putNextEntry(new ZipEntry(target));
+                            Files.copy(file, stream);
+                            return FileVisitResult.CONTINUE;
+                        }
+                    });
+                }
+            }
+            terminal.println(Strings.format("Diagnostic information saved to [%s]", zip.toAbsolutePath()));
+
+            // Clean up files inserted in the diagnostic bundle, to avoid duplication and conflict over names (which may lead to "stale"
+            // dump files). This is particularly relevant in a Docker environment, where the PID is often stable (always the same, across
+            // container restarts).
+            terminal.println("Cleaning up dump files: " + Stream.of(dumpFiles).map(Path::toString).collect(Collectors.joining(";")));
+            IOUtils.deleteFilesIgnoringExceptions(dumpFiles);
+            if (replayFiles.length > 0) {
+                terminal.println(
+                    "Cleaning up replay files: " + Stream.of(replayFiles).map(Path::toString).collect(Collectors.joining(";"))
+                );
+                IOUtils.deleteFilesIgnoringExceptions(replayFiles);
+            }
+            terminal.println("Finished cleaning up");
+        } catch (IOException e) {
+            throw new UserException(ExitCodes.IO_ERROR, "Cannot copy diagnostic information to {targetPath}", e);
+        }
+    }
+
+    @Override
+    protected ServerProcess startServer(Terminal terminal, ProcessInfo processInfo, ServerArgs args) throws Exception {
+        var tempDir = ServerProcessUtils.setupTempDir(processInfo);
+        var jvmOptions = JvmOptionsParser.determineJvmOptions(args, processInfo, tempDir);
+
+        initializeOnExitDiagnosticsAction(processInfo.sysprops(), args, jvmOptions, terminal);
+
+        var serverProcessBuilder = new ServerProcessBuilder().withTerminal(terminal)
+            .withProcessInfo(processInfo)
+            .withServerArgs(args)
+            .withTempDir(tempDir)
+            .withJvmOptions(jvmOptions);
+        return serverProcessBuilder.start();
+    }
+
+    private static Optional<String> extractJvmOptionValue(String optionPrefix, List<String> jvmOptions) {
+        return jvmOptions.stream().filter(x -> x.startsWith(optionPrefix)).findFirst().map(x -> x.substring(optionPrefix.length()));
+    }
+
+    void initializeOnExitDiagnosticsAction(Map<String, String> sysProps, ServerArgs args, List<String> jvmOptions, Terminal terminal) {
+        final String diagnosticsDir = sysProps.getOrDefault(DIAGNOSTICS_TARGET_PATH_SYSPROP, DEFAULT_DIAGNOSTICS_TARGET_PATH);
+
+        var heapDumpDataDir = extractJvmOptionValue(HEAP_DUMP_PATH_JVM_OPT, jvmOptions);
+        var replayFile = extractJvmOptionValue(REPLAY_DATA_FILE_JVM_OPT, jvmOptions);
+        var replayDir = replayFile.map(p -> Paths.get(p).getParent()).orElse(args.logsDir());
+        if (diagnosticsDir == null || Files.isDirectory(Paths.get(diagnosticsDir)) == false) {
+            terminal.errorPrintln(
+                Strings.format("The diagnostic target path [%s] is not correctly set; OOME diagnostic will not be saved.", diagnosticsDir)
+            );
+        } else if (heapDumpDataDir.isEmpty()) {
+            terminal.errorPrintln("The heap dump path is not correctly set; OOME diagnostic will not be saved.");
+        } else {
+            var diagnosticsPath = Paths.get(diagnosticsDir);
+            var heapDumpDataPath = Paths.get(heapDumpDataDir.get());
+            terminal.println(
+                Strings.format(
+                    "OOME dumps will be read from [%s] and saved to the diagnostic target path [%s].",
+                    heapDumpDataPath.toAbsolutePath().toString(),
+                    diagnosticsPath.toAbsolutePath().toString()
+                )
+            );
+            onExitDiagnosticsAction = exitCode -> {
+                terminal.println("Starting post-exit diagnostic collection, exit code is " + exitCode);
+                moveDiagnosticsToTargetPath(
+                    exitCode,
+                    diagnosticsPath,
+                    heapDumpDataPath,
+                    replayDir,
+                    args.logsDir(),
+                    args.nodeSettings(),
+                    terminal
+                );
+            };
+        }
+    }
+
+    @Override
+    protected void onExit(int exitCode) throws UserException {
+        onExitDiagnosticsAction.accept(exitCode);
+        super.onExit(exitCode);
     }
 
     @Override
