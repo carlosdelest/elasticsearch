@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 
 import static org.elasticsearch.xpack.inference.services.ServiceFields.DIMENSIONS;
 import static org.elasticsearch.xpack.inference.services.ServiceFields.MAX_INPUT_TOKENS;
@@ -114,11 +113,11 @@ public class CohereServiceSettings implements ServiceSettings {
     }
 
     public SimilarityMeasure similarity() {
-        return Optional.ofNullable(similarity);
+        return similarity;
     }
 
     public Integer dimensions() {
-        return Optional.ofNullable(dimensions);
+        return dimensions;
     }
 
     public Integer getMaxInputTokens() {
