@@ -52,9 +52,9 @@ echo '--- Creating project'
 resetCredentials() {
     CRED_RESULT=$(curl -H "Authorization: ApiKey $API_KEY" \
       -H "Content-Type: application/json" \
-      "${ENV_URL}/api/v1/serverless/projects/elasticsearch/$PROJECT_ID/_reset-credentials" \
+      "${ENV_URL}/api/v1/serverless/projects/elasticsearch/$PROJECT_ID/_reset-internal-credentials" \
       -XPOST)
-    
+
     CREDCHECK=$((echo $CRED_RESULT | jq -e -r '.username') &> 0 && echo "true" || echo "false")
     if [ $CREDCHECK == "false" ]; then
         echo "Resetting credentials failed. Response: $CRED_RESULT"
