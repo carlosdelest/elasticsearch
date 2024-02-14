@@ -27,6 +27,7 @@ import org.elasticsearch.inference.ModelRegistry;
 import org.elasticsearch.inference.ModelSettings;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -256,9 +257,9 @@ public class BulkShardRequestInferenceProvider {
                 }
                 // TODO We won't batch until chunkedInfer has batching support
                 for (String inferenceFieldName : inferenceFieldNames) {
-                    ActionListener<ChunkedInferenceServiceResults> inferenceResultsListener = new ActionListener<>() {
+                    ActionListener<List<ChunkedInferenceServiceResults>> inferenceResultsListener = new ActionListener<>() {
                         @Override
-                        public void onResponse(ChunkedInferenceServiceResults results) {
+                        public void onResponse(List<ChunkedInferenceServiceResults> results) {
                             if (results == null) {
                                 onBulkItemFailure.apply(
                                     bulkItemRequest,
@@ -271,7 +272,13 @@ public class BulkShardRequestInferenceProvider {
 
                             Map<String, Object> inferenceFieldResult = new LinkedHashMap<>();
                             inferenceFieldResult.putAll(new ModelSettings(inferenceProvider.model).asMap());
-                            inferenceFieldResult.put(INFERENCE_RESULTS, results.chunksAsMap());
+                            inferenceFieldResult.put(
+                                INFERENCE_RESULTS,
+                                results.stream()
+                                    .map(ChunkedInferenceServiceResults::chunksAsMap)
+                                    .flatMap(Collection::stream)
+                                    .collect(Collectors.toList())
+                            );
                             rootInferenceFieldMap.put(inferenceFieldName, inferenceFieldResult);
                         }
 
