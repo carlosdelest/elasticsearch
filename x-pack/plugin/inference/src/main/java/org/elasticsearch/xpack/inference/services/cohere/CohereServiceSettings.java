@@ -17,8 +17,9 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.inference.ModelConfigurations;
 import org.elasticsearch.inference.ServiceSettings;
-import org.elasticsearch.inference.SimilarityMeasure;
+import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xpack.inference.common.SimilarityMeasure;
 
 import java.io.IOException;
 import java.net.URI;
@@ -112,11 +113,11 @@ public class CohereServiceSettings implements ServiceSettings {
         return uri;
     }
 
-    public SimilarityMeasure similarity() {
+    public SimilarityMeasure getSimilarity() {
         return similarity;
     }
 
-    public Integer dimensions() {
+    public Integer getDimensions() {
         return dimensions;
     }
 
@@ -161,6 +162,11 @@ public class CohereServiceSettings implements ServiceSettings {
         }
 
         return builder;
+    }
+
+    @Override
+    public ToXContentObject getFilteredXContentObject() {
+        return this;
     }
 
     @Override
