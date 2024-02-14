@@ -9,6 +9,7 @@
 package org.elasticsearch.inference;
 
 import java.util.List;
+import java.util.Map;
 
 public interface ChunkedInferenceServiceResults extends InferenceServiceResults {
 
@@ -22,4 +23,5 @@ public interface ChunkedInferenceServiceResults extends InferenceServiceResults 
         throw new UnsupportedOperationException("Chunked results are not returned in the legacy format");
     }
 
+    List<Map<String, Object>> chunksAsMap();
 }

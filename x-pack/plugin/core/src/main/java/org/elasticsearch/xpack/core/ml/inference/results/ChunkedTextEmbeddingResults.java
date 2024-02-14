@@ -125,7 +125,12 @@ public class ChunkedTextEmbeddingResults extends ChunkedNlpInferenceResults {
 
     @Override
     void addMapFields(Map<String, Object> map) {
-        map.put(resultsField, chunks.stream().map(EmbeddingChunk::asMap).collect(Collectors.toList()));
+        map.put(resultsField, chunksAsMap());
+    }
+
+    @Override
+    public List<Map<String, Object>> chunksAsMap() {
+        return chunks.stream().map(EmbeddingChunk::asMap).collect(Collectors.toList());
     }
 
     @Override

@@ -97,14 +97,19 @@ public class ChunkedTextExpansionResults extends ChunkedNlpInferenceResults {
 
     @Override
     void addMapFields(Map<String, Object> map) {
-        map.put(resultsField, chunks.stream().map(ChunkedResult::asMap).collect(Collectors.toList()));
+        map.put(resultsField, chunksAsMap());
     }
 
     @Override
     public Map<String, Object> asMap(String outputField) {
         var map = super.asMap(outputField);
-        map.put(resultsField, chunks.stream().map(ChunkedResult::asMap).collect(Collectors.toList()));
+        map.put(resultsField, chunksAsMap());
         return map;
+    }
+
+    @Override
+    public List<Map<String, Object>> chunksAsMap() {
+        return chunks.stream().map(ChunkedResult::asMap).collect(Collectors.toList());
     }
 
     @Override

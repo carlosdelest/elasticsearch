@@ -76,7 +76,12 @@ public class ChunkedTextEmbeddingResults implements ChunkedInferenceServiceResul
 
     @Override
     public Map<String, Object> asMap() {
-        return Map.of(CHUNK_EMBEDDINGS_FIELD_NAME, chunks.stream().map(EmbeddingChunk::asMap).toList());
+        return Map.of(CHUNK_EMBEDDINGS_FIELD_NAME, chunksAsMap());
+    }
+
+    @Override
+    public List<Map<String, Object>> chunksAsMap() {
+        return chunks.stream().map(EmbeddingChunk::asMap).toList();
     }
 
     @Override

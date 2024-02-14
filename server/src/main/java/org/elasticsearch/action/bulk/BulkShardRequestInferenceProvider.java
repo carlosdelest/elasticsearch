@@ -52,6 +52,7 @@ public class BulkShardRequestInferenceProvider {
 
     // Contains the inference result when it's a sparse vector
     public static final String MODEL_INFO_FIELD = "model";
+    public static final String INFERENCE_RESULTS = "inference_results";
 
     private final ClusterState clusterState;
     private final Map<String, InferenceProvider> inferenceProvidersMap;
@@ -270,7 +271,7 @@ public class BulkShardRequestInferenceProvider {
 
                             Map<String, Object> inferenceFieldResult = new LinkedHashMap<>();
                             inferenceFieldResult.putAll(new ModelSettings(inferenceProvider.model).asMap());
-                            inferenceFieldResult.putAll(results.asMap());
+                            inferenceFieldResult.put(INFERENCE_RESULTS, results.chunksAsMap());
                             rootInferenceFieldMap.put(inferenceFieldName, inferenceFieldResult);
                         }
 

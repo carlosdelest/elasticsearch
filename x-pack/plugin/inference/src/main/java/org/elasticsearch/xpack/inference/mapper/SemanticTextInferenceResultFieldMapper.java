@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.inference.mapper;
 
 import org.apache.lucene.search.Query;
+import org.elasticsearch.action.bulk.BulkShardRequestInferenceProvider;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.index.IndexVersion;
 import org.elasticsearch.index.mapper.DocumentParserContext;
@@ -29,11 +30,10 @@ import org.elasticsearch.index.mapper.vectors.SparseVectorFieldMapper;
 import org.elasticsearch.index.query.SearchExecutionContext;
 import org.elasticsearch.inference.ModelSettings;
 import org.elasticsearch.inference.SimilarityMeasure;
+import org.elasticsearch.inference.TaskType;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.xcontent.XContentParser;
-import org.elasticsearch.xpack.core.inference.results.ChunkedSparseEmbeddingResults;
-import org.elasticsearch.xpack.core.inference.results.ChunkedTextEmbeddingResults;
 import org.elasticsearch.xpack.core.ml.inference.results.ChunkedNlpInferenceResults;
 
 import java.io.IOException;
@@ -138,9 +138,7 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
     @Override
     protected void parseCreateField(DocumentParserContext context) throws IOException {
         XContentParser parser = context.parser();
-        if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
-            throw new DocumentParsingException(parser.getTokenLocation(), "Expected a START_OBJECT, got " + parser.currentToken());
-        }
+        failIfTokenIsNot(parser, XContentParser.Token.START_OBJECT);
 
         parseAllFields(context);
     }
@@ -149,9 +147,7 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
         XContentParser parser = context.parser();
         MapperBuilderContext mapperBuilderContext = MapperBuilderContext.root(false, false);
         for (XContentParser.Token token = parser.nextToken(); token != XContentParser.Token.END_OBJECT; token = parser.nextToken()) {
-            if (token != XContentParser.Token.FIELD_NAME) {
-                throw new DocumentParsingException(parser.getTokenLocation(), "Expected a FIELD_NAME, got " + token);
-            }
+            failIfTokenIsNot(parser, XContentParser.Token.FIELD_NAME);
 
             parseSingleField(context, mapperBuilderContext);
         }
@@ -169,29 +165,15 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
             );
         }
         parser.nextToken();
-        parseFieldResults(context, mapperBuilderContext, fieldName);
-    }
-
-    private static void parseFieldResults(DocumentParserContext context, MapperBuilderContext mapperBuilderContext, String fieldName)
-        throws IOException {
-        XContentParser parser = context.parser();
-        if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
-            throw new DocumentParsingException(parser.getTokenLocation(), "Expected a START_OBJECT, got " + parser.currentToken());
-        }
+        failIfTokenIsNot(parser, XContentParser.Token.START_OBJECT);
         parser.nextToken();
         ModelSettings modelSettings = ModelSettings.parse(parser);
         for (XContentParser.Token token = parser.nextToken(); token != XContentParser.Token.END_OBJECT; token = parser.nextToken()) {
-            if (token != XContentParser.Token.FIELD_NAME) {
-                throw new DocumentParsingException(parser.getTokenLocation(), "Expected a FIELD_NAME, got " + token);
-            }
+            failIfTokenIsNot(parser, XContentParser.Token.FIELD_NAME);
 
             String currentName = parser.currentName();
-
-            if (ChunkedSparseEmbeddingResults.CHUNK_EMBEDDINGS_FIELD_NAME.equals(currentName)) {
-                NestedObjectMapper nestedObjectMapper = createSparseEmbeddingsObjectMapper(context, mapperBuilderContext, fieldName);
-                parseFieldInferenceChunks(context, mapperBuilderContext, fieldName, modelSettings, nestedObjectMapper);
-            } else if (ChunkedTextEmbeddingResults.CHUNK_EMBEDDINGS_FIELD_NAME.equals(currentName)) {
-                NestedObjectMapper nestedObjectMapper = createTextEmbeddingsObjectMapper(
+            if (BulkShardRequestInferenceProvider.INFERENCE_RESULTS.equals(currentName)) {
+                NestedObjectMapper nestedObjectMapper = createInferenceResultsObjectMapper(
                     context,
                     mapperBuilderContext,
                     fieldName,
@@ -214,9 +196,8 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
     ) throws IOException {
         XContentParser parser = context.parser();
 
-        if (parser.nextToken() != XContentParser.Token.START_ARRAY) {
-            throw new DocumentParsingException(parser.getTokenLocation(), "Expected a START_ARRAY, got " + parser.currentToken());
-        }
+        parser.nextToken();
+        failIfTokenIsNot(parser, XContentParser.Token.START_ARRAY);
 
         for (XContentParser.Token token = parser.nextToken(); token != XContentParser.Token.END_ARRAY; token = parser.nextToken()) {
             DocumentParserContext nestedContext = context.createNestedContext(nestedObjectMapper);
@@ -232,15 +213,11 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
         XContentParser parser = context.parser();
         DocumentParserContext childContext = context.createChildContext(objectMapper);
 
-        if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
-            throw new DocumentParsingException(parser.getTokenLocation(), "Expected a START_OBJECT, got " + parser.currentToken());
-        }
+        failIfTokenIsNot(parser, XContentParser.Token.START_OBJECT);
 
         Set<String> visitedSubfields = new HashSet<>();
         for (XContentParser.Token token = parser.nextToken(); token != XContentParser.Token.END_OBJECT; token = parser.nextToken()) {
-            if (token != XContentParser.Token.FIELD_NAME) {
-                throw new DocumentParsingException(parser.getTokenLocation(), "Expected a FIELD_NAME, got " + parser.currentToken());
-            }
+            failIfTokenIsNot(parser, XContentParser.Token.FIELD_NAME);
 
             String currentName = parser.currentName();
             visitedSubfields.add(currentName);
@@ -272,61 +249,41 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
         }
     }
 
-    private static NestedObjectMapper createSparseEmbeddingsObjectMapper(
-        DocumentParserContext context,
-        MapperBuilderContext mapperBuilderContext,
-        String fieldName
-    ) {
-        IndexVersion indexVersionCreated = context.indexSettings().getIndexVersionCreated();
-        SparseVectorFieldMapper.Builder sparseVectorMapperBuilder = new SparseVectorFieldMapper.Builder(
-            ChunkedNlpInferenceResults.INFERENCE
-        );
-        TextFieldMapper.Builder textMapperBuilder = new TextFieldMapper.Builder(
-            ChunkedNlpInferenceResults.TEXT,
-            indexVersionCreated,
-            context.indexAnalyzers()
-        ).index(false).store(false);
-
-        NestedObjectMapper.Builder nestedBuilder = new NestedObjectMapper.Builder(
-            fieldName,
-            context.indexSettings().getIndexVersionCreated()
-        );
-        nestedBuilder.add(sparseVectorMapperBuilder).add(textMapperBuilder);
-
-        return nestedBuilder.build(mapperBuilderContext);
-    }
-
-    private static NestedObjectMapper createTextEmbeddingsObjectMapper(
+    private static NestedObjectMapper createInferenceResultsObjectMapper(
         DocumentParserContext context,
         MapperBuilderContext mapperBuilderContext,
         String fieldName,
         ModelSettings modelSettings
     ) {
         IndexVersion indexVersionCreated = context.indexSettings().getIndexVersionCreated();
-        DenseVectorFieldMapper.Builder denseVectorMapperBuilder = new DenseVectorFieldMapper.Builder(
-            ChunkedNlpInferenceResults.INFERENCE,
-            indexVersionCreated
-        );
-        SimilarityMeasure similarity = modelSettings.similarity();
-        if (similarity != null) {
-            switch (similarity) {
-                case COSINE:
-                    denseVectorMapperBuilder.similarity(DenseVectorFieldMapper.VectorSimilarity.COSINE);
-                    break;
-                case DOT_PRODUCT:
-                    denseVectorMapperBuilder.similarity(DenseVectorFieldMapper.VectorSimilarity.DOT_PRODUCT);
-                    break;
-                default:
-                    throw new IllegalArgumentException(
+        FieldMapper.Builder resultsBuilder;
+        if (modelSettings.taskType() == TaskType.SPARSE_EMBEDDING) {
+            resultsBuilder = new SparseVectorFieldMapper.Builder(ChunkedNlpInferenceResults.INFERENCE);
+        } else if (modelSettings.taskType() == TaskType.TEXT_EMBEDDING) {
+            DenseVectorFieldMapper.Builder denseVectorMapperBuilder = new DenseVectorFieldMapper.Builder(
+                ChunkedNlpInferenceResults.INFERENCE,
+                indexVersionCreated
+            );
+            SimilarityMeasure similarity = modelSettings.similarity();
+            if (similarity != null) {
+                switch (similarity) {
+                    case COSINE -> denseVectorMapperBuilder.similarity(DenseVectorFieldMapper.VectorSimilarity.COSINE);
+                    case DOT_PRODUCT -> denseVectorMapperBuilder.similarity(DenseVectorFieldMapper.VectorSimilarity.DOT_PRODUCT);
+                    default -> throw new IllegalArgumentException(
                         "Unknown similarity measure for field [" + fieldName + "] in model settings: " + similarity
                     );
+                }
             }
+            Integer dimensions = modelSettings.dimensions();
+            if (dimensions == null) {
+                throw new IllegalArgumentException("Model settings for field [" + fieldName + "] must contain dimensions");
+            }
+            denseVectorMapperBuilder.dimensions(dimensions);
+            resultsBuilder = denseVectorMapperBuilder;
+        } else {
+            throw new IllegalArgumentException("Unknown task type for field [" + fieldName + "]: " + modelSettings.taskType());
         }
-        Integer dimensions = modelSettings.dimensions();
-        if (dimensions == null) {
-            throw new IllegalArgumentException("Model settings for field [" + fieldName + "] must contain dimensions");
-        }
-        denseVectorMapperBuilder.dimensions(dimensions);
+
         TextFieldMapper.Builder textMapperBuilder = new TextFieldMapper.Builder(
             ChunkedNlpInferenceResults.TEXT,
             indexVersionCreated,
@@ -337,7 +294,7 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
             fieldName,
             context.indexSettings().getIndexVersionCreated()
         );
-        nestedBuilder.add(denseVectorMapperBuilder).add(textMapperBuilder);
+        nestedBuilder.add(resultsBuilder).add(textMapperBuilder);
 
         return nestedBuilder.build(mapperBuilderContext);
     }
@@ -350,6 +307,15 @@ public class SemanticTextInferenceResultFieldMapper extends MetadataFieldMapper 
             parser.skipChildren();
         } else if (token.isValue() == false && token != XContentParser.Token.VALUE_NULL) {
             throw new DocumentParsingException(parser.getTokenLocation(), "Expected a START_* or VALUE_*, got " + token);
+        }
+    }
+
+    private static void failIfTokenIsNot(XContentParser parser, XContentParser.Token expected) {
+        if (parser.currentToken() != expected) {
+            throw new DocumentParsingException(
+                parser.getTokenLocation(),
+                "Expected a " + expected.toString() + ", got " + parser.currentToken()
+            );
         }
     }
 

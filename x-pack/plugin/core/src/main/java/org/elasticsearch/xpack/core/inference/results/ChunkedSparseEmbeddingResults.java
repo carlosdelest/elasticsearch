@@ -49,7 +49,12 @@ public class ChunkedSparseEmbeddingResults implements ChunkedInferenceServiceRes
 
     @Override
     public Map<String, Object> asMap() {
-        return Map.of(CHUNK_EMBEDDINGS_FIELD_NAME, chunkedResults.stream().map(ChunkedTextExpansionResults.ChunkedResult::asMap).toList());
+        return Map.of(CHUNK_EMBEDDINGS_FIELD_NAME, chunksAsMap());
+    }
+
+    @Override
+    public List<Map<String, Object>> chunksAsMap() {
+        return chunkedResults.stream().map(ChunkedTextExpansionResults.ChunkedResult::asMap).toList();
     }
 
     @Override
