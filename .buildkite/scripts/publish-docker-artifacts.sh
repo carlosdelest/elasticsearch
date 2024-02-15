@@ -33,6 +33,9 @@ if [[ -z "${DEPLOY_ARCH}" ]]; then
         docker push ${X86_IMAGE_TAG}
         docker push ${ARM_IMAGE_TAG}
         push_docker_manifest ${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT} ${X86_IMAGE_TAG} ${ARM_IMAGE_TAG}
+        if [[ -n "${DOCKER_IMAGE_TAG}" ]]; then
+          push_docker_manifest ${DOCKER_IMAGE}:${DOCKER_IMAGE_TAG} ${X86_IMAGE_TAG} ${ARM_IMAGE_TAG}
+        fi
     else
         echo "--- Docker image $IMAGE_TAG already pubslished. Not rebuilding..."
     fi
@@ -51,6 +54,9 @@ elif [ "$DEPLOY_ARCH" == "x86_64" ]; then
         docker_login
         docker push ${ARCH_IMAGE_TAG}
         push_docker_manifest ${DOCKER_IMAGE}:${GIT_ABBREV_COMMIT} ${ARCH_IMAGE_TAG}
+        if [[ -n "${DOCKER_IMAGE_TAG}" ]]; then
+          push_docker_manifest ${DOCKER_IMAGE}:${DOCKER_IMAGE_TAG} ${ARCH_IMAGE_TAG}
+        fi
     else
         echo "--- Docker image $ARCH_IMAGE_TAG already pubslished. Not rebuilding..."
     fi
