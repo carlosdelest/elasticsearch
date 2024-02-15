@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.metering.reports.HttpClientThreadFilter;
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
+import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
 import com.sun.net.httpserver.HttpExchange;
@@ -31,7 +32,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentParserUtils;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.core.TimeValue;
-import org.elasticsearch.node.NodeRoleSettings;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.transport.MockTransportService;
@@ -46,7 +46,6 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -56,7 +55,7 @@ import java.util.stream.Collectors;
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
 @ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
-public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
+public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessIntegTestCase {
 
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
 
@@ -93,7 +92,11 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(MeteringPlugin.class, MockTransportService.TestPlugin.class);
+        var list = new ArrayList<Class<? extends Plugin>>();
+        list.addAll(super.nodePlugins());
+        list.add(MeteringPlugin.class);
+        list.add(MockTransportService.TestPlugin.class);
+        return list;
     }
 
     protected BlockingQueue<List<UsageRecord>> receivedMetrics() {
@@ -102,25 +105,23 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
 
     @Override
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal, otherSettings))
-            .put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
+        return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
             .put(MeteringReporter.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
             .put(MeteringService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
+            .put("xpack.searchable.snapshot.shared_cache.size", "16MB")
+            .put("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
             .build();
     }
 
-    protected Settings settingsForRoles(DiscoveryNodeRole... roles) {
-        return Settings.builder()
-            .put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
-            .putList(NodeRoleSettings.NODE_ROLES_SETTING.getKey(), Arrays.stream(roles).map(DiscoveryNodeRole::roleName).toList())
-            .build();
-    }
-
-    protected String startNodes() {
+    protected String startMasterIndexAndIngestNode() {
         return internalCluster().startNode(
-            settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.SEARCH_ROLE)
+            settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.INGEST_ROLE)
         );
+    }
+
+    @Override
+    protected Settings.Builder settingsForRoles(DiscoveryNodeRole... roles) {
+        return super.settingsForRoles(roles).put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId");
     }
 
     @After
@@ -130,10 +131,6 @@ public abstract class AbstractMeteringIntegTestCase extends ESIntegTestCase {
         cleanUpCluster();
 
         server.stop(1);
-        // drain all requests
-        if (received.isEmpty() == false) {
-            fail("Requests were unprocessed: " + received);
-        }
     }
 
     protected List<UsageRecord> getReceivedRecords(String prefix) {

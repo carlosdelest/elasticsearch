@@ -24,7 +24,6 @@ import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequ
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.ingest.PutPipelineRequest;
-import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
@@ -79,14 +78,8 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
             .build();
     }
 
-    protected String startNodes() {
-        return internalCluster().startNode(
-            settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.INGEST_ROLE)
-        );
-    }
-
     @Before
-    public void setup() {
+    public void init() {
         createNewFieldPipeline();
     }
 
@@ -102,8 +95,8 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
     public void testIngestMetricsAreRecordedThroughBulk() throws InterruptedException, IOException {
         String indexName = "idx1";
-
-        startNodes();
+        startMasterAndIndexNode();
+        startSearchNode();
         createIndex(indexName);
         // size 3*char+int (long size)
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
@@ -127,12 +120,12 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         assertThat(receivedMetrics(), not(empty()));
         usageRecord = getFirstReceivedRecord("ingested-doc:" + indexName);
         assertUsageRecord(indexName, usageRecord, expectedOverriddenAttributes);
-
     }
 
     public void testIngestMetricsAreRecordedThroughIngestPipelines() throws InterruptedException, IOException {
         String indexName2 = "idx2";
-        startNodes();
+        startMasterIndexAndIngestNode();
+        startSearchNode();
         createIndex(indexName2);
 
         client().index(
@@ -164,7 +157,8 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
     public void testDocumentFailingInPipelineNotReported() throws InterruptedException, IOException {
         String indexName3 = "idx3";
-        startNodes();
+        startMasterIndexAndIngestNode();
+        startSearchNode();
         createIndex(indexName3);
         createFailPipeline();
 

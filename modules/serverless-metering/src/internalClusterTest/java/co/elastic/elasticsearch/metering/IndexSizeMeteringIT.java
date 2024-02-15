@@ -23,7 +23,6 @@ import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.plugins.PluginsService;
@@ -52,9 +51,18 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
             .build();
     }
 
-    public void testNodeCanStartWithMeteringEnabled() {
-        startNodes();
+    @Override
+    protected int numberOfReplicas() {
+        return 1;
+    }
 
+    protected int numberOfShards() {
+        return 1;
+    }
+
+    public void testNodeCanStartWithMeteringEnabled() {
+        startMasterAndIndexNode();
+        startSearchNode();
         var plugins = StreamSupport.stream(internalCluster().getInstances(PluginsService.class).spliterator(), false)
             .flatMap(ps -> ps.filterPlugins(MeteringPlugin.class))
             .toList();
@@ -62,16 +70,12 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
     }
 
     public void testSizeMetricsAreRecorded() throws InterruptedException {
-        startNodes();
+        startMasterAndIndexNode();
+        startSearchNode();
+        ensureStableCluster(2);
 
         String indexName = "idx1";
-        assertAcked(
-            prepareCreate(
-                indexName,
-                1,
-                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            )
-        );
+        createIndex(indexName);
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 

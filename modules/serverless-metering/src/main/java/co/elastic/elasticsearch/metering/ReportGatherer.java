@@ -76,6 +76,7 @@ class ReportGatherer {
 
     void start() {
         nextRun = threadPool.schedule(this::gatherReports, reportPeriod, executor);
+        log.trace("Scheduled first task");
     }
 
     boolean cancel() {
@@ -88,6 +89,7 @@ class ReportGatherer {
     }
 
     private void gatherReports() {
+        log.trace("starting to gather reports");
         if (cancel) return; // cancelled - nothing to do
 
         runTimer.start();
@@ -100,22 +102,17 @@ class ReportGatherer {
             runTimer.stop();
 
             // work out how long it took
-            TimeValue runtime = runTimer.lastTaskTime();
-            long remainingNanos = reportPeriod.nanos() - runtime.nanos();
-            if (remainingNanos < 0) {
-                // TODO: report to somewhere that cares
-                log.error("Gathering metrics took longer than the report period ({})!", runtime);
-                remainingNanos = 0;
-            } else if (remainingNanos < reportPeriod.nanos() / 2) {
-                // TODO: report to somewhere that cares
-                log.warn("Gathering metrics took {}", runtime);
-            }
+            TimeValue remainingNanos = getRemainingNanos();
 
             if (cancel == false) {
                 try {
                     // schedule the next run
                     // TODO: jitter within the expected schedules
-                    nextRun = threadPool.schedule(this::gatherReports, TimeValue.timeValueNanos(remainingNanos), executor);
+                    nextRun = threadPool.schedule(this::gatherReports, remainingNanos, executor);
+                    log.trace(
+                        () -> Strings.format("scheduled next run in %s.%s seconds", remainingNanos.getSeconds(), remainingNanos.getMillis())
+                    );
+
                 } catch (EsRejectedExecutionException e) {
                     nextRun = null;
                     if (e.isExecutorShutdown()) {
@@ -128,7 +125,22 @@ class ReportGatherer {
                     }
                 }
             }
+
         }
+    }
+
+    private TimeValue getRemainingNanos() {
+        TimeValue runtime = runTimer.lastTaskTime();
+        long remainingNanos = reportPeriod.nanos() - runtime.nanos();
+        if (remainingNanos < 0) {
+            // TODO: report to somewhere that cares
+            log.error("Gathering metrics took longer than the report period ({})!", runtime);
+            remainingNanos = 0;
+        } else if (remainingNanos < reportPeriod.nanos() / 2) {
+            // TODO: report to somewhere that cares
+            log.warn("Gathering metrics took {}", runtime);
+        }
+        return TimeValue.timeValueNanos(remainingNanos);
     }
 
     private void reportMetrics() {

@@ -23,6 +23,7 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.util.CollectionUtils;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.threadpool.Scheduler;
@@ -124,6 +125,7 @@ public class MeteringReporter extends AbstractLifecycleComponent {
     protected void doStop() {}
 
     public void sendRecords(List<UsageRecord> records) {
+        log.trace(() -> Strings.format("Sending records: %s", records));
         if (records.isEmpty()) return;
 
         List<List<UsageRecord>> batches = CollectionUtils.eagerPartition(records, batchSize);

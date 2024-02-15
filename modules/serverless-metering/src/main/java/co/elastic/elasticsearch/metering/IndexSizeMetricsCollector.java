@@ -114,4 +114,5 @@ class IndexSizeMetricsCollector implements MetricsCollector {
         }
         return metrics;
     }
+
 }

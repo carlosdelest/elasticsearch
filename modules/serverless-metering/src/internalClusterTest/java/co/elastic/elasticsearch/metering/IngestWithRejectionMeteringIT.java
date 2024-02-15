@@ -27,14 +27,12 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentSizeObserver;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 
-import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.ingest.PutPipelineRequest;
 import org.elasticsearch.action.support.WriteRequest;
-import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
@@ -44,6 +42,7 @@ import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.XContentTestUtils;
+import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.xcontent.XContentType;
 
 import java.io.IOException;
@@ -57,7 +56,10 @@ import java.util.concurrent.TimeUnit;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
-@LuceneTestCase.AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/1419")
+@TestLogging(
+    value = "co.elastic.elasticsearch.metering:TRACE",
+    reason = "This test benefits from the trace messages in the metering module."
+)
 public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase {
 
     private static final int ITEMS_IN_BULK = 100;
@@ -97,8 +99,9 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
     }
 
     public void testDocumentsNotMeteredWhenRejectionInBulk() throws Exception {
-        internalCluster().startNode(settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE));
-        internalCluster().startNode(settingsForRoles(DiscoveryNodeRole.SEARCH_ROLE));
+        startMasterAndIndexNode();
+        startSearchNode();
+
         ensureStableCluster(2);
 
         String index = "test1";
@@ -111,17 +114,17 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         long successCount = executeRequests(request1, request2);
         ensureGreen();
         if (successCount > 0) {
-            waitUntil(() -> getReceivedRecords("ingested-doc").size() > 0, 30, TimeUnit.SECONDS);
+            boolean hasReceivedRecords = waitUntil(() -> getReceivedRecords("ingested-doc").size() > 0, 30, TimeUnit.SECONDS);
+            logger.info("Has received records = " + hasReceivedRecords);
+
             UsageRecord usageRecord = getFirstReceivedRecord("ingested-doc");
             assertThat(usageRecord.usage().quantity(), equalTo(successCount * documentNormalizedSize));
         }
     }
 
     public void testDocumentsNotMeteredWhenRejectionAfterPipeline() throws Exception {
-        internalCluster().startNode(
-            settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.INGEST_ROLE)
-        );
-        internalCluster().startNode(settingsForRoles(DiscoveryNodeRole.SEARCH_ROLE));
+        startMasterIndexAndIngestNode();
+        startSearchNode();
         ensureStableCluster(2);
         createPipeline("pipeline");
 
@@ -136,7 +139,8 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         long successCount = executeRequests(request1, request2);
         ensureGreen();
         if (successCount > 0) {
-            waitUntil(() -> getReceivedRecords("ingested-doc").size() > 0, 30, TimeUnit.SECONDS);
+            boolean hasReceivedRecords = waitUntil(() -> getReceivedRecords("ingested-doc").size() > 0, 30, TimeUnit.SECONDS);
+            logger.info("Has received records = " + hasReceivedRecords);
             UsageRecord usageRecord = getFirstReceivedRecord("ingested-doc");
             assertThat(usageRecord.usage().quantity(), equalTo(successCount * documentNormalizedSize));
         }
@@ -162,15 +166,21 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
 
             BulkResponse bulkItemResponses1 = bulkFuture1.actionGet();
             BulkResponse bulkItemResponses2 = bulkFuture2.actionGet();
+            logger.info("response 1: " + formatResponse(bulkItemResponses1));
+            logger.info("response 2: " + formatResponse(bulkItemResponses2));
 
-            successCount += Arrays.stream(bulkItemResponses1.getItems()).filter(b -> b.isFailed() != false).count();
-            successCount += Arrays.stream(bulkItemResponses2.getItems()).filter(b -> b.isFailed() != false).count();
+            successCount += Arrays.stream(bulkItemResponses1.getItems()).filter(b -> b.isFailed() == false).count();
+            successCount += Arrays.stream(bulkItemResponses2.getItems()).filter(b -> b.isFailed() == false).count();
         } catch (EsRejectedExecutionException e) {
             logger.info(e);
             // ignored, one of the two bulk requests was rejected outright due to the write queue being full
         }
         logger.info("success count " + successCount);
         return successCount;
+    }
+
+    private String formatResponse(BulkResponse bulkItemResponses) {
+        return bulkItemResponses.hasFailures() ? bulkItemResponses.buildFailureMessage() : "success";
     }
 
     private static Map<String, String> documentSource() {
