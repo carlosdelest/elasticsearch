@@ -4,9 +4,9 @@
 #
 # The updated environment is provided via ENVIRONMENT variable. The seedling
 # step will branch and execute pipeline snippets at the following location:
-# .buildkite/quality-gates/pipeline.emergency.tests-qa.yaml
-# .buildkite/quality-gates/pipeline.emergency.tests-staging.yaml
-# .buildkite/quality-gates/pipeline.emergency.tests-production.yaml
+# .buildkite/quality-gates/emergency/pipeline.emergency.tests-qa.yaml
+# .buildkite/quality-gates/emergency/pipeline.emergency.tests-staging.yaml
+# .buildkite/quality-gates/emergency/pipeline.emergency.tests-production.yaml
 #
 # Docs: https://docs.elastic.dev/serverless/qualitygates
 
@@ -17,7 +17,7 @@ env:
 steps:
   - label: ":pipeline::grey_question::seedling: Trigger Elasticsearch Tests for ${ENVIRONMENT}"
     env:
-      QG_PIPELINE_LOCATION: ".buildkite/quality-gates"
+      QG_PIPELINE_LOCATION: ".buildkite/quality-gates/emergency"
     command: "make -C /agent run-environment-tests"
     agents:
       image: "docker.elastic.co/ci-agent-images/quality-gate-seedling:0.0.3"
