@@ -114,10 +114,10 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         long successCount = executeRequests(request1, request2);
         ensureGreen();
         if (successCount > 0) {
-            boolean hasReceivedRecords = waitUntil(() -> getReceivedRecords("ingested-doc").size() > 0, 30, TimeUnit.SECONDS);
+            boolean hasReceivedRecords = waitUntil(() -> hasReceivedRecords("ingested-doc"), 30, TimeUnit.SECONDS);
             logger.info("Has received records = " + hasReceivedRecords);
 
-            UsageRecord usageRecord = getFirstReceivedRecord("ingested-doc");
+            UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc");
             assertThat(usageRecord.usage().quantity(), equalTo(successCount * documentNormalizedSize));
         }
     }
@@ -139,9 +139,9 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         long successCount = executeRequests(request1, request2);
         ensureGreen();
         if (successCount > 0) {
-            boolean hasReceivedRecords = waitUntil(() -> getReceivedRecords("ingested-doc").size() > 0, 30, TimeUnit.SECONDS);
+            boolean hasReceivedRecords = waitUntil(() -> hasReceivedRecords("ingested-doc"), 30, TimeUnit.SECONDS);
             logger.info("Has received records = " + hasReceivedRecords);
-            UsageRecord usageRecord = getFirstReceivedRecord("ingested-doc");
+            UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc");
             assertThat(usageRecord.usage().quantity(), equalTo(successCount * documentNormalizedSize));
         }
     }

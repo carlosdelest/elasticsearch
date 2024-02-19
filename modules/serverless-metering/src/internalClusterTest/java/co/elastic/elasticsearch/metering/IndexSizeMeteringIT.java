@@ -79,9 +79,8 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        waitUntil(() -> receivedMetrics().stream().anyMatch(l -> l.stream().anyMatch(u -> u.id().startsWith("shard-size"))));
-        assertThat(receivedMetrics(), not(empty()));
-        UsageRecord metric = getFirstReceivedRecord("shard-size");
+        waitUntil(() -> hasReceivedRecords("shard-size"));
+        UsageRecord metric = pollReceivedRecordsAndGetFirst("shard-size");
 
         String idPRefix = "shard-size:" + indexName + ":0";
         assertThat(metric.id(), startsWith(idPRefix));
@@ -97,9 +96,8 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         );
         assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
 
-        waitUntil(() -> receivedMetrics().isEmpty() == false);
-        assertThat(receivedMetrics(), not(empty()));
-        metric = getFirstReceivedRecord("shard-size");
+        waitUntil(() -> hasReceivedRecords("shard-size"));
+        metric = pollReceivedRecordsAndGetFirst("shard-size");
         assertThat(metric.id(), startsWith(idPRefix));
         assertThat(metric.usage().type(), equalTo("es_indexed_data"));
         assertThat(metric.usage().quantity(), greaterThan(0L));
