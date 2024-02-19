@@ -129,12 +129,12 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     /**
      * This method is called during node construction to allow for injection.
-     * The DocumentParsingSupplier instance depends on ingestMetricsCollector created during {@link #createComponents}.
-     * The DocumentParsingSupplier instance is being used after the {@link #createComponents}, therefore ingestMetricsCollector
+     * The DocumentParsingProvider instance depends on ingestMetricsCollector created during {@link #createComponents}.
+     * The DocumentParsingProvider instance is being used after the {@link #createComponents}, therefore ingestMetricsCollector
      * should be stored in a volatile field.
      */
     @Override
-    public DocumentParsingProvider getDocumentParsingSupplier() {
+    public DocumentParsingProvider getDocumentParsingProvider() {
         return new MeteringDocumentParsingProvider(this::getIngestMetricsCollector);
     }
 }
