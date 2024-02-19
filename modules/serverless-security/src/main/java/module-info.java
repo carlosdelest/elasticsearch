@@ -16,6 +16,9 @@
  */
 
 import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorOnlyRegistry;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessPutRoleRequestBuilderFactory;
+
+import org.elasticsearch.xpack.core.security.action.role.PutRoleRequestBuilderFactory;
 
 module org.elasticsearch.internal.security {
 
@@ -27,6 +30,8 @@ module org.elasticsearch.internal.security {
     requires org.elasticsearch.security;
 
     exports co.elastic.elasticsearch.serverless.security.operator to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.serverless.security.role to org.elasticsearch.server;
 
     provides org.elasticsearch.xpack.security.operator.OperatorOnlyRegistry with ServerlessOperatorOnlyRegistry;
+    provides PutRoleRequestBuilderFactory with ServerlessPutRoleRequestBuilderFactory;
 }

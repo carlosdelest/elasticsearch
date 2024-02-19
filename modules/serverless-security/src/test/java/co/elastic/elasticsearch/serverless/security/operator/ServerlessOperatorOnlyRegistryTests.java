@@ -124,7 +124,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
         when(restHandler.routes()).thenReturn(handlerRoutes);
         OperatorPrivilegesViolation violation = registry.checkRest(restHandler, unRestrictedRequest, null);
         assertNull(violation);
-        assertNull(unRestrictedRequest.param(RestRequest.RESPONSE_RESTRICTED));
+        assertNull(unRestrictedRequest.param(RestRequest.PATH_RESTRICTED));
 
         // restricted path
         handlerRoutes = Arrays.asList(
@@ -135,7 +135,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
         when(restHandler.routes()).thenReturn(handlerRoutes);
         violation = registry.checkRest(restHandler, unRestrictedRequest, null);
         assertNull(violation);
-        assertThat(restrictedRequest.param(RestRequest.RESPONSE_RESTRICTED), is("serverless"));
+        assertThat(restrictedRequest.param(RestRequest.PATH_RESTRICTED), is("serverless"));
     }
 
 }

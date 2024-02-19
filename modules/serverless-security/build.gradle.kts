@@ -27,6 +27,8 @@ esplugin {
 
 dependencies {
     javaRestTestImplementation(testArtifact(xpackModule("plugin")))
+    javaRestTestImplementation(testArtifact(xpackModule("core")))
+    testImplementation(testArtifact(xpackModule("core")))
     compileOnly(xpackModule("core"))
     compileOnly(xpackModule("security"))
 }

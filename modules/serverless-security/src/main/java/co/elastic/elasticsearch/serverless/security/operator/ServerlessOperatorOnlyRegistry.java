@@ -41,7 +41,7 @@ import java.util.Set;
 public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
 
     private static final Logger logger = LogManager.getLogger(ServerlessOperatorOnlyRegistry.class);
-    private static final Set<String> PARTIALLY_RESTRICTED_PATHS = Set.of("/");
+    private static final Set<String> PARTIALLY_RESTRICTED_PATHS = Set.of("/", "/_security/role/{name}");
 
     private final Set<String> partiallyRestrictedPaths;
 
@@ -83,7 +83,7 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
                 return () -> errorMessage;
             } else if (restHandler.routes().stream().map(RestHandler.Route::getPath).anyMatch(partiallyRestrictedPaths::contains)) {
                 assert Scope.PUBLIC.equals(scope);
-                restRequest.markResponseRestricted("serverless");
+                restRequest.markPathRestricted("serverless");
                 logger.trace("Marked request for uri [{}] as restricted for serverless", restRequest.uri());
             }
         } catch (Exception e) {
