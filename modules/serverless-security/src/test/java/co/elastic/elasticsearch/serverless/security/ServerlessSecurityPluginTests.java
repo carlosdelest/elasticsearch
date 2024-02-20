@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.serverless.security;
 
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings;
 
 import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDED_RESERVED_ROLES_SETTING;
 import static org.hamcrest.Matchers.contains;
@@ -42,6 +43,10 @@ public class ServerlessSecurityPluginTests extends ESTestCase {
             INCLUDED_RESERVED_ROLES_SETTING.get(plugin.additionalSettings()),
             contains("superuser", "remote_monitoring_agent", "remote_monitoring_collector")
         );
+    }
+
+    public void testExcludeRolesSettingIsRegistered() {
+        assertThat(plugin.getSettings(), hasItem(SamlRealmSettings.EXCLUDE_ROLES));
     }
 
 }

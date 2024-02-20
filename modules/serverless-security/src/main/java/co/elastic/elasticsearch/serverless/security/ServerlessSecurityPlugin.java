@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import static org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings.EXCLUDE_ROLES;
 import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDED_RESERVED_ROLES_SETTING;
 import static org.elasticsearch.xpack.security.operator.OperatorPrivileges.OPERATOR_PRIVILEGES_ENABLED;
 
@@ -94,7 +95,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(INCLUDED_RESERVED_ROLES_SETTING, NATIVE_USERS_SETTING, NATIVE_ROLES_SETTING);
+        return List.of(INCLUDED_RESERVED_ROLES_SETTING, NATIVE_USERS_SETTING, NATIVE_ROLES_SETTING, EXCLUDE_ROLES);
     }
 
     @Override
