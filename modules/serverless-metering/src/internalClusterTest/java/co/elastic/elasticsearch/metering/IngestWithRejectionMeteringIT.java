@@ -25,7 +25,6 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentSizeObserver;
-import co.elastic.elasticsearch.metering.reports.UsageRecord;
 
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -50,8 +49,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
@@ -114,11 +113,14 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         long successCount = executeRequests(request1, request2);
         ensureGreen();
         if (successCount > 0) {
-            boolean hasReceivedRecords = waitUntil(() -> hasReceivedRecords("ingested-doc"), 30, TimeUnit.SECONDS);
-            logger.info("Has received records = " + hasReceivedRecords);
-
-            UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc");
-            assertThat(usageRecord.usage().quantity(), equalTo(successCount * documentNormalizedSize));
+            assertBusy(() -> {
+                long reportedQuantity = receivedMetrics().stream()
+                    .flatMap(List::stream)
+                    .filter(m -> m.id().startsWith("ingested-doc"))
+                    .mapToLong(r -> r.usage().quantity())
+                    .sum();
+                assertThat(reportedQuantity, equalTo(successCount * documentNormalizedSize));
+            });
         }
     }
 
@@ -139,10 +141,15 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         long successCount = executeRequests(request1, request2);
         ensureGreen();
         if (successCount > 0) {
-            boolean hasReceivedRecords = waitUntil(() -> hasReceivedRecords("ingested-doc"), 30, TimeUnit.SECONDS);
-            logger.info("Has received records = " + hasReceivedRecords);
-            UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc");
-            assertThat(usageRecord.usage().quantity(), equalTo(successCount * documentNormalizedSize));
+            assertBusy(() -> {
+                long reportedQuantity = receivedMetrics().stream()
+                    .flatMap(List::stream)
+                    .filter(m -> m.id().startsWith("ingested-doc"))
+                    .mapToLong(r -> r.usage().quantity())
+                    .sum();
+                assertThat(reportedQuantity, equalTo(successCount * documentNormalizedSize));
+            });
+
         }
     }
 
