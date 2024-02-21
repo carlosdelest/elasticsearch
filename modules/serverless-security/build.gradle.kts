@@ -26,6 +26,7 @@ esplugin {
 }
 
 dependencies {
+    javaRestTestImplementation(project(":modules:serverless-security"))
     javaRestTestImplementation(testArtifact(xpackModule("plugin")))
     javaRestTestImplementation(testArtifact(xpackModule("core")))
     testImplementation(testArtifact(xpackModule("core")))

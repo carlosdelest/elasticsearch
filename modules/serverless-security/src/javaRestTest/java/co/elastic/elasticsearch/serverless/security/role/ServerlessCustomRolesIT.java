@@ -17,11 +17,14 @@
 
 package co.elastic.elasticsearch.serverless.security.role;
 
+import co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupportedPrivilegesRegistry;
+
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
@@ -32,22 +35,31 @@ import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.elasticsearch.xcontent.XContentParser;
+import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
+import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
+import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.junit.ClassRule;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
 
 public class ServerlessCustomRolesIT extends ESRestTestCase {
     private static final String TEST_OPERATOR_USER = "elastic-operator-user";
     private static final String TEST_USER = "elastic-user";
     private static final String TEST_PASSWORD = "elastic-password";
+    private static final List<String> RESERVED_ROLES = List.of("superuser", "remote_monitoring_agent", "remote_monitoring_collector");
 
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
@@ -84,6 +96,7 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             // Explicitly disable native user mgt, rather than relying on the serverless default
             settings.put("xpack.security.authc.native_users.enabled", "false");
         }
+        settings.put("xpack.security.reserved_roles.include", Strings.collectionToCommaDelimitedString(RESERVED_ROLES));
         settings.put("xpack.security.authc.native_roles.enabled", "true");
         return settings;
     }
@@ -106,31 +119,6 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
         doTestRoleNameCannotMatchReservedRole();
     }
 
-    public void testOtherRoleApisNotExposed() throws IOException {
-        final var rolePayload = """
-            {
-              "cluster": ["all"]
-            }""";
-        executeAndAssertSuccess(TEST_USER, "custom_role", rolePayload);
-
-        {
-            // Get Role not exposed yet to regular users
-            final var e = expectThrows(ResponseException.class, () -> getRole(TEST_USER, "custom_role"));
-            assertThat(e.getMessage(), containsString("not available when running in serverless mode"));
-            assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(404));
-        }
-
-        {
-            // Delete Role not exposed yet to regular users
-            final var e = expectThrows(
-                ResponseException.class,
-                () -> executeAsUser(TEST_USER, new Request("DELETE", "/_security/role/" + "custom_role"))
-            );
-            assertThat(e.getMessage(), containsString("not available when running in serverless mode"));
-            assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(404));
-        }
-    }
-
     private void doTestInvalidApplicationPrivilegeName() throws IOException {
         final var rolePayload = """
             {
@@ -142,14 +130,14 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
                 }
               ]
             }""";
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_USER,
             "custom_role",
             rolePayload,
             400,
             "invalid application name [kibana-.*]. name must be wildcard [*] or one of [kibana-.kibana]"
         );
-        executeAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
 
     private void doTestValidCustomRole() throws IOException {
@@ -182,8 +170,10 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
                 "env": ["prod"]
               }
             }""";
-        executeAndAssertSuccess(TEST_USER, "custom_role", rolePayload);
-        executeAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+
+        assertThat(deleteRole(randomFrom(TEST_USER, TEST_OPERATOR_USER), "custom_role"), is(true));
     }
 
     private void doTestEmptyRunAsIsValid() throws IOException {
@@ -191,8 +181,8 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             {
               "run_as": []
             }""";
-        executeAndAssertSuccess(TEST_USER, "custom_role", rolePayload);
-        executeAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
 
     private void doTestUnsupportedClusterPrivilege() throws IOException {
@@ -200,7 +190,7 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             {
               "cluster": ["all", "manage_ilm"]
             }""";
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_USER,
             "custom_role",
             rolePayload,
@@ -208,7 +198,7 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode"
         );
         // Operator user still succeeds because we don't enforce custom role restrictions
-        executeAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
 
     private void doTestUnsupportedIndexPrivileges() throws IOException {
@@ -221,14 +211,14 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
                 }
               ]
             }""";
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_USER,
             "custom_role",
             rolePayload,
             400,
             "index privilege [read_cross_cluster] exists but is not supported when running in serverless mode"
         );
-        executeAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
 
     private void doTestInvalidQueryFieldInIndexPrivilege() {
@@ -242,7 +232,7 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
                 }
               ]
             }""";
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_USER,
             "custom_role",
             rolePayload,
@@ -251,7 +241,7 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
                 + Strings.arrayToCommaDelimitedString(new String[] { "index-a", "*" })
                 + "] at index privilege [0] of role descriptor"
         );
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_OPERATOR_USER,
             "custom_role",
             rolePayload,
@@ -273,14 +263,14 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
                 }
               ]
             }""";
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_USER,
             "custom_role",
             rolePayload,
             400,
             "field [remote_indices] is not supported when running in serverless mode"
         );
-        executeAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
 
     private void doTestMalformedUnsupportedField() {
@@ -294,7 +284,7 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
               ]
             }""";
         // We don't validate the malformed payload but fail early since remote_indices is not supported at all
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_USER,
             "custom_role",
             rolePayload,
@@ -302,7 +292,7 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             "field [remote_indices] is not supported when running in serverless mode"
         );
         // For an operator user we do validate the malformed request and fail
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_OPERATOR_USER,
             "custom_role",
             rolePayload,
@@ -316,14 +306,14 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             {
               "run_as": {"field": "other"}
             }""";
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_USER,
             "custom_role",
             rolePayload,
             400,
             "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty."
         );
-        executeAndAssertFailure(TEST_OPERATOR_USER, "custom_role", rolePayload, 400, "could not parse [run_as] field.");
+        putRoleAndAssertFailure(TEST_OPERATOR_USER, "custom_role", rolePayload, 400, "could not parse [run_as] field.");
     }
 
     private void doTestRunAsNotSupported() throws IOException {
@@ -331,14 +321,14 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             {
               "run_as": ["bob"]
             }""";
-        executeAndAssertFailure(
+        putRoleAndAssertFailure(
             TEST_USER,
             "custom_role",
             rolePayload,
             400,
             "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty."
         );
-        executeAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
 
     private void doTestRoleNameCannotMatchFileBasedRole() throws IOException {
@@ -347,8 +337,8 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
               "cluster": ["all"]
             }""";
         // role is defined in `roles.yml` file
-        executeAndAssertFailure(TEST_USER, "file_based_role", rolePayload, 400, "Role [file_based_role] is reserved and may not be used");
-        executeAndAssertSuccess(TEST_OPERATOR_USER, "file_based_role", rolePayload);
+        putRoleAndAssertFailure(TEST_USER, "file_based_role", rolePayload, 400, "Role [file_based_role] is reserved and may not be used");
+        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "file_based_role", rolePayload);
     }
 
     private void doTestRoleNameCannotMatchReservedRole() {
@@ -356,19 +346,105 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             {
               "cluster": ["all"]
             }""";
-        executeAndAssertFailure(TEST_USER, "superuser", rolePayload, 400, "Role [superuser] is reserved and may not be used");
-        executeAndAssertFailure(TEST_OPERATOR_USER, "superuser", rolePayload, 400, "Role [superuser] is reserved and may not be used");
+        putRoleAndAssertFailure(TEST_USER, "superuser", rolePayload, 400, "Role [superuser] is reserved and may not be used");
+        putRoleAndAssertFailure(TEST_OPERATOR_USER, "superuser", rolePayload, 400, "Role [superuser] is reserved and may not be used");
     }
 
-    private void executeAndAssertSuccess(String username, String roleName, String rolePayload) throws IOException {
+    public void testGetRoles() throws IOException {
+        putRoleAndAssertSuccess(TEST_USER, "custom_role_1", """
+            {
+              "cluster": ["all"]
+            }""");
+
+        putRoleAndAssertSuccess(TEST_USER, "custom_role_2", """
+            {
+              "cluster": ["none"]
+            }""");
+
+        assertThat(
+            expectThrows(ResponseException.class, () -> getRoles(TEST_USER, "missing_role")).getResponse().getStatusLine().getStatusCode(),
+            equalTo(404)
+        );
+        assertThat(getRoles(TEST_USER, "custom_role_1", "custom_role_2"), containsInAnyOrder("custom_role_1", "custom_role_2"));
+        assertThat(getRoles(TEST_USER), containsInAnyOrder("custom_role_1", "custom_role_2"));
+        assertThat(getRoles(TEST_USER, "custom_role_1", randomFrom(RESERVED_ROLES)), containsInAnyOrder("custom_role_1"));
+        assertThat(
+            expectThrows(ResponseException.class, () -> getRoles(TEST_USER, randomFrom(RESERVED_ROLES))).getResponse()
+                .getStatusLine()
+                .getStatusCode(),
+            equalTo(404)
+        );
+
+        assertThat(
+            expectThrows(ResponseException.class, () -> getRoles(TEST_OPERATOR_USER, "missing_role")).getResponse()
+                .getStatusLine()
+                .getStatusCode(),
+            equalTo(404)
+        );
+        assertThat(getRoles(TEST_OPERATOR_USER, "custom_role_1", "custom_role_2"), containsInAnyOrder("custom_role_1", "custom_role_2"));
+        final List<String> allRoles = new ArrayList<>(List.of("custom_role_1", "custom_role_2"));
+        allRoles.addAll(RESERVED_ROLES);
+        assertThat(getRoles(TEST_OPERATOR_USER), containsInAnyOrder(allRoles.toArray(new String[0])));
+        assertThat(getRoles(TEST_OPERATOR_USER, "custom_role_1", "superuser"), containsInAnyOrder("custom_role_1", "superuser"));
+        final List<String> reservedRoles = randomNonEmptySubsetOf(RESERVED_ROLES);
+        assertThat(
+            getRoles(TEST_OPERATOR_USER, reservedRoles.toArray(new String[0])),
+            containsInAnyOrder(reservedRoles.toArray(new String[0]))
+        );
+    }
+
+    public void testDeleteReservedRoles() {
+        final String roleName = randomFrom(RESERVED_ROLES);
+        {
+            ResponseException responseException = expectThrows(ResponseException.class, () -> deleteRole(TEST_USER, roleName));
+            assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(400));
+            assertThat(responseException.getMessage(), containsString("role [" + roleName + "] is reserved and cannot be deleted"));
+        }
+        {
+            ResponseException responseException = expectThrows(ResponseException.class, () -> deleteRole(TEST_OPERATOR_USER, roleName));
+            assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(400));
+            assertThat(responseException.getMessage(), containsString("role [" + roleName + "] is reserved and cannot be deleted"));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testGetBuiltinPrivileges() throws IOException {
+        {
+            final Response response = executeAndAssertSuccess(TEST_USER, new Request("GET", "/_security/privilege/_builtin"));
+            final Map<String, Object> responseAsMap = responseAsMap(response);
+            assertThat(
+                (Collection<String>) responseAsMap.get("cluster"),
+                contains(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames().stream().sorted().toArray())
+            );
+            assertThat(
+                (Collection<String>) responseAsMap.get("index"),
+                contains(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames().stream().sorted().toArray())
+            );
+        }
+        {
+            final Response response = executeAndAssertSuccess(TEST_OPERATOR_USER, new Request("GET", "/_security/privilege/_builtin"));
+            final Map<String, Object> responseAsMap = responseAsMap(response);
+            assertThat(
+                (Collection<String>) responseAsMap.get("cluster"),
+                contains(ClusterPrivilegeResolver.names().stream().sorted().toArray())
+            );
+            assertThat((Collection<String>) responseAsMap.get("index"), contains(IndexPrivilege.names().stream().sorted().toArray()));
+        }
+    }
+
+    private void putRoleAndAssertSuccess(String username, String roleName, String rolePayload) throws IOException {
         final var putRoleRequest = new Request(randomFrom("PUT", "POST"), "/_security/role/" + roleName);
         putRoleRequest.setJsonEntity(rolePayload);
         executeAndAssertSuccess(username, putRoleRequest);
-        // Use operator user since route is not exposed yet
-        assertThat(getRole(TEST_OPERATOR_USER, roleName), is(notNullValue()));
+        final RoleDescriptor actualRoleDescriptor = getRoleAsRoleDescriptor(username, roleName);
+        assertThat(actualRoleDescriptor.getName(), equalTo(roleName));
+        assertThat(
+            actualRoleDescriptor,
+            equalTo(RoleDescriptor.parse(actualRoleDescriptor.getName(), new BytesArray(rolePayload), false, XContentType.JSON))
+        );
     }
 
-    private void executeAndAssertFailure(String username, String roleName, String rolePayload, int statusCode, String message) {
+    private void putRoleAndAssertFailure(String username, String roleName, String rolePayload, int statusCode, String message) {
         final var putRoleRequest = new Request(randomFrom("PUT", "POST"), "/_security/role/" + roleName);
         putRoleRequest.setJsonEntity(rolePayload);
         final ResponseException e = expectThrows(ResponseException.class, () -> executeAsUser(username, putRoleRequest));
@@ -376,9 +452,10 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
         assertThat(e.getMessage(), containsString(message));
     }
 
-    private void executeAndAssertSuccess(String username, Request putRoleRequest) throws IOException {
-        final Response putRoleResponse = executeAsUser(username, putRoleRequest);
-        assertOK(putRoleResponse);
+    private Response executeAndAssertSuccess(String username, Request request) throws IOException {
+        final Response response = executeAsUser(username, request);
+        assertOK(response);
+        return response;
     }
 
     private Response executeAsUser(String username, Request request) throws IOException {
@@ -389,7 +466,14 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
         return client().performRequest(request);
     }
 
-    private RoleDescriptor getRole(String username, String roleName) throws IOException {
+    private boolean deleteRole(String username, String roleName) throws IOException {
+        final Response response = executeAsUser(username, new Request("DELETE", "/_security/role/" + roleName));
+        assertOK(response);
+        final Map<String, Object> responseMap = responseAsMap(response);
+        return (Boolean) responseMap.get("found");
+    }
+
+    private RoleDescriptor getRoleAsRoleDescriptor(String username, String roleName) throws IOException {
         final var request = new Request("GET", "/_security/role/" + roleName);
         final Response response = executeAsUser(username, request);
         assertOK(response);
@@ -399,5 +483,10 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
         parser.nextToken();
         parser.nextToken();
         return RoleDescriptor.parse(roleName, parser, false);
+    }
+
+    private Set<String> getRoles(String username, String... roleNames) throws IOException {
+        final var request = new Request("GET", "/_security/role/" + Strings.arrayToCommaDelimitedString(roleNames));
+        return responseAsMap(executeAndAssertSuccess(username, request)).keySet();
     }
 }

@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.security.role;
 
+import co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupportedPrivilegesRegistry;
+
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.xpack.core.security.action.role.RoleDescriptorRequestValidator;

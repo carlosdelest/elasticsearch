@@ -41,7 +41,12 @@ import java.util.Set;
 public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
 
     private static final Logger logger = LogManager.getLogger(ServerlessOperatorOnlyRegistry.class);
-    private static final Set<String> PARTIALLY_RESTRICTED_PATHS = Set.of("/", "/_security/role/{name}");
+    private static final Set<String> PARTIALLY_RESTRICTED_PATHS = Set.of(
+        "/",
+        "/_security/role/{name}",
+        "/_security/role/",
+        "/_security/privilege/_builtin"
+    );
 
     private final Set<String> partiallyRestrictedPaths;
 

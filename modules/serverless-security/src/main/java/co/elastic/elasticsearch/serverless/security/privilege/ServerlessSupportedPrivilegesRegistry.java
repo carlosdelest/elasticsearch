@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.serverless.security.role;
+package co.elastic.elasticsearch.serverless.security.privilege;
 
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
@@ -79,25 +79,25 @@ public record ServerlessSupportedPrivilegesRegistry() {
             .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue))
     );
 
-    static boolean isSupportedClusterPrivilege(String clusterPrivilegeName) {
+    public static boolean isSupportedClusterPrivilege(String clusterPrivilegeName) {
         final String name = canonicalize(clusterPrivilegeName);
         final boolean supported = SUPPORTED_CLUSTER_PRIVILEGES.containsKey(name);
         assert false == supported || ClusterPrivilegeResolver.getNamedOrNull(name) != null;
         return supported;
     }
 
-    static boolean isSupportedIndexPrivilege(String indexPrivilegeName) {
+    public static boolean isSupportedIndexPrivilege(String indexPrivilegeName) {
         final String name = canonicalize(indexPrivilegeName);
-        final boolean supported = SUPPORTED_INDEX_PRIVILEGES.containsKey(indexPrivilegeName);
+        final boolean supported = SUPPORTED_INDEX_PRIVILEGES.containsKey(name);
         assert false == supported || IndexPrivilege.getNamedOrNull(name) != null;
         return supported;
     }
 
-    static Set<String> supportedClusterPrivilegeNames() {
+    public static Set<String> supportedClusterPrivilegeNames() {
         return SUPPORTED_CLUSTER_PRIVILEGES.keySet();
     }
 
-    static Set<String> supportedIndexPrivilegeNames() {
+    public static Set<String> supportedIndexPrivilegeNames() {
         return SUPPORTED_INDEX_PRIVILEGES.keySet();
     }
 

@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.security.role;
 
+import co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupportedPrivilegesRegistry;
+
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.test.ESTestCase;
