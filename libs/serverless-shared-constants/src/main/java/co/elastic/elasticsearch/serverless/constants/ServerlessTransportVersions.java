@@ -36,6 +36,7 @@ public class ServerlessTransportVersions {
     public static final TransportVersion DUMMY_PRIMARY_RELOCATION_CHANGE_FIX = def(8_517_01_0);
     public static final TransportVersion STALE_INDICES_GC = def(8_531_01_0);
     public static final TransportVersion COMPOUND_COMMIT_WITH_SIZE = def(8_594_01_0);
+    public static final TransportVersion INDEX_SIZE_SERVICE_ADDED = def(8_594_02_0);
     /*
      * STOP! READ THIS FIRST! No, really,
      *        ____ _____ ___  ____  _        ____  _____    _    ____    _____ _   _ ___ ____    _____ ___ ____  ____ _____ _
