@@ -9,6 +9,7 @@
 package co.elastic.elasticsearch.qa.sso;
 
 import org.apache.http.util.EntityUtils;
+import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
@@ -18,6 +19,8 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.ssl.PemUtils;
+import org.elasticsearch.common.util.CollectionUtils;
+import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.test.cluster.local.LocalClusterSpec;
@@ -73,6 +76,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.opensaml.saml.common.xml.SAMLConstants.SAML2_REDIRECT_BINDING_URI;
 
@@ -99,6 +103,9 @@ public final class ServerlessSsoIT extends ESRestTestCase {
 
     private static final String IDP_ENTITY_ID = "urn:idp-cloud-elastic-co";
     private static final String REALM_NAME = "cloud-saml-kibana";
+    private static final Set<String> RESERVED_ROLES = Set.of("superuser", "kibana_admin");
+    private static final Set<String> PREDEFINED_ROLES = Set.of("viewer", "editor", "admin", "developer");
+    private static final SetOnce<Set<String>> EXCLUDED_ROLES = new SetOnce<>();
 
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
@@ -120,7 +127,7 @@ public final class ServerlessSsoIT extends ESRestTestCase {
      */
     private static Map<String, String> samlRealm(LocalClusterSpec.LocalNodeSpec node) {
         final var prefix = "xpack.security.authc.realms.saml." + REALM_NAME;
-        return Map.ofEntries(
+        final Map<String, String> settings = Map.ofEntries(
             Map.entry(prefix + ".order", "101"),
             Map.entry(prefix + ".idp.entity_id", IDP_ENTITY_ID),
             Map.entry(prefix + ".idp.metadata.path", "metadata.xml"),
@@ -132,6 +139,16 @@ public final class ServerlessSsoIT extends ESRestTestCase {
             Map.entry(prefix + ".attributes.groups", GROUPS_ATTRIBUTE),
             Map.entry(prefix + ".nameid_format", "urn:oasis:names:tc:SAML:2.0:nameid-format:transient")
         );
+        EXCLUDED_ROLES.trySet(randomBoolean() ? Set.of() : RESERVED_ROLES);
+        if (EXCLUDED_ROLES.get().isEmpty()) {
+            return settings;
+        } else {
+            return Maps.copyMapWithAddedEntry(
+                settings,
+                prefix + ".exclude_roles",
+                Strings.collectionToCommaDelimitedString(EXCLUDED_ROLES.get())
+            );
+        }
     }
 
     @Override
@@ -289,7 +306,8 @@ public final class ServerlessSsoIT extends ESRestTestCase {
         assertThat(ObjectPath.evaluate(responseBody, "authentication"), notNullValue());
         final Object roles = ObjectPath.evaluate(responseBody, "authentication.roles");
         assertThat(roles, instanceOf(Collection.class));
-        assertThat("Roles: " + roles, (Collection<?>) roles, containsInAnyOrder((Object[]) user.groups));
+        assertThat("Roles: " + roles, (Collection<?>) roles, not(containsInAnyOrder(RESERVED_ROLES)));
+        assertThat("Roles: " + roles, (Collection<?>) roles, containsInAnyOrder((Object[]) getFilteredUserGroups(user)));
         assertThat(ObjectPath.evaluate(responseBody, "authentication.full_name"), is(user.name()));
     }
 
@@ -299,11 +317,18 @@ public final class ServerlessSsoIT extends ESRestTestCase {
         final Map<String, Object> responseBody = responseAsMap(client().performRequest(request));
         assertThat(ObjectPath.evaluate(responseBody, "username"), is(user.principal));
         assertThat(ObjectPath.evaluate(responseBody, "full_name"), is(user.name));
-        assertThat(ObjectPath.evaluate(responseBody, "roles"), containsInAnyOrder(user.groups));
+        final Object roles = ObjectPath.evaluate(responseBody, "roles");
+        assertThat(roles, instanceOf(Collection.class));
+        assertThat("Roles: " + roles, (Collection<?>) roles, not(containsInAnyOrder(RESERVED_ROLES)));
+        assertThat("Roles: " + roles, (Collection<?>) roles, containsInAnyOrder((Object[]) getFilteredUserGroups(user)));
         assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.name"), is(REALM_NAME));
         assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.type"), is("saml"));
         assertThat(ObjectPath.evaluate(responseBody, "authentication_type"), is("token"));
         assertThat(ObjectPath.evaluate(responseBody, "metadata.saml_principal"), contains(user.principal));
+    }
+
+    private static String[] getFilteredUserGroups(UserInfo user) {
+        return Arrays.stream(user.groups).filter(g -> EXCLUDED_ROLES.get().contains(g) == false).toArray(String[]::new);
     }
 
     private void verifyAccessTokenInvalidated(String accessToken) throws Exception {
@@ -403,8 +428,10 @@ public final class ServerlessSsoIT extends ESRestTestCase {
             + randomAlphaOfLengthBetween(2, 6)
             + ".example."
             + randomFrom("net", "com", "org");
-        final var roles = randomNonEmptySubsetOf(Set.of("viewer", "editor", "admin", "developer")).toArray(String[]::new);
-        return new UserInfo(principal, name, email, roles);
+        final List<String> predefinedRoles = randomNonEmptySubsetOf(PREDEFINED_ROLES);
+        final List<String> reservedRoles = randomSubsetOf(EXCLUDED_ROLES.get());
+        final var roles = CollectionUtils.concatLists(predefinedRoles, reservedRoles);
+        return new UserInfo(principal, name, email, roles.toArray(String[]::new));
     }
 
     private SuccessfulAuthenticationResponseMessageBuilder getAuthenticationResponseBuilder() throws Exception {
