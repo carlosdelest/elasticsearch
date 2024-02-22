@@ -17,20 +17,15 @@
 
 package co.elastic.elasticsearch.serverless.constants;
 
-import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.plugins.internal.SettingsExtension;
-
-import java.util.List;
-
-public class ServerlessSharedSettingsExtension implements SettingsExtension {
-    @Override
-    public List<Setting<?>> getSettings() {
-        return List.of(
-            ServerlessSharedSettings.BOOST_WINDOW_SETTING,
-            ServerlessSharedSettings.SEARCH_POWER_SETTING,
-            ServerlessSharedSettings.BWC_PROJECT_ID,
-            ServerlessSharedSettings.PROJECT_ID,
-            ServerlessSharedSettings.PROJECT_TYPE
-        );
-    }
+/**
+ * The type of a project in serverless.
+ *
+ * Project type constants may have subtypes, separated by an underscore from the main project type.
+ */
+public enum ProjectType {
+    ELASTICSEARCH_SEARCH,
+    ELASTICSEARCH_VECTOR,
+    ELASTICSEARCH_TIMESERIES,
+    OBSERVABILITY,
+    SECURITY
 }

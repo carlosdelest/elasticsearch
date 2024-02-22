@@ -51,5 +51,12 @@ public class ServerlessSharedSettings {
         Setting.Property.NodeScope
     );
 
+    public static final Setting<ProjectType> PROJECT_TYPE = Setting.enumSetting(
+        ProjectType.class,
+        "serverless.project_type",
+        ProjectType.ELASTICSEARCH_SEARCH,
+        Setting.Property.NodeScope
+    );
+
     private ServerlessSharedSettings() {}
 }
