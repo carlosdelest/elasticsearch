@@ -61,8 +61,8 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
         reason = "Testing logging at INFO level",
         value = "co.elastic.elasticsearch.serverless.shutdown.SigtermTerminationHandler:INFO"
     )
-    public void testShutdownStallsImmediately() {
-        shutdownFinishesImmediately(SingleNodeShutdownMetadata.Status.STALLED);
+    public void testShutdownStalledRequiresPolling() {
+        shutdownRequiresPolling(SingleNodeShutdownMetadata.Status.STALLED, SingleNodeShutdownMetadata.Status.COMPLETE);
     }
 
     private void shutdownFinishesImmediately(SingleNodeShutdownMetadata.Status finishedWithStatus) {
@@ -144,10 +144,6 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
 
     public void testShutdownNotStartedThenCompletes() {
         shutdownRequiresPolling(SingleNodeShutdownMetadata.Status.NOT_STARTED, SingleNodeShutdownMetadata.Status.COMPLETE);
-    }
-
-    public void testShutdownNotStartedThenStalls() {
-        shutdownRequiresPolling(SingleNodeShutdownMetadata.Status.NOT_STARTED, SingleNodeShutdownMetadata.Status.STALLED);
     }
 
     public void shutdownRequiresPolling(

@@ -134,8 +134,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
         client.execute(GetShutdownStatusAction.INSTANCE, request, ActionListener.wrap(res -> {
             assert res.getShutdownStatuses().size() == 1 : "got more than this node's shutdown status";
             SingleNodeShutdownStatus status = res.getShutdownStatuses().get(0);
-            if (status.overallStatus().equals(SingleNodeShutdownMetadata.Status.COMPLETE)
-                || status.overallStatus().equals(SingleNodeShutdownMetadata.Status.STALLED)) {
+            if (status.overallStatus().equals(SingleNodeShutdownMetadata.Status.COMPLETE)) {
                 logger.info("node ready for shutdown with status [{}]: {}", status.overallStatus(), status);
                 latch.countDown();
             } else {
