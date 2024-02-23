@@ -20,7 +20,6 @@ package org.elasticsearch.test.cluster.serverless.local.core;
 import org.elasticsearch.test.cluster.FeatureFlag;
 import org.elasticsearch.test.cluster.local.AbstractLocalClusterSpecBuilder;
 import org.elasticsearch.test.cluster.local.DefaultEnvironmentProvider;
-import org.elasticsearch.test.cluster.local.DefaultSettingsProvider;
 import org.elasticsearch.test.cluster.local.LocalClusterSpec;
 import org.elasticsearch.test.cluster.local.LocalClusterSpecBuilder;
 import org.elasticsearch.test.cluster.local.LocalNodeSpecBuilder;
@@ -30,6 +29,7 @@ import org.elasticsearch.test.cluster.local.distribution.ReleasedDistributionRes
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.serverless.distribution.ServerlessDistributionResolver;
 import org.elasticsearch.test.cluster.serverless.local.DefaultLocalServerlessElasticsearchCluster;
+import org.elasticsearch.test.cluster.serverless.local.DefaultServerlessSettingsProvider;
 import org.elasticsearch.test.cluster.serverless.local.ServerlessLocalClusterFactory;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 
@@ -55,7 +55,7 @@ public class CoreServerlessLocalClusterSpecBuilder extends AbstractLocalClusterS
 
     public CoreServerlessLocalClusterSpecBuilder() {
         this.distribution(DistributionType.DEFAULT)
-            .settings(new DefaultSettingsProvider())
+            .settings(new DefaultServerlessSettingsProvider())
             .environment(new DefaultEnvironmentProvider())
             .setting("stateless.enabled", "true")
             .setting("stateless.object_store.type", "fs")

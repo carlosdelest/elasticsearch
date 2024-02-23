@@ -19,7 +19,6 @@ package org.elasticsearch.test.cluster.serverless.local;
 
 import org.elasticsearch.test.cluster.local.AbstractLocalClusterSpecBuilder;
 import org.elasticsearch.test.cluster.local.DefaultEnvironmentProvider;
-import org.elasticsearch.test.cluster.local.DefaultSettingsProvider;
 import org.elasticsearch.test.cluster.local.distribution.LocalDistributionResolver;
 import org.elasticsearch.test.cluster.local.distribution.ReleasedDistributionResolver;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
@@ -29,7 +28,7 @@ import org.elasticsearch.test.cluster.util.resource.Resource;
 public class ServerlessLocalClusterSpecBuilder extends AbstractLocalClusterSpecBuilder<ServerlessElasticsearchCluster> {
 
     public ServerlessLocalClusterSpecBuilder() {
-        this.settings(new DefaultSettingsProvider());
+        this.settings(new DefaultServerlessSettingsProvider());
         this.environment(new DefaultEnvironmentProvider());
         this.apply(new DefaultServerlessLocalConfigProvider());
         this.rolesFile(Resource.fromClasspath("default_test_roles.yml"));

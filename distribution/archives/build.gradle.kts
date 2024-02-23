@@ -101,6 +101,7 @@ distribution_archives {
                     exclude("*/modules/x-pack-esql")
                     exclude("*/modules/rest-root")
                     exclude("*/modules/health-shards-availability")
+                    exclude("*/modules/x-pack-deprecation")
                     includeEmptyDirs = false
                 }
                 into("elasticsearch") {
