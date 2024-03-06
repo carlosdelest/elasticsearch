@@ -135,7 +135,8 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
             "custom_role",
             rolePayload,
             400,
-            "invalid application name [kibana-.*]. name must be wildcard [*] or one of [kibana-.kibana]"
+            "invalid application name [kibana-.*]. name must be a wildcard [*] or "
+                + "one of the supported application names [kibana-.kibana]"
         );
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }

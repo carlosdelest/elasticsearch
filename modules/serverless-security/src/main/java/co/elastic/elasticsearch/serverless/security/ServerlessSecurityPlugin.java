@@ -35,6 +35,7 @@ import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -69,6 +70,15 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
+    public static final Setting<Boolean> API_KEY_STRICT_REQUEST_VALIDATION = Setting.boolSetting(
+        "xpack.security.authc.api_key.strict_request_validation.enabled",
+        false, // TODO : This will become true at a later time
+        Setting.Property.OperatorDynamic,
+        Setting.Property.NodeScope
+    );
+
+    private AtomicBoolean apiKeyStrictRequestValidation;
+
     @Override
     public Collection<?> createComponents(PluginServices services) {
         if (OPERATOR_PRIVILEGES_ENABLED.get(services.environment().settings()) == false) {
@@ -78,9 +88,18 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
                     + "] to true"
             );
         }
-
+        services.clusterService()
+            .getClusterSettings()
+            .addSettingsUpdateConsumer(API_KEY_STRICT_REQUEST_VALIDATION, this::configureStrictApiKeyRequestValidation);
         return Collections.emptyList();
+    }
 
+    private void configureStrictApiKeyRequestValidation(boolean enabled) {
+        if (this.apiKeyStrictRequestValidation == null) {
+            throw new IllegalStateException("Strict API key request validation object not configured");
+        } else {
+            this.apiKeyStrictRequestValidation.set(enabled);
+        }
     }
 
     @Override
@@ -90,12 +109,19 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .put(OPERATOR_PRIVILEGES_ENABLED.getKey(), true)
             .put(NATIVE_USERS_SETTING.getKey(), false)
             .put(NATIVE_ROLES_SETTING.getKey(), false)
+            .put(API_KEY_STRICT_REQUEST_VALIDATION.getKey(), false)
             .build();
     }
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(INCLUDED_RESERVED_ROLES_SETTING, NATIVE_USERS_SETTING, NATIVE_ROLES_SETTING, EXCLUDE_ROLES);
+        return List.of(
+            INCLUDED_RESERVED_ROLES_SETTING,
+            NATIVE_USERS_SETTING,
+            NATIVE_ROLES_SETTING,
+            EXCLUDE_ROLES,
+            API_KEY_STRICT_REQUEST_VALIDATION
+        );
     }
 
     @Override
@@ -110,7 +136,12 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Supplier<DiscoveryNodes> nodesInCluster,
         Predicate<NodeFeature> clusterSupportsFeature
     ) {
+        this.apiKeyStrictRequestValidation = new AtomicBoolean(clusterSettings.get(API_KEY_STRICT_REQUEST_VALIDATION));
         restController.getApiProtections().setEnabled(true);
         return List.of();
+    }
+
+    public boolean strictApiKeyRequestValidationEnabled() {
+        return apiKeyStrictRequestValidation != null && apiKeyStrictRequestValidation.get();
     }
 }

@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupporte
 
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.xpack.core.security.action.role.RoleDescriptorRequestValidator;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
@@ -30,28 +31,48 @@ import org.elasticsearch.xpack.core.security.support.MetadataUtils;
 import org.elasticsearch.xpack.core.security.support.NativeRealmValidationUtil;
 import org.elasticsearch.xpack.core.security.support.Validation;
 
+import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 
-final class ServerlessCustomRoleValidator {
-
+public final class ServerlessCustomRoleValidator {
     // package-private for testing
     static final Set<String> SUPPORTED_APPLICATION_NAMES = Set.of("kibana-.kibana");
     private static final String RESERVED_ROLE_NAME_PREFIX = "_";
     private final Predicate<String> fileRolesStoreNameChecker;
 
-    ServerlessCustomRoleValidator(Predicate<String> fileRolesStoreNameChecker) {
+    public ServerlessCustomRoleValidator(Predicate<String> fileRolesStoreNameChecker) {
         this.fileRolesStoreNameChecker = fileRolesStoreNameChecker;
     }
 
-    ActionRequestValidationException validate(RoleDescriptor roleDescriptor) {
+    public ServerlessCustomRoleValidator() {
+        this(ignored -> false);
+    }
+
+    public ActionRequestValidationException validate(RoleDescriptor roleDescriptor) {
         return validate(roleDescriptor, true);
     }
 
-    ActionRequestValidationException validate(RoleDescriptor roleDescriptor, boolean validateRoleName) {
+    public void validateAndThrow(@Nullable List<RoleDescriptor> roleDescriptors, boolean validateRoleName) {
+        if (roleDescriptors == null || roleDescriptors.isEmpty()) {
+            return;
+        }
         ActionRequestValidationException validationException = null;
+        for (var roleDescriptor : roleDescriptors) {
+            validationException = validate(roleDescriptor, validateRoleName, validationException);
+        }
+        if (validationException != null) {
+            throw validationException;
+        }
+    }
+
+    public ActionRequestValidationException validate(
+        RoleDescriptor roleDescriptor,
+        boolean validateRoleName,
+        ActionRequestValidationException validationException
+    ) {
         if (validateRoleName) {
             validationException = validateRoleName(roleDescriptor.getName(), validationException);
         }
@@ -60,6 +81,10 @@ final class ServerlessCustomRoleValidator {
         // role is also a valid "regular" role must hold
         assert validationException != null || RoleDescriptorRequestValidator.validate(roleDescriptor) == null;
         return validationException;
+    }
+
+    public ActionRequestValidationException validate(RoleDescriptor roleDescriptor, boolean validateRoleName) {
+        return validate(roleDescriptor, validateRoleName, null);
     }
 
     private ActionRequestValidationException validateRoleName(String roleName, ActionRequestValidationException validationException) {
@@ -182,7 +207,7 @@ final class ServerlessCustomRoleValidator {
             validationException = addValidationError(
                 "invalid application name ["
                     + applicationName
-                    + "]. name must be wildcard [*] or one of ["
+                    + "]. name must be a wildcard [*] or one of the supported application names ["
                     + Strings.collectionToCommaDelimitedString(SUPPORTED_APPLICATION_NAMES)
                     + "]",
                 validationException

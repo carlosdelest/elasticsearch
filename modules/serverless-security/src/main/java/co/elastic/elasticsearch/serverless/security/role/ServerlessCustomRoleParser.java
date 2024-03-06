@@ -31,7 +31,7 @@ import org.elasticsearch.xpack.core.security.xcontent.XContentUtils;
 import java.io.IOException;
 import java.util.Map;
 
-public class ServerlessCustomRoleParser {
+public final class ServerlessCustomRoleParser {
 
     private ServerlessCustomRoleParser() {}
 
@@ -42,9 +42,9 @@ public class ServerlessCustomRoleParser {
         }
     }
 
-    private static RoleDescriptor parse(String name, XContentParser parser) throws IOException {
+    public static RoleDescriptor parse(String name, XContentParser parser) throws IOException {
         // validate name
-        Validation.Error validationError = Validation.Roles.validateRoleName(name, false);
+        Validation.Error validationError = Validation.Roles.validateRoleName(name, true);
         if (validationError != null) {
             ValidationException ve = new ValidationException();
             ve.addValidationError(validationError.toString());
@@ -61,17 +61,18 @@ public class ServerlessCustomRoleParser {
         String[] clusterPrivileges = null;
         RoleDescriptor.ApplicationResourcePrivileges[] applicationPrivileges = null;
         Map<String, Object> metadata = null;
-        String[] runAsUsers = null;
+
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
-            } else if (RoleDescriptor.Fields.INDICES.match(currentFieldName, parser.getDeprecationHandler())) {
+            } else if (matchesIndexField(currentFieldName, parser)) {
                 indicesPrivileges = RoleDescriptor.parseIndices(name, parser, false);
-            } else if (RoleDescriptor.Fields.RUN_AS.match(currentFieldName, parser.getDeprecationHandler())) {
+            } else if (RoleDescriptor.Fields.RUN_AS.withDeprecation("run_as").match(currentFieldName, parser.getDeprecationHandler())) {
+                final String[] runAsUsers;
                 try {
                     runAsUsers = readStringArray(name, parser);
-                    // Skip any run-as parsing exception -- the field must be absent or an empty array (for BWC) so any parsing errors we
-                    // get are irrelevant and should not bubble up
+                    // Skip any run-as parsing exception -- the field must be absent or an empty array (for BWC) so any parsing errors
+                    // we get are irrelevant and should not bubble up
                 } catch (ElasticsearchParseException parseException) {
                     throw new ElasticsearchParseException(
                         "failed to parse role [{}]. In serverless mode run_as must be absent or empty.",
@@ -86,7 +87,7 @@ public class ServerlessCustomRoleParser {
                 }
             } else if (RoleDescriptor.Fields.CLUSTER.match(currentFieldName, parser.getDeprecationHandler())) {
                 clusterPrivileges = readStringArray(name, parser);
-            } else if (RoleDescriptor.Fields.APPLICATIONS.match(currentFieldName, parser.getDeprecationHandler())) {
+            } else if (matchesApplicationField(currentFieldName, parser)) {
                 applicationPrivileges = RoleDescriptor.parseApplicationPrivileges(name, parser);
             } else if (RoleDescriptor.Fields.GLOBAL.match(currentFieldName, parser.getDeprecationHandler())) {
                 throw new ElasticsearchParseException(
@@ -116,6 +117,12 @@ public class ServerlessCustomRoleParser {
                     name,
                     currentFieldName
                 );
+            } else if (RoleDescriptor.Fields.RESTRICTION.match(currentFieldName, parser.getDeprecationHandler())) {
+                throw new ElasticsearchParseException(
+                    "failed to parse role [{}]. field [{}] is not supported when running in serverless mode",
+                    name,
+                    currentFieldName
+                );
             } else if (RoleDescriptor.Fields.TYPE.match(currentFieldName, parser.getDeprecationHandler())) {
                 // don't need it
             } else {
@@ -134,6 +141,16 @@ public class ServerlessCustomRoleParser {
             null,
             null
         );
+    }
+
+    private static boolean matchesIndexField(String currentFieldName, XContentParser parser) {
+        return RoleDescriptor.Fields.INDEX.match(currentFieldName, parser.getDeprecationHandler())
+            || RoleDescriptor.Fields.INDICES.match(currentFieldName, parser.getDeprecationHandler());
+    }
+
+    private static boolean matchesApplicationField(String currentFieldName, XContentParser parser) {
+        return RoleDescriptor.Fields.APPLICATION.match(currentFieldName, parser.getDeprecationHandler())
+            || RoleDescriptor.Fields.APPLICATIONS.match(currentFieldName, parser.getDeprecationHandler());
     }
 
     private static String[] readStringArray(String roleName, XContentParser parser) throws IOException {
