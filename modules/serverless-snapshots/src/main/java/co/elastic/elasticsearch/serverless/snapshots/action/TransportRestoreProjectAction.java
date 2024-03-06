@@ -22,7 +22,7 @@ import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.ActionType;
-import org.elasticsearch.action.admin.cluster.snapshots.get.GetSnapshotsRequest;
+import org.elasticsearch.action.admin.cluster.snapshots.get.SnapshotSortKey;
 import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotRequest;
 import org.elasticsearch.action.admin.cluster.snapshots.restore.RestoreSnapshotResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
@@ -114,7 +114,7 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
             .cluster()
             .prepareGetSnapshots()
             .setRepositories(repository)
-            .setSort(GetSnapshotsRequest.SortBy.START_TIME)
+            .setSort(SnapshotSortKey.START_TIME)
             .setOrder(SortOrder.ASC)
             .setVerbose(false) // note: verbose=false *requires* that the order be START_TIME + ASC, made explicit above for clarity
             .execute(listener.map(response -> {
