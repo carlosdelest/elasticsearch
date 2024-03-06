@@ -38,7 +38,7 @@ steps:
       env:
         TARGET_ENV: staging
         CHECK_LOG_ERROR_RATE: true
-        MAX_ERROR_PERCENT: 1
+        MAX_ERROR_PERCENT: 0.5
         QUERY_WINDOW: 60m
         LOG_LEVEL_ERROR_VALUE: ERROR
         SERVICE: elasticsearch
@@ -46,4 +46,4 @@ steps:
         SERVICE_VERSION: ${SERVICE_VERSION:0:12}
         SERVICE_TYPE_FIELD: kubernetes.container.name
         CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
-        MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 1
+        MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 0.1
