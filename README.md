@@ -120,7 +120,7 @@ To deploy a branch snapshot into QA
    Store both values in a env variable:
    ```
    export ESS_PUBLIC_URL=<URL_FROM_BUILD_INFO_BOX>
-   export ESS_ROOT_USERNAME=elastic
+   export ESS_ROOT_USERNAME=testing-internal
    export ESS_ROOT_PASSWORD_ENCRYPTED="<ENCRYPTED_PASSWORD_FROM_BUILD_INFO_BOX>"
    ```
 
