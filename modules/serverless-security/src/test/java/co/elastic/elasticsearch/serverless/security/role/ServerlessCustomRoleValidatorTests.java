@@ -115,7 +115,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         }
         final RoleDescriptor.IndicesPrivileges[] indicesPrivileges = indexPrivileges.isEmpty()
             ? null
-            : new RoleDescriptor.IndicesPrivileges[] { indexBuilderWithPrivileges(indexPrivileges, restrictedIndexAccess).build() };
+            : new RoleDescriptor.IndicesPrivileges[] { indexBuilderWithPrivileges(indexPrivileges, restrictedIndexAccess, true).build() };
 
         final RoleDescriptor.ApplicationResourcePrivileges.Builder builder = RoleDescriptor.ApplicationResourcePrivileges.builder()
             .resources("*");
@@ -198,11 +198,19 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         assertThat(validationErrors, containsInAnyOrder(itemMatchers));
     }
 
-    private static RoleDescriptor randomRoleDescriptor() {
+    public static RoleDescriptor randomRoleDescriptor() {
+        return randomRoleDescriptor(true);
+    }
+
+    public static RoleDescriptor randomRoleDescriptorWithoutFlsDls() {
+        return randomRoleDescriptor(false);
+    }
+
+    private static RoleDescriptor randomRoleDescriptor(boolean allowDlsFls) {
         return new RoleDescriptor(
             randomValueOtherThanMany(ReservedRolesStore::isReserved, () -> randomAlphaOfLengthBetween(3, 90)),
             randomSubsetOf(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames()).toArray(String[]::new),
-            randomIndicesPrivileges(0, 3, Set.of()),
+            randomIndicesPrivileges(0, 3, Set.of(), allowDlsFls),
             randomApplicationPrivileges(),
             null,
             null,
@@ -213,32 +221,43 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         );
     }
 
-    private static RoleDescriptor.IndicesPrivileges[] randomIndicesPrivileges(int min, int max, Set<String> excludedPrivileges) {
+    private static RoleDescriptor.IndicesPrivileges[] randomIndicesPrivileges(
+        int min,
+        int max,
+        Set<String> excludedPrivileges,
+        boolean allowDlsFls
+    ) {
         final RoleDescriptor.IndicesPrivileges[] indexPrivileges = new RoleDescriptor.IndicesPrivileges[randomIntBetween(min, max)];
         for (int i = 0; i < indexPrivileges.length; i++) {
-            indexPrivileges[i] = randomIndicesPrivilegesBuilder(excludedPrivileges).build();
+            indexPrivileges[i] = randomIndicesPrivilegesBuilder(excludedPrivileges, allowDlsFls).build();
         }
         return indexPrivileges;
     }
 
-    private static RoleDescriptor.IndicesPrivileges.Builder randomIndicesPrivilegesBuilder(Set<String> excludedPrivileges) {
+    private static RoleDescriptor.IndicesPrivileges.Builder randomIndicesPrivilegesBuilder(
+        Set<String> excludedPrivileges,
+        boolean allowDlsFls
+    ) {
         final Set<String> candidatePrivilegesNames = Sets.difference(
             ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames(),
             excludedPrivileges
         );
         assert false == candidatePrivilegesNames.isEmpty() : "no candidate privilege names to random from";
-        return indexBuilderWithPrivileges(randomSubsetOf(randomIntBetween(1, 4), candidatePrivilegesNames), false);
+        return indexBuilderWithPrivileges(randomSubsetOf(randomIntBetween(1, 4), candidatePrivilegesNames), false, allowDlsFls);
     }
 
-    private static RoleDescriptor.IndicesPrivileges.Builder indexBuilderWithPrivileges(
+    public static RoleDescriptor.IndicesPrivileges.Builder indexBuilderWithPrivileges(
         List<String> privileges,
-        boolean allowRestrictedIndices
+        boolean allowRestrictedIndices,
+        boolean allowDlsFls
     ) {
         final RoleDescriptor.IndicesPrivileges.Builder builder = RoleDescriptor.IndicesPrivileges.builder()
             .privileges(privileges)
             .indices(generateRandomStringArray(5, randomIntBetween(3, 9), false, false))
             .allowRestrictedIndices(allowRestrictedIndices);
-        randomDlsFls(builder);
+        if (allowDlsFls) {
+            randomDlsFls(builder);
+        }
         return builder;
     }
 

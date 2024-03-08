@@ -48,7 +48,8 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
         "/_security/privilege/_builtin",
         "/_security/api_key/{ids}",
         "/_security/api_key",
-        "/_security/api_key/_bulk_update"
+        "/_security/api_key/_bulk_update",
+        "/_security/user/_has_privileges"
     );
 
     private final Set<String> partiallyRestrictedPaths;

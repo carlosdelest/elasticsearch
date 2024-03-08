@@ -156,7 +156,7 @@ public final class ServerlessCustomRoleValidator {
         return validationException;
     }
 
-    static String mustBePredefinedClusterPrivilegeMessage() {
+    public static String mustBePredefinedClusterPrivilegeMessage() {
         return "a privilege must be one of the predefined cluster privilege names ["
             + Strings.collectionToCommaDelimitedString(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames())
             + "]";
@@ -191,7 +191,7 @@ public final class ServerlessCustomRoleValidator {
         return validationException;
     }
 
-    static String mustBePredefinedIndexPrivilegeMessage() {
+    public static String mustBePredefinedIndexPrivilegeMessage() {
         return "a privilege must be one of the predefined index privilege names ["
             + Strings.collectionToCommaDelimitedString(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames())
             + "]";

@@ -17,19 +17,17 @@
 
 package co.elastic.elasticsearch.serverless.security.apikey;
 
+import co.elastic.elasticsearch.serverless.security.AbstractServerlessCustomRolesRestTestCase;
+
 import org.elasticsearch.client.Request;
-import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
-import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
-import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
 
 import java.io.IOException;
@@ -38,10 +36,7 @@ import java.util.Map;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 
-public class ServerlessApiKeyCustomRolesIT extends ESRestTestCase {
-    private static final String TEST_OPERATOR_USER = "elastic-operator-user";
-    private static final String TEST_USER = "elastic-user";
-    private static final String TEST_PASSWORD = "elastic-password";
+public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRolesRestTestCase {
 
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
@@ -54,17 +49,6 @@ public class ServerlessApiKeyCustomRolesIT extends ESRestTestCase {
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
-    }
-
-    @Override
-    protected boolean preserveClusterUponCompletion() {
-        return false;
-    }
-
-    @Override
-    protected Settings restClientSettings() {
-        String token = basicAuthHeaderValue(TEST_OPERATOR_USER, new SecureString(TEST_PASSWORD.toCharArray()));
-        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 
     public void testApiKeys() throws IOException {
@@ -242,14 +226,10 @@ public class ServerlessApiKeyCustomRolesIT extends ESRestTestCase {
     }
 
     private void setStrictValidation(boolean value) throws IOException {
-        final var settingsPutRequest = new Request("PUT", "/_cluster/settings");
-        settingsPutRequest.setJsonEntity(Strings.format("""
-            {
-              "persistent": {
-                "xpack.security.authc.api_key.strict_request_validation.enabled": "%s"
-              }
-            }""", value));
-        executeAndAssertSuccess(TEST_OPERATOR_USER, settingsPutRequest);
+        updateClusterSettings(
+            adminClient(),
+            Settings.builder().put("xpack.security.authc.api_key.strict_request_validation.enabled", value).build()
+        );
     }
 
     private void executeApiKeyActionsAndAssertSuccess(String username, String roleDescriptorsPayload) throws IOException {
@@ -354,19 +334,5 @@ public class ServerlessApiKeyCustomRolesIT extends ESRestTestCase {
         final ResponseException e = expectThrows(ResponseException.class, () -> executeAsUser(username, request));
         assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(400));
         assertThat(e.getMessage(), containsString(message));
-    }
-
-    private Response executeAndAssertSuccess(String username, Request request) throws IOException {
-        final Response response = executeAsUser(username, request);
-        assertOK(response);
-        return response;
-    }
-
-    private Response executeAsUser(String username, Request request) throws IOException {
-        request.setOptions(
-            RequestOptions.DEFAULT.toBuilder()
-                .addHeader("Authorization", basicAuthHeaderValue(username, new SecureString(TEST_PASSWORD.toCharArray())))
-        );
-        return client().performRequest(request);
     }
 }

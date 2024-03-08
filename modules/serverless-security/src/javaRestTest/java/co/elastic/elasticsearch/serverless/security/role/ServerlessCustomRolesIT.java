@@ -17,10 +17,10 @@
 
 package co.elastic.elasticsearch.serverless.security.role;
 
+import co.elastic.elasticsearch.serverless.security.AbstractServerlessCustomRolesRestTestCase;
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupportedPrivilegesRegistry;
 
 import org.elasticsearch.client.Request;
-import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.common.Strings;
@@ -33,7 +33,6 @@ import org.elasticsearch.test.cluster.local.LocalClusterSpec;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
-import org.elasticsearch.test.rest.ESRestTestCase;
 import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
@@ -55,10 +54,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 
-public class ServerlessCustomRolesIT extends ESRestTestCase {
-    private static final String TEST_OPERATOR_USER = "elastic-operator-user";
-    private static final String TEST_USER = "elastic-user";
-    private static final String TEST_PASSWORD = "elastic-password";
+public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTestCase {
     private static final List<String> RESERVED_ROLES = List.of("superuser", "remote_monitoring_agent", "remote_monitoring_collector");
 
     @ClassRule
@@ -73,11 +69,6 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
-    }
-
-    @Override
-    protected boolean preserveClusterUponCompletion() {
-        return false;
     }
 
     @Override
@@ -451,20 +442,6 @@ public class ServerlessCustomRolesIT extends ESRestTestCase {
         final ResponseException e = expectThrows(ResponseException.class, () -> executeAsUser(username, putRoleRequest));
         assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(statusCode));
         assertThat(e.getMessage(), containsString(message));
-    }
-
-    private Response executeAndAssertSuccess(String username, Request request) throws IOException {
-        final Response response = executeAsUser(username, request);
-        assertOK(response);
-        return response;
-    }
-
-    private Response executeAsUser(String username, Request request) throws IOException {
-        request.setOptions(
-            RequestOptions.DEFAULT.toBuilder()
-                .addHeader("Authorization", basicAuthHeaderValue(username, new SecureString(TEST_PASSWORD.toCharArray())))
-        );
-        return client().performRequest(request);
     }
 
     private boolean deleteRole(String username, String roleName) throws IOException {

@@ -21,6 +21,7 @@ import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings;
 
 import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.API_KEY_STRICT_REQUEST_VALIDATION;
+import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION;
 import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDED_RESERVED_ROLES_SETTING;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
@@ -57,5 +58,13 @@ public class ServerlessSecurityPluginTests extends ESTestCase {
 
     public void testDefaultValueApiKeyStrictValidationSetting() {
         assertThat(API_KEY_STRICT_REQUEST_VALIDATION.get(plugin.additionalSettings()), equalTo(false));
+    }
+
+    public void testHasPrivilegesStrictValidationSettingIsRegistered() {
+        assertThat(plugin.getSettings(), hasItem(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION));
+    }
+
+    public void testDefaultValueHasPrivilegesStrictValidationSetting() {
+        assertThat(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION.get(plugin.additionalSettings()), equalTo(false));
     }
 }

@@ -20,6 +20,7 @@ import co.elastic.elasticsearch.serverless.security.apikey.ServerlessCreateApiKe
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessUpdateApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorOnlyRegistry;
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessGetBuiltinPrivilegesResponseTranslator;
+import co.elastic.elasticsearch.serverless.security.privilege.ServerlessHasPrivilegesRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessPutRoleRequestBuilderFactory;
 
 import org.elasticsearch.xpack.core.security.action.apikey.BulkUpdateApiKeyRequestTranslator;
@@ -27,6 +28,7 @@ import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyRequestBu
 import org.elasticsearch.xpack.core.security.action.apikey.UpdateApiKeyRequestTranslator;
 import org.elasticsearch.xpack.core.security.action.privilege.GetBuiltinPrivilegesResponseTranslator;
 import org.elasticsearch.xpack.core.security.action.role.PutRoleRequestBuilderFactory;
+import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesRequestBuilderFactory;
 
 module org.elasticsearch.internal.security {
 
@@ -48,4 +50,5 @@ module org.elasticsearch.internal.security {
     provides PutRoleRequestBuilderFactory with ServerlessPutRoleRequestBuilderFactory;
     provides CreateApiKeyRequestBuilderFactory with ServerlessCreateApiKeyRequestBuilderFactory;
     provides GetBuiltinPrivilegesResponseTranslator with ServerlessGetBuiltinPrivilegesResponseTranslator;
+    provides HasPrivilegesRequestBuilderFactory with ServerlessHasPrivilegesRequestBuilderFactory;
 }

@@ -77,7 +77,15 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
+    public static final Setting<Boolean> HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION = Setting.boolSetting(
+        "xpack.security.authz.has_privileges.strict_request_validation.enabled",
+        false, // TODO : This will become true at a later time
+        Setting.Property.OperatorDynamic,
+        Setting.Property.NodeScope
+    );
+
     private AtomicBoolean apiKeyStrictRequestValidation;
+    private AtomicBoolean hasPrivilegesStrictRequestValidation;
 
     @Override
     public Collection<?> createComponents(PluginServices services) {
@@ -88,9 +96,12 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
                     + "] to true"
             );
         }
-        services.clusterService()
-            .getClusterSettings()
-            .addSettingsUpdateConsumer(API_KEY_STRICT_REQUEST_VALIDATION, this::configureStrictApiKeyRequestValidation);
+        final ClusterSettings clusterSettings = services.clusterService().getClusterSettings();
+        clusterSettings.addSettingsUpdateConsumer(API_KEY_STRICT_REQUEST_VALIDATION, this::configureStrictApiKeyRequestValidation);
+        clusterSettings.addSettingsUpdateConsumer(
+            HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION,
+            this::configureStrictHasPrivilegesRequestValidation
+        );
         return Collections.emptyList();
     }
 
@@ -102,6 +113,14 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         }
     }
 
+    private void configureStrictHasPrivilegesRequestValidation(boolean enabled) {
+        if (this.hasPrivilegesStrictRequestValidation == null) {
+            throw new IllegalStateException("Strict Has Privileges request validation object not configured");
+        } else {
+            this.hasPrivilegesStrictRequestValidation.set(enabled);
+        }
+    }
+
     @Override
     public Settings additionalSettings() {
         return Settings.builder()
@@ -110,6 +129,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .put(NATIVE_USERS_SETTING.getKey(), false)
             .put(NATIVE_ROLES_SETTING.getKey(), false)
             .put(API_KEY_STRICT_REQUEST_VALIDATION.getKey(), false)
+            .put(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION.getKey(), false)
             .build();
     }
 
@@ -120,7 +140,8 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             NATIVE_USERS_SETTING,
             NATIVE_ROLES_SETTING,
             EXCLUDE_ROLES,
-            API_KEY_STRICT_REQUEST_VALIDATION
+            API_KEY_STRICT_REQUEST_VALIDATION,
+            HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION
         );
     }
 
@@ -137,11 +158,16 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Predicate<NodeFeature> clusterSupportsFeature
     ) {
         this.apiKeyStrictRequestValidation = new AtomicBoolean(clusterSettings.get(API_KEY_STRICT_REQUEST_VALIDATION));
+        this.hasPrivilegesStrictRequestValidation = new AtomicBoolean(clusterSettings.get(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION));
         restController.getApiProtections().setEnabled(true);
         return List.of();
     }
 
     public boolean strictApiKeyRequestValidationEnabled() {
         return apiKeyStrictRequestValidation != null && apiKeyStrictRequestValidation.get();
+    }
+
+    public boolean strictHasPrivilegesRequestValidationEnabled() {
+        return hasPrivilegesStrictRequestValidation != null && hasPrivilegesStrictRequestValidation.get();
     }
 }
