@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.lifecycle.serverless;
+package co.elastic.elasticsearch.serverless.datastream;
 
 import org.apache.http.util.EntityUtils;
 import org.elasticsearch.client.Request;

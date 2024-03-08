@@ -3,9 +3,9 @@ plugins {
 }
 
 esplugin {
-    name = "serverless-datastream-lifecycle"
-    description = "Data Stream Lifecycle for Elasticsearch"
-    classname = "co.elastic.elasticsearch.lifecycle.serverless.ServerlessDataStreamLifecyclePlugin"
+    name = "serverless-datastream"
+    description = "Data Stream for Elasticsearch"
+    classname = "co.elastic.elasticsearch.serverless.datastream.ServerlessDataStreamPlugin"
 }
 
 configurations {

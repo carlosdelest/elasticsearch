@@ -15,6 +15,6 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-module org.elasticsearch.lifecycle.serverless {
+module org.elasticsearch.serverless.datastream {
     requires org.elasticsearch.server;
 }

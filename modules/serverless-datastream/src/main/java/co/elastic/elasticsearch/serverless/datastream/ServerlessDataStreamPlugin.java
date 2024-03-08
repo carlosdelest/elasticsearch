@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.lifecycle.serverless;
+package co.elastic.elasticsearch.serverless.datastream;
 
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -25,9 +25,9 @@ import org.elasticsearch.plugins.Plugin;
 import java.util.List;
 
 /**
- * Serverless plugin that registers the data stream lifecycle only setting.
+ * Serverless plugin that registers the data stream settings.
  */
-public class ServerlessDataStreamLifecyclePlugin extends Plugin {
+public class ServerlessDataStreamPlugin extends Plugin {
 
     private static final String DATA_STREAMS_LIFECYCLE_ONLY_MODE_NAME = "data_streams.lifecycle_only.mode";
     public static final Setting<Boolean> DATA_STREAMS_LIFECYCLE_ONLY_MODE = Setting.boolSetting(
