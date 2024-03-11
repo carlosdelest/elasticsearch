@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.serverless.buildinfo;
 import org.elasticsearch.Build;
 import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.util.Maps;
+import org.elasticsearch.env.BuildVersion;
 import org.elasticsearch.internal.BuildExtension;
 
 import java.io.IOException;
@@ -48,6 +49,31 @@ public class ServerlessBuildExtension implements BuildExtension {
         var str = String.format(Locale.ROOT, "[serverless][%s][%s]", hash, date);
         INSTANCE = new Build(FLAVOR, Build.Type.DOCKER, hash, date, hash, null, isSnapshot, hash, hash, str);
     }
+
+    /**
+     * This build version implementation is intended to make version comparisons into no-ops.
+     * In other words, this class models all serverless builds as equal. We do this because the
+     * stateful implementation is intended to impose restrictions on users as they upgrade and
+     * downgrade nodes. In serverless, however, Elastic is the sole operator, and we don't
+     * need the same guardrails; other version classes such as {@link org.elasticsearch.TransportVersion}
+     * and {@link org.elasticsearch.index.IndexVersion} handle the comparisons we need.
+     */
+    private static final BuildVersion SERVERLESS_BUILD_VERSION = new BuildVersion() {
+        @Override
+        public boolean onOrAfterMinimumCompatible() {
+            return true;
+        }
+
+        @Override
+        public boolean isFutureVersion() {
+            return false;
+        }
+
+        @Override
+        public int id() {
+            return -1;
+        }
+    };
 
     private static Map<String, String> resolveManifestAttributes(String... keys) {
         Map<String, String> returnMap = Maps.newHashMapWithExpectedSize(keys.length);
@@ -85,5 +111,16 @@ public class ServerlessBuildExtension implements BuildExtension {
     @Override
     public boolean hasReleaseVersioning() {
         return false;
+    }
+
+    @Override
+    public BuildVersion currentBuildVersion() {
+        return SERVERLESS_BUILD_VERSION;
+    }
+
+    @Override
+    public BuildVersion fromVersionId(int versionId) {
+        assert versionId == -1 : "do not create serverless build version with real version ID";
+        return SERVERLESS_BUILD_VERSION;
     }
 }
