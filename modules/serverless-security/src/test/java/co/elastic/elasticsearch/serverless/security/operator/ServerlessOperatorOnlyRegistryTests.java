@@ -19,7 +19,6 @@ package co.elastic.elasticsearch.serverless.security.operator;
 
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.common.Randomness;
-import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestRequest;
@@ -37,8 +36,6 @@ import org.mockito.ArgumentCaptor;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -56,7 +53,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
         RestHandler restHandler = mock(RestHandler.class);
         RestRequest restRequest = mock(RestRequest.class);
         RestChannel restChannel = mock(RestChannel.class);
-        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry(Set.of());
+        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry();
 
         // no access at all is controlled outside of operator privileges - so we only assert this precondition
         when(restHandler.getServerlessScope()).thenReturn(null);
@@ -86,56 +83,29 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
     }
 
     public void testCheckRestPartial() {
-        List<String> restrictedPaths = randomList(1, 100, () -> randomAlphaOfLengthBetween(10, 20));
-        List<String> unRestrictedPaths = randomList(
-            1,
-            100,
-            () -> randomValueOtherThanMany(restrictedPaths::contains, () -> randomAlphaOfLengthBetween(10, 20))
-        );
-        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry(Sets.newHashSet(restrictedPaths));
+        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry();
 
         // create a rest request that should be restricted
-        String restrictedPath = randomFrom(restrictedPaths);
-        FakeRestRequest.Builder restrictedRequestBuilder = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY);
-        restrictedRequestBuilder.withPath(restrictedPath);
-        RestRequest restrictedRequest = restrictedRequestBuilder.build();
-
-        // create a rest request that should not be restricted
-        String unRestrictedPath = randomFrom(unRestrictedPaths);
-        FakeRestRequest.Builder unRestrictedRequestBuilder = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY);
-        unRestrictedRequestBuilder.withPath(unRestrictedPath);
-        RestRequest unRestrictedRequest = restrictedRequestBuilder.build();
-
-        // find a random additional unrestricted path we can add to our handler.
-        RestHandler.Route additionalPath = randomFrom(
-            unRestrictedPaths.stream()
-                .map(p -> RestHandler.Route.builder(randomFrom(RestRequest.Method.values()), p).build())
-                .collect(Collectors.toList())
-        );
+        final String requestPath = randomAlphaOfLengthBetween(10, 20);
+        RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withPath(requestPath).build();
 
         RestHandler restHandler = mock(RestHandler.class);
         when(restHandler.getServerlessScope()).thenReturn(Scope.PUBLIC);
-        // unrestricted path
-        List<RestHandler.Route> handlerRoutes = Arrays.asList(
-            RestHandler.Route.builder(randomFrom(RestRequest.Method.values()), unRestrictedPath).build(),
-            additionalPath
-        );
-        Randomness.shuffle(handlerRoutes);
-        when(restHandler.routes()).thenReturn(handlerRoutes);
-        OperatorPrivilegesViolation violation = registry.checkRest(restHandler, unRestrictedRequest, null);
-        assertNull(violation);
-        assertNull(unRestrictedRequest.param(RestRequest.PATH_RESTRICTED));
 
-        // restricted path
-        handlerRoutes = Arrays.asList(
-            RestHandler.Route.builder(randomFrom(RestRequest.Method.values()), restrictedPath).build(),
-            additionalPath
+        final RestHandler.Route additionalRoute = RestHandler.Route.builder(
+            randomFrom(RestRequest.Method.values()),
+            randomValueOtherThan(requestPath, () -> randomAlphaOfLengthBetween(10, 20))
+        ).build();
+        List<RestHandler.Route> handlerRoutes = Arrays.asList(
+            RestHandler.Route.builder(randomFrom(RestRequest.Method.values()), requestPath).build(),
+            additionalRoute
         );
         Randomness.shuffle(handlerRoutes);
         when(restHandler.routes()).thenReturn(handlerRoutes);
-        violation = registry.checkRest(restHandler, unRestrictedRequest, null);
+
+        OperatorPrivilegesViolation violation = registry.checkRest(restHandler, request, null);
         assertNull(violation);
-        assertThat(restrictedRequest.param(RestRequest.PATH_RESTRICTED), is("serverless"));
+        assertThat(request.param(RestRequest.PATH_RESTRICTED), is("serverless"));
     }
 
 }

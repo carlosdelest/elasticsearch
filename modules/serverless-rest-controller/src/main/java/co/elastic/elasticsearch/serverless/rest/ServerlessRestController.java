@@ -17,12 +17,17 @@
 
 package co.elastic.elasticsearch.serverless.rest;
 
+import co.elastic.elasticsearch.serverless.rest.RestrictedRestParameters.ParameterValidator;
+
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.client.internal.node.NodeClient;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestController;
+import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestInterceptor;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
@@ -30,13 +35,21 @@ import org.elasticsearch.telemetry.tracing.Tracer;
 import org.elasticsearch.usage.UsageService;
 import org.elasticsearch.xcontent.MediaType;
 
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
 public class ServerlessRestController extends RestController {
+
     static final String VERSION_HEADER_NAME = "Elastic-Api-Version";
     static final String VERSION_20231031 = "2023-10-31";
     static final Predicate<String> VERSION_VALIDATOR = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$").asMatchPredicate();
+
+    private static final Logger logger = org.elasticsearch.logging.LogManager.getLogger(ServerlessRestController.class);
+
+    private final boolean logValidationErrorsAsWarnings;
 
     public ServerlessRestController(
         RestInterceptor restInterceptor,
@@ -44,8 +57,60 @@ public class ServerlessRestController extends RestController {
         CircuitBreakerService circuitBreakerService,
         UsageService usageService,
         Tracer tracer
+
+    ) {
+        this(restInterceptor, client, circuitBreakerService, usageService, tracer, true);
+    }
+
+    protected ServerlessRestController(
+        RestInterceptor restInterceptor,
+        NodeClient client,
+        CircuitBreakerService circuitBreakerService,
+        UsageService usageService,
+        Tracer tracer,
+        boolean logValidationErrorsAsWarnings
     ) {
         super(restInterceptor, client, circuitBreakerService, usageService, tracer);
+        this.logValidationErrorsAsWarnings = logValidationErrorsAsWarnings;
+    }
+
+    @Override
+    protected void validateRequest(RestRequest request, RestHandler handler, NodeClient client) throws ElasticsearchStatusException {
+        if (request.hasParam(RestRequest.PATH_RESTRICTED)) {
+            validateRestParameters(request.path(), request.params());
+        }
+    }
+
+    private void validateRestParameters(String path, Map<String, String> params) throws ElasticsearchStatusException {
+        Set<String> errorSet = null;
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            final var paramName = entry.getKey();
+            String paramError = null;
+            if (RestrictedRestParameters.GLOBALLY_REJECTED_PARAMETERS.contains(paramName)) {
+                paramError = "The http parameter [" + paramName + "] is not permitted when running in serverless mode";
+            } else {
+                ParameterValidator validator = RestrictedRestParameters.GLOBALLY_VALIDATED_PARAMETERS.get(paramName);
+                if (validator != null) {
+                    paramError = validator.validate(paramName, entry.getValue());
+                }
+            }
+            if (paramError != null) {
+                if (errorSet == null) {
+                    errorSet = new HashSet<>();
+                }
+                errorSet.add(paramError);
+            }
+        }
+
+        if (errorSet != null) {
+            final String message = "Parameter validation failed for [" + path + "]: " + Strings.collectionToDelimitedString(errorSet, "; ");
+            if (logValidationErrorsAsWarnings) {
+                // Temporary behaviour to soft-launch this validation
+                logger.warn(message);
+            } else {
+                throw new ElasticsearchStatusException(message, RestStatus.BAD_REQUEST);
+            }
+        }
     }
 
     @Override

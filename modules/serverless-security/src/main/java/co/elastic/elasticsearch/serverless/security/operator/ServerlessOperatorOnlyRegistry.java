@@ -33,7 +33,6 @@ import org.elasticsearch.xpack.security.operator.OperatorPrivilegesViolation;
 
 import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Operator privilege rules specific for the serverless deployment.
@@ -41,28 +40,6 @@ import java.util.Set;
 public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
 
     private static final Logger logger = LogManager.getLogger(ServerlessOperatorOnlyRegistry.class);
-    private static final Set<String> PARTIALLY_RESTRICTED_PATHS = Set.of(
-        "/",
-        "/_security/role/{name}",
-        "/_security/role/",
-        "/_security/privilege/_builtin",
-        "/_security/api_key/{ids}",
-        "/_security/api_key",
-        "/_security/api_key/_bulk_update",
-        "/_security/user/_has_privileges"
-    );
-
-    private final Set<String> partiallyRestrictedPaths;
-
-    // Needed for java module
-    public ServerlessOperatorOnlyRegistry() {
-        this(PARTIALLY_RESTRICTED_PATHS);
-    }
-
-    // for testing
-    ServerlessOperatorOnlyRegistry(Set<String> partiallyRestrictedPaths) {
-        this.partiallyRestrictedPaths = partiallyRestrictedPaths;
-    }
 
     public OperatorPrivilegesViolation check(String action, TransportRequest request) {
         return null;  // do nothing
@@ -90,7 +67,7 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
                     restChannel.sendResponse(new RestResponse(RestStatus.NOT_FOUND, builder));
                 }
                 return () -> errorMessage;
-            } else if (restHandler.routes().stream().map(RestHandler.Route::getPath).anyMatch(partiallyRestrictedPaths::contains)) {
+            } else {
                 assert Scope.PUBLIC.equals(scope);
                 restRequest.markPathRestricted("serverless");
                 logger.trace("Marked request for uri [{}] as restricted for serverless", restRequest.uri());

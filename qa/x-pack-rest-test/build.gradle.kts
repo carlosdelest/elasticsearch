@@ -64,6 +64,8 @@ tasks {
             "roles/*/*",
             "change_password/*/*",
             "service_accounts/*/*",
+            // Uses "wait_for_active_shards"
+            "security/authz/31_rollover_using_alias/*",
             // Some ML APIs
             "ml/post_data/*",
             // Deprecation
