@@ -174,6 +174,8 @@ tasks {
                 // - Scripting
                 "scripts/20_get_script_context/*",
                 "scripts/25_get_script_languages/*",
+                // - Retrievers - need to be updated to not have specific index settings
+                "search.retrievers/*/*",
                 // - Legacy _knn_search
                 "search.vectors/40_knn_search/kNN search in _knn_search endpoint",
                 "search.vectors/40_knn_search/kNN search with filter in _knn_search endpoint",
