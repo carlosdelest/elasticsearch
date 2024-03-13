@@ -26,5 +26,7 @@ tasks {
         // Frozen indices not supported in Serverless
         exclude("**/JdbcDocFrozenCsvSpecIT.class")
         exclude("**/JdbcFrozenCsvSpecIT.class")
+        // AwaitsFix: https://github.com/elastic/elasticsearch-serverless/issues/1501
+        exclude("**/RestSqlIT.class")
     }
 }
