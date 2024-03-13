@@ -32,6 +32,11 @@ allprojects {
             add("featuresMetadataExtractor", "org.elasticsearch.test:metadata-extractor")
         }
     }
+    pluginManager.withPlugin("elasticsearch.java-base") {
+        dependencies {
+            add("nativeLibs", "org.elasticsearch:elasticsearch-native-libraries")
+        }
+    }
 
     configurations {
         all {
