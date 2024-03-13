@@ -43,6 +43,7 @@ class RestrictedRestParameters {
         "node_ids",
         "pre_filter_shard_size",
         "preference",
+        "routing",
         "type",
         "wait_for_active_shards"
     );
