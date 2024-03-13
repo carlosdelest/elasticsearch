@@ -1,5 +1,6 @@
 plugins {
     id("elasticsearch.internal-java-rest-test")
+    id("elasticsearch.internal-yaml-rest-test")
 }
 
 esplugin {
@@ -18,6 +19,10 @@ configurations {
 
 tasks {
     javaRestTest {
+        usesDefaultDistribution()
+    }
+
+    yamlRestTest {
         usesDefaultDistribution()
     }
 }

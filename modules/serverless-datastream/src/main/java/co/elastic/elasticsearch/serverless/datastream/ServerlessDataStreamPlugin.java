@@ -17,35 +17,45 @@
 
 package co.elastic.elasticsearch.serverless.datastream;
 
+import org.elasticsearch.cluster.metadata.DataStreamLifecycle;
+import org.elasticsearch.cluster.metadata.MetadataCreateDataStreamService;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.plugins.Plugin;
 
 import java.util.List;
 
 /**
- * Serverless plugin that registers the data stream settings.
+ * Serverless plugin that registers data stream settings.
  */
 public class ServerlessDataStreamPlugin extends Plugin {
 
-    private static final String DATA_STREAMS_LIFECYCLE_ONLY_MODE_NAME = "data_streams.lifecycle_only.mode";
     public static final Setting<Boolean> DATA_STREAMS_LIFECYCLE_ONLY_MODE = Setting.boolSetting(
-        "data_streams.lifecycle_only.mode",
+        DataStreamLifecycle.DATA_STREAMS_LIFECYCLE_ONLY_SETTING_NAME,
         true,
+        Property.NodeScope
+    );
+    public static final Setting<TimeValue> FAILURE_STORE_REFRESH_INTERVAL_SETTING = Setting.timeSetting(
+        MetadataCreateDataStreamService.FAILURE_STORE_REFRESH_INTERVAL_SETTING_NAME,
+        TimeValue.timeValueSeconds(30),
         Property.NodeScope
     );
 
     @Override
     public Settings additionalSettings() {
-        // we explicitly configure the setting here as it's read in the open source distribution where the
-        // setting is not registered (and it's read with a default of `false`)
-        // this way we'll be able to make sure the in serverless the setting will always have the value `true`
-        return Settings.builder().put(DATA_STREAMS_LIFECYCLE_ONLY_MODE_NAME, true).build();
+        // We explicitly configure these settings here, as they're read in the open source distribution where the
+        // settings are not registered. We fall back to their default values in the open source distribution
+        // and here we set the values for serverless.
+        return Settings.builder()
+            .put(DATA_STREAMS_LIFECYCLE_ONLY_MODE.getKey(), true)
+            .put(FAILURE_STORE_REFRESH_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(30))
+            .build();
     }
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(DATA_STREAMS_LIFECYCLE_ONLY_MODE);
+        return List.of(DATA_STREAMS_LIFECYCLE_ONLY_MODE, FAILURE_STORE_REFRESH_INTERVAL_SETTING);
     }
 }

@@ -17,4 +17,5 @@
 
 module org.elasticsearch.serverless.datastream {
     requires org.elasticsearch.server;
+    requires org.elasticsearch.base;
 }
