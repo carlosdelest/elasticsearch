@@ -92,11 +92,16 @@ public class ServerlessOperatorPrivsIT extends ESRestTestCase {
             ResponseException.class,
             () -> notOperatorClient.performRequest(new Request("GET", "/_cat/thread_pool/write"))
         );
-        assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.NOT_FOUND.getStatus()));
-        assertEquals(
-            "{\"error\":\"Request for uri [/_cat/thread_pool/write] with method [GET] "
-                + "exists but is not available when running in serverless mode\"}",
-            EntityUtils.toString(exception.getResponse().getEntity(), StandardCharsets.UTF_8)
+        assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.GONE.getStatus()));
+        assertThat(
+            EntityUtils.toString(exception.getResponse().getEntity(), StandardCharsets.UTF_8),
+            equalTo(
+                "{\"error\":{\"root_cause\":[{\"type\":\"api_not_available_exception\",\"reason\":\"Request for uri "
+                    + "[/_cat/thread_pool/write] with method [GET] exists but is not available when running in serverless mode\"}],"
+                    + "\"type\":\"api_not_available_exception\",\"reason\":\"Request for uri [/_cat/thread_pool/write] with method "
+                    + "[GET] exists but is not available when running in serverless mode\"},\"status\":410}"
+            )
         );
     }
+
 }

@@ -18,7 +18,9 @@
 package co.elastic.elasticsearch.serverless.security.operator;
 
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.common.Randomness;
+import org.elasticsearch.rest.ApiNotAvailableException;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestRequest;
@@ -37,11 +39,10 @@ import org.mockito.ArgumentCaptor;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.hamcrest.Matchers.containsString;
+import static org.elasticsearch.test.TestMatchers.throwableWithMessage;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
@@ -67,19 +68,25 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
         when(restRequest.method()).thenReturn(method);
         when(restChannel.newErrorBuilder()).thenReturn(XContentBuilder.builder(XContentType.JSON.xContent()));
         ArgumentCaptor<RestResponse> responseCapture = ArgumentCaptor.forClass(RestResponse.class);
-        OperatorPrivilegesViolation violation = registry.checkRest(restHandler, restRequest, restChannel);
-        verify(restChannel).sendResponse(responseCapture.capture());
-        assertThat(responseCapture.getValue().status(), is(RestStatus.NOT_FOUND));
+        ElasticsearchException ex = expectThrows(
+            ElasticsearchException.class,
+            () -> registry.checkRest(restHandler, restRequest, restChannel)
+        );
+        assertThat(ex, instanceOf(ApiNotAvailableException.class));
+        assertThat(ex.status(), is(RestStatus.GONE));
         String violationMessage = "Request for uri ["
             + path
             + "] with method ["
             + method
             + "] exists but is not available when running in serverless mode";
-        assertEquals(violation.message(), violationMessage);
-        assertThat(responseCapture.getValue().content().utf8ToString(), containsString(violationMessage));
+        assertThat(ex, throwableWithMessage(violationMessage));
 
         when(restHandler.getServerlessScope()).thenReturn(Scope.PUBLIC);
-        assertThat(registry.checkRest(restHandler, restRequest, restChannel), nullValue());
+        try {
+            registry.checkRest(restHandler, restRequest, restChannel);
+        } catch (ElasticsearchStatusException e) {
+            fail("Public rest handlers should not trigger exceptions in the operator-only registry - " + e);
+        }
     }
 
     public void testCheckRestPartial() {
