@@ -16,6 +16,7 @@
  */
 
 module org.elasticsearch.serverless.buildinfo {
+    requires org.apache.logging.log4j;
     requires org.elasticsearch.server;
     requires org.elasticsearch.base;
 

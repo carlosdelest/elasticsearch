@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.buildinfo;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.Build;
 import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.util.Maps;
@@ -33,6 +35,7 @@ import java.util.jar.JarInputStream;
 import java.util.jar.Manifest;
 
 public class ServerlessBuildExtension implements BuildExtension {
+    private static final Logger logger = LogManager.getLogger(ServerlessBuildExtension.class);
     private static final String FLAVOR = "serverless";
 
     private static final Build INSTANCE;
@@ -120,7 +123,11 @@ public class ServerlessBuildExtension implements BuildExtension {
 
     @Override
     public BuildVersion fromVersionId(int versionId) {
-        assert versionId == -1 : "do not create serverless build version with real version ID";
+        // TODO: reenable this once we deal with PersistedCLusterState (ES-7343)
+        // assert versionId == -1 : "do not create serverless build version with real version ID";
+        if (versionId != -1) {
+            logger.warn("Attempted to create a BuildVersion with stateful build id: [{}]", versionId);
+        }
         return SERVERLESS_BUILD_VERSION;
     }
 }
