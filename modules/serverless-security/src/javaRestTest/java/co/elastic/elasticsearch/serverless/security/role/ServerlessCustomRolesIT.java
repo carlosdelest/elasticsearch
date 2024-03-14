@@ -36,8 +36,6 @@ import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
-import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
-import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.junit.ClassRule;
 
 import java.io.IOException;
@@ -413,14 +411,18 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 contains(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames().stream().sorted().toArray())
             );
         }
+        // Same for operator users
         {
             final Response response = executeAndAssertSuccess(TEST_OPERATOR_USER, new Request("GET", "/_security/privilege/_builtin"));
             final Map<String, Object> responseAsMap = responseAsMap(response);
             assertThat(
                 (Collection<String>) responseAsMap.get("cluster"),
-                contains(ClusterPrivilegeResolver.names().stream().sorted().toArray())
+                contains(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames().stream().sorted().toArray())
             );
-            assertThat((Collection<String>) responseAsMap.get("index"), contains(IndexPrivilege.names().stream().sorted().toArray()));
+            assertThat(
+                (Collection<String>) responseAsMap.get("index"),
+                contains(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames().stream().sorted().toArray())
+            );
         }
     }
 

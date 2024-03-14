@@ -83,11 +83,11 @@ public class ServerlessHasPrivilegesRequestBuilderFactory implements HasPrivileg
                 return super.source(username, source, xContentType);
             }
             super.source(username, source, xContentType);
-            validatePrivilegesToCheck(request.getPrivilegesToCheck());
+            validatePrivilegesToCheck(username, request.getPrivilegesToCheck());
             return this;
         }
 
-        private void validatePrivilegesToCheck(AuthorizationEngine.PrivilegesToCheck privilegesToCheck) {
+        private void validatePrivilegesToCheck(String username, AuthorizationEngine.PrivilegesToCheck privilegesToCheck) {
             ActionRequestValidationException validationException = null;
             for (var clusterPrivilege : privilegesToCheck.cluster()) {
                 validationException = validateClusterPrivilege(clusterPrivilege, validationException);
@@ -101,7 +101,7 @@ public class ServerlessHasPrivilegesRequestBuilderFactory implements HasPrivileg
                 if (strictRequestValidationEnabled.get()) {
                     throw validationException;
                 } else {
-                    logger.info("Has Privileges Request includes unsupported privileges", validationException);
+                    logger.info("Has Privileges Request includes unsupported privileges for [" + username + "]", validationException);
                 }
             }
         }

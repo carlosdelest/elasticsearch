@@ -92,6 +92,9 @@ tasks {
             "security/authz/40_condtional_cluster_priv/*",
             // - Legacy templates
             "analytics/multi_terms/*",
+            // Set of privileges is different in Serverless; we cover this case in
+            // ServerlessCustomRolesIT::testGetBuiltinPrivileges
+            "privileges/11_builtin/Test get builtin privileges",
 
             // Muted in severless, awaitsfix https://github.com/elastic/elasticsearch-serverless/issues/826
             "dlm/10_usage/Test data stream lifecycle usage stats"
