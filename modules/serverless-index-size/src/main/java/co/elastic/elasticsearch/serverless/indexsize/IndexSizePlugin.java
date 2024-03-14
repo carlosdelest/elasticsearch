@@ -17,31 +17,45 @@
 
 package co.elastic.elasticsearch.serverless.indexsize;
 
+import co.elastic.elasticsearch.serverless.indexsize.action.GetShardInfoAction;
+import co.elastic.elasticsearch.serverless.indexsize.action.TransportGetShardInfoAction;
+
+import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
+import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.features.NodeFeature;
 import org.elasticsearch.persistent.PersistentTaskParams;
 import org.elasticsearch.persistent.PersistentTasksExecutor;
 import org.elasticsearch.persistent.PersistentTasksService;
+import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.PersistentTaskPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ParseField;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
-public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin {
+public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin, ActionPlugin {
 
     static final NodeFeature INDEX_SIZE_SUPPORTED = new NodeFeature("index_size.supported");
 
     private IndexSizeTaskExecutor indexSizeTaskExecutor;
+    private MeteringShardInfoService meteringShardInfoService;
+    private final boolean hasSearchRole;
+
+    public IndexSizePlugin(Settings settings) {
+        this.hasSearchRole = DiscoveryNode.hasRole(settings, DiscoveryNodeRole.SEARCH_ROLE);
+    }
 
     @Override
     public List<Setting<?>> getSettings() {
@@ -65,6 +79,12 @@ public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin {
             indexSizeService,
             services.environment().settings()
         );
+        if (hasSearchRole) {
+            meteringShardInfoService = new MeteringShardInfoService();
+            return List.of(indexSizeTaskExecutor, indexSizeService, meteringShardInfoService);
+        } else {
+            meteringShardInfoService = null;
+        }
         return List.of(indexSizeTaskExecutor, indexSizeService);
     }
 
@@ -98,7 +118,11 @@ public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin {
     }
 
     @Override
-    public void close() throws IOException {
-        super.close();
+    public Collection<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+        if (hasSearchRole) {
+            return List.of(new ActionPlugin.ActionHandler<>(GetShardInfoAction.INSTANCE, TransportGetShardInfoAction.class));
+        } else {
+            return List.of();
+        }
     }
 }

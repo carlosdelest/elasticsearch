@@ -30,4 +30,5 @@ module org.elasticsearch.serverless.indexsize {
     provides org.elasticsearch.features.FeatureSpecification with IndexSizeFeatures;
 
     exports co.elastic.elasticsearch.serverless.indexsize;
+    exports co.elastic.elasticsearch.serverless.indexsize.action to org.elasticsearch.server;
 }
