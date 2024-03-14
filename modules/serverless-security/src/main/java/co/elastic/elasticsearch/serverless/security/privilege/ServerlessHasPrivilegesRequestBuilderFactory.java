@@ -34,6 +34,9 @@ import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeRes
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator.mustBePredefinedClusterPrivilegeMessage;
@@ -101,9 +104,57 @@ public class ServerlessHasPrivilegesRequestBuilderFactory implements HasPrivileg
                 if (strictRequestValidationEnabled.get()) {
                     throw validationException;
                 } else {
-                    logger.info("Has Privileges Request includes unsupported privileges for [" + username + "]", validationException);
+                    // We have some noisy issues that are already tracked; exclude them from logs
+                    if (false == isKnownNoisyIssue(privilegesToCheck)) {
+                        logger.info(
+                            "Has Privileges Request includes unsupported privileges for ["
+                                + username
+                                + "] and privileges to check ["
+                                + privilegesToCheck
+                                + "]",
+                            validationException
+                        );
+                    } else {
+                        logger.debug("Detected known invalid Has Privileges Request for [" + username + "]");
+                    }
                 }
             }
+        }
+
+        private static final Set<String> KNOWN_INVALID_PAYLOAD_ES_8038 = Set.of(
+            "all",
+            "create_snapshot",
+            "manage",
+            "manage_api_key",
+            "manage_ccr",
+            "manage_transform",
+            "manage_ilm",
+            "manage_index_templates",
+            "manage_ingest_pipelines",
+            "manage_ml",
+            "manage_own_api_key",
+            "manage_pipeline",
+            "manage_rollup",
+            "manage_saml",
+            "manage_security",
+            "manage_token",
+            "manage_watcher",
+            "monitor",
+            "monitor_transform",
+            "monitor_ml",
+            "monitor_rollup",
+            "monitor_watcher",
+            "read_ccr",
+            "read_ilm",
+            "transport_client"
+        );
+
+        private static boolean isKnownNoisyIssue(AuthorizationEngine.PrivilegesToCheck privilegesToCheck) {
+            if (privilegesToCheck.cluster() == null) {
+                return false;
+            }
+            // https://elasticco.atlassian.net/browse/ES-8038
+            return new HashSet<>(Arrays.asList(privilegesToCheck.cluster())).equals(KNOWN_INVALID_PAYLOAD_ES_8038);
         }
 
         private ActionRequestValidationException validateClusterPrivilege(
