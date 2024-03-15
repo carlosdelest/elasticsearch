@@ -8,7 +8,7 @@ echo "--- Determining last succesful kibana e2e tests"
 KIBANA_BRANCH='main'
 INTAKE_PIPELINE_SLUG="kibana-elasticsearch-serverless-verify-and-promote"
 BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
-BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${KIBANA_BRANCH}&state=passed" | jq '. | map(. | select(.creator == null)) | .[0] | {commit: .commit, url: .web_url}')
+BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${KIBANA_BRANCH}&state=passed&per_page=100" | jq '. | map(. | select(.creator == null)) | .[0] | {commit: .commit, url: .web_url}')
 KIBANA_COMMIT=$(echo ${BUILD_JSON} | jq -r '.commit')
 PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
 
