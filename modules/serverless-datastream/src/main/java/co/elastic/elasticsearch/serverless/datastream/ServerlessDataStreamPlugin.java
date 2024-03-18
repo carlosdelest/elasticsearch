@@ -27,12 +27,15 @@ import org.elasticsearch.plugins.Plugin;
 
 import java.util.List;
 
+import static org.elasticsearch.action.datastreams.autosharding.DataStreamAutoShardingService.DATA_STREAMS_AUTO_SHARDING_ENABLED;
+import static org.elasticsearch.common.settings.Setting.boolSetting;
+
 /**
  * Serverless plugin that registers data stream settings.
  */
 public class ServerlessDataStreamPlugin extends Plugin {
 
-    public static final Setting<Boolean> DATA_STREAMS_LIFECYCLE_ONLY_MODE = Setting.boolSetting(
+    public static final Setting<Boolean> DATA_STREAMS_LIFECYCLE_ONLY_MODE = boolSetting(
         DataStreamLifecycle.DATA_STREAMS_LIFECYCLE_ONLY_SETTING_NAME,
         true,
         Property.NodeScope
@@ -43,6 +46,12 @@ public class ServerlessDataStreamPlugin extends Plugin {
         Property.NodeScope
     );
 
+    public static final Setting<Boolean> DATA_STREAM_AUTO_SHARDING_ENABLED_SETTING = boolSetting(
+        DATA_STREAMS_AUTO_SHARDING_ENABLED,
+        false,
+        Setting.Property.NodeScope
+    );
+
     @Override
     public Settings additionalSettings() {
         // We explicitly configure these settings here, as they're read in the open source distribution where the
@@ -51,11 +60,12 @@ public class ServerlessDataStreamPlugin extends Plugin {
         return Settings.builder()
             .put(DATA_STREAMS_LIFECYCLE_ONLY_MODE.getKey(), true)
             .put(FAILURE_STORE_REFRESH_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(30))
+            .put(DATA_STREAMS_AUTO_SHARDING_ENABLED, true)
             .build();
     }
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(DATA_STREAMS_LIFECYCLE_ONLY_MODE, FAILURE_STORE_REFRESH_INTERVAL_SETTING);
+        return List.of(DATA_STREAMS_LIFECYCLE_ONLY_MODE, FAILURE_STORE_REFRESH_INTERVAL_SETTING, DATA_STREAM_AUTO_SHARDING_ENABLED_SETTING);
     }
 }
