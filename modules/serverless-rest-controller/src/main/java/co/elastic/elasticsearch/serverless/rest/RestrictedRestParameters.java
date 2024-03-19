@@ -17,6 +17,9 @@
 
 package co.elastic.elasticsearch.serverless.rest;
 
+import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.rest.action.document.RestGetAction;
+
 import java.util.Map;
 import java.util.Set;
 
@@ -28,8 +31,18 @@ class RestrictedRestParameters {
         /**
          * @return An error message if the parameter is invalid, or {@code null} if it is allowed.
          */
-        String validate(String paramName, String paramValue);
+        String validate(RestHandler handler, String paramName, String paramValue);
     }
+
+    /**
+     * Reject the supplied parameter if it applied to the {@link RestGetAction} handler.
+     */
+    private static final ParameterValidator REJECTED_FOR_GET_DOC = (handler, param, value) -> {
+        if (handler instanceof RestGetAction) {
+            return "In serverless mode, get requests may not include the [" + param + "] parameter";
+        }
+        return null;
+    };
 
     /**
      * HTTP parameters that are rejected on a request to any path (if request restrictions are enabled for this request)
@@ -51,6 +64,8 @@ class RestrictedRestParameters {
     /**
      * HTTP parameters that are validated on a request to any path (if request restrictions are enabled for this request)
      */
-    public static final Map<String, ParameterValidator> GLOBALLY_VALIDATED_PARAMETERS = Map.ofEntries();
+    public static final Map<String, ParameterValidator> GLOBALLY_VALIDATED_PARAMETERS = Map.ofEntries(
+        Map.entry("refresh", REJECTED_FOR_GET_DOC)
+    );
 
 }

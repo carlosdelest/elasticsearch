@@ -26,6 +26,7 @@ import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.rest.action.document.RestGetAction;
 import org.elasticsearch.telemetry.tracing.Tracer;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.client.NoOpNodeClient;
@@ -67,6 +68,7 @@ public class ServerlessRestControllerTests extends ESTestCase {
     private ThreadContext threadContext;
     private NoOpNodeClient client;
     private ServerlessRestController controller;
+    private RestHandler restHandler;
 
     @Before
     public void setup() {
@@ -81,6 +83,7 @@ public class ServerlessRestControllerTests extends ESTestCase {
             mock(Tracer.class),
             false
         );
+        this.restHandler = new DummyRestHandler();
     }
 
     @After
@@ -198,10 +201,28 @@ public class ServerlessRestControllerTests extends ESTestCase {
         }
     }
 
+    public void testRejectRefreshParameterOnGetDoc() throws Exception {
+        this.restHandler = new RestGetAction();
+        final String path = "/" + randomAlphaOfLength(3) + "/" + randomAlphaOfLength(5);
+        final String errorMessage = expectParameterValidationFailure(path, Map.of("refresh", String.valueOf(randomBoolean())));
+        assertThat(
+            errorMessage,
+            equalTo(
+                "Parameter validation failed for [" + path + "]: In serverless mode, get requests may not include the [refresh] parameter"
+            )
+        );
+    }
+
     public void testAllHttpParametersAllowedForOperator() throws Exception {
+        if (randomBoolean()) {
+            this.restHandler = new RestGetAction();
+        } else {
+            this.restHandler = new DummyRestHandler();
+        }
         final String path = "/" + randomAlphaOfLength(3) + "/" + randomAlphaOfLength(5);
         final List<String> operatorOnlyParamNames = randomNonEmptySubsetOf(RestrictedRestParameters.GLOBALLY_REJECTED_PARAMETERS);
-        final List<String> validParamNames = randomList(
+        final List<String> validatedParamNames = randomSubsetOf(RestrictedRestParameters.GLOBALLY_VALIDATED_PARAMETERS.keySet());
+        final List<String> permittedParamNames = randomList(
             1,
             5,
             () -> randomValueOtherThanMany(
@@ -211,10 +232,10 @@ public class ServerlessRestControllerTests extends ESTestCase {
             )
         );
         Map<String, String> parameters = new HashMap<>();
-        Stream.concat(operatorOnlyParamNames.stream(), validParamNames.stream())
+        Stream.concat(operatorOnlyParamNames.stream(), Stream.concat(validatedParamNames.stream(), permittedParamNames.stream()))
             .forEach(name -> parameters.put(name, randomAlphaOfLengthBetween(2, 8)));
 
-        assertThat(parameters.size(), equalTo(operatorOnlyParamNames.size() + validParamNames.size()));
+        assertThat(parameters.size(), equalTo(operatorOnlyParamNames.size() + validatedParamNames.size() + permittedParamNames.size()));
         validateRequest(path, parameters, true);
     }
 
@@ -252,7 +273,7 @@ public class ServerlessRestControllerTests extends ESTestCase {
         }
 
         final RestRequest req = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withPath(path).withParams(effectiveParams).build();
-        controller.validateRequest(req, new DummyRestHandler(), client);
+        controller.validateRequest(req, restHandler, client);
     }
 
     private static class DummyRestHandler implements RestHandler {

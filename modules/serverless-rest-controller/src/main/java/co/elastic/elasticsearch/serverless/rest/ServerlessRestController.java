@@ -77,11 +77,11 @@ public class ServerlessRestController extends RestController {
     @Override
     protected void validateRequest(RestRequest request, RestHandler handler, NodeClient client) throws ElasticsearchStatusException {
         if (request.hasParam(RestRequest.PATH_RESTRICTED)) {
-            validateRestParameters(request.path(), request.params());
+            validateRestParameters(request.path(), handler.getConcreteRestHandler(), request.params());
         }
     }
 
-    private void validateRestParameters(String path, Map<String, String> params) throws ElasticsearchStatusException {
+    private void validateRestParameters(String path, RestHandler handler, Map<String, String> params) throws ElasticsearchStatusException {
         Set<String> errorSet = null;
         for (Map.Entry<String, String> entry : params.entrySet()) {
             final var paramName = entry.getKey();
@@ -91,7 +91,7 @@ public class ServerlessRestController extends RestController {
             } else {
                 ParameterValidator validator = RestrictedRestParameters.GLOBALLY_VALIDATED_PARAMETERS.get(paramName);
                 if (validator != null) {
-                    paramError = validator.validate(paramName, entry.getValue());
+                    paramError = validator.validate(handler, paramName, entry.getValue());
                 }
             }
             if (paramError != null) {
