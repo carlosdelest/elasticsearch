@@ -17,15 +17,19 @@
 
 package co.elastic.elasticsearch.serverless.security.privilege;
 
+import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.NamedClusterPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.Privilege;
 
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -108,5 +112,24 @@ public record ServerlessSupportedPrivilegesRegistry() {
     private static Map.Entry<String, IndexPrivilege> nameWithPrivilegeEntry(IndexPrivilege privilege) {
         assert privilege.name().size() == 1 : "expected singleton but got [" + privilege.name() + "]";
         return Map.entry(privilege.name().iterator().next(), privilege);
+    }
+
+    public static Collection<String> findClusterPrivilegesThatGrant(
+        Authentication authentication,
+        String action,
+        TransportRequest request
+    ) {
+        return findPrivilegesThatGrant(SUPPORTED_CLUSTER_PRIVILEGES, e -> e.getValue().permission().check(action, request, authentication));
+    }
+
+    public static Collection<String> findIndexPrivilegesThatGrant(String action) {
+        return findPrivilegesThatGrant(SUPPORTED_INDEX_PRIVILEGES, e -> e.getValue().predicate().test(action));
+    }
+
+    private static <T> Collection<String> findPrivilegesThatGrant(
+        Map<String, T> privileges,
+        Predicate<Map.Entry<String, T>> privilegeEntryMatcher
+    ) {
+        return privileges.entrySet().stream().filter(privilegeEntryMatcher).map(Map.Entry::getKey).toList();
     }
 }

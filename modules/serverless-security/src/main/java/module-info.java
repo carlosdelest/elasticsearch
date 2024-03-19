@@ -18,6 +18,7 @@
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessBulkUpdateApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessCreateApiKeyRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessUpdateApiKeyRequestTranslator;
+import co.elastic.elasticsearch.serverless.security.authz.ServerlessAuthorizationDenialMessages;
 import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorOnlyRegistry;
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessGetBuiltinPrivilegesResponseTranslator;
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessHasPrivilegesRequestBuilderFactory;
@@ -29,6 +30,7 @@ import org.elasticsearch.xpack.core.security.action.apikey.UpdateApiKeyRequestTr
 import org.elasticsearch.xpack.core.security.action.privilege.GetBuiltinPrivilegesResponseTranslator;
 import org.elasticsearch.xpack.core.security.action.role.PutRoleRequestBuilderFactory;
 import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesRequestBuilderFactory;
+import org.elasticsearch.xpack.security.authz.AuthorizationDenialMessages;
 
 module org.elasticsearch.internal.security {
 
@@ -43,6 +45,7 @@ module org.elasticsearch.internal.security {
     exports co.elastic.elasticsearch.serverless.security.operator to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.role to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.privilege to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.serverless.security.authz to org.elasticsearch.server;
 
     provides UpdateApiKeyRequestTranslator with ServerlessUpdateApiKeyRequestTranslator;
     provides BulkUpdateApiKeyRequestTranslator with ServerlessBulkUpdateApiKeyRequestTranslator;
@@ -51,4 +54,5 @@ module org.elasticsearch.internal.security {
     provides CreateApiKeyRequestBuilderFactory with ServerlessCreateApiKeyRequestBuilderFactory;
     provides GetBuiltinPrivilegesResponseTranslator with ServerlessGetBuiltinPrivilegesResponseTranslator;
     provides HasPrivilegesRequestBuilderFactory with ServerlessHasPrivilegesRequestBuilderFactory;
+    provides AuthorizationDenialMessages with ServerlessAuthorizationDenialMessages;
 }
