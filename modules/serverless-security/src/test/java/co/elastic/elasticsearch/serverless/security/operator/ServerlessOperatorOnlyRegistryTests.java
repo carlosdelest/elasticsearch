@@ -21,20 +21,14 @@ import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.rest.ApiNotAvailableException;
-import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestRequest;
-import org.elasticsearch.rest.RestResponse;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.rest.Scope;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.rest.FakeRestRequest;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
-import org.elasticsearch.xcontent.XContentBuilder;
-import org.elasticsearch.xcontent.XContentType;
-import org.elasticsearch.xpack.security.operator.OperatorPrivilegesViolation;
 import org.junit.Before;
-import org.mockito.ArgumentCaptor;
 
 import java.util.Arrays;
 import java.util.List;
@@ -53,12 +47,11 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
     public void testCheckRestFull() throws Exception {
         RestHandler restHandler = mock(RestHandler.class);
         RestRequest restRequest = mock(RestRequest.class);
-        RestChannel restChannel = mock(RestChannel.class);
         ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry();
 
         // no access at all is controlled outside of operator privileges - so we only assert this precondition
         when(restHandler.getServerlessScope()).thenReturn(null);
-        expectThrows(ElasticsearchException.class, () -> registry.checkRest(restHandler, restRequest, restChannel));
+        expectThrows(ElasticsearchException.class, () -> registry.checkRest(restHandler, restRequest));
 
         // by the time we get here, we know the user is not an operator, so fully restrict the request for internal scope
         when(restHandler.getServerlessScope()).thenReturn(Scope.INTERNAL);
@@ -66,12 +59,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
         RestRequest.Method method = randomFrom(RestRequest.Method.values());
         when(restRequest.uri()).thenReturn(path);
         when(restRequest.method()).thenReturn(method);
-        when(restChannel.newErrorBuilder()).thenReturn(XContentBuilder.builder(XContentType.JSON.xContent()));
-        ArgumentCaptor<RestResponse> responseCapture = ArgumentCaptor.forClass(RestResponse.class);
-        ElasticsearchException ex = expectThrows(
-            ElasticsearchException.class,
-            () -> registry.checkRest(restHandler, restRequest, restChannel)
-        );
+        ElasticsearchException ex = expectThrows(ElasticsearchException.class, () -> registry.checkRest(restHandler, restRequest));
         assertThat(ex, instanceOf(ApiNotAvailableException.class));
         assertThat(ex.status(), is(RestStatus.GONE));
         String violationMessage = "Request for uri ["
@@ -83,7 +71,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
 
         when(restHandler.getServerlessScope()).thenReturn(Scope.PUBLIC);
         try {
-            registry.checkRest(restHandler, restRequest, restChannel);
+            registry.checkRest(restHandler, restRequest);
         } catch (ElasticsearchStatusException e) {
             fail("Public rest handlers should not trigger exceptions in the operator-only registry - " + e);
         }
@@ -110,8 +98,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
         Randomness.shuffle(handlerRoutes);
         when(restHandler.routes()).thenReturn(handlerRoutes);
 
-        OperatorPrivilegesViolation violation = registry.checkRest(restHandler, request, null);
-        assertNull(violation);
+        registry.checkRest(restHandler, request);
         assertThat(request.param(RestRequest.PATH_RESTRICTED), is("serverless"));
     }
 

@@ -21,7 +21,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.rest.ApiNotAvailableException;
-import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.Scope;
@@ -43,7 +42,7 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
     }
 
     @Override
-    public OperatorPrivilegesViolation checkRest(RestHandler restHandler, RestRequest restRequest, RestChannel restChannel) {
+    public void checkRest(RestHandler restHandler, RestRequest restRequest) {
         try {
             Scope scope = restHandler.getServerlessScope();
             Objects.requireNonNull(
@@ -66,6 +65,5 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
         } catch (Exception e) {
             throw new ElasticsearchException(e);
         }
-        return null;
     }
 }
