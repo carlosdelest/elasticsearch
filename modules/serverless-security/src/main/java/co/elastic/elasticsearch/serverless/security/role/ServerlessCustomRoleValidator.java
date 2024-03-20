@@ -33,13 +33,14 @@ import org.elasticsearch.xpack.core.security.support.Validation;
 
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Predicate;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 
 public final class ServerlessCustomRoleValidator {
     // package-private for testing
-    static final Set<String> SUPPORTED_APPLICATION_NAMES = Set.of("kibana-.kibana");
+    static final Set<String> SUPPORTED_APPLICATION_NAMES = Set.of("apm", "kibana-.kibana");
     private static final String RESERVED_ROLE_NAME_PREFIX = "_";
     private final Predicate<String> fileRolesStoreNameChecker;
 
@@ -208,17 +209,14 @@ public final class ServerlessCustomRoleValidator {
                 "invalid application name ["
                     + applicationName
                     + "]. name must be a wildcard [*] or one of the supported application names ["
-                    + Strings.collectionToCommaDelimitedString(SUPPORTED_APPLICATION_NAMES)
+                    + Strings.collectionToCommaDelimitedString(new TreeSet<>(SUPPORTED_APPLICATION_NAMES))
                     + "]",
                 validationException
             );
         }
         for (String privilegeName : applicationPrivileges.getPrivileges()) {
             try {
-                // plain wildcard is supported; otherwise, it must be a valid privilege name
-                if (false == isWildcard(privilegeName)) {
-                    ApplicationPrivilege.validatePrivilegeName(privilegeName);
-                }
+                ApplicationPrivilege.validatePrivilegeOrActionName(privilegeName);
             } catch (IllegalArgumentException e) {
                 validationException = addValidationError(e.getMessage(), validationException);
             }

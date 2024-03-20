@@ -31,7 +31,6 @@ import org.junit.BeforeClass;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -77,7 +76,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         final boolean restrictedIndexAccess = randomBoolean();
         final boolean invalidApplicationName = randomBoolean();
         // ensure at least one validation error
-        final boolean invalidApplicationPrivilegeName = false == (invalidRoleName
+        final boolean invalidApplicationPrivilege = false == (invalidRoleName
             && unknownClusterPrivilege
             && unsupportedClusterPrivilege
             && unknownIndexPrivilege
@@ -124,10 +123,10 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         } else {
             builder.application("*");
         }
-        if (invalidApplicationPrivilegeName) {
-            builder.privileges("action/" + randomAlphaOfLength(4));
+        if (invalidApplicationPrivilege) {
+            builder.privileges(" " + randomAlphaOfLength(4));
         } else {
-            builder.privileges(randomNamedApplicationPrivilege());
+            builder.privileges(generateRandomStringArray(6, randomIntBetween(4, 8), false, false));
         }
         final RoleDescriptor.ApplicationResourcePrivileges[] applicationPrivileges = { builder.build() };
 
@@ -192,8 +191,8 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         if (invalidApplicationName) {
             itemMatchers.add(containsString("invalid application name"));
         }
-        if (invalidApplicationPrivilegeName) {
-            itemMatchers.add(containsString("Application privilege names must match the pattern"));
+        if (invalidApplicationPrivilege) {
+            itemMatchers.add(containsString("Application privilege names and actions must match the pattern"));
         }
         assertThat(validationErrors, containsInAnyOrder(itemMatchers));
     }
@@ -286,9 +285,9 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             final RoleDescriptor.ApplicationResourcePrivileges.Builder builder = RoleDescriptor.ApplicationResourcePrivileges.builder();
             builder.application(randomBoolean() ? "*" : randomFrom(SUPPORTED_APPLICATION_NAMES.toArray(new String[0])));
             if (randomBoolean()) {
-                builder.privileges("*");
+                builder.privileges(randomNonEmptySubsetOf(List.of("*", "action:read", "action:*", "action/read:data")));
             } else {
-                builder.privileges(randomArray(1, 6, String[]::new, ServerlessCustomRoleValidatorTests::randomNamedApplicationPrivilege));
+                builder.privileges(generateRandomStringArray(6, randomIntBetween(4, 8), false, false));
             }
             if (randomBoolean()) {
                 builder.resources("*");
@@ -299,9 +298,4 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         }
         return applicationPrivileges;
     }
-
-    private static String randomNamedApplicationPrivilege() {
-        return randomAlphaOfLengthBetween(5, 10).toLowerCase(Locale.ROOT);
-    }
-
 }

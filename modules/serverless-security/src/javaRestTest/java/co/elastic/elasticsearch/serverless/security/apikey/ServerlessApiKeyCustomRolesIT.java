@@ -107,6 +107,11 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
                     "application": "kibana-.kibana",
                     "privileges": [ "feature.read" ],
                     "resources": [ "*" ]
+                  },
+                  {
+                    "application": "apm",
+                    "privileges": [ "event:write", "config_agent:read" ],
+                    "resources": [ "*" ]
                   }
                 ],
                 "metadata": {
