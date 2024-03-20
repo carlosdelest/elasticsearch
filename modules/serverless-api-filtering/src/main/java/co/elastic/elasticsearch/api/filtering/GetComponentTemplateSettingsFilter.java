@@ -43,7 +43,11 @@ public class GetComponentTemplateSettingsFilter extends ApiFilteringActionFilter
             .stream()
             .collect(Collectors.toMap(Map.Entry::getKey, e -> mapComponentTemplate(e.getValue())));
 
-        return new GetComponentTemplateAction.Response(newComponentTemplates, response.getRolloverConfiguration());
+        return new GetComponentTemplateAction.Response(
+            newComponentTemplates,
+            response.getRolloverConfiguration(),
+            response.getGlobalRetention()
+        );
     }
 
     private ComponentTemplate mapComponentTemplate(ComponentTemplate componentTemplate) {
