@@ -28,12 +28,14 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
-public class TransportGetShardInfoAction extends HandledTransportAction<GetShardInfoAction.Request, GetShardInfoAction.Response> {
+public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
+    GetMeteringShardInfoAction.Request,
+    GetMeteringShardInfoAction.Response> {
     private final ShardReader shardReader;
     private final MeteringShardInfoService meteringShardInfoService;
 
     @Inject
-    public TransportGetShardInfoAction(
+    public TransportGetMeteringShardInfoAction(
         TransportService transportService,
         IndicesService indicesService,
         ThreadPool threadPool,
@@ -41,11 +43,11 @@ public class TransportGetShardInfoAction extends HandledTransportAction<GetShard
         MeteringShardInfoService meteringShardInfoService
     ) {
         super(
-            GetShardInfoAction.NAME,
+            GetMeteringShardInfoAction.NAME,
             false,
             transportService,
             actionFilters,
-            GetShardInfoAction.Request::new,
+            GetMeteringShardInfoAction.Request::new,
             threadPool.executor(ThreadPool.Names.MANAGEMENT)
         );
         this.shardReader = new ShardReader(indicesService);
@@ -53,10 +55,14 @@ public class TransportGetShardInfoAction extends HandledTransportAction<GetShard
     }
 
     @Override
-    protected void doExecute(Task task, GetShardInfoAction.Request request, ActionListener<GetShardInfoAction.Response> listener) {
+    protected void doExecute(
+        Task task,
+        GetMeteringShardInfoAction.Request request,
+        ActionListener<GetMeteringShardInfoAction.Response> listener
+    ) {
         try {
             var shardSizes = shardReader.getShardSizes(meteringShardInfoService);
-            listener.onResponse(new GetShardInfoAction.Response(shardSizes));
+            listener.onResponse(new GetMeteringShardInfoAction.Response(shardSizes));
         } catch (Exception ex) {
             listener.onFailure(ex);
         }

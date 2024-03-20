@@ -25,8 +25,6 @@ import java.io.IOException;
 
 public record MeteringShardInfo(long size, long primaryTerm, long generation) implements Writeable {
 
-    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0);
-
     public MeteringShardInfo {
         assert size >= 0 : "size must be non negative";
     }
@@ -40,10 +38,5 @@ public record MeteringShardInfo(long size, long primaryTerm, long generation) im
         out.writeVLong(size);
         out.writeVLong(primaryTerm);
         out.writeVLong(generation);
-    }
-
-    @Override
-    public String toString() {
-        return "[size=" + size + "][primaryTerm=" + primaryTerm + "][generation=" + generation + "]";
     }
 }

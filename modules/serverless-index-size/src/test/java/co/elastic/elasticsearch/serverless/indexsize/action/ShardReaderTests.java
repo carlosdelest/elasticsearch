@@ -34,6 +34,7 @@ import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.test.ESTestCase;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
 
@@ -48,7 +49,7 @@ import static org.mockito.Mockito.when;
 
 public class ShardReaderTests extends ESTestCase {
 
-    public void testEmptySetWhenNoIndices() {
+    public void testEmptySetWhenNoIndices() throws IOException {
 
         var indicesService = mock(IndicesService.class);
         var shardSizeService = mock(MeteringShardInfoService.class);
@@ -61,7 +62,7 @@ public class ShardReaderTests extends ESTestCase {
         assertThat(shardSizes.keySet(), empty());
     }
 
-    public void testMultipleIndicesReportAllShards() {
+    public void testMultipleIndicesReportAllShards() throws IOException {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
         ShardId shardId2 = new ShardId("index1", "index1UUID", 2);
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
@@ -82,7 +83,7 @@ public class ShardReaderTests extends ESTestCase {
         when(index2.iterator()).thenReturn(Iterators.single(shard3));
 
         var engine = mock(Engine.class);
-        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos());
+        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
 
         when(shard1.getEngineOrNull()).thenReturn(engine);
         when(shard2.getEngineOrNull()).thenReturn(engine);
@@ -100,30 +101,45 @@ public class ShardReaderTests extends ESTestCase {
         assertThat(shardSizes.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
     }
 
-    private static SegmentInfos createMockSegmentInfos() {
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        var segmentInfo = new SegmentCommitInfo(
-            new SegmentInfo(
-                mock(Directory.class),
-                Version.LATEST,
-                Version.LATEST,
-                "",
+    private static class TestSegmentCommitInfo extends SegmentCommitInfo {
+
+        private final long size;
+
+        TestSegmentCommitInfo(long size) {
+            super(
+                new SegmentInfo(
+                    mock(Directory.class),
+                    Version.LATEST,
+                    Version.LATEST,
+                    "",
+                    0,
+                    false,
+                    false,
+                    mock(Codec.class),
+                    Map.of(),
+                    new byte[16],
+                    Map.of(),
+                    Sort.INDEXORDER
+                ),
                 0,
-                false,
-                false,
-                mock(Codec.class),
-                Map.of(),
-                new byte[16],
-                Map.of(),
-                Sort.INDEXORDER
-            ),
-            0,
-            0,
-            0,
-            0,
-            0,
-            null
-        );
+                0,
+                0,
+                0,
+                0,
+                null
+            );
+            this.size = size;
+        }
+
+        @Override
+        public long sizeInBytes() {
+            return size;
+        }
+    }
+
+    private static SegmentInfos createMockSegmentInfos(long size) {
+        var segmentInfos = new SegmentInfos(Version.LATEST.major);
+        var segmentInfo = new TestSegmentCommitInfo(size);
         segmentInfos.add(segmentInfo);
         return segmentInfos;
     }

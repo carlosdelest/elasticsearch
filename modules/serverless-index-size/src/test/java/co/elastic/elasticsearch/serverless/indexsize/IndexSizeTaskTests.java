@@ -73,7 +73,7 @@ public class IndexSizeTaskTests extends ESTestCase {
         assertThat(task.scheduled.isCancelled(), is(false));
         assertThat(task.scheduled.getDelay(TimeUnit.MINUTES), is(12L));
 
-        verify(mockIndexSizeService, times(1)).updateSizeMeasures(any());
+        verify(mockIndexSizeService, times(1)).updateMeteringShardInfo(any());
     }
 
     public void testCancellationStopsServiceInvocation() {
@@ -104,7 +104,7 @@ public class IndexSizeTaskTests extends ESTestCase {
         doNothing().when(task).markAsCompleted();
 
         task.run();
-        verify(mockIndexSizeService, times(1)).updateSizeMeasures(any());
+        verify(mockIndexSizeService, times(1)).updateMeteringShardInfo(any());
 
         assertThat(task.scheduled, notNullValue());
         assertThat(task.scheduled.isCancelled(), is(false));
@@ -115,7 +115,7 @@ public class IndexSizeTaskTests extends ESTestCase {
 
         // Run on a cancelled task no longer invokes the service
         task.run();
-        verify(mockIndexSizeService, times(1)).updateSizeMeasures(any());
+        verify(mockIndexSizeService, times(1)).updateMeteringShardInfo(any());
     }
 
     public void testRequestRescheduleCancelsAndRescheduleImmediately() {

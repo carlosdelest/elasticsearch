@@ -32,22 +32,18 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Action used to collect metering shard info from all data node and reduce it to a single Index Size (IX) information for IndexSizeService.
+ * Action used to collect metering shard info from a single data node.
  */
-public class GetShardInfoAction {
+public class GetMeteringShardInfoAction {
 
     public static final String NAME = "cluster:monitor/get/metering/shard-info";
     public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
     public static class Request extends ActionRequest {
+        public Request() {}
 
         public Request(StreamInput in) throws IOException {
             super(in);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
         }
 
         @Override
@@ -57,24 +53,24 @@ public class GetShardInfoAction {
 
         @Override
         public String getDescription() {
-            return "Collect shard information from a search node";
+            return "Get shard metering information from a single data node";
         }
     }
 
     public static class Response extends ActionResponse {
-        private final Map<ShardId, MeteringShardInfo> shardSizes;
+        private final Map<ShardId, MeteringShardInfo> meteringShardInfoMap;
 
         public Response(final Map<ShardId, MeteringShardInfo> shardSizes) {
-            this.shardSizes = Objects.requireNonNull(shardSizes);
+            this.meteringShardInfoMap = Objects.requireNonNull(shardSizes);
         }
 
         public Response(StreamInput in) throws IOException {
-            this.shardSizes = in.readImmutableMap(ShardId::new, MeteringShardInfo::from);
+            this.meteringShardInfoMap = in.readImmutableMap(ShardId::new, MeteringShardInfo::from);
         }
 
         @Override
         public void writeTo(StreamOutput output) throws IOException {
-            output.writeMap(shardSizes, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
+            output.writeMap(meteringShardInfoMap, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
         }
 
         @Override
@@ -83,18 +79,18 @@ public class GetShardInfoAction {
                 return true;
             }
             if (o instanceof Response response) {
-                return Objects.equals(shardSizes, response.shardSizes);
+                return Objects.equals(meteringShardInfoMap, response.meteringShardInfoMap);
             }
             return false;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(shardSizes);
+            return Objects.hash(meteringShardInfoMap);
         }
 
-        public Map<ShardId, MeteringShardInfo> getShardSizes() {
-            return shardSizes;
+        public Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap() {
+            return meteringShardInfoMap;
         }
     }
 }

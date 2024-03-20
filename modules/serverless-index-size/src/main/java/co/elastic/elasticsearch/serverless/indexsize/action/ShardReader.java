@@ -20,7 +20,9 @@ package co.elastic.elasticsearch.serverless.indexsize.action;
 import co.elastic.elasticsearch.serverless.indexsize.MeteringShardInfo;
 import co.elastic.elasticsearch.serverless.indexsize.MeteringShardInfoService;
 
+import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
+import org.apache.lucene.util.StringHelper;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.shard.IndexShard;
@@ -29,6 +31,7 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -40,15 +43,26 @@ public class ShardReader {
         this.indicesService = indicesService;
     }
 
-    private long computeShardSize(ShardId shardId, SegmentInfos segmentInfos) {
-        if (segmentInfos.size() == 0) {
-            return 0L;
+    private long computeShardSize(ShardId shardId, SegmentInfos segmentInfos) throws IOException {
+        long size = 0;
+        for (SegmentCommitInfo si : segmentInfos) {
+            try {
+                long commitSize = si.sizeInBytes();
+                size += commitSize;
+            } catch (IOException err) {
+                logger.warn(
+                    "Failed to read file size for shard: [{}], commitId: [{}], err: [{}]",
+                    shardId,
+                    StringHelper.idToString(si.getId()),
+                    err
+                );
+                throw err;
+            }
         }
-        // TODO (ES-7850): replace this mock response with real data
-        return 10L;
+        return size;
     }
 
-    public Map<ShardId, MeteringShardInfo> getShardSizes(MeteringShardInfoService meteringShardInfoService) {
+    public Map<ShardId, MeteringShardInfo> getShardSizes(MeteringShardInfoService meteringShardInfoService) throws IOException {
         Map<ShardId, MeteringShardInfo> shardIds = new HashMap<>();
         for (final IndexService indexService : indicesService) {
             for (final IndexShard shard : indexService) {

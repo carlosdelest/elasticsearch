@@ -17,42 +17,67 @@
 
 package co.elastic.elasticsearch.serverless.indexsize;
 
+import co.elastic.elasticsearch.serverless.indexsize.action.CollectMeteringShardInfoAction;
+
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
-import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.node.DiscoveryNodeRole;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.core.Strings;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
+import java.util.EnumSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class IndexSizeService {
-
     private static final Logger logger = LogManager.getLogger(IndexSizeService.class);
 
-    private final ClusterService clusterService;
-
-    public IndexSizeService(ClusterService clusterService) {
-        this.clusterService = clusterService;
+    private enum CollectedMeteringShardInfoFlag {
+        PARTIAL,
+        STALE
     }
 
+    record CollectedMeteringShardInfo(
+        Map<ShardId, MeteringShardInfo> meteringShardInfoMap,
+        Set<CollectedMeteringShardInfoFlag> meteringShardInfoStatus
+    ) {}
+
+    private final AtomicReference<CollectedMeteringShardInfo> collectedShardInfo = new AtomicReference<>();
+
     /**
-     * Updates the internal storage of size measures, by performing a scatter-gather operation towards all (search) nodes
+     * Updates the internal storage of metering shard info, by performing a scatter-gather operation towards all (search) nodes
      */
-    public void updateSizeMeasures(Client client) {
-        logger.debug("Calling IndexSizeService#updateSizeMeasures");
-        var clusterState = clusterService.state();
-        final Set<DiscoveryNode> nodes = clusterState.nodes()
-            .stream()
-            .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
-            .collect(Collectors.toSet());
+    public void updateMeteringShardInfo(Client client) {
+        logger.debug("Calling IndexSizeService#updateMeteringShardInfo");
+        client.execute(CollectMeteringShardInfoAction.INSTANCE, new CollectMeteringShardInfoAction.Request(), new ActionListener<>() {
+            @Override
+            public void onResponse(CollectMeteringShardInfoAction.Response response) {
+                Set<CollectedMeteringShardInfoFlag> status = EnumSet.noneOf(CollectedMeteringShardInfoFlag.class);
+                if (response.isComplete() == false) {
+                    status.add(CollectedMeteringShardInfoFlag.PARTIAL);
+                }
 
-        logger.trace("querying {} data nodes based on cluster state version [{}]", nodes.size(), clusterState.version());
+                // TODO[lor]: ES-7851: create a new MeteringShardInfo from diffs.
+                collectedShardInfo.set(new CollectedMeteringShardInfo(response.getShardInfo(), status));
+                logger.debug(
+                    () -> Strings.format(
+                        "collected new metering shard info for shards [%s]",
+                        response.getShardInfo().keySet().stream().map(ShardId::toString).collect(Collectors.joining(","))
+                    )
+                );
+            }
 
-        // TODO: the fan-out loop will be moved to the scatter-gather TransportAction we will introduce.
-        for (DiscoveryNode node : nodes) {
-            logger.trace("would request shards from node [{}]", node.toString());
-        }
+            @Override
+            public void onFailure(Exception e) {
+                var previousSizes = collectedShardInfo.get();
+                var status = EnumSet.copyOf(previousSizes.meteringShardInfoStatus());
+                status.add(CollectedMeteringShardInfoFlag.STALE);
+                collectedShardInfo.set(new CollectedMeteringShardInfo(previousSizes.meteringShardInfoMap(), status));
+                logger.error("failed to collect metering shard info", e);
+            }
+        });
     }
 }

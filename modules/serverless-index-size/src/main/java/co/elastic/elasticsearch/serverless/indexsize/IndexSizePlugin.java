@@ -17,8 +17,10 @@
 
 package co.elastic.elasticsearch.serverless.indexsize;
 
-import co.elastic.elasticsearch.serverless.indexsize.action.GetShardInfoAction;
-import co.elastic.elasticsearch.serverless.indexsize.action.TransportGetShardInfoAction;
+import co.elastic.elasticsearch.serverless.indexsize.action.CollectMeteringShardInfoAction;
+import co.elastic.elasticsearch.serverless.indexsize.action.GetMeteringShardInfoAction;
+import co.elastic.elasticsearch.serverless.indexsize.action.TransportCollectMeteringShardInfoAction;
+import co.elastic.elasticsearch.serverless.indexsize.action.TransportGetMeteringShardInfoAction;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
@@ -64,7 +66,7 @@ public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin, Act
 
     @Override
     public Collection<?> createComponents(Plugin.PluginServices services) {
-        var indexSizeService = new IndexSizeService(services.clusterService());
+        var indexSizeService = new IndexSizeService();
 
         // TODO[lor]: We should not create multiple PersistentTasksService. Instead, we should create one in Server and pass it to plugins
         // via services or via PersistentTaskPlugin#getPersistentTasksExecutor. See elasticsearch#105662
@@ -119,10 +121,14 @@ public class IndexSizePlugin extends Plugin implements PersistentTaskPlugin, Act
 
     @Override
     public Collection<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+        var collectShardSize = new ActionHandler<>(CollectMeteringShardInfoAction.INSTANCE, TransportCollectMeteringShardInfoAction.class);
         if (hasSearchRole) {
-            return List.of(new ActionPlugin.ActionHandler<>(GetShardInfoAction.INSTANCE, TransportGetShardInfoAction.class));
+            return List.of(
+                new ActionPlugin.ActionHandler<>(GetMeteringShardInfoAction.INSTANCE, TransportGetMeteringShardInfoAction.class),
+                collectShardSize
+            );
         } else {
-            return List.of();
+            return List.of(collectShardSize);
         }
     }
 }

@@ -89,7 +89,7 @@ public class IndexSizeTask extends AllocatedPersistentTask {
             return;
         }
         try {
-            indexSizeService.updateSizeMeasures(client);
+            indexSizeService.updateMeteringShardInfo(client);
         } catch (Exception e) {
             logger.error("Failed during IndexSizeTask run", e);
         }
