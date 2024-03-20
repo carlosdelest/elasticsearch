@@ -52,12 +52,12 @@ public class ShardReaderTests extends ESTestCase {
     public void testEmptySetWhenNoIndices() throws IOException {
 
         var indicesService = mock(IndicesService.class);
-        var shardSizeService = mock(MeteringShardInfoService.class);
+        var meteringShardInfoService = mock(MeteringShardInfoService.class);
         var shardReader = new ShardReader(indicesService);
 
         when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
 
-        var shardSizes = shardReader.getShardSizes(shardSizeService);
+        var shardSizes = shardReader.getMeteringShardInfoMap(meteringShardInfoService);
 
         assertThat(shardSizes.keySet(), empty());
     }
@@ -68,7 +68,7 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
-        var shardSizeService = mock(MeteringShardInfoService.class);
+        var meteringShardInfoService = mock(MeteringShardInfoService.class);
         var shardReader = new ShardReader(indicesService);
 
         var index1 = mock(IndexService.class);
@@ -93,12 +93,12 @@ public class ShardReaderTests extends ESTestCase {
         when(shard2.shardId()).thenReturn(shardId2);
         when(shard3.shardId()).thenReturn(shardId3);
 
-        var shardSizes = shardReader.getShardSizes(shardSizeService);
+        var shardInfoMap = shardReader.getMeteringShardInfoMap(meteringShardInfoService);
 
-        verify(shardSizeService, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
-        verify(shardSizeService, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong());
+        verify(meteringShardInfoService, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
+        verify(meteringShardInfoService, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong());
 
-        assertThat(shardSizes.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
+        assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
     }
 
     private static class TestSegmentCommitInfo extends SegmentCommitInfo {

@@ -34,20 +34,25 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class ShardReader {
+class ShardReader {
     private static final Logger logger = LogManager.getLogger(ShardReader.class);
     private final IndicesService indicesService;
 
-    public ShardReader(IndicesService indicesService) {
+    ShardReader(IndicesService indicesService) {
         this.indicesService = indicesService;
     }
 
-    private long computeShardSize(ShardId shardId, SegmentInfos segmentInfos) throws IOException {
-        long size = 0;
+    private record ShardSizeAndDocCount(long sizeInBytes, long docCount) {}
+
+    private ShardSizeAndDocCount computeShardStats(ShardId shardId, SegmentInfos segmentInfos) throws IOException {
+        long sizeInBytes = 0;
+        long docCount = 0;
         for (SegmentCommitInfo si : segmentInfos) {
             try {
                 long commitSize = si.sizeInBytes();
-                size += commitSize;
+                long commitDocCount = si.info.maxDoc() - si.getDelCount() - si.getSoftDelCount();
+                sizeInBytes += commitSize;
+                docCount += commitDocCount;
             } catch (IOException err) {
                 logger.warn(
                     "Failed to read file size for shard: [{}], commitId: [{}], err: [{}]",
@@ -58,10 +63,10 @@ public class ShardReader {
                 throw err;
             }
         }
-        return size;
+        return new ShardSizeAndDocCount(sizeInBytes, docCount);
     }
 
-    public Map<ShardId, MeteringShardInfo> getShardSizes(MeteringShardInfoService meteringShardInfoService) throws IOException {
+    Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap(MeteringShardInfoService meteringShardInfoService) throws IOException {
         Map<ShardId, MeteringShardInfo> shardIds = new HashMap<>();
         for (final IndexService indexService : indicesService) {
             for (final IndexShard shard : indexService) {
@@ -78,18 +83,27 @@ public class ShardReader {
                 long generation = segmentInfos.getGeneration();
 
                 var cachedShardInfo = meteringShardInfoService.getCachedShardInfo(shardId, primaryTerm, generation);
-                var size = computeShardSize(shardId, segmentInfos);
+                var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
                 logger.debug(
                     "cached shard size for [{}] at [{}:{}] is [{}]",
                     shardId,
                     primaryTerm,
                     generation,
-                    cachedShardInfo.map(x -> Long.toString(x.size())).orElse("<not present>")
+                    cachedShardInfo.map(x -> Long.toString(x.sizeInBytes())).orElse("<not present>")
                 );
                 // TODO (ES-7851): only insert diffs here (cachedShardSize.isEmpty() || cachedShardSize.get().size() != size)
-                shardIds.put(shardId, new MeteringShardInfo(size, primaryTerm, generation));
+                shardIds.put(
+                    shardId,
+                    new MeteringShardInfo(shardSizeAndDocCount.sizeInBytes(), shardSizeAndDocCount.docCount(), primaryTerm, generation)
+                );
 
-                meteringShardInfoService.updateCachedShardInfo(shardId, primaryTerm, generation, size);
+                meteringShardInfoService.updateCachedShardInfo(
+                    shardId,
+                    primaryTerm,
+                    generation,
+                    shardSizeAndDocCount.sizeInBytes(),
+                    shardSizeAndDocCount.docCount()
+                );
             }
         }
         return shardIds;

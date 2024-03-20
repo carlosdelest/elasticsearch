@@ -27,7 +27,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MeteringShardInfoService extends AbstractLifecycleComponent {
-    private record CacheEntry(long primaryTerm, long generation, long size) {}
+    private record CacheEntry(long primaryTerm, long generation, long size, long docCount) {}
 
     private Map<ShardId, CacheEntry> shardSizeCache = new ConcurrentHashMap<>();
 
@@ -47,12 +47,12 @@ public class MeteringShardInfoService extends AbstractLifecycleComponent {
     public Optional<MeteringShardInfo> getCachedShardInfo(ShardId shardId, long primaryTerm, long generation) {
         var cacheEntry = shardSizeCache.get(shardId);
         if (cacheEntry != null && cacheEntry.primaryTerm == primaryTerm && cacheEntry.generation == generation) {
-            return Optional.of(new MeteringShardInfo(cacheEntry.size, primaryTerm, generation));
+            return Optional.of(new MeteringShardInfo(cacheEntry.size, cacheEntry.docCount, primaryTerm, generation));
         }
         return Optional.empty();
     }
 
-    public void updateCachedShardInfo(ShardId shardId, long primaryTerm, long generation, long size) {
-        shardSizeCache.put(shardId, new CacheEntry(primaryTerm, generation, size));
+    public void updateCachedShardInfo(ShardId shardId, long primaryTerm, long generation, long size, long docCount) {
+        shardSizeCache.put(shardId, new CacheEntry(primaryTerm, generation, size, docCount));
     }
 }

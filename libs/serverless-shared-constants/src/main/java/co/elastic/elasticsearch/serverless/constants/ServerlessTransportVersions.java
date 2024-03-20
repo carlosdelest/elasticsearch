@@ -38,6 +38,7 @@ public class ServerlessTransportVersions {
     public static final TransportVersion COMPOUND_COMMIT_WITH_SIZE = def(8_594_01_0);
     public static final TransportVersion INDEX_SIZE_SERVICE_ADDED = def(8_594_02_0);
     public static final TransportVersion NEW_COMMIT_NOTIFICATION_WITH_BCC_INFO = def(8_612_01_0);
+    public static final TransportVersion METERING_SHARD_INFO_DOC_COUNT_ADDED = def(8_612_02_0);
     /*
      * STOP! READ THIS FIRST! No, really,
      *        ____ _____ ___  ____  _        ____  _____    _    ____    _____ _   _ ___ ____    _____ ___ ____  ____ _____ _

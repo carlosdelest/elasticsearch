@@ -17,25 +17,41 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
+
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 
 import java.io.IOException;
 
-public record MeteringShardInfo(long size, long primaryTerm, long generation) implements Writeable {
+public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTerm, long generation) implements Writeable {
 
     public MeteringShardInfo {
-        assert size >= 0 : "size must be non negative";
+        assert sizeInBytes >= 0 : "size must be non negative";
     }
 
     public static MeteringShardInfo from(StreamInput in) throws IOException {
-        return new MeteringShardInfo(in.readVLong(), in.readVLong(), in.readVLong());
+        var sizeInBytes = in.readVLong();
+
+        final long docCount;
+        if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SHARD_INFO_DOC_COUNT_ADDED)) {
+            docCount = in.readVLong();
+        } else {
+            docCount = -1;
+        }
+        var primaryTerm = in.readVLong();
+        var generation = in.readVLong();
+
+        return new MeteringShardInfo(sizeInBytes, docCount, primaryTerm, generation);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(size);
+        out.writeVLong(sizeInBytes);
+        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SHARD_INFO_DOC_COUNT_ADDED)) {
+            out.writeVLong(docCount);
+        }
         out.writeVLong(primaryTerm);
         out.writeVLong(generation);
     }

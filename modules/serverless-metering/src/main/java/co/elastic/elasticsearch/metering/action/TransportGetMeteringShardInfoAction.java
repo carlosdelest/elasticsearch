@@ -61,7 +61,7 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
         ActionListener<GetMeteringShardInfoAction.Response> listener
     ) {
         try {
-            var shardSizes = shardReader.getShardSizes(meteringShardInfoService);
+            var shardSizes = shardReader.getMeteringShardInfoMap(meteringShardInfoService);
             listener.onResponse(new GetMeteringShardInfoAction.Response(shardSizes));
         } catch (Exception ex) {
             listener.onFailure(ex);

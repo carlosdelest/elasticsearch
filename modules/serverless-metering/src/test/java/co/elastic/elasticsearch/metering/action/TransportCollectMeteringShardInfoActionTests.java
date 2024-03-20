@@ -226,12 +226,15 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         final Map<String, Map<ShardId, MeteringShardInfo>> nodesShardAnswer = Map.of(
             searchNodes.get(0).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new MeteringShardInfo(11L, 1, 1)),
-                Map.entry(shard2Id, new MeteringShardInfo(12L, 1, 2)),
-                Map.entry(shard3Id, new MeteringShardInfo(13L, 1, 1))
+                Map.entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1)),
+                Map.entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2)),
+                Map.entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1))
             ),
             searchNodes.get(1).getId(),
-            Map.ofEntries(Map.entry(shard1Id, new MeteringShardInfo(21L, 2, 1)), Map.entry(shard2Id, new MeteringShardInfo(22L, 1, 1)))
+            Map.ofEntries(
+                Map.entry(shard1Id, new MeteringShardInfo(21L, 210L, 2, 1)),
+                Map.entry(shard2Id, new MeteringShardInfo(22L, 220L, 1, 1))
+            )
         );
 
         var expectedSizes = Map.of(shard1Id, 21L, shard2Id, 12L, shard3Id, 13L);
@@ -255,9 +258,9 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         var response = listener.get();
         assertEquals("total shards", 3, response.getShardInfo().size());
         assertTrue(response.isComplete());
-        assertThat(response.getShardInfo().get(shard1Id).size(), is(expectedSizes.get(shard1Id)));
-        assertThat(response.getShardInfo().get(shard2Id).size(), is(expectedSizes.get(shard2Id)));
-        assertThat(response.getShardInfo().get(shard3Id).size(), is(expectedSizes.get(shard3Id)));
+        assertThat(response.getShardInfo().get(shard1Id).sizeInBytes(), is(expectedSizes.get(shard1Id)));
+        assertThat(response.getShardInfo().get(shard2Id).sizeInBytes(), is(expectedSizes.get(shard2Id)));
+        assertThat(response.getShardInfo().get(shard3Id).sizeInBytes(), is(expectedSizes.get(shard3Id)));
     }
 
     private void createMockClusterState(ClusterService clusterService) {
@@ -290,7 +293,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     }
 
     private MeteringShardInfo createMeteringShardInfo(ShardId shardId) {
-        return new MeteringShardInfo(randomLongBetween(0, 10000), 0, 0);
+        return new MeteringShardInfo(randomLongBetween(0, 10000), randomLongBetween(0, 10000), 0, 0);
     }
 
     private static void awaitForkedTasks() {
