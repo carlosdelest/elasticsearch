@@ -168,9 +168,7 @@ public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRest
     }
 
     public void testInvalidHasPrivilegesChecksStrictValidationDisabled() throws IOException {
-        if (randomBoolean()) {
-            disableStrictValidation();
-        }
+        disableStrictValidation();
         {
             final var payload = """
                 {

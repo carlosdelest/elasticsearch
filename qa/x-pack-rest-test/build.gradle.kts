@@ -61,7 +61,6 @@ tasks {
             "license/*/*",
             // Security users/roles
             "users/*/*",
-            "roles/*/*",
             "change_password/*/*",
             "service_accounts/*/*",
             // Uses "wait_for_active_shards"
