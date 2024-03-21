@@ -165,7 +165,7 @@ Alternatively you can use the buildkite commandline interface to undeploy your p
 
 ### Update an elasticsearch serverless platform QA environment deployment
 
-To update an existing elasticsearch serverless QA deployment the update-dev buildkite pipeline at https://buildkite.com/elastic/elasticsearch-serverless-udpate-qa can be used.
+To update an existing elasticsearch serverless QA deployment the update-dev buildkite pipeline at https://buildkite.com/elastic/elasticsearch-serverless-update-qa can be used.
 
 The pipeline must be triggered from the same branch as the deploy qa was executed. The last deployed project by https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa will be updated.
 
