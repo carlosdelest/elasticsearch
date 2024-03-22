@@ -71,7 +71,15 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
 
         final RequestWithApiKeyId requestWithApiKeyId = new RequestWithApiKeyId(apiKeyId, request);
         if (strictRequestValidationEnabled.get()) {
-            return parseWithValidation(requestWithApiKeyId);
+            try {
+                return parseWithValidation(requestWithApiKeyId);
+            } catch (Exception ex) {
+                ServerlessCustomRoleErrorLogger.logException(
+                    "API key update request for API key [" + requestWithApiKeyId.apiKeyId() + "]",
+                    ex
+                );
+                throw ex;
+            }
         }
 
         final UpdateApiKeyRequest updateRequest = super.translate(request);

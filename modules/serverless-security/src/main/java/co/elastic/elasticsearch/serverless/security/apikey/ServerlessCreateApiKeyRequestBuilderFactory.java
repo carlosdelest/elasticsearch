@@ -80,7 +80,12 @@ public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKey
 
             final SourceWithXContentType sourceWithXContentType = new SourceWithXContentType(source, xContentType);
             if (strictRequestValidationEnabled.get()) {
-                return parseWithValidation(sourceWithXContentType);
+                try {
+                    return parseWithValidation(sourceWithXContentType);
+                } catch (Exception ex) {
+                    ServerlessCustomRoleErrorLogger.logException("API key creation request", ex);
+                    throw ex;
+                }
             }
 
             final CreateApiKeyRequest createApiKeyRequest = super.parse(source, xContentType);

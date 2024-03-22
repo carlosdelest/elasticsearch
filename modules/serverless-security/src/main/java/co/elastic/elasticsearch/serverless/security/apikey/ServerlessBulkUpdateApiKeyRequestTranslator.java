@@ -61,7 +61,12 @@ public class ServerlessBulkUpdateApiKeyRequestTranslator extends BulkUpdateApiKe
         }
 
         if (strictRequestValidationEnabled.get()) {
-            return parseWithValidation(request);
+            try {
+                return parseWithValidation(request);
+            } catch (Exception ex) {
+                ServerlessCustomRoleErrorLogger.logException("API key bulk update request", ex);
+                throw ex;
+            }
         }
 
         final BulkUpdateApiKeyRequest updateRequest = super.translate(request);

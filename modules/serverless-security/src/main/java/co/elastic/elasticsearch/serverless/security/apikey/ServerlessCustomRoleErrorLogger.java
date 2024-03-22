@@ -43,6 +43,10 @@ final class ServerlessCustomRoleErrorLogger {
         logCustomRoleErrors(payloadDescription, payload, payloadChecker, roleDescriptors, LOGGER);
     }
 
+    static void logException(String payloadDescription, Exception ex) {
+        logException(LOGGER, payloadDescription, ex);
+    }
+
     /**
      * This method accepts a generic payload and payload checker. If the payload checker throws, the exception is logged.
      *
@@ -70,7 +74,7 @@ final class ServerlessCustomRoleErrorLogger {
             try {
                 payloadValidator.accept(payloadWithCustomRoleDescriptors);
             } catch (Exception ex) {
-                logger.info("Invalid custom role descriptors in [" + payloadDescription + "].", ex);
+                logException(logger, payloadDescription, ex);
             }
         } else {
             logger.debug(
@@ -78,5 +82,9 @@ final class ServerlessCustomRoleErrorLogger {
                 validationException
             );
         }
+    }
+
+    private static void logException(Logger logger, String payloadDescription, Exception ex) {
+        logger.info("Invalid custom role descriptors in [" + payloadDescription + "].", ex);
     }
 }
