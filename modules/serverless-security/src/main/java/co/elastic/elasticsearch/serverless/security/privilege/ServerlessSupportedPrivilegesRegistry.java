@@ -37,8 +37,10 @@ public record ServerlessSupportedPrivilegesRegistry() {
     private static final Map<String, NamedClusterPrivilege> SUPPORTED_CLUSTER_PRIVILEGES = ClusterPrivilegeResolver.sortByAccessLevel(
         Set.of(
             ClusterPrivilegeResolver.ALL,
+            ClusterPrivilegeResolver.CANCEL_TASK,
             ClusterPrivilegeResolver.MANAGE,
             ClusterPrivilegeResolver.MANAGE_API_KEY,
+            ClusterPrivilegeResolver.MANAGE_BEHAVIORAL_ANALYTICS,
             ClusterPrivilegeResolver.MANAGE_ENRICH,
             ClusterPrivilegeResolver.MANAGE_IDX_TEMPLATES,
             ClusterPrivilegeResolver.MANAGE_LOGSTASH_PIPELINES,
@@ -55,6 +57,7 @@ public record ServerlessSupportedPrivilegesRegistry() {
             ClusterPrivilegeResolver.MONITOR_ML,
             ClusterPrivilegeResolver.MONITOR_TRANSFORM,
             ClusterPrivilegeResolver.NONE,
+            ClusterPrivilegeResolver.POST_BEHAVIORAL_ANALYTICS_EVENT,
             ClusterPrivilegeResolver.READ_PIPELINE,
             ClusterPrivilegeResolver.READ_SECURITY
         )
