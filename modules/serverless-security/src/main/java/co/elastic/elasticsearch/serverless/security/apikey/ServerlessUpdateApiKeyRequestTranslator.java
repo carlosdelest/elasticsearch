@@ -31,7 +31,9 @@ import java.io.IOException;
 import java.util.function.Supplier;
 
 public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequestTranslator.Default {
-    private static final ConstructingObjectParser<Payload, Void> PARSER = createParser(ServerlessCustomRoleParser::parse);
+    private static final ConstructingObjectParser<Payload, Void> PARSER = createParser(
+        ServerlessCustomRoleParser::parseWithWorkflowRestrictionAllowed
+    );
     private final ServerlessCustomRoleValidator serverlessCustomRoleValidator;
     private final Supplier<Boolean> strictRequestValidationEnabled;
 

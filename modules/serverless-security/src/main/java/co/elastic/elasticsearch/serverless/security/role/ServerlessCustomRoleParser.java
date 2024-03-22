@@ -38,11 +38,15 @@ public final class ServerlessCustomRoleParser {
     public static RoleDescriptor parse(String name, BytesReference source, XContentType xContentType) throws IOException {
         assert name != null;
         try (XContentParser parser = createParser(source, xContentType)) {
-            return parse(name, parser);
+            return parse(name, parser, false);
         }
     }
 
-    public static RoleDescriptor parse(String name, XContentParser parser) throws IOException {
+    public static RoleDescriptor parseWithWorkflowRestrictionAllowed(String name, XContentParser parser) throws IOException {
+        return parse(name, parser, true);
+    }
+
+    public static RoleDescriptor parse(String name, XContentParser parser, boolean allowRestriction) throws IOException {
         // validate name
         Validation.Error validationError = Validation.Roles.validateRoleName(name, true);
         if (validationError != null) {
@@ -61,6 +65,7 @@ public final class ServerlessCustomRoleParser {
         String[] clusterPrivileges = null;
         RoleDescriptor.ApplicationResourcePrivileges[] applicationPrivileges = null;
         Map<String, Object> metadata = null;
+        RoleDescriptor.Restriction restriction = null;
 
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
@@ -89,6 +94,8 @@ public final class ServerlessCustomRoleParser {
                 clusterPrivileges = readStringArray(name, parser);
             } else if (matchesApplicationField(currentFieldName, parser)) {
                 applicationPrivileges = RoleDescriptor.parseApplicationPrivileges(name, parser);
+            } else if (allowRestriction && RoleDescriptor.Fields.RESTRICTION.match(currentFieldName, parser.getDeprecationHandler())) {
+                restriction = RoleDescriptor.Restriction.parse(name, parser);
             } else if (RoleDescriptor.Fields.GLOBAL.match(currentFieldName, parser.getDeprecationHandler())) {
                 throw new ElasticsearchParseException(
                     "failed to parse role [{}]. field [{}] is not supported when running in serverless mode",
@@ -117,12 +124,6 @@ public final class ServerlessCustomRoleParser {
                     name,
                     currentFieldName
                 );
-            } else if (RoleDescriptor.Fields.RESTRICTION.match(currentFieldName, parser.getDeprecationHandler())) {
-                throw new ElasticsearchParseException(
-                    "failed to parse role [{}]. field [{}] is not supported when running in serverless mode",
-                    name,
-                    currentFieldName
-                );
             } else if (RoleDescriptor.Fields.TYPE.match(currentFieldName, parser.getDeprecationHandler())) {
                 // don't need it
             } else {
@@ -139,7 +140,7 @@ public final class ServerlessCustomRoleParser {
             metadata,
             null,
             null,
-            null
+            restriction
         );
     }
 

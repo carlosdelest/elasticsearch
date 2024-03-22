@@ -48,7 +48,7 @@ import java.util.List;
 import java.util.Map;
 
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidatorTests.indexBuilderWithPrivileges;
-import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidatorTests.randomRoleDescriptorWithoutFlsDls;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidatorTests.randomRoleDescriptorWithoutFlsDlsOrRestriction;
 import static org.elasticsearch.common.xcontent.XContentHelper.convertToMap;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -221,7 +221,7 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
     }
 
     private HashMap<String, Object> randomValidPrivilegesToCheckAsMap() throws IOException {
-        return roleDescriptorToPrivilegesToCheckMap(randomRoleDescriptorWithoutFlsDls());
+        return roleDescriptorToPrivilegesToCheckMap(randomRoleDescriptorWithoutFlsDlsOrRestriction());
     }
 
     private HashMap<String, Object> roleDescriptorToPrivilegesToCheckMap(RoleDescriptor roleDescriptor) throws IOException {

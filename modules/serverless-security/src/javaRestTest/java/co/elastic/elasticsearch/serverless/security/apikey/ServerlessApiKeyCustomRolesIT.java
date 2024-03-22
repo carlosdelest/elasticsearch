@@ -54,6 +54,7 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
     public void testApiKeys() throws IOException {
         enableStrictValidation();
         doTestValidApiKey();
+        doTestApiKeyWithWorkflowRestriction();
         doTestApiKeyWithEmptyRoleDescriptors();
         doTestApiKeyWithoutRoleDescriptors();
 
@@ -65,6 +66,7 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
     public void testApiKeysStrictValidationDisabled() throws IOException {
         disableStrictValidation();
         doTestValidApiKey();
+        doTestApiKeyWithWorkflowRestriction();
         doTestApiKeyWithEmptyRoleDescriptors();
         doTestApiKeyWithoutRoleDescriptors();
 
@@ -114,6 +116,22 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
                     "resources": [ "*" ]
                   }
                 ],
+                "metadata": {
+                  "env": ["prod"]
+                }
+              }
+            }""";
+        executeApiKeyActionsAndAssertSuccess(TEST_USER, payload);
+        executeApiKeyActionsAndAssertSuccess(TEST_OPERATOR_USER, payload);
+    }
+
+    private void doTestApiKeyWithWorkflowRestriction() throws IOException {
+        final var payload = """
+            {
+              "role-0": {
+                "restriction": {
+                  "workflows": ["search_application_query"]
+                },
                 "metadata": {
                   "env": ["prod"]
                 }

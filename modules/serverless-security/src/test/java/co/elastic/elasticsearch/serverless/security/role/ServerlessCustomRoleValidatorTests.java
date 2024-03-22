@@ -23,6 +23,7 @@ import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
+import org.elasticsearch.xpack.core.security.authz.RoleRestrictionTests;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
@@ -75,14 +76,16 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         final boolean unsupportedIndexPrivilege = randomBoolean();
         final boolean restrictedIndexAccess = randomBoolean();
         final boolean invalidApplicationName = randomBoolean();
+        final boolean invalidApplicationPrivilege = randomBoolean();
         // ensure at least one validation error
-        final boolean invalidApplicationPrivilege = false == (invalidRoleName
+        final boolean invalidWorkflowRestriction = false == (invalidRoleName
             && unknownClusterPrivilege
             && unsupportedClusterPrivilege
             && unknownIndexPrivilege
             && unsupportedIndexPrivilege
             && restrictedIndexAccess
-            && invalidApplicationName) || randomBoolean();
+            && invalidApplicationName
+            && invalidApplicationPrivilege) || randomBoolean();
 
         final List<String> clusterPrivileges = new ArrayList<>();
         if (unknownClusterPrivilege) {
@@ -130,6 +133,13 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         }
         final RoleDescriptor.ApplicationResourcePrivileges[] applicationPrivileges = { builder.build() };
 
+        final RoleDescriptor.Restriction restriction;
+        if (invalidWorkflowRestriction) {
+            restriction = new RoleDescriptor.Restriction(new String[] { randomAlphaOfLength(4) });
+        } else {
+            restriction = RoleRestrictionTests.randomWorkflowsRestriction(1, 2);
+        }
+
         final RoleDescriptor roleDescriptor = new RoleDescriptor(
             roleName,
             clusterPrivileges.toArray(String[]::new),
@@ -140,7 +150,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             Map.of(),
             Map.of(),
             null,
-            null
+            restriction
         );
 
         final ActionRequestValidationException ex = validator.validate(roleDescriptor);
@@ -194,18 +204,21 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         if (invalidApplicationPrivilege) {
             itemMatchers.add(containsString("Application privilege names and actions must match the pattern"));
         }
+        if (invalidWorkflowRestriction) {
+            itemMatchers.add(containsString("Unknown workflow"));
+        }
         assertThat(validationErrors, containsInAnyOrder(itemMatchers));
     }
 
     public static RoleDescriptor randomRoleDescriptor() {
-        return randomRoleDescriptor(true);
+        return randomRoleDescriptor(true, true);
     }
 
-    public static RoleDescriptor randomRoleDescriptorWithoutFlsDls() {
-        return randomRoleDescriptor(false);
+    public static RoleDescriptor randomRoleDescriptorWithoutFlsDlsOrRestriction() {
+        return randomRoleDescriptor(false, false);
     }
 
-    private static RoleDescriptor randomRoleDescriptor(boolean allowDlsFls) {
+    private static RoleDescriptor randomRoleDescriptor(boolean allowDlsFls, boolean allowRestriction) {
         return new RoleDescriptor(
             randomValueOtherThanMany(ReservedRolesStore::isReserved, () -> randomAlphaOfLengthBetween(3, 90)),
             randomSubsetOf(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames()).toArray(String[]::new),
@@ -216,7 +229,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             Map.of(),
             Map.of(),
             null,
-            null
+            allowRestriction ? RoleRestrictionTests.randomWorkflowsRestriction(1, 2) : null
         );
     }
 

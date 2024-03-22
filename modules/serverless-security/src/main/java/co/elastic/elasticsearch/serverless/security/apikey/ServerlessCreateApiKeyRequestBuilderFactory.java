@@ -58,7 +58,9 @@ public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKey
     }
 
     static class ServerlessCreateApiKeyRequestBuilder extends CreateApiKeyRequestBuilder {
-        private static final ConstructingObjectParser<CreateApiKeyRequest, Void> PARSER = createParser(ServerlessCustomRoleParser::parse);
+        private static final ConstructingObjectParser<CreateApiKeyRequest, Void> PARSER = createParser(
+            ServerlessCustomRoleParser::parseWithWorkflowRestrictionAllowed
+        );
         private final boolean restrictRequest;
         private final ServerlessCustomRoleValidator serverlessCustomRoleValidator;
         private final Supplier<Boolean> strictRequestValidationEnabled;

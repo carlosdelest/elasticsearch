@@ -107,6 +107,7 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         doTestMalformedRunAs();
         doTestRoleNameCannotMatchFileBasedRole();
         doTestRoleNameCannotMatchReservedRole();
+        doTestWorkflowRestrictionsNotSupportedForRegularRole();
     }
 
     private void doTestInvalidApplicationPrivilegeName() throws IOException {
@@ -195,6 +196,29 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         );
         // Operator user still succeeds because we don't enforce custom role restrictions
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+    }
+
+    private void doTestWorkflowRestrictionsNotSupportedForRegularRole() {
+        final var rolePayload = """
+            {
+              "restriction": {
+                "workflows": ["search_application_query"]
+              }
+            }""";
+        putRoleAndAssertFailure(
+            TEST_USER,
+            "custom_role",
+            rolePayload,
+            400,
+            "failed to parse role [custom_role]. unexpected field [restriction]"
+        );
+        putRoleAndAssertFailure(
+            TEST_OPERATOR_USER,
+            "custom_role",
+            rolePayload,
+            400,
+            "failed to parse role [custom_role]. unexpected field [restriction]"
+        );
     }
 
     private void doTestUnsupportedIndexPrivileges() throws IOException {

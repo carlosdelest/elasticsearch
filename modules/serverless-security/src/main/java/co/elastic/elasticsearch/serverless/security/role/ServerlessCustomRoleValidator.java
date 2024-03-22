@@ -27,6 +27,7 @@ import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivilege;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
+import org.elasticsearch.xpack.core.security.authz.restriction.WorkflowResolver;
 import org.elasticsearch.xpack.core.security.support.MetadataUtils;
 import org.elasticsearch.xpack.core.security.support.NativeRealmValidationUtil;
 import org.elasticsearch.xpack.core.security.support.Validation;
@@ -111,7 +112,6 @@ public final class ServerlessCustomRoleValidator {
         assert false == roleDescriptor.hasConfigurableClusterPrivileges();
         assert false == roleDescriptor.hasRemoteIndicesPrivileges();
         assert false == roleDescriptor.hasRunAs();
-        assert false == roleDescriptor.hasWorkflowsRestriction();
         if (roleDescriptor.getClusterPrivileges() != null) {
             for (String cp : roleDescriptor.getClusterPrivileges()) {
                 validationException = validateClusterPrivilege(cp, validationException);
@@ -132,6 +132,15 @@ public final class ServerlessCustomRoleValidator {
                 "role descriptor metadata keys may not start with [" + MetadataUtils.RESERVED_PREFIX + "]",
                 validationException
             );
+        }
+        if (roleDescriptor.hasWorkflowsRestriction()) {
+            for (String workflowName : roleDescriptor.getRestriction().getWorkflows()) {
+                try {
+                    WorkflowResolver.resolveWorkflowByName(workflowName);
+                } catch (IllegalArgumentException e) {
+                    validationException = addValidationError(e.getMessage(), validationException);
+                }
+            }
         }
         return validationException;
     }
