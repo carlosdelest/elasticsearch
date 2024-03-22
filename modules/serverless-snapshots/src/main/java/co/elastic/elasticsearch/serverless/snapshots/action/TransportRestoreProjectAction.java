@@ -115,13 +115,12 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
             .prepareGetSnapshots()
             .setRepositories(repository)
             .setSort(SnapshotSortKey.START_TIME)
-            .setOrder(SortOrder.ASC)
-            .setVerbose(false) // note: verbose=false *requires* that the order be START_TIME + ASC, made explicit above for clarity
+            .setOrder(SortOrder.DESC)
+            .setIncludeIndexNames(false) // these aren't needed, so skip them
             .execute(listener.map(response -> {
-                // since they're in *ascending* order, iterate backwards until you find a successful snapshot
+                // since they're in *descending* order, iterate until you find a successful snapshot
                 String latestSuccessfulSnapshot = null;
-                for (int i = response.getSnapshots().size() - 1; i >= 0; i--) {
-                    SnapshotInfo info = response.getSnapshots().get(i);
+                for (SnapshotInfo info : response.getSnapshots()) {
                     if (info.state().equals(SnapshotState.SUCCESS)) {
                         latestSuccessfulSnapshot = info.snapshotId().getName();
                         break;

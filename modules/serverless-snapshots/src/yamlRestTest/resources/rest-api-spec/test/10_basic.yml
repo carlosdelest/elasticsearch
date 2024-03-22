@@ -33,16 +33,18 @@ setup:
           settings:
             location: "test_repo_1_loc"
 
+  # the funny naming on these snapshots is to avoid having alphabetical order and start_time order be the same
+
   - do:
       snapshot.create:
         repository: test_repo_1
-        snapshot: test_snapshot_1
+        snapshot: test_snapshot_z_1
         wait_for_completion: true
 
   - do:
       snapshot.create:
         repository: test_repo_1
-        snapshot: test_snapshot_2
+        snapshot: test_snapshot_a_2
         wait_for_completion: true
 
 ---
@@ -70,9 +72,9 @@ setup:
   - do:
       snapshot.restore_project:
         repository: test_repo_1
-        snapshot: test_snapshot_1
+        snapshot: test_snapshot_z_1
 
-  - match: { snapshot.snapshot: test_snapshot_1 }
+  - match: { snapshot.snapshot: test_snapshot_z_1 }
   - match: { snapshot.shards.successful: 2 } # 2 for test_index_1
   - match: { snapshot.shards.failed : 0 }
 
@@ -89,7 +91,7 @@ setup:
         repository: test_repo_1
         snapshot: _latest_success
 
-  - match: { snapshot.snapshot: test_snapshot_2 } # test_snapshot_2 is the latest successful snapshot
+  - match: { snapshot.snapshot: test_snapshot_a_2 } # test_snapshot_a_2 is the latest successful snapshot
   - match: { snapshot.shards.successful: 2 } # 2 for test_index_1
   - match: { snapshot.shards.failed : 0 }
 
