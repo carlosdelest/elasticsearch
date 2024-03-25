@@ -86,6 +86,7 @@ public class RestoreProjectRestTestIT extends ESRestTestCase {
 
         // execute a reindex with wait_for_completion=false to provoke a .tasks index
         String testIndex2 = "test_index_2";
+        createIndex(testIndex2, Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1).build());
         Request reindexRequest = new Request("POST", "/_reindex");
         reindexRequest.addParameter("wait_for_completion", "false");
         reindexRequest.setJsonEntity("""
