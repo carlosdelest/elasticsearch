@@ -87,7 +87,11 @@ public class ServerlessRestController extends RestController {
             final var paramName = entry.getKey();
             String paramError = null;
             if (RestrictedRestParameters.GLOBALLY_REJECTED_PARAMETERS.contains(paramName)) {
-                paramError = "The http parameter [" + paramName + "] is not permitted when running in serverless mode";
+                paramError = "The http parameter ["
+                    + paramName
+                    + "] (with value ["
+                    + entry.getValue()
+                    + "]) is not permitted when running in serverless mode";
             } else {
                 ParameterValidator validator = RestrictedRestParameters.GLOBALLY_VALIDATED_PARAMETERS.get(paramName);
                 if (validator != null) {

@@ -191,7 +191,16 @@ public class ServerlessRestControllerTests extends ESTestCase {
         final String errorMessage = expectParameterValidationFailure(path, parameters);
         assertThat(errorMessage, startsWith("Parameter validation failed for [" + path + "]: "));
         for (String param : invalidParamNames) {
-            assertThat(errorMessage, containsString("The http parameter [" + param + "] is not permitted when running in serverless mode"));
+            assertThat(
+                errorMessage,
+                containsString(
+                    "The http parameter ["
+                        + param
+                        + "] (with value ["
+                        + parameters.get(param)
+                        + "]) is not permitted when running in serverless mode"
+                )
+            );
         }
         for (String param : validParamNames) {
             assertThat(
