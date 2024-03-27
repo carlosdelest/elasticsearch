@@ -48,6 +48,8 @@ public class ServerlessRestController extends RestController {
     static final Predicate<String> VERSION_VALIDATOR = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$").asMatchPredicate();
 
     private static final Logger logger = org.elasticsearch.logging.LogManager.getLogger(ServerlessRestController.class);
+    private static final String PROJECT_ID_REST_HEADER = "X-Elastic-Project-Id";
+    private static final String PROJECT_ID_THREADCONTEXT_HEADER = "project.id";
 
     private final boolean logValidationErrorsAsWarnings;
 
@@ -120,12 +122,29 @@ public class ServerlessRestController extends RestController {
     @Override
     public void dispatchRequest(RestRequest request, RestChannel channel, ThreadContext threadContext) {
         try {
+            processProjectIdHeader(request, threadContext);
             processApiVersionHeader(request, threadContext);
         } catch (ElasticsearchStatusException e) {
             super.dispatchBadRequest(channel, threadContext, e);
             return;
         }
         super.dispatchRequest(request, channel, threadContext);
+    }
+
+    /**
+     * This runs at the very beginning of the request dispatch, which means everything else can depend on knowing which project is being
+     * referenced, but it also means that we don't know whether the user is an operator or not, so we need to defer the
+     * "only operators can perform non-project operations" check to later on.
+     */
+    private static void processProjectIdHeader(RestRequest request, ThreadContext threadContext) {
+        final String projectId = request.header(PROJECT_ID_REST_HEADER);
+        if (projectId != null) {
+            threadContext.putHeader(PROJECT_ID_THREADCONTEXT_HEADER, projectId);
+        } else {
+            // Longer term we want _every_ request to either have a project-id or a special flag for operator-only cluster-level operations
+            // But doing that now would break a lot of tests and local dev, so (for now) we just log at DEBUG
+            logger.debug("No project id supplied in request [{}] [{}]", request.method(), request.path());
+        }
     }
 
     static void processApiVersionHeader(RestRequest request, ThreadContext threadContext) throws ElasticsearchStatusException {
