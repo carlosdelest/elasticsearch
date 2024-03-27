@@ -25,6 +25,7 @@ import org.elasticsearch.cli.ExitCodes;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.cli.UserException;
+import org.elasticsearch.common.hash.MessageDigests;
 import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
@@ -40,6 +41,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.DigestOutputStream;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -150,7 +153,8 @@ public class ServerlessServerCli extends ServerCli {
 
             Path zip = targetPath.resolve(zipFileName + ".zip");
 
-            try (ZipOutputStream stream = new ZipOutputStream(Files.newOutputStream(zip))) {
+            MessageDigest md = MessageDigests.sha256();
+            try (ZipOutputStream stream = new ZipOutputStream(new DigestOutputStream(Files.newOutputStream(zip), md))) {
                 for (Path dumpFile : dumpFiles) {
                     String target = heapDumpDataDir.relativize(dumpFile).toString();
                     stream.putNextEntry(new ZipEntry(target));
@@ -179,7 +183,14 @@ public class ServerlessServerCli extends ServerCli {
                     });
                 }
             }
-            terminal.println(Strings.format("Diagnostic information saved to [%s]", zip.toAbsolutePath()));
+            terminal.println(
+                Strings.format(
+                    "Diagnostic information saved to [%s]; SHA256: [%s]; Size: [%d]",
+                    zip.toAbsolutePath(),
+                    MessageDigests.toHexString(md.digest()),
+                    Files.size(zip)
+                )
+            );
 
             // Clean up files inserted in the diagnostic bundle, to avoid duplication and conflict over names (which may lead to "stale"
             // dump files). This is particularly relevant in a Docker environment, where the PID is often stable (always the same, across

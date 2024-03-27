@@ -27,6 +27,7 @@ import org.elasticsearch.cli.CommandTestCase;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.cli.UserException;
+import org.elasticsearch.common.hash.MessageDigests;
 import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.settings.KeyStoreWrapper;
 import org.elasticsearch.common.settings.SecureString;
@@ -44,6 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.arrayContaining;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
@@ -52,6 +54,7 @@ import static org.hamcrest.Matchers.emptyArray;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
@@ -188,8 +191,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles.length, is(1));
-        assertThat(targetPathFiles[0].toString(), endsWith(".zip"));
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -212,9 +214,8 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles.length, is(1));
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
         assertThat(targetPathFiles[0].getFileName().toString(), startsWith("PRJ_ID_NODE_NAME"));
-        assertThat(targetPathFiles[0].toString(), endsWith(".zip"));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -238,8 +239,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles.length, is(1));
-        assertThat(targetPathFiles[0].toString(), endsWith(".zip"));
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -267,8 +267,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles.length, is(1));
-        assertThat(targetPathFiles[0].toString(), endsWith(".zip"));
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -294,8 +293,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles.length, is(1));
-        assertThat(targetPathFiles[0].toString(), endsWith(".zip"));
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -320,13 +318,42 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles.length, is(1));
-        assertThat(targetPathFiles[0].toString(), endsWith(".zip"));
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
         assertThat(filesInZip, hasSize(2));
         assertThat(filesInZip, containsInAnyOrder("/mock1.hprof", "/logs/replay_1234.log"));
+    }
+
+    public void testZipChecksumPrintedOnStdout() throws UserException, IOException {
+        Path targetPath = createEmptyTempDir();
+        Path heapDumpDataPath = createEmptyTempDir();
+        Path logsDir = createEmptyTempDir();
+
+        var mockDumpFile1 = heapDumpDataPath.resolve("mock1.hprof");
+        Files.writeString(mockDumpFile1, "MOCK-DUMP");
+
+        var logFile1 = logsDir.resolve("log1.log");
+        Files.writeString(logFile1, "log line");
+        Files.createDirectory(logsDir.resolve("sub/"));
+        var logFile2 = logsDir.resolve("sub/log2.json");
+        Files.writeString(logFile2, "{}");
+
+        try (var serverlessCli = new ServerlessServerCli()) {
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+        }
+
+        var targetPathFiles = FileSystemUtils.files(targetPath);
+
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
+
+        String sha256;
+        try (var zipFileStream = Files.newInputStream(targetPathFiles[0])) {
+            sha256 = MessageDigests.toHexString(MessageDigests.digest(zipFileStream, MessageDigests.sha256()));
+        }
+
+        assertThat(terminal.getOutput(), containsString("SHA256: [" + sha256 + "]"));
     }
 
     public void testMoveDiagnosticsInvalidDumpDir() throws UserException, IOException {
@@ -366,8 +393,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles.length, is(1));
-        assertThat(targetPathFiles[0].toString(), endsWith(".zip"));
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -395,8 +421,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles.length, is(1));
-        assertThat(targetPathFiles[0].toString(), endsWith(".zip"));
+        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
