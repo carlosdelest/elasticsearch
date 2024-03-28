@@ -114,6 +114,12 @@ To deploy a branch snapshot into QA
    This deploys a snapshot from the selected branch into our QA environment (see https://docs.elastic.dev/serverless/qa)
    by publishing a docker snapshot into our internal docker registry and then using the serverless project api to deploy that snapshot to our serverless platform QA environment.
 
+   By default a project of type `elasticsearch` is deployed. If you want to deploy a different project type (`observability` or `security`) you can pass the project type as environment variable when triggering the pipeline above via:
+
+   ```
+   PROJECT_TYPE=observability
+   ```
+
    The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa/builds/3#annotation-ess-public-url
    The encrypted user password is also shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa/builds/4#annotation-ess-password-encrypted
 

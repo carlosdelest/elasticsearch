@@ -31,10 +31,10 @@ if [ -z "${PROJECT_ID}" ]; then
         PROJECT_ID=$(echo ${BUILD_JSON} | jq -r '.meta_data."ess-project-id"')
     else
         echo "--- Resolve project id from deployID $DEPLOY_ID"
-        ALL_PROJECTS=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/elasticsearch")
+        ALL_PROJECTS=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE")
         PROJECT_ID=$(echo $ALL_PROJECTS | jq -c --arg deploymentName "$DEPLOY_ID" '.items[] | select(.name == $deploymentName)' | jq -r '.id')
     fi
 fi
 
 echo "Deleting project $PROJECT_ID"
-curl -XDELETE -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/elasticsearch/${PROJECT_ID}"
+curl -XDELETE -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/${PROJECT_ID}"

@@ -36,7 +36,7 @@ OVERRIDE_CONFIG=",
 fi
 
 CREATE_RESULT=$(curl -H "Authorization: ApiKey $API_KEY" \
-     -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/elasticsearch" \
+     -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE" \
      -XPOST -d "{
         \"name\": \"$DEPLOY_ID\",
         \"region_id\": \"$AWS_REGION\" $OVERRIDE_CONFIG
@@ -52,7 +52,7 @@ echo '--- Creating project'
 resetCredentials() {
     CRED_RESULT=$(curl -H "Authorization: ApiKey $API_KEY" \
       -H "Content-Type: application/json" \
-      "${ENV_URL}/api/v1/serverless/projects/elasticsearch/$PROJECT_ID/_reset-internal-credentials" \
+      "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/$PROJECT_ID/_reset-internal-credentials" \
       -XPOST)
 
     CREDCHECK=$((echo $CRED_RESULT | jq -e -r '.username') &> 0 && echo "true" || echo "false")
@@ -71,7 +71,7 @@ retry 5 5 resetCredentials
 
 echo '--- Wait for ES being ready'
 
-PROJ_INFO=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/elasticsearch/${PROJECT_ID}")
+PROJ_INFO=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/${PROJECT_ID}")
 
 ES_ENDPOINT=$(echo $PROJ_INFO | jq -r '.endpoints.elasticsearch')
 

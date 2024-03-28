@@ -8,6 +8,7 @@ env:
   TEST_ENV: "${TEST_ENV}"
   IMAGE_OVERRIDE: "${IMAGE_OVERRIDE}"
   SKIP_DOCKER: "${SKIP_DOCKER:-false}"
+  PROJECT_TYPE: "${PROJECT_TYPE:-elasticsearch}"
 
 steps:
   - label: ":docker: Publish docker test images"

@@ -34,12 +34,12 @@ echo "Updating deployment from: ${DEPLOY_BUILD_URL}" | buildkite-agent annotate 
 API_KEY=$(vault_with_retries read -field api-key "$VAULT_PATH_API_KEY")
 
 DEPLOYMENT_NAME=$(curl -k -H "Authorization: ApiKey $API_KEY" \
-     -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/elasticsearch/$PROJECT_ID" \
+     -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/$PROJECT_ID" \
      | jq -r '.name')
 
 echo "--- Updating deployment $PROJECT_ID - $DEPLOYMENT_NAME"
 UPDATE_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
-     -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/elasticsearch/$PROJECT_ID" \
+     -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/$PROJECT_ID" \
      -XPUT -d "{
         \"name\": \"$DEPLOYMENT_NAME\",
         \"overrides\": {
@@ -55,7 +55,7 @@ echo $UPDATE_RESULT
 
 echo '--- Wait for ES being ready'
 
-PROJ_INFO=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/elasticsearch/${PROJECT_ID}")
+PROJ_INFO=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/${PROJECT_ID}")
 ES_ENDPOINT=$(echo $PROJ_INFO | jq -r '.endpoints.elasticsearch')
 
 # wait for a maximum of 20 minutes max

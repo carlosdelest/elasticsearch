@@ -8,6 +8,7 @@ env:
   TEST_ENV: "qa"
   IMAGE_OVERRIDE: "${IMAGE_OVERRIDE-docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}}"
   ESS_ROOT_USERNAME: "${ESS_ROOT_USERNAME:-elastic}"
+  PROJECT_TYPE: "${PROJECT_TYPE:-elasticsearch}"
 
 steps:
   - label: ":docker: Publish docker test images"

@@ -7,6 +7,7 @@ env:
   AWS_REGION: "aws-eu-west-1"
   TEST_ENV: "qa"
   IMAGE_OVERRIDE: "${IMAGE_OVERRIDE-docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}}"
+  PROJECT_TYPE: "${PROJECT_TYPE:-elasticsearch}"
 
 steps:
   - label: ":k8s: Undeploy deployment from ${TEST_ENV}"
