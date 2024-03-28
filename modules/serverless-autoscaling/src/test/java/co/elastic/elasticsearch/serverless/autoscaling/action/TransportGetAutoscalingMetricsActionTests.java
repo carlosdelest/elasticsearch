@@ -33,6 +33,7 @@ import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.client.NoOpClient;
 import org.elasticsearch.threadpool.ThreadPool;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -56,7 +57,7 @@ public class TransportGetAutoscalingMetricsActionTests extends ESTestCase {
                 Request request,
                 ActionListener<Response> listener
             ) {
-                listener.onResponse((Response) new GetSearchTierMetrics.Response(new SearchTierMetrics(null, null, null)));
+                listener.onResponse((Response) new GetSearchTierMetrics.Response(new SearchTierMetrics(null, null, null, List.of())));
             }
         };
 
