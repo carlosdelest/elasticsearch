@@ -30,6 +30,7 @@ import static co.elastic.elasticsearch.api.filtering.CommonTestPublicSettings.MI
 import static co.elastic.elasticsearch.api.filtering.CommonTestPublicSettings.NON_PUBLIC_SETTING;
 import static co.elastic.elasticsearch.api.filtering.CommonTestPublicSettings.PUBLIC_SETTING;
 import static co.elastic.elasticsearch.api.filtering.CommonTestPublicSettings.THREAD_CONTEXT;
+import static org.elasticsearch.cluster.metadata.DataStreamTestHelper.randomGlobalRetention;
 import static org.hamcrest.Matchers.equalTo;
 
 public class GetComponentTemplateSettingsFilterTests extends ESTestCase {
@@ -48,7 +49,10 @@ public class GetComponentTemplateSettingsFilterTests extends ESTestCase {
 
             ComponentTemplate ct = new ComponentTemplate(new Template(mixPublicAndNonPublicSettings, null, null), 1L, Map.of());
 
-            GetComponentTemplateAction.Response response = new GetComponentTemplateAction.Response(Map.of("name", ct));
+            GetComponentTemplateAction.Response response = new GetComponentTemplateAction.Response(
+                Map.of("name", ct),
+                randomGlobalRetention()
+            );
 
             GetComponentTemplateAction.Response newResponse = filter.filterResponse(response);
 
@@ -56,6 +60,7 @@ public class GetComponentTemplateSettingsFilterTests extends ESTestCase {
                 newResponse.getComponentTemplates().get("name").template().settings(),
                 equalTo(Settings.builder().put(PUBLIC_SETTING.getKey(), 0).build())
             );
+            assertThat(newResponse.getGlobalRetention(), equalTo(response.getGlobalRetention()));
         }
     }
 
@@ -63,11 +68,15 @@ public class GetComponentTemplateSettingsFilterTests extends ESTestCase {
         try (ThreadContext.StoredContext ctx = THREAD_CONTEXT.stashContext()) {
             ComponentTemplate ct = new ComponentTemplate(new Template(null, null, null), 1L, Map.of());
 
-            GetComponentTemplateAction.Response response = new GetComponentTemplateAction.Response(Map.of("name", ct));
+            GetComponentTemplateAction.Response response = new GetComponentTemplateAction.Response(
+                Map.of("name", ct),
+                randomGlobalRetention()
+            );
 
             GetComponentTemplateAction.Response newResponse = filter.filterResponse(response);
 
             assertThat(newResponse.getComponentTemplates().get("name").template().settings(), equalTo(null));
+            assertThat(newResponse.getGlobalRetention(), equalTo(response.getGlobalRetention()));
         }
     }
 }

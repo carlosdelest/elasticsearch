@@ -45,7 +45,7 @@ public class GetComposableIndexTemplateSettingsFilter extends ApiFilteringAction
             .stream()
             .collect(Collectors.toMap(Map.Entry::getKey, e -> mapComponentTemplate(e.getValue())));
 
-        return new GetComposableIndexTemplateAction.Response(newTemplates);
+        return new GetComposableIndexTemplateAction.Response(newTemplates, response.getGlobalRetention());
     }
 
     private ComposableIndexTemplate mapComponentTemplate(ComposableIndexTemplate t) {
