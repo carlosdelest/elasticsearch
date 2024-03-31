@@ -40,6 +40,7 @@ public class ServerlessTransportVersions {
     public static final TransportVersion NEW_COMMIT_NOTIFICATION_WITH_BCC_INFO = def(8_612_01_0);
     public static final TransportVersion METERING_SHARD_INFO_DOC_COUNT_ADDED = def(8_612_02_0);
     public static final TransportVersion SEARCH_LOAD_AUTOSCALING = def(8_618_01_0);
+    public static final TransportVersion BLOB_LOCATION_WITHOUT_BLOB_LENGTH = def(8_619_01_0);
     /*
      * STOP! READ THIS FIRST! No, really,
      *        ____ _____ ___  ____  _        ____  _____    _    ____    _____ _   _ ___ ____    _____ ___ ____  ____ _____ _
