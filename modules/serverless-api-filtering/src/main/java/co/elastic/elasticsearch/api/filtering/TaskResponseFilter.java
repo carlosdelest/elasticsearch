@@ -17,8 +17,8 @@
 
 package co.elastic.elasticsearch.api.filtering;
 
-import org.elasticsearch.action.admin.cluster.node.tasks.get.GetTaskAction;
 import org.elasticsearch.action.admin.cluster.node.tasks.get.GetTaskResponse;
+import org.elasticsearch.action.admin.cluster.node.tasks.get.TransportGetTaskAction;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.tasks.TaskInfo;
 import org.elasticsearch.tasks.TaskResult;
@@ -30,7 +30,7 @@ import org.elasticsearch.xpack.core.api.filtering.ApiFilteringActionFilter;
  */
 public class TaskResponseFilter extends ApiFilteringActionFilter<GetTaskResponse> {
     protected TaskResponseFilter(ThreadContext threadContext) {
-        super(threadContext, GetTaskAction.NAME, GetTaskResponse.class);
+        super(threadContext, TransportGetTaskAction.TYPE.name(), GetTaskResponse.class);
     }
 
     @Override

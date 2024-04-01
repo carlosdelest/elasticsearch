@@ -20,8 +20,8 @@ package co.elastic.elasticsearch.api.validation;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
-import org.elasticsearch.action.admin.indices.create.CreateIndexAction;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
+import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
 import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.template.put.PutComponentTemplateAction;
@@ -55,7 +55,7 @@ public class PublicSettingsValidationActionFilter implements ActionFilter {
     }
 
     private Map.Entry<String, Function<CreateIndexRequest, Settings>> settingsFromCreateIndexAction() {
-        return Map.entry(CreateIndexAction.NAME, (CreateIndexRequest ir) -> ir.settings());
+        return Map.entry(TransportCreateIndexAction.TYPE.name(), (CreateIndexRequest ir) -> ir.settings());
     }
 
     private Map.Entry<String, Function<PutComponentTemplateAction.Request, Settings>> settingsFromCreateComponentTemplate() {
