@@ -125,7 +125,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             int sum = sumQuantity(ingestedDocs);
 
             // asserting that eventually records value sum up to expected value
-            assertThat(sum, equalTo(numDocs * 96 /* size of the single doc*/));
+            assertThat(sum, equalTo(numDocs * 6 /* size in bytes of the single doc*/));
             logger.info(numDocs);
             logger.info(ingestedDocs.size());
             logger.info(sum);

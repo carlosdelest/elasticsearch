@@ -17,248 +17,344 @@
 
 package co.elastic.elasticsearch.metering.ingested_size;
 
+import org.elasticsearch.core.RestApiVersion;
+import org.elasticsearch.xcontent.DeprecationHandler;
+import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.XContentLocation;
 import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xcontent.support.AbstractXContentParser;
 
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.nio.CharBuffer;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This is an XContentParser that is performing metering.
  * the metering is taking into account field names and field values.
  * The structure, format is ignored.
- *
- * Decimals (int, long) are all metered with same value (long bit size)
- * Floating points (float, double) are metered with double bit size
- * field names are metered with length * char bit size
- * text fields are length * char bit size
+ * <p>
+ * Numbers (float, double, long, int) are all metered with same value (long 8 bytes)
+ * field names and text are metered with the number of bytes when encoded in utf-8
+ * (1byte for ascii, 2 bytes for bmf chars, 3 and 4bytes for supplementary character set)
  */
 public class MeteringParser extends AbstractXContentParser {
     private final XContentParser delegate;
     private final AtomicLong counter;
 
-    private boolean tokenValueCharged = false;
-    private boolean currentNameCharged = false;
-
     /**
      * A function to accumulate total size of the document
-     * it takes into account that some methods (i.e. currentName) are called multiple times
-     * without moving a token. It does not overcharge for this
-     *
-     * It also makes sure that we don't have a code that calls different typed methods
-     * (like intValue, doubleValue) on the same token. This will throw an AssertionError
-     *
-     * @param sizeInBits amount of bits corresponding to a type and size
+     * based on the JSONS's token type it will add size for the type.
+     * This method is called by nextToken method which is only called once per each token.
      */
-    private void charge(long sizeInBits) {
-        if (tokenValueCharged == false) {
-            counter.addAndGet(sizeInBits);
-            tokenValueCharged = true;
+    private void charge(Token token) throws IOException {
+        if (token != null) {
+            var sizeInBytes = switch (token) {
+                case FIELD_NAME -> calculateTextLength(CharBuffer.wrap(currentName()));
+                case VALUE_STRING -> calculateTextLength(CharBuffer.wrap(textCharacters(), textOffset(), textLength()));
+                case VALUE_EMBEDDED_OBJECT -> calculateBase64Length(binaryValue().length);
+                case VALUE_NUMBER -> Long.BYTES;
+                case VALUE_BOOLEAN -> 1;
+                default -> 0;
+            };
+            counter.addAndGet(sizeInBytes);
         }
+    }
+
+    private int calculateTextLength(CharBuffer charBuffer) throws IOException {
+        int byteLength = 0;
+
+        for (int i = 0; i < charBuffer.length(); i++) {
+            char c = charBuffer.get(i);
+            if (c <= 127) {
+                byteLength += 1;
+            } else if (c <= 2047) {
+                byteLength += 2;
+            } else if (Character.isHighSurrogate(c)) {
+                // assuming valid encoded bytes, this is followed by a low surrogate
+                byteLength += 4;
+                i++;
+            } else {
+                byteLength += 3;
+            }
+        }
+
+        return byteLength;
     }
 
     public MeteringParser(XContentParser xContentParser, AtomicLong counter) {
         super(xContentParser.getXContentRegistry(), xContentParser.getDeprecationHandler(), xContentParser.getRestApiVersion());
+        Objects.requireNonNull(xContentParser);
+        Objects.requireNonNull(counter);
         this.delegate = xContentParser;
         this.counter = counter;
     }
 
-    @Override
-    public XContentType contentType() {
-        return delegate.contentType();
-    }
-
-    @Override
-    public void allowDuplicateKeys(boolean allowDuplicateKeys) {
-        delegate.allowDuplicateKeys(allowDuplicateKeys);
+    protected XContentParser delegate() {
+        return delegate;
     }
 
     @Override
     public Token nextToken() throws IOException {
-        Token token = delegate.nextToken();
-        if (token != Token.START_OBJECT && token != Token.END_OBJECT && token != Token.START_ARRAY && token != Token.END_ARRAY) {
-            // next field or value
-            tokenValueCharged = false;
-        }
-        if (token == Token.FIELD_NAME) {
-            currentNameCharged = false;
-        }
-
+        Token token = delegate().nextToken();
+        charge(token);
         return token;
     }
 
     /**
-     * when a parser is defined to use this method and will be skipping children we cannot charge for them.
-     * Those will not be stored as fields in lucene document after all.
-     * NOTE! however if the same document is sent over via ingest pipeline we will charge for those fields
+     * when a parser is defined to use this method (field has a ignored=true) we still want to charge for those.
+     * The parsing should iterate all the token as if the field was not ignored.
      */
     @Override
     public void skipChildren() throws IOException {
-        delegate.skipChildren();
+        // reimplementing the ParserMinimalBase#skipChildren()
+        Token currentToken = currentToken();
+        if (currentToken != Token.START_OBJECT && currentToken != Token.START_ARRAY) {
+            return;
+        }
+        int open = 1;
+        while (true) {
+            Token t = nextToken();
+            if (t == null) {
+                return;
+            }
+            switch (t) {
+                case START_OBJECT:
+                case START_ARRAY:
+                    ++open;
+                    break;
+                case END_OBJECT:
+                case END_ARRAY:
+                    if (--open == 0) {
+                        return;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private long calculateBase64Length(int n) {
+        /*
+        this calculates the length of a base64 (padded) encoded string for a given byte array length N
+        the calculation is as follows:
+        every 3 bytes of byte array are encoded in 4characters blocks
+        if blocks are not fully populated by a byte array (byte array length is not divisible by 3) the remaining is padded with =
+        Therefore we need a ceil (n/3)
+        (n+2)/3 is an equivalent of ceil(n/3)
+         */
+        return 4 * (n + 2) / 3;
+    }
+
+    @Override
+    public XContentType contentType() {
+        return delegate().contentType();
+    }
+
+    @Override
+    public void allowDuplicateKeys(boolean allowDuplicateKeys) {
+        delegate().allowDuplicateKeys(allowDuplicateKeys);
     }
 
     @Override
     public Token currentToken() {
-        return delegate.currentToken();
+        return delegate().currentToken();
     }
 
-    /**
-     * currentName() method is often interleaved between different other calls, even after moving a token.
-     * we only want to charge for a field name once.
-     */
     @Override
     public String currentName() throws IOException {
-        String currentName = delegate.currentName();
-        if (currentNameCharged == false) {
-            charge(currentName.length() * Character.SIZE);
-            currentNameCharged = true;
-        }
-
-        return currentName;
+        return delegate().currentName();
     }
 
     @Override
     public String text() throws IOException {
-        String text = delegate.text();
-        charge(text.length() * Character.SIZE);
-        return text;
+        return delegate().text();
+    }
+
+    @Override
+    public CharBuffer charBufferOrNull() throws IOException {
+        return delegate().charBufferOrNull();
     }
 
     @Override
     public CharBuffer charBuffer() throws IOException {
-        CharBuffer charBuffer = delegate.charBuffer();
-        charge(charBuffer.length() * Character.SIZE);
-        return charBuffer;
+        return delegate().charBuffer();
     }
 
     @Override
     public Object objectText() throws IOException {
-        // TODO how do we measure this?
-        Object o = delegate.objectText();
-        charge(String.valueOf(o).length() * Character.SIZE);
-        return o;
+        return delegate().objectText();
     }
 
     @Override
     public Object objectBytes() throws IOException {
-        // TODO how do we measure this? AbstractQueryBuilder#maybeConvertToBytesRef
-        return delegate.objectBytes();
+        return delegate().objectBytes();
     }
 
     @Override
     public boolean hasTextCharacters() {
-        return delegate.hasTextCharacters();
+        return delegate().hasTextCharacters();
     }
 
     @Override
     public char[] textCharacters() throws IOException {
-        char[] chars = delegate.textCharacters();
-        charge(chars.length * Character.SIZE);
-        return chars;
+        return delegate().textCharacters();
     }
 
     @Override
     public int textLength() throws IOException {
-        return delegate.textLength();
+        return delegate().textLength();
     }
 
     @Override
     public int textOffset() throws IOException {
-        return delegate.textOffset();
+        return delegate().textOffset();
     }
 
     @Override
     public Number numberValue() throws IOException {
-        Number number = delegate.numberValue();
-        /*TODO discuss how we charge here
-         */
-        switch (delegate.numberType()) {
-            case INT:
-                charge(Long.SIZE);
-                break;
-            case BIG_INTEGER:
-                charge(((BigInteger) number).bitLength());
-                break;
-            case LONG:
-                charge(Long.SIZE);
-                break;
-            case FLOAT:
-                charge(Double.SIZE);
-                break;
-            case DOUBLE:
-                charge(Double.SIZE);
-                break;
-            case BIG_DECIMAL:
-                charge(((BigDecimal) number).toBigInteger().bitLength());
-        }
-        return number;
+        return delegate().numberValue();
     }
 
     @Override
     public NumberType numberType() throws IOException {
-        return delegate.numberType();
+        return delegate().numberType();
+    }
+
+    @Override
+    public short shortValue(boolean coerce) throws IOException {
+        return delegate().shortValue(coerce);
+    }
+
+    @Override
+    public int intValue(boolean coerce) throws IOException {
+        return delegate().intValue(coerce);
+    }
+
+    @Override
+    public long longValue(boolean coerce) throws IOException {
+        return delegate().longValue(coerce);
+    }
+
+    @Override
+    public float floatValue(boolean coerce) throws IOException {
+        return delegate().floatValue(coerce);
+    }
+
+    @Override
+    public double doubleValue(boolean coerce) throws IOException {
+        return delegate().doubleValue(coerce);
+    }
+
+    @Override
+    public short shortValue() throws IOException {
+        return delegate().shortValue();
+    }
+
+    @Override
+    public int intValue() throws IOException {
+        return delegate().intValue();
+    }
+
+    @Override
+    public long longValue() throws IOException {
+        return delegate().longValue();
+    }
+
+    @Override
+    public float floatValue() throws IOException {
+        return delegate().floatValue();
+    }
+
+    @Override
+    public double doubleValue() throws IOException {
+        return delegate().doubleValue();
+    }
+
+    @Override
+    public boolean isBooleanValue() throws IOException {
+        return delegate().isBooleanValue();
+    }
+
+    @Override
+    public boolean booleanValue() throws IOException {
+        return delegate().booleanValue();
     }
 
     @Override
     public byte[] binaryValue() throws IOException {
-        byte[] bytes = delegate.binaryValue();
-        charge(bytes.length * Byte.SIZE);
-        return bytes;
+        return delegate().binaryValue();
     }
 
     @Override
     public XContentLocation getTokenLocation() {
-        return delegate.getTokenLocation();
+        return delegate().getTokenLocation();
     }
 
     @Override
-    protected boolean doBooleanValue() throws IOException {
-        charge(1);
-        return delegate.booleanValue();
+    public <T> T namedObject(Class<T> categoryClass, String name, Object context) throws IOException {
+        return delegate().namedObject(categoryClass, name, context);
     }
 
     @Override
-    protected short doShortValue() throws IOException {
-        charge(Short.SIZE);
-        return delegate.shortValue();
-    }
-
-    @Override
-    protected int doIntValue() throws IOException {
-        charge(Long.SIZE);
-        return delegate.intValue();
-    }
-
-    @Override
-    protected long doLongValue() throws IOException {
-        charge(Long.SIZE);
-        return delegate.longValue();
-    }
-
-    @Override
-    protected float doFloatValue() throws IOException {
-        charge(Double.SIZE);
-        return delegate.floatValue();
-    }
-
-    @Override
-    protected double doDoubleValue() throws IOException {
-        charge(Double.SIZE);
-        return delegate.doubleValue();
+    public NamedXContentRegistry getXContentRegistry() {
+        return delegate().getXContentRegistry();
     }
 
     @Override
     public boolean isClosed() {
-        return delegate.isClosed();
+        return delegate().isClosed();
     }
 
     @Override
     public void close() throws IOException {
         delegate.close();
+    }
+
+    @Override
+    public RestApiVersion getRestApiVersion() {
+        return delegate().getRestApiVersion();
+    }
+
+    @Override
+    public DeprecationHandler getDeprecationHandler() {
+        return delegate().getDeprecationHandler();
+    }
+
+    // AbstractXContent do* methods are not supported.
+    // All the high level XContentParser methods are reimplemented with delegation (not using do*)
+    // the overriden with metering behaviour method is nextToken
+    // AbstractXContent
+
+    @Override
+    protected boolean doBooleanValue() throws IOException {
+        throw new UnsupportedOperationException("do variants should not be used");
+    }
+
+    @Override
+    protected short doShortValue() throws IOException {
+        throw new UnsupportedOperationException("do variants should not be used");
+    }
+
+    @Override
+    protected int doIntValue() throws IOException {
+        throw new UnsupportedOperationException("do variants should not be used");
+    }
+
+    @Override
+    protected long doLongValue() throws IOException {
+        throw new UnsupportedOperationException("do variants should not be used");
+    }
+
+    @Override
+    protected float doFloatValue() throws IOException {
+        throw new UnsupportedOperationException("do variants should not be used");
+    }
+
+    @Override
+    protected double doDoubleValue() throws IOException {
+        throw new UnsupportedOperationException("do variants should not be used");
     }
 }

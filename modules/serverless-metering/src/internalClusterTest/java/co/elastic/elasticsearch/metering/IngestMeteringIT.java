@@ -56,6 +56,8 @@ import static org.hamcrest.Matchers.startsWith;
 public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
     protected static final int DEFAULT_SEARCH_POWER = 200;
+    private static final int ASCII_SIZE = 1;
+    private static final int NUMBER_SIZE = Long.BYTES;
 
     Map<String, Object> defaultAttributes = Map.of(
         "boost_window",
@@ -126,7 +128,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
 
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, expectedDefaultAttributes, 3 * Character.SIZE + Long.SIZE);
+        assertUsageRecord(indexName, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
 
         // change settings propagated to usage records
         ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
@@ -139,7 +141,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, expectedOverriddenAttributes, 3 * Character.SIZE + Long.SIZE);
+        assertUsageRecord(indexName, usageRecord, expectedOverriddenAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
 
     }
 
@@ -156,7 +158,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName2));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName2);
-        assertUsageRecord(indexName2, usageRecord, expectedDefaultAttributes, 3 * Character.SIZE + Long.SIZE);
+        assertUsageRecord(indexName2, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
 
         // change settings propagated to usage records
         ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
@@ -171,7 +173,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName2));
         usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName2);
-        assertUsageRecord(indexName2, usageRecord, expectedOverriddenAttributes, 3 * Character.SIZE + Long.SIZE);
+        assertUsageRecord(indexName2, usageRecord, expectedOverriddenAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
     }
 
     public void testDocumentFailingInPipelineNotReported() throws InterruptedException, IOException {
@@ -192,7 +194,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName3));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName3);
         // even though 2 documents were in bulk request, we will only have 1 reported
-        assertUsageRecord(indexName3, usageRecord, expectedDefaultAttributes, 3 * Character.SIZE + Long.SIZE);
+        assertUsageRecord(indexName3, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
     }
 
     public void testUpdatesAreMeteredInBulkRawWithPartialDoc() throws InterruptedException, IOException {
@@ -206,7 +208,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName4));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName4);
-        assertUsageRecord(indexName4, usageRecord, expectedDefaultAttributes, Character.SIZE + Long.SIZE);// partial doc size
+        assertUsageRecord(indexName4, usageRecord, expectedDefaultAttributes, ASCII_SIZE + NUMBER_SIZE);// partial doc size
     }
 
     public void testUpdatesViaScriptAreNotMetered() throws InterruptedException, IOException {
@@ -234,7 +236,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
 
-        assertUsageRecord(indexName, usageRecord, defaultAttributes, 3 * Character.SIZE + Long.SIZE);
+        assertUsageRecord(indexName, usageRecord, defaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
         receivedMetrics().clear();
     }
 
@@ -244,7 +246,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
 
-        assertUsageRecord(indexName, usageRecord, settings, 3 * Character.SIZE + Long.SIZE);
+        assertUsageRecord(indexName, usageRecord, settings, 3 * ASCII_SIZE + NUMBER_SIZE);
         receivedMetrics().clear();
     }
 
