@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.api.filtering;
 
 import co.elastic.elasticsearch.api.validation.PublicSettingsValidationActionFilter;
+import co.elastic.elasticsearch.api.validation.ReindexRequestValidator;
 
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.common.settings.IndexScopedSettings;
@@ -50,7 +51,8 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 new GetComponentTemplateSettingsFilter(context, indexScopedSettings),
                 new GetIndexActionSettingsFilter(context, indexScopedSettings),
                 new GetSettingsActionSettingsFilter(context, indexScopedSettings),
-                new PublicSettingsValidationActionFilter(context, indexScopedSettings)
+                new PublicSettingsValidationActionFilter(context, indexScopedSettings),
+                new ReindexRequestValidator()
             )
         );
 
