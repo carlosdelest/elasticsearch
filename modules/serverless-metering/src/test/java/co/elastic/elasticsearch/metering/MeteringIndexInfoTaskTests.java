@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
+
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.tasks.TaskCancelHelper;

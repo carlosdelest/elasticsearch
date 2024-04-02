@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ResourceAlreadyExistsException;
@@ -59,10 +61,12 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
         Setting.Property.NodeScope
     );
 
+    public static TimeValue MINIMUM_METERING_INFO_UPDATE_PERIOD = TimeValue.timeValueSeconds(5);
+
     public static final Setting<TimeValue> POLL_INTERVAL_SETTING = Setting.timeSetting(
         "metering.index-info-task.poll.interval",
         TimeValue.timeValueSeconds(30),
-        TimeValue.timeValueSeconds(5),
+        MINIMUM_METERING_INFO_UPDATE_PERIOD,
         Setting.Property.Dynamic,
         Setting.Property.NodeScope
     );
@@ -98,6 +102,8 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
         this.persistentTasksService = persistentTasksService;
         this.enabled = ENABLED_SETTING.get(settings);
         this.pollInterval = POLL_INTERVAL_SETTING.get(settings);
+
+        meteringIndexInfoService.setMeteringShardInfoUpdatePeriod(this.pollInterval);
     }
 
     private static void registerListeners(
@@ -236,6 +242,7 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     private void updatePollInterval(TimeValue pollInterval) {
         if (Objects.equals(this.pollInterval, pollInterval) == false) {
             this.pollInterval = pollInterval;
+            meteringIndexInfoService.setMeteringShardInfoUpdatePeriod(pollInterval);
             var task = executorNodeTask.get();
             if (task != null) {
                 task.requestReschedule();

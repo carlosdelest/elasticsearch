@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metering.MeteringShardInfoService;
-
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.util.StringHelper;
@@ -66,7 +64,8 @@ class ShardReader {
         return new ShardSizeAndDocCount(sizeInBytes, docCount);
     }
 
-    Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap(MeteringShardInfoService meteringShardInfoService) throws IOException {
+    Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap(LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache)
+        throws IOException {
         Map<ShardId, MeteringShardInfo> shardIds = new HashMap<>();
         for (final IndexService indexService : indicesService) {
             for (final IndexShard shard : indexService) {
@@ -82,7 +81,7 @@ class ShardReader {
                 long primaryTerm = shard.getOperationPrimaryTerm();
                 long generation = segmentInfos.getGeneration();
 
-                var cachedShardInfo = meteringShardInfoService.getCachedShardInfo(shardId, primaryTerm, generation);
+                var cachedShardInfo = localNodeMeteringShardInfoCache.getCachedShardInfo(shardId, primaryTerm, generation);
                 var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
                 logger.debug(
                     "cached shard size for [{}] at [{}:{}] is [{}]",
@@ -97,7 +96,7 @@ class ShardReader {
                     new MeteringShardInfo(shardSizeAndDocCount.sizeInBytes(), shardSizeAndDocCount.docCount(), primaryTerm, generation)
                 );
 
-                meteringShardInfoService.updateCachedShardInfo(
+                localNodeMeteringShardInfoCache.updateCachedShardInfo(
                     shardId,
                     primaryTerm,
                     generation,

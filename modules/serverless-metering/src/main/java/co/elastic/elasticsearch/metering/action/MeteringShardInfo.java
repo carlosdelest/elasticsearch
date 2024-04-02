@@ -27,6 +27,8 @@ import java.io.IOException;
 
 public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTerm, long generation) implements Writeable {
 
+    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0);
+
     public MeteringShardInfo {
         assert sizeInBytes >= 0 : "size must be non negative";
     }

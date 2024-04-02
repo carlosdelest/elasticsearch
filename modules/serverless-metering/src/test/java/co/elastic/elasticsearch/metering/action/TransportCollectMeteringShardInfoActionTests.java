@@ -17,15 +17,10 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.PlainActionFuture;
-import org.elasticsearch.cluster.ClusterName;
-import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
-import org.elasticsearch.cluster.node.DiscoveryNodeUtils;
-import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.TimeValue;
@@ -52,15 +47,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static java.util.Collections.emptySet;
+import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.awaitForkedTasks;
+import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterState;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
-import static org.elasticsearch.test.ClusterServiceUtils.setState;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
 
 public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
-    private static final String TEST_CLUSTER = "test-cluster";
     private static final String TEST_THREAD_POOL_NAME = "test_thread_pool";
     private static ThreadPool THREAD_POOL;
 
@@ -116,7 +110,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     @AfterClass
     public static void destroyThreadPool() {
         ThreadPool.terminate(THREAD_POOL, 30, TimeUnit.SECONDS);
-        // since static must set to null to be eligible for collection
+        // set static field to null to make it eligible for collection
         THREAD_POOL = null;
     }
 
@@ -127,7 +121,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
-        awaitForkedTasks();
+        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
 
         final Set<DiscoveryNode> searchNodes = clusterService.state()
@@ -171,14 +165,15 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
             .collect(Collectors.toMap(DiscoveryNode::getId, x -> {
                 var shardCount = randomIntBetween(0, shards.size());
                 var nodeShards = randomSubsetOf(shardCount, shards);
-                return nodeShards.stream().collect(Collectors.toMap(Function.identity(), this::createMeteringShardInfo));
+                return nodeShards.stream()
+                    .collect(Collectors.toMap(Function.identity(), TestTransportActionUtils::createMeteringShardInfo));
             }));
 
         var request = new CollectMeteringShardInfoAction.Request();
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
-        awaitForkedTasks();
+        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
 
         Set<ShardId> seenShards = new HashSet<>();
@@ -211,7 +206,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     }
 
     public void testMostRecentUsedInResultAggregation() throws ExecutionException, InterruptedException {
-        createMockClusterState(clusterService, 3, 2);
+        createMockClusterState(clusterService, 3, 2, b -> {});
 
         var searchNodes = clusterService.state()
             .nodes()
@@ -243,7 +238,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
-        awaitForkedTasks();
+        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
 
         for (Map.Entry<String, List<CapturingTransport.CapturedRequest>> entry : capturedRequests.entrySet()) {
@@ -261,46 +256,5 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         assertThat(response.getShardInfo().get(shard1Id).sizeInBytes(), is(expectedSizes.get(shard1Id)));
         assertThat(response.getShardInfo().get(shard2Id).sizeInBytes(), is(expectedSizes.get(shard2Id)));
         assertThat(response.getShardInfo().get(shard3Id).sizeInBytes(), is(expectedSizes.get(shard3Id)));
-    }
-
-    private void createMockClusterState(ClusterService clusterService) {
-        int numberOfNodes = randomIntBetween(3, 5);
-        int numberOfSearchNodes = randomIntBetween(1, numberOfNodes);
-        createMockClusterState(clusterService, numberOfNodes, numberOfSearchNodes);
-    }
-
-    private void createMockClusterState(ClusterService clusterService, int numberOfNodes, int numberOfSearchNodes) {
-
-        DiscoveryNodes.Builder discoBuilder = DiscoveryNodes.builder();
-
-        for (int i = 0; i < numberOfSearchNodes; i++) {
-            final DiscoveryNode node = DiscoveryNodeUtils.builder("node_" + i).roles(Set.of(DiscoveryNodeRole.SEARCH_ROLE)).build();
-            discoBuilder = discoBuilder.add(node);
-        }
-
-        for (int i = numberOfSearchNodes; i < numberOfNodes; i++) {
-            final DiscoveryNode node = DiscoveryNodeUtils.builder("node_" + i).roles(emptySet()).build();
-            discoBuilder = discoBuilder.add(node);
-        }
-
-        discoBuilder.localNodeId("node_0");
-        discoBuilder.masterNodeId("node_" + (numberOfNodes - 1));
-        ClusterState.Builder stateBuilder = ClusterState.builder(new ClusterName(TEST_CLUSTER));
-        stateBuilder.nodes(discoBuilder);
-
-        ClusterState clusterState = stateBuilder.build();
-        setState(clusterService, clusterState);
-    }
-
-    private MeteringShardInfo createMeteringShardInfo(ShardId shardId) {
-        return new MeteringShardInfo(randomLongBetween(0, 10000), randomLongBetween(0, 10000), 0, 0);
-    }
-
-    private static void awaitForkedTasks() {
-        PlainActionFuture.get(
-            listener -> THREAD_POOL.executor(TEST_THREAD_POOL_NAME).execute(ActionRunnable.run(listener, () -> {})),
-            10,
-            TimeUnit.SECONDS
-        );
     }
 }

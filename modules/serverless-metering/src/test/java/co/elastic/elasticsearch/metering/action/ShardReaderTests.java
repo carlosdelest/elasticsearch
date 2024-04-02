@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metering.MeteringShardInfoService;
-
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfo;
@@ -52,12 +50,12 @@ public class ShardReaderTests extends ESTestCase {
     public void testEmptySetWhenNoIndices() throws IOException {
 
         var indicesService = mock(IndicesService.class);
-        var meteringShardInfoService = mock(MeteringShardInfoService.class);
+        var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
         var shardReader = new ShardReader(indicesService);
 
         when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
 
-        var shardSizes = shardReader.getMeteringShardInfoMap(meteringShardInfoService);
+        var shardSizes = shardReader.getMeteringShardInfoMap(shardInfoCache);
 
         assertThat(shardSizes.keySet(), empty());
     }
@@ -68,7 +66,7 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
-        var meteringShardInfoService = mock(MeteringShardInfoService.class);
+        var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
         var shardReader = new ShardReader(indicesService);
 
         var index1 = mock(IndexService.class);
@@ -93,10 +91,10 @@ public class ShardReaderTests extends ESTestCase {
         when(shard2.shardId()).thenReturn(shardId2);
         when(shard3.shardId()).thenReturn(shardId3);
 
-        var shardInfoMap = shardReader.getMeteringShardInfoMap(meteringShardInfoService);
+        var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache);
 
-        verify(meteringShardInfoService, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
-        verify(meteringShardInfoService, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong());
+        verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
+        verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong());
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
     }

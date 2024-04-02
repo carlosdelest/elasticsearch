@@ -15,9 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
-
-import co.elastic.elasticsearch.metering.action.MeteringShardInfo;
+package co.elastic.elasticsearch.metering.action;
 
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.index.shard.ShardId;
@@ -26,7 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class MeteringShardInfoService extends AbstractLifecycleComponent {
+public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent {
     private record CacheEntry(long primaryTerm, long generation, long size, long docCount) {}
 
     private Map<ShardId, CacheEntry> shardSizeCache = new ConcurrentHashMap<>();

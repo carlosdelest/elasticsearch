@@ -19,8 +19,12 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.action.CollectMeteringShardInfoAction;
 import co.elastic.elasticsearch.metering.action.GetMeteringShardInfoAction;
+import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
+import co.elastic.elasticsearch.metering.action.LocalNodeMeteringShardInfoCache;
+import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
 import co.elastic.elasticsearch.metering.action.TransportCollectMeteringShardInfoAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringShardInfoAction;
+import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsAction;
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
@@ -74,7 +78,6 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
 
     private MeteringIndexInfoTaskExecutor meteringIndexInfoTaskExecutor;
-    private MeteringShardInfoService meteringShardInfoService;
     private final boolean hasSearchRole;
     private List<MetricsCollector> metricsCollectors;
     private MeteringReporter reporter;
@@ -170,10 +173,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         );
         cs.add(meteringIndexInfoTaskExecutor);
         if (hasSearchRole) {
-            meteringShardInfoService = new MeteringShardInfoService();
-            cs.add(meteringShardInfoService);
-        } else {
-            meteringShardInfoService = null;
+            cs.add(new LocalNodeMeteringShardInfoCache());
         }
 
         return cs;
@@ -234,17 +234,19 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     @Override
     public Collection<ActionPlugin.ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        var collectShardSize = new ActionPlugin.ActionHandler<>(
+        var collectMeteringShardInfo = new ActionPlugin.ActionHandler<>(
             CollectMeteringShardInfoAction.INSTANCE,
             TransportCollectMeteringShardInfoAction.class
         );
+        var getMeteringStats = new ActionPlugin.ActionHandler<>(GetMeteringStatsAction.INSTANCE, TransportGetMeteringStatsAction.class);
         if (hasSearchRole) {
-            return List.of(
-                new ActionPlugin.ActionHandler<>(GetMeteringShardInfoAction.INSTANCE, TransportGetMeteringShardInfoAction.class),
-                collectShardSize
+            var getMeteringShardInfo = new ActionPlugin.ActionHandler<>(
+                GetMeteringShardInfoAction.INSTANCE,
+                TransportGetMeteringShardInfoAction.class
             );
+            return List.of(getMeteringShardInfo, getMeteringStats, collectMeteringShardInfo);
         } else {
-            return List.of(collectShardSize);
+            return List.of(getMeteringStats, collectMeteringShardInfo);
         }
     }
 }

@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metering.MeteringShardInfoService;
-
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.test.ESTestCase;
 
@@ -26,13 +24,13 @@ import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
 import static org.hamcrest.Matchers.is;
 
-public class MeteringShardInfoServiceTests extends ESTestCase {
+public class LocalNodeMeteringShardInfoCacheTests extends ESTestCase {
 
     public void testSizeIsCached() {
         var shardId1 = new ShardId("index1", "index1UUID", 1);
         var shardId2 = new ShardId("index1", "index1UUID", 2);
 
-        try (var shardSizeService = new MeteringShardInfoService()) {
+        try (var shardSizeService = new LocalNodeMeteringShardInfoCache()) {
             var shard1QueryResult = shardSizeService.getCachedShardInfo(shardId1, 1, 1);
             shardSizeService.updateCachedShardInfo(shardId1, 1, 1, 10L, 100L);
             var secondShard1QueryResult = shardSizeService.getCachedShardInfo(shardId1, 1, 1);
@@ -66,7 +64,7 @@ public class MeteringShardInfoServiceTests extends ESTestCase {
     public void testCachedSizeNonMatchingWithDifferentPrimaryTermOrGeneration() {
         var shardId = new ShardId("index1", "index1UUID", 1);
 
-        try (var shardSizeService = new MeteringShardInfoService()) {
+        try (var shardSizeService = new LocalNodeMeteringShardInfoCache()) {
             var firstQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
             shardSizeService.updateCachedShardInfo(shardId, 1, 1, 10L, 100L);
             var secondQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);

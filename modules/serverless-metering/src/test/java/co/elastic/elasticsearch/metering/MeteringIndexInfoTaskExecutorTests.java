@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
+
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
@@ -67,6 +69,8 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
     private ClusterService clusterService;
     private PersistentTasksService persistentTasksService;
     private FeatureService featureService;
+
+    private MeteringIndexInfoService meteringIndexInfoService;
     private String localNodeId;
     private ClusterSettings clusterSettings;
     private Settings settings;
@@ -97,6 +101,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
         clusterService = spy(createClusterService(threadPool, clusterSettings));
         localNodeId = clusterService.localNode().getId();
         persistentTasksService = mock(PersistentTasksService.class);
+        meteringIndexInfoService = mock(MeteringIndexInfoService.class);
         featureService = new FeatureService(List.of(new MeteringFeatures()));
     }
 
@@ -118,7 +123,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             persistentTasksService,
             featureService,
             threadPool,
-            null,
+            meteringIndexInfoService,
             settings
         );
         executor.startStopTask(new ClusterChangedEvent("", initialState(), ClusterState.EMPTY_STATE));
@@ -138,7 +143,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             persistentTasksService,
             featureService,
             threadPool,
-            null,
+            meteringIndexInfoService,
             settings
         );
         executor.startStopTask(new ClusterChangedEvent("", stateWithIndexSizeTask(initialState()), ClusterState.EMPTY_STATE));
@@ -158,7 +163,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             persistentTasksService,
             featureService,
             threadPool,
-            null,
+            meteringIndexInfoService,
             settings
         );
         executor.startStopTask(new ClusterChangedEvent("", stateWithIndexSizeTask(initialStateWithoutFeature()), ClusterState.EMPTY_STATE));
@@ -178,7 +183,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             persistentTasksService,
             featureService,
             threadPool,
-            null,
+            meteringIndexInfoService,
             settings
         );
         MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
@@ -195,7 +200,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
                 persistentTasksService,
                 featureService,
                 threadPool,
-                null,
+                meteringIndexInfoService,
                 settings
             );
             MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
@@ -221,7 +226,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
                 persistentTasksService,
                 featureService,
                 threadPool,
-                null,
+                meteringIndexInfoService,
                 settings
             );
             MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
@@ -241,7 +246,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             persistentTasksService,
             featureService,
             threadPool,
-            null,
+            meteringIndexInfoService,
             settings
         );
         MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);

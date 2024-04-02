@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metering.MeteringShardInfoService;
-
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
@@ -32,7 +30,7 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
     GetMeteringShardInfoAction.Request,
     GetMeteringShardInfoAction.Response> {
     private final ShardReader shardReader;
-    private final MeteringShardInfoService meteringShardInfoService;
+    private final LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache;
 
     @Inject
     public TransportGetMeteringShardInfoAction(
@@ -40,7 +38,7 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
         IndicesService indicesService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        MeteringShardInfoService meteringShardInfoService
+        LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache
     ) {
         super(
             GetMeteringShardInfoAction.NAME,
@@ -51,7 +49,7 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
             threadPool.executor(ThreadPool.Names.MANAGEMENT)
         );
         this.shardReader = new ShardReader(indicesService);
-        this.meteringShardInfoService = meteringShardInfoService;
+        this.localNodeMeteringShardInfoCache = localNodeMeteringShardInfoCache;
     }
 
     @Override
@@ -61,7 +59,7 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
         ActionListener<GetMeteringShardInfoAction.Response> listener
     ) {
         try {
-            var shardSizes = shardReader.getMeteringShardInfoMap(meteringShardInfoService);
+            var shardSizes = shardReader.getMeteringShardInfoMap(localNodeMeteringShardInfoCache);
             listener.onResponse(new GetMeteringShardInfoAction.Response(shardSizes));
         } catch (Exception ex) {
             listener.onFailure(ex);

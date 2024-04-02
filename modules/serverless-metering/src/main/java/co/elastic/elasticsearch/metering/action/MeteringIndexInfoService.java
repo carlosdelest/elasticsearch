@@ -15,28 +15,29 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
-
-import co.elastic.elasticsearch.metering.action.CollectMeteringShardInfoAction;
-import co.elastic.elasticsearch.metering.action.MeteringShardInfo;
+package co.elastic.elasticsearch.metering.action;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
 import java.util.EnumSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
+
 public class MeteringIndexInfoService {
     private static final Logger logger = LogManager.getLogger(MeteringIndexInfoService.class);
 
-    private enum CollectedMeteringShardInfoFlag {
+    enum CollectedMeteringShardInfoFlag {
         PARTIAL,
         STALE
     }
@@ -44,9 +45,24 @@ public class MeteringIndexInfoService {
     record CollectedMeteringShardInfo(
         Map<ShardId, MeteringShardInfo> meteringShardInfoMap,
         Set<CollectedMeteringShardInfoFlag> meteringShardInfoStatus
-    ) {}
+    ) {
+        public MeteringShardInfo getMeteringShardInfoMap(ShardId shardId) {
+            var shardInfo = meteringShardInfoMap.get(shardId);
+            return Objects.requireNonNullElse(shardInfo, MeteringShardInfo.EMPTY);
+        }
+    }
 
     private final AtomicReference<CollectedMeteringShardInfo> collectedShardInfo = new AtomicReference<>();
+
+    private volatile TimeValue meteringShardInfoUpdatePeriod = MINIMUM_METERING_INFO_UPDATE_PERIOD;
+
+    public TimeValue getMeteringShardInfoUpdatePeriod() {
+        return meteringShardInfoUpdatePeriod;
+    }
+
+    public void setMeteringShardInfoUpdatePeriod(TimeValue meteringShardInfoUpdatePeriod) {
+        this.meteringShardInfoUpdatePeriod = meteringShardInfoUpdatePeriod;
+    }
 
     /**
      * Updates the internal storage of metering shard info, by performing a scatter-gather operation towards all (search) nodes
@@ -80,5 +96,9 @@ public class MeteringIndexInfoService {
                 logger.error("failed to collect metering shard info", e);
             }
         });
+    }
+
+    CollectedMeteringShardInfo getMeteringShardInfo() {
+        return collectedShardInfo.get();
     }
 }
