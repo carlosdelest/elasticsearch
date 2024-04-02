@@ -98,6 +98,8 @@ tasks {
             // Muted in severless, awaitsfix https://github.com/elastic/elasticsearch-serverless/issues/826
             "dlm/10_usage/Test data stream lifecycle usage stats"
 
+            // Enrich stats API is not available on Serverless
+            "enrich/10_basic/*"
         ).joinToString(","))
     }
 }
