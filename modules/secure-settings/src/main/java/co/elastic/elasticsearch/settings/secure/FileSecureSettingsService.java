@@ -88,6 +88,12 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
         }
     }
 
+    @Override
+    protected void processInitialFileMissing() {
+        // TODO: this should add an empty cluster state for secure settings state, but
+        // until readiness allows plugging in additional ready state hooks there is no need
+    }
+
     private static List<String> getStackTraceAsList(Exception e) {
         return List.of(ExceptionsHelper.stackTrace(e));
     }
