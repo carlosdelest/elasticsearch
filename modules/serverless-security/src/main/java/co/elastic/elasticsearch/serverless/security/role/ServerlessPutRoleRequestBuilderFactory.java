@@ -27,22 +27,21 @@ import org.elasticsearch.xpack.core.security.action.role.PutRoleRequestBuilderFa
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 
 import java.io.IOException;
-import java.util.function.Predicate;
 
 public class ServerlessPutRoleRequestBuilderFactory implements PutRoleRequestBuilderFactory {
     @Override
-    public PutRoleRequestBuilder create(Client client, boolean restrictRequest, Predicate<String> fileRolesStoreNameChecker) {
-        return new ServerlessPutRoleRequestBuilder(client, restrictRequest, fileRolesStoreNameChecker);
+    public PutRoleRequestBuilder create(Client client, boolean restrictRequest) {
+        return new ServerlessPutRoleRequestBuilder(client, restrictRequest);
     }
 
     static class ServerlessPutRoleRequestBuilder extends PutRoleRequestBuilder {
         private final boolean restrictRequest;
         private final ServerlessCustomRoleValidator serverlessCustomRoleValidator;
 
-        ServerlessPutRoleRequestBuilder(Client client, boolean restrictRequest, Predicate<String> fileRolesStoreNameChecker) {
+        ServerlessPutRoleRequestBuilder(Client client, boolean restrictRequest) {
             super(client);
             this.restrictRequest = restrictRequest;
-            this.serverlessCustomRoleValidator = new ServerlessCustomRoleValidator(fileRolesStoreNameChecker);
+            this.serverlessCustomRoleValidator = new ServerlessCustomRoleValidator();
         }
 
         @Override
@@ -61,6 +60,7 @@ public class ServerlessPutRoleRequestBuilderFactory implements PutRoleRequestBui
             request.addIndex(roleDescriptor.getIndicesPrivileges());
             request.addApplicationPrivileges(roleDescriptor.getApplicationPrivileges());
             request.metadata(roleDescriptor.getMetadata());
+            request.restrictRequest(restrictRequest);
             validate(request);
             return this;
         }

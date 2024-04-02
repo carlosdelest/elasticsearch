@@ -53,20 +53,18 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
     }
 
     public void testValidCustomRole() {
-        final ServerlessCustomRoleValidator validator = new ServerlessCustomRoleValidator(ignored -> false);
+        final ServerlessCustomRoleValidator validator = new ServerlessCustomRoleValidator();
         assertThat(validator.validate(randomRoleDescriptor()), is(nullValue()));
     }
 
     public void testInvalidCustomRole() {
-        final String fileBasedName = randomAlphaOfLength(42);
-        final ServerlessCustomRoleValidator validator = new ServerlessCustomRoleValidator(fileBasedName::equals);
+        final ServerlessCustomRoleValidator validator = new ServerlessCustomRoleValidator();
 
-        final int roleNameCaseNo = randomIntBetween(0, 3);
+        final int roleNameCaseNo = randomIntBetween(0, 2);
         final String roleName = switch (roleNameCaseNo) {
             case 0 -> randomAlphaOfLength(30); // valid
-            case 1 -> fileBasedName; // file-based reserved
-            case 2 -> "superuser"; // reserved
-            case 3 -> "_" + randomAlphaOfLength(30); // invalid prefix
+            case 1 -> "superuser"; // reserved
+            case 2 -> "_" + randomAlphaOfLength(30); // invalid prefix
             default -> throw new IllegalStateException("Unexpected value: " + roleNameCaseNo);
         };
         final boolean invalidRoleName = roleNameCaseNo != 0;
@@ -158,10 +156,10 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
         final List<String> validationErrors = ex.validationErrors();
         final List<Matcher<? super String>> itemMatchers = new ArrayList<>();
         switch (roleNameCaseNo) {
-            case 1, 2 -> {
+            case 1 -> {
                 itemMatchers.add(containsString("is reserved and may not be used"));
             }
-            case 3 -> itemMatchers.add(containsString("role name may not start with [_]"));
+            case 2 -> itemMatchers.add(containsString("role name may not start with [_]"));
         }
         if (unknownClusterPrivilege) {
             itemMatchers.add(

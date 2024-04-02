@@ -35,7 +35,6 @@ import org.elasticsearch.xpack.core.security.support.Validation;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.Predicate;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 
@@ -43,15 +42,8 @@ public final class ServerlessCustomRoleValidator {
     // package-private for testing
     static final Set<String> SUPPORTED_APPLICATION_NAMES = Set.of("apm", "kibana-.kibana");
     private static final String RESERVED_ROLE_NAME_PREFIX = "_";
-    private final Predicate<String> fileRolesStoreNameChecker;
 
-    public ServerlessCustomRoleValidator(Predicate<String> fileRolesStoreNameChecker) {
-        this.fileRolesStoreNameChecker = fileRolesStoreNameChecker;
-    }
-
-    public ServerlessCustomRoleValidator() {
-        this(ignored -> false);
-    }
+    public ServerlessCustomRoleValidator() {}
 
     public ActionRequestValidationException validate(RoleDescriptor roleDescriptor) {
         return validate(roleDescriptor, true);
@@ -98,8 +90,6 @@ public final class ServerlessCustomRoleValidator {
                 "role name may not start with [" + RESERVED_ROLE_NAME_PREFIX + "]",
                 validationException
             );
-        } else if (fileRolesStoreNameChecker.test(roleName)) {
-            validationException = addValidationError("Role [" + roleName + "] is reserved and may not be used", validationException);
         }
         return validationException;
     }

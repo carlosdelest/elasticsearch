@@ -34,6 +34,8 @@ import org.elasticsearch.test.cluster.local.LocalClusterSpec;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
+import org.elasticsearch.test.rest.ESRestTestCase;
+import org.elasticsearch.xcontent.ObjectPath;
 import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
@@ -121,13 +123,13 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 }
               ]
             }""";
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
             "invalid application name [kibana-.*]. name must be a wildcard [*] or "
-                + "one of the supported application names [apm,kibana-.kibana]"
+                + "one of the supported application names [apm,kibana-.kibana]",
+            "action_request_validation_exception"
         );
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
@@ -187,12 +189,12 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             {
               "cluster": ["all", "manage_ilm"]
             }""";
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
-            "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode"
+            "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode",
+            "action_request_validation_exception"
         );
         // Operator user still succeeds because we don't enforce custom role restrictions
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
@@ -205,19 +207,19 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 "workflows": ["search_application_query"]
               }
             }""";
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
-            "failed to parse role [custom_role]. unexpected field [restriction]"
+            "failed to parse role [custom_role]. unexpected field [restriction]",
+            "parse_exception"
         );
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_OPERATOR_USER,
             "custom_role",
             rolePayload,
-            400,
-            "failed to parse role [custom_role]. unexpected field [restriction]"
+            "failed to parse role [custom_role]. unexpected field [restriction]",
+            "parse_exception"
         );
     }
 
@@ -231,12 +233,12 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 }
               ]
             }""";
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
-            "index privilege [read_cross_cluster] exists but is not supported when running in serverless mode"
+            "index privilege [read_cross_cluster] exists but is not supported when running in serverless mode",
+            "action_request_validation_exception"
         );
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
@@ -252,23 +254,23 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 }
               ]
             }""";
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
             "failed to parse field 'query' for indices ["
                 + Strings.arrayToCommaDelimitedString(new String[] { "index-a", "*" })
-                + "] at index privilege [0] of role descriptor"
+                + "] at index privilege [0] of role descriptor",
+            "parse_exception"
         );
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_OPERATOR_USER,
             "custom_role",
             rolePayload,
-            400,
             "failed to parse field 'query' for indices ["
                 + Strings.arrayToCommaDelimitedString(new String[] { "index-a", "*" })
-                + "] at index privilege [0] of role descriptor"
+                + "] at index privilege [0] of role descriptor",
+            "parse_exception"
         );
     }
 
@@ -283,12 +285,12 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 }
               ]
             }""";
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
-            "field [remote_indices] is not supported when running in serverless mode"
+            "field [remote_indices] is not supported when running in serverless mode",
+            "parse_exception"
         );
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
@@ -304,20 +306,20 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
               ]
             }""";
         // We don't validate the malformed payload but fail early since remote_indices is not supported at all
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
-            "field [remote_indices] is not supported when running in serverless mode"
+            "field [remote_indices] is not supported when running in serverless mode",
+            "parse_exception"
         );
         // For an operator user we do validate the malformed request and fail
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_OPERATOR_USER,
             "custom_role",
             rolePayload,
-            400,
-            "failed to parse remote indices privileges for role [custom_role]. missing required [clusters] field"
+            "failed to parse remote indices privileges for role [custom_role]. missing required [clusters] field",
+            "parse_exception"
         );
     }
 
@@ -326,14 +328,20 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             {
               "run_as": {"field": "other"}
             }""";
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
-            "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty."
+            "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty.",
+            "parse_exception"
         );
-        putRoleAndAssertFailure(TEST_OPERATOR_USER, "custom_role", rolePayload, 400, "could not parse [run_as] field.");
+        putRoleAndAssertValidationException(
+            TEST_OPERATOR_USER,
+            "custom_role",
+            rolePayload,
+            "could not parse [run_as] field.",
+            "parse_exception"
+        );
     }
 
     private void doTestRunAsNotSupported() throws IOException {
@@ -341,24 +349,37 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             {
               "run_as": ["bob"]
             }""";
-        putRoleAndAssertFailure(
+        putRoleAndAssertValidationException(
             TEST_USER,
             "custom_role",
             rolePayload,
-            400,
-            "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty."
+            "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty.",
+            "parse_exception"
         );
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
     }
 
-    private void doTestRoleNameCannotMatchFileBasedRole() throws IOException {
+    private void doTestRoleNameCannotMatchFileBasedRole() {
         final var rolePayload = """
             {
               "cluster": ["all"]
             }""";
         // role is defined in `roles.yml` file
-        putRoleAndAssertFailure(TEST_USER, "file_based_role", rolePayload, 400, "Role [file_based_role] is reserved and may not be used");
-        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "file_based_role", rolePayload);
+        final String roleName = "file_based_role";
+        putRoleAndAssertValidationException(
+            TEST_USER,
+            roleName,
+            rolePayload,
+            "Role [file_based_role] is reserved and may not be used",
+            "action_request_validation_exception"
+        );
+        putRoleAndAssertValidationException(
+            TEST_OPERATOR_USER,
+            roleName,
+            rolePayload,
+            "Role [file_based_role] is reserved and may not be used",
+            "action_request_validation_exception"
+        );
     }
 
     private void doTestRoleNameCannotMatchReservedRole() {
@@ -366,8 +387,20 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             {
               "cluster": ["all"]
             }""";
-        putRoleAndAssertFailure(TEST_USER, "superuser", rolePayload, 400, "Role [superuser] is reserved and may not be used");
-        putRoleAndAssertFailure(TEST_OPERATOR_USER, "superuser", rolePayload, 400, "Role [superuser] is reserved and may not be used");
+        putRoleAndAssertValidationException(
+            TEST_USER,
+            "superuser",
+            rolePayload,
+            "Role [superuser] is reserved and may not be used",
+            "action_request_validation_exception"
+        );
+        putRoleAndAssertValidationException(
+            TEST_OPERATOR_USER,
+            "superuser",
+            rolePayload,
+            "Role [superuser] is reserved and may not be used",
+            "action_request_validation_exception"
+        );
     }
 
     public void testGetRoles() throws IOException {
@@ -422,6 +455,21 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         }
         {
             ResponseException responseException = expectThrows(ResponseException.class, () -> deleteRole(TEST_OPERATOR_USER, roleName));
+            assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(400));
+            assertThat(responseException.getMessage(), containsString("role [" + roleName + "] is reserved and cannot be deleted"));
+        }
+    }
+
+    public void testDeleteFileBasedRoles() {
+        // role is defined in `roles.yml` file
+        final String roleName = "file_based_role";
+        {
+            ResponseException responseException = expectThrows(ResponseException.class, () -> deleteRole(TEST_USER, roleName));
+            assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(400));
+            assertThat(responseException.getMessage(), containsString("role [" + roleName + "] is reserved and cannot be deleted"));
+        }
+        {
+            ResponseException responseException = expectThrows(ResponseException.class, () -> deleteRole(TEST_USER, roleName));
             assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(400));
             assertThat(responseException.getMessage(), containsString("role [" + roleName + "] is reserved and cannot be deleted"));
         }
@@ -494,12 +542,25 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         );
     }
 
-    private void putRoleAndAssertFailure(String username, String roleName, String rolePayload, int statusCode, String message) {
+    private void putRoleAndAssertValidationException(
+        String username,
+        String roleName,
+        String rolePayload,
+        String message,
+        String errorType
+    ) {
         final var putRoleRequest = new Request(randomFrom("PUT", "POST"), "/_security/role/" + roleName);
         putRoleRequest.setJsonEntity(rolePayload);
         final ResponseException e = expectThrows(ResponseException.class, () -> executeAsUser(username, putRoleRequest));
-        assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(statusCode));
+        assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(400));
         assertThat(e.getMessage(), containsString(message));
+        Map<String, Object> response = null;
+        try {
+            response = ESRestTestCase.entityAsMap(e.getResponse());
+        } catch (IOException ex) {
+            fail("Should be able to parse error response");
+        }
+        assertThat(ObjectPath.eval("error.type", response), is(errorType));
     }
 
     private boolean deleteRole(String username, String roleName) throws IOException {

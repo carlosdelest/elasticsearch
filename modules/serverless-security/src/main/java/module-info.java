@@ -23,6 +23,7 @@ import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorO
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessGetBuiltinPrivilegesResponseTranslator;
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessHasPrivilegesRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessPutRoleRequestBuilderFactory;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessReservedRoleNameChecker;
 
 import org.elasticsearch.xpack.core.security.action.apikey.BulkUpdateApiKeyRequestTranslator;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyRequestBuilderFactory;
@@ -31,6 +32,7 @@ import org.elasticsearch.xpack.core.security.action.privilege.GetBuiltinPrivileg
 import org.elasticsearch.xpack.core.security.action.role.PutRoleRequestBuilderFactory;
 import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesRequestBuilderFactory;
 import org.elasticsearch.xpack.security.authz.AuthorizationDenialMessages;
+import org.elasticsearch.xpack.security.authz.ReservedRoleNameChecker;
 
 module org.elasticsearch.internal.security {
 
@@ -55,4 +57,5 @@ module org.elasticsearch.internal.security {
     provides GetBuiltinPrivilegesResponseTranslator with ServerlessGetBuiltinPrivilegesResponseTranslator;
     provides HasPrivilegesRequestBuilderFactory with ServerlessHasPrivilegesRequestBuilderFactory;
     provides AuthorizationDenialMessages with ServerlessAuthorizationDenialMessages;
+    provides ReservedRoleNameChecker.Factory with ServerlessReservedRoleNameChecker.Factory;
 }
