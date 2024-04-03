@@ -89,6 +89,8 @@ steps:
   - label: ":git: Push promoted build tags"
     if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main'
     command: ".buildkite/scripts/tag-promoted-commit.sh"
+    env:
+      USE_GITHUB_CREDS: "true"
     agents:
       provider: "gcp"
       machineType: "n1-standard-4"
