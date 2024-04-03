@@ -28,5 +28,7 @@ tasks {
         exclude("**/JdbcFrozenCsvSpecIT.class")
         // AwaitsFix: https://github.com/elastic/elasticsearch-serverless/issues/1501
         exclude("**/RestSqlIT.class")
+        // AwaitsFix: https://github.com/elastic/elasticsearch-serverless/issues/1611
+        exclude("**/JdbcShardFailureIT.class")
     }
 }
