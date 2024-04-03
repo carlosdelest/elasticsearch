@@ -46,7 +46,6 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
 
         actionFilters.set(
             List.of(
-                new EnrichStatsResponseFilter(context),
                 new TaskResponseFilter(context),
                 new GetComponentTemplateSettingsFilter(context, indexScopedSettings),
                 new GetIndexActionSettingsFilter(context, indexScopedSettings),
