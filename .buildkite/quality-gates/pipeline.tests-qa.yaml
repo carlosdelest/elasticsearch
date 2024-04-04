@@ -18,3 +18,23 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+  - label: ":hourglass: Wait 30 minutes for environment health metrics"
+    key: staging_bake_period
+    command:
+    - echo "Waiting for 30m for indicative health metrics"
+    - sleep ${QA_GATE_WAIT_PERIOD:-1800}
+
+  - label: ":pipeline: Trigger Elasticsearch observability checks in QA"
+    depends_on: staging_bake_period
+    trigger: serverless-quality-gates
+    build:
+      message: "${BUILDKITE_MESSAGE}"
+      env:
+        TARGET_ENV: qa
+        SERVICE: elasticsearch
+        SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+        SERVICE_VERSION: ${SERVICE_VERSION:0:12}
+        SERVICE_TYPE_FIELD: kubernetes.container.name
+        CHECK_ALERTS: true
+        CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
+        CHECK_ALERTS_TRANSIENT_LOOKBACK: 30m # 30 minutes is the default lookback for transient alerts
