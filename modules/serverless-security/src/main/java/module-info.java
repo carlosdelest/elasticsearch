@@ -15,6 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
+import co.elastic.elasticsearch.serverless.security.ServerlessSecondaryAuthActions;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessBulkUpdateApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessCreateApiKeyRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessUpdateApiKeyRequestTranslator;
@@ -31,6 +32,7 @@ import org.elasticsearch.xpack.core.security.action.apikey.UpdateApiKeyRequestTr
 import org.elasticsearch.xpack.core.security.action.privilege.GetBuiltinPrivilegesResponseTranslator;
 import org.elasticsearch.xpack.core.security.action.role.PutRoleRequestBuilderFactory;
 import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesRequestBuilderFactory;
+import org.elasticsearch.xpack.security.authc.support.SecondaryAuthActions;
 import org.elasticsearch.xpack.security.authz.AuthorizationDenialMessages;
 import org.elasticsearch.xpack.security.authz.ReservedRoleNameChecker;
 
@@ -58,4 +60,5 @@ module org.elasticsearch.internal.security {
     provides HasPrivilegesRequestBuilderFactory with ServerlessHasPrivilegesRequestBuilderFactory;
     provides AuthorizationDenialMessages with ServerlessAuthorizationDenialMessages;
     provides ReservedRoleNameChecker.Factory with ServerlessReservedRoleNameChecker.Factory;
+    provides SecondaryAuthActions with ServerlessSecondaryAuthActions;
 }
