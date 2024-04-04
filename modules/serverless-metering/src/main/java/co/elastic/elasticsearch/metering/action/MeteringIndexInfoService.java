@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
 
@@ -46,14 +47,20 @@ public class MeteringIndexInfoService {
         Map<ShardId, MeteringShardInfo> meteringShardInfoMap,
         Set<CollectedMeteringShardInfoFlag> meteringShardInfoStatus
     ) {
+        static final CollectedMeteringShardInfo INITIAL = new CollectedMeteringShardInfo(
+            Map.of(),
+            Set.of(CollectedMeteringShardInfoFlag.STALE)
+        );
+
         public MeteringShardInfo getMeteringShardInfoMap(ShardId shardId) {
             var shardInfo = meteringShardInfoMap.get(shardId);
             return Objects.requireNonNullElse(shardInfo, MeteringShardInfo.EMPTY);
         }
     }
 
-    private final AtomicReference<CollectedMeteringShardInfo> collectedShardInfo = new AtomicReference<>();
-
+    private final AtomicReference<CollectedMeteringShardInfo> collectedShardInfo = new AtomicReference<>(
+        CollectedMeteringShardInfo.INITIAL
+    );
     private volatile TimeValue meteringShardInfoUpdatePeriod = MINIMUM_METERING_INFO_UPDATE_PERIOD;
 
     public TimeValue getMeteringShardInfoUpdatePeriod() {
@@ -77,8 +84,8 @@ public class MeteringIndexInfoService {
                     status.add(CollectedMeteringShardInfoFlag.PARTIAL);
                 }
 
-                // TODO[lor]: ES-7851: create a new MeteringShardInfo from diffs.
-                collectedShardInfo.set(new CollectedMeteringShardInfo(response.getShardInfo(), status));
+                // Create a new MeteringShardInfo from diffs.
+                collectedShardInfo.getAndUpdate(current -> mergeShardInfo(current.meteringShardInfoMap(), response.getShardInfo(), status));
                 logger.debug(
                     () -> Strings.format(
                         "collected new metering shard info for shards [%s]",
@@ -96,6 +103,16 @@ public class MeteringIndexInfoService {
                 logger.error("failed to collect metering shard info", e);
             }
         });
+    }
+
+    static CollectedMeteringShardInfo mergeShardInfo(
+        Map<ShardId, MeteringShardInfo> current,
+        Map<ShardId, MeteringShardInfo> updated,
+        Set<CollectedMeteringShardInfoFlag> status
+    ) {
+        var merged = Stream.concat(current.entrySet().stream(), updated.entrySet().stream())
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, TransportCollectMeteringShardInfoAction::mostRecent));
+        return new CollectedMeteringShardInfo(merged, status);
     }
 
     CollectedMeteringShardInfo getMeteringShardInfo() {

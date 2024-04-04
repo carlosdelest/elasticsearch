@@ -35,11 +35,13 @@ import org.elasticsearch.test.ESTestCase;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -55,7 +57,7 @@ public class ShardReaderTests extends ESTestCase {
 
         when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
 
-        var shardSizes = shardReader.getMeteringShardInfoMap(shardInfoCache);
+        var shardSizes = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
 
         assertThat(shardSizes.keySet(), empty());
     }
@@ -91,12 +93,55 @@ public class ShardReaderTests extends ESTestCase {
         when(shard2.shardId()).thenReturn(shardId2);
         when(shard3.shardId()).thenReturn(shardId3);
 
-        var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache);
+        var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
 
-        verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
-        verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong());
+        verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong(), eq("TEST-NODE"));
+        verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"));
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
+    }
+
+    public void testNotReturningUnchangedDataInDiff() throws IOException {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+        ShardId shardId2 = new ShardId("index1", "index1UUID", 2);
+        ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
+
+        var indicesService = mock(IndicesService.class);
+        var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
+        when(shardInfoCache.getCachedShardInfo(eq(shardId3), anyLong(), anyLong(), any())).thenReturn(
+            Optional.of(new MeteringShardInfo(10L, 100L, 1L, 1L))
+        );
+
+        var shardReader = new ShardReader(indicesService);
+
+        var index1 = mock(IndexService.class);
+        var index2 = mock(IndexService.class);
+
+        var shard1 = mock(IndexShard.class);
+        var shard2 = mock(IndexShard.class);
+        var shard3 = mock(IndexShard.class);
+
+        when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
+        when(index1.iterator()).thenReturn(Iterators.concat(Iterators.single(shard1), Iterators.single(shard2)));
+        when(index2.iterator()).thenReturn(Iterators.single(shard3));
+
+        var engine = mock(Engine.class);
+        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
+
+        when(shard1.getEngineOrNull()).thenReturn(engine);
+        when(shard2.getEngineOrNull()).thenReturn(engine);
+        when(shard3.getEngineOrNull()).thenReturn(engine);
+
+        when(shard1.shardId()).thenReturn(shardId1);
+        when(shard2.shardId()).thenReturn(shardId2);
+        when(shard3.shardId()).thenReturn(shardId3);
+
+        var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
+
+        verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong(), eq("TEST-NODE"));
+        verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"));
+
+        assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2));
     }
 
     private static class TestSegmentCommitInfo extends SegmentCommitInfo {
@@ -110,7 +155,7 @@ public class ShardReaderTests extends ESTestCase {
                     Version.LATEST,
                     Version.LATEST,
                     "",
-                    0,
+                    100,
                     false,
                     false,
                     mock(Codec.class),

@@ -17,14 +17,20 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
+
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.PlainActionFuture;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.persistent.NotPersistentTaskNodeException;
+import org.elasticsearch.persistent.PersistentTaskNodeNotAssignedException;
+import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.transport.CapturingTransport;
@@ -50,12 +56,15 @@ import java.util.stream.Collectors;
 import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.awaitForkedTasks;
 import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterState;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     private static final String TEST_THREAD_POOL_NAME = "test_thread_pool";
+    private static final long ALLOCATION_ID = 1L;
     private static ThreadPool THREAD_POOL;
 
     private ClusterService clusterService;
@@ -115,7 +124,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     }
 
     public void testOneRequestIsSentToEachNode() {
-        createMockClusterState(clusterService);
+        createMockClusterStateWithPersistentTask(clusterService);
 
         var request = new CollectMeteringShardInfoAction.Request();
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
@@ -143,12 +152,15 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
             var capturedRequest = entry.getValue().get(0);
             assertThat(capturedRequest.action(), is("cluster:monitor/get/metering/shard-info"));
             assertThat(capturedRequest.request(), instanceOf(GetMeteringShardInfoAction.Request.class));
-            // assertThat(asInstanceOf(GetShardInfoAction.Request.class, capturedRequest.request()).getToken(), is(token));
+            assertThat(
+                asInstanceOf(GetMeteringShardInfoAction.Request.class, capturedRequest.request()).getCacheToken(),
+                equalTo(Long.toString(ALLOCATION_ID))
+            );
         }
     }
 
     public void testResultAggregation() throws ExecutionException, InterruptedException {
-        createMockClusterState(clusterService);
+        createMockClusterStateWithPersistentTask(clusterService);
 
         var shards = List.of(
             new ShardId("index1", "index1UUID", 1),
@@ -206,7 +218,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     }
 
     public void testMostRecentUsedInResultAggregation() throws ExecutionException, InterruptedException {
-        createMockClusterState(clusterService, 3, 2, b -> {});
+        createMockClusterStateWithPersistentTask(clusterService);
 
         var searchNodes = clusterService.state()
             .nodes()
@@ -256,5 +268,55 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         assertThat(response.getShardInfo().get(shard1Id).sizeInBytes(), is(expectedSizes.get(shard1Id)));
         assertThat(response.getShardInfo().get(shard2Id).sizeInBytes(), is(expectedSizes.get(shard2Id)));
         assertThat(response.getShardInfo().get(shard3Id).sizeInBytes(), is(expectedSizes.get(shard3Id)));
+    }
+
+    public void testNoPersistentTaskNodeFails() {
+        createMockClusterState(clusterService);
+
+        var request = new CollectMeteringShardInfoAction.Request();
+        PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
+
+        action.doExecute(mock(Task.class), request, listener);
+        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
+
+        var exception = expectThrows(ExecutionException.class, listener::get);
+        assertThat(exception.getCause(), instanceOf(PersistentTaskNodeNotAssignedException.class));
+    }
+
+    public void testWrongPersistentTaskNodeFails() {
+        PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
+
+        when(task.isAssigned()).thenReturn(true);
+        when(task.getExecutorNode()).thenReturn("FOO");
+
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+
+        createMockClusterState(clusterService, 3, 2, b -> {
+            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
+        });
+
+        var request = new CollectMeteringShardInfoAction.Request();
+        PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
+
+        action.doExecute(mock(Task.class), request, listener);
+        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
+
+        var exception = expectThrows(ExecutionException.class, listener::get);
+        assertThat(exception.getCause(), instanceOf(NotPersistentTaskNodeException.class));
+    }
+
+    private static void createMockClusterStateWithPersistentTask(ClusterService clusterService) {
+        PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
+
+        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
+        when(task.isAssigned()).thenReturn(true);
+        when(task.getAllocationId()).thenReturn(ALLOCATION_ID);
+        when(task.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
+
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+
+        createMockClusterState(clusterService, 3, 2, b -> {
+            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
+        });
     }
 }

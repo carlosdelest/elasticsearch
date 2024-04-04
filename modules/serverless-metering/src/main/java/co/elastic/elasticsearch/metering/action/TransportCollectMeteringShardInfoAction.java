@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
+
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.support.ActionFilters;
@@ -28,6 +30,8 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
+import org.elasticsearch.persistent.NotPersistentTaskNodeException;
+import org.elasticsearch.persistent.PersistentTaskNodeNotAssignedException;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -123,6 +127,16 @@ public class TransportCollectMeteringShardInfoAction extends HandledTransportAct
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
             .collect(Collectors.toSet());
 
+        var persistentTask = MeteringIndexInfoTask.findTask(clusterState);
+        if (persistentTask == null || persistentTask.isAssigned() == false) {
+            listener.onFailure(new PersistentTaskNodeNotAssignedException(MeteringIndexInfoTask.TASK_NAME));
+            return;
+        }
+        if (clusterService.localNode().getId().equals(persistentTask.getExecutorNode()) == false) {
+            listener.onFailure(new NotPersistentTaskNodeException(clusterService.localNode().getId(), MeteringIndexInfoTask.TASK_NAME));
+            return;
+        }
+        var currentPersistentTaskAllocation = Long.toString(persistentTask.getAllocationId());
         final int expectedOps = nodes.size();
         logger.trace("querying {} data nodes based on cluster state version [{}]", expectedOps, clusterState.version());
 
@@ -134,7 +148,7 @@ public class TransportCollectMeteringShardInfoAction extends HandledTransportAct
         int i = 0;
         for (DiscoveryNode node : nodes) {
             final int nodeIndex = i++;
-            var shardInfoRequest = new GetMeteringShardInfoAction.Request();
+            var shardInfoRequest = new GetMeteringShardInfoAction.Request(currentPersistentTaskAllocation);
             shardInfoRequest.setParentTask(clusterService.localNode().getId(), task.getId());
 
             sendRequest(node, shardInfoRequest, ActionListener.wrap(response -> {
@@ -167,7 +181,7 @@ public class TransportCollectMeteringShardInfoAction extends HandledTransportAct
         return new CollectMeteringShardInfoAction.Response(normalizedShards, failures);
     }
 
-    private static MeteringShardInfo mostRecent(MeteringShardInfo v1, MeteringShardInfo v2) {
+    static MeteringShardInfo mostRecent(MeteringShardInfo v1, MeteringShardInfo v2) {
         if ((v1.primaryTerm() > v2.primaryTerm()) || (v1.primaryTerm() == v2.primaryTerm() && v1.generation() > v2.generation())) {
             return v1;
         }

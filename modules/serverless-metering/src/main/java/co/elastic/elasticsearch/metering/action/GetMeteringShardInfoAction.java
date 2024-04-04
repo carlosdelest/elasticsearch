@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
+
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.ActionResponse;
@@ -38,10 +40,24 @@ public class GetMeteringShardInfoAction {
     public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
     public static class Request extends ActionRequest {
-        public Request() {}
+        private final String cacheToken;
+
+        /**
+         * Creates a new request, specifying a token to use on the target node to check if the cached info (if any) matches
+         * the requesting node, or if it is stale and should not be used and replaced.
+         * @param cacheToken a token to be used to check if the cached info (if any) is valid or stale
+         */
+        public Request(String cacheToken) {
+            this.cacheToken = cacheToken;
+        }
 
         public Request(StreamInput in) throws IOException {
             super(in);
+            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SHARD_INFO_REQUEST_TOKEN_ADDED)) {
+                this.cacheToken = in.readString();
+            } else {
+                this.cacheToken = null;
+            }
         }
 
         @Override
@@ -52,6 +68,18 @@ public class GetMeteringShardInfoAction {
         @Override
         public String getDescription() {
             return "Get shard metering information from a single data node";
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            super.writeTo(out);
+            if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SHARD_INFO_REQUEST_TOKEN_ADDED)) {
+                out.writeString(cacheToken);
+            }
+        }
+
+        public String getCacheToken() {
+            return cacheToken;
         }
     }
 

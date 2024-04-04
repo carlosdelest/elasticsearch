@@ -64,8 +64,10 @@ class ShardReader {
         return new ShardSizeAndDocCount(sizeInBytes, docCount);
     }
 
-    Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap(LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache)
-        throws IOException {
+    Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap(
+        LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache,
+        String requestCacheToken
+    ) throws IOException {
         Map<ShardId, MeteringShardInfo> shardIds = new HashMap<>();
         for (final IndexService indexService : indicesService) {
             for (final IndexShard shard : indexService) {
@@ -81,7 +83,12 @@ class ShardReader {
                 long primaryTerm = shard.getOperationPrimaryTerm();
                 long generation = segmentInfos.getGeneration();
 
-                var cachedShardInfo = localNodeMeteringShardInfoCache.getCachedShardInfo(shardId, primaryTerm, generation);
+                var cachedShardInfo = localNodeMeteringShardInfoCache.getCachedShardInfo(
+                    shardId,
+                    primaryTerm,
+                    generation,
+                    requestCacheToken
+                );
                 var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
                 logger.debug(
                     "cached shard size for [{}] at [{}:{}] is [{}]",
@@ -90,19 +97,25 @@ class ShardReader {
                     generation,
                     cachedShardInfo.map(x -> Long.toString(x.sizeInBytes())).orElse("<not present>")
                 );
-                // TODO (ES-7851): only insert diffs here (cachedShardSize.isEmpty() || cachedShardSize.get().size() != size)
-                shardIds.put(
-                    shardId,
-                    new MeteringShardInfo(shardSizeAndDocCount.sizeInBytes(), shardSizeAndDocCount.docCount(), primaryTerm, generation)
-                );
+                if (cachedShardInfo.isEmpty()
+                    || cachedShardInfo.get().sizeInBytes() != shardSizeAndDocCount.sizeInBytes
+                    || cachedShardInfo.get().docCount() != shardSizeAndDocCount.docCount) {
+                    shardIds.put(
+                        shardId,
+                        new MeteringShardInfo(shardSizeAndDocCount.sizeInBytes(), shardSizeAndDocCount.docCount(), primaryTerm, generation)
+                    );
+                }
 
-                localNodeMeteringShardInfoCache.updateCachedShardInfo(
-                    shardId,
-                    primaryTerm,
-                    generation,
-                    shardSizeAndDocCount.sizeInBytes(),
-                    shardSizeAndDocCount.docCount()
-                );
+                if (requestCacheToken != null) {
+                    localNodeMeteringShardInfoCache.updateCachedShardInfo(
+                        shardId,
+                        primaryTerm,
+                        generation,
+                        shardSizeAndDocCount.sizeInBytes(),
+                        shardSizeAndDocCount.docCount(),
+                        requestCacheToken
+                    );
+                }
             }
         }
         return shardIds;

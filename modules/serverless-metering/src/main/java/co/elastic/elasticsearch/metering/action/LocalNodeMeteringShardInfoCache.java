@@ -25,7 +25,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent {
-    private record CacheEntry(long primaryTerm, long generation, long size, long docCount) {}
+    private record CacheEntry(long primaryTerm, long generation, long size, long docCount, String token) {}
 
     private Map<ShardId, CacheEntry> shardSizeCache = new ConcurrentHashMap<>();
 
@@ -42,15 +42,23 @@ public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent 
     @Override
     protected void doClose() {}
 
-    public Optional<MeteringShardInfo> getCachedShardInfo(ShardId shardId, long primaryTerm, long generation) {
+    public Optional<MeteringShardInfo> getCachedShardInfo(ShardId shardId, long primaryTerm, long generation, String requestCacheToken) {
+        if (requestCacheToken == null) {
+            return Optional.empty();
+        }
         var cacheEntry = shardSizeCache.get(shardId);
-        if (cacheEntry != null && cacheEntry.primaryTerm == primaryTerm && cacheEntry.generation == generation) {
+        if (cacheEntry != null
+            && cacheEntry.primaryTerm == primaryTerm
+            && cacheEntry.generation == generation
+            && cacheEntry.token.equals(requestCacheToken)) {
             return Optional.of(new MeteringShardInfo(cacheEntry.size, cacheEntry.docCount, primaryTerm, generation));
         }
         return Optional.empty();
     }
 
-    public void updateCachedShardInfo(ShardId shardId, long primaryTerm, long generation, long size, long docCount) {
-        shardSizeCache.put(shardId, new CacheEntry(primaryTerm, generation, size, docCount));
+    public void updateCachedShardInfo(ShardId shardId, long primaryTerm, long generation, long size, long docCount, String token) {
+        assert shardId != null;
+        assert token != null;
+        shardSizeCache.put(shardId, new CacheEntry(primaryTerm, generation, size, docCount, token));
     }
 }

@@ -78,7 +78,7 @@ public class MeteringIndexInfoTask extends AllocatedPersistentTask {
     }
 
     @Nullable
-    static PersistentTasksCustomMetadata.PersistentTask<?> findTask(ClusterState clusterState) {
+    public static PersistentTasksCustomMetadata.PersistentTask<?> findTask(ClusterState clusterState) {
         PersistentTasksCustomMetadata taskMetadata = clusterState.getMetadata().custom(PersistentTasksCustomMetadata.TYPE);
         if (taskMetadata == null) {
             return null;
