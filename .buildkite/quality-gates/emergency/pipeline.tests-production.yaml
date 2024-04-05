@@ -19,7 +19,7 @@ steps:
       env:
         TARGET_ENV: production
         CHECK_LOG_ERROR_RATE: true
-        MAX_ERROR_PERCENT: 10
+        MAX_ERROR_PERCENT: 1
         QUERY_WINDOW: 60m
         LOG_LEVEL_ERROR_VALUE: ERROR
         SERVICE: elasticsearch
@@ -27,4 +27,7 @@ steps:
         SERVICE_VERSION: ${SERVICE_VERSION:0:12}
         SERVICE_TYPE_FIELD: kubernetes.container.name
         CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
-        MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 5
+        MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 1
+        CHECK_ALERTS: true
+        CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
+        CHECK_ALERTS_TRANSIENT_LOOKBACK: 24h
