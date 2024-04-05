@@ -1,3 +1,7 @@
+import org.elasticsearch.gradle.internal.toolchain.AdoptiumJdkToolchainResolver
+import org.elasticsearch.gradle.internal.toolchain.ArchivedOracleJdkToolchainResolver
+import org.elasticsearch.gradle.internal.toolchain.OracleOpenJdkToolchainResolver
+
 pluginManagement {
     repositories {
         mavenCentral()
@@ -11,6 +15,23 @@ pluginManagement {
 
 plugins {
     id("com.gradle.enterprise") version ("3.16.2")
+    id("elasticsearch.java-toolchain")
+}
+
+toolchainManagement {
+    jvm {
+        javaRepositories {
+            repository("bundledOracleOpendJdk") {
+                resolverClass = OracleOpenJdkToolchainResolver::class.java
+            }
+            repository("adoptiumJdks") {
+                resolverClass = AdoptiumJdkToolchainResolver::class.java
+            }
+            repository("archivedOracleJdks") {
+                resolverClass = ArchivedOracleJdkToolchainResolver::class.java
+            }
+        }
+    }
 }
 
 dependencyResolutionManagement {
