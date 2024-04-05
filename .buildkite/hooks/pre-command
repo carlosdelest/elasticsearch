@@ -8,11 +8,3 @@ source ./.buildkite/java-versions.properties
 
 # Resolve JAVA_HOME
 export JAVA_HOME="/usr/java/${ES_BUILD_JAVA}"
-
-if [[ "${USE_GITHUB_CREDS:-}" == "true" ]]; then
-  GITHUB_USERNAME=$(vault read -field=username secret/ci/elastic-elasticsearch-serverless/github_api_credentials)
-  GITHUB_TOKEN=$(vault read -field=token secret/ci/elastic-elasticsearch-serverless/github_api_credentials)
-
-  git config --local credential.helper store
-  echo "https://${GITHUB_USERNAME}:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
-fi

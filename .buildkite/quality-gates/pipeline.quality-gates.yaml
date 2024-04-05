@@ -27,7 +27,6 @@ steps:
     command: ".buildkite/scripts/tag-promoted-commit.sh"
     env:
       GITOPS_ENV: "${ENVIRONMENT}"
-      USE_GITHUB_CREDS: "true"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
