@@ -146,7 +146,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             meteringIndexInfoService,
             settings
         );
-        executor.startStopTask(new ClusterChangedEvent("", stateWithIndexSizeTask(initialState()), ClusterState.EMPTY_STATE));
+        executor.startStopTask(new ClusterChangedEvent("", stateWithLocalAssignedIndexSizeTask(initialState()), ClusterState.EMPTY_STATE));
         verify(persistentTasksService, never()).sendStartRequest(
             eq(MeteringIndexInfoTask.TASK_NAME),
             eq(MeteringIndexInfoTask.TASK_NAME),
@@ -166,7 +166,9 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             meteringIndexInfoService,
             settings
         );
-        executor.startStopTask(new ClusterChangedEvent("", stateWithIndexSizeTask(initialStateWithoutFeature()), ClusterState.EMPTY_STATE));
+        executor.startStopTask(
+            new ClusterChangedEvent("", stateWithUnassignedIndexSizeTask(initialStateWithoutFeature()), ClusterState.EMPTY_STATE)
+        );
         verify(persistentTasksService, never()).sendStartRequest(
             eq(MeteringIndexInfoTask.TASK_NAME),
             eq(MeteringIndexInfoTask.TASK_NAME),
@@ -207,7 +209,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             PersistentTaskState state = mock(PersistentTaskState.class);
             executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
 
-            ClusterState initialState = stateWithIndexSizeTask(initialState());
+            ClusterState initialState = stateWithLocalAssignedIndexSizeTask(initialState());
             ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
             executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
         }
@@ -216,6 +218,50 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             any(),
             any()
         );
+    }
+
+    public void testDoNothingIfAlreadyStoppedOnShutdown() {
+        for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
+            var executor = MeteringIndexInfoTaskExecutor.create(
+                client,
+                clusterService,
+                persistentTasksService,
+                featureService,
+                threadPool,
+                meteringIndexInfoService,
+                settings
+            );
+            MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
+            PersistentTaskState state = mock(PersistentTaskState.class);
+            executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
+
+            ClusterState initialState = initialState();
+            ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
+            executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
+        }
+        verify(persistentTasksService, never()).sendRemoveRequest(eq(MeteringIndexInfoTask.TASK_NAME), any(), any());
+    }
+
+    public void testDoNothingIfTaskAssignedToAnotherNodeOnShutdown() {
+        for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
+            var executor = MeteringIndexInfoTaskExecutor.create(
+                client,
+                clusterService,
+                persistentTasksService,
+                featureService,
+                threadPool,
+                meteringIndexInfoService,
+                settings
+            );
+            MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
+            PersistentTaskState state = mock(PersistentTaskState.class);
+            executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
+
+            ClusterState initialState = stateWithOtherAssignedIndexSizeTask(initialState());
+            ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
+            executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
+        }
+        verify(persistentTasksService, never()).sendRemoveRequest(eq(MeteringIndexInfoTask.TASK_NAME), any(), any());
     }
 
     public void testDoNothingIfAlreadyShutdown() {
@@ -233,7 +279,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             PersistentTaskState state = mock(PersistentTaskState.class);
             executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
 
-            ClusterState withShutdown = stateWithNodeShuttingDown(stateWithIndexSizeTask(initialState()), type);
+            ClusterState withShutdown = stateWithNodeShuttingDown(stateWithLocalAssignedIndexSizeTask(initialState()), type);
             executor.shuttingDown(new ClusterChangedEvent("unchanged", withShutdown, withShutdown));
             verify(persistentTasksService, never()).sendRemoveRequest(eq(MeteringIndexInfoTask.TASK_NAME), any(), any());
         }
@@ -297,7 +343,35 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
             .build();
     }
 
-    private ClusterState stateWithIndexSizeTask(ClusterState clusterState) {
+    private ClusterState stateWithLocalAssignedIndexSizeTask(ClusterState clusterState) {
+        ClusterState.Builder builder = ClusterState.builder(clusterState);
+        PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
+        tasks.addTask(
+            MeteringIndexInfoTask.TASK_NAME,
+            MeteringIndexInfoTask.TASK_NAME,
+            new MeteringIndexInfoTaskParams(),
+            new PersistentTasksCustomMetadata.Assignment(localNodeId, "")
+        );
+
+        Metadata.Builder metadata = Metadata.builder(clusterState.metadata()).putCustom(PersistentTasksCustomMetadata.TYPE, tasks.build());
+        return builder.metadata(metadata).build();
+    }
+
+    private ClusterState stateWithOtherAssignedIndexSizeTask(ClusterState clusterState) {
+        ClusterState.Builder builder = ClusterState.builder(clusterState);
+        PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
+        tasks.addTask(
+            MeteringIndexInfoTask.TASK_NAME,
+            MeteringIndexInfoTask.TASK_NAME,
+            new MeteringIndexInfoTaskParams(),
+            new PersistentTasksCustomMetadata.Assignment("another-node", "")
+        );
+
+        Metadata.Builder metadata = Metadata.builder(clusterState.metadata()).putCustom(PersistentTasksCustomMetadata.TYPE, tasks.build());
+        return builder.metadata(metadata).build();
+    }
+
+    private ClusterState stateWithUnassignedIndexSizeTask(ClusterState clusterState) {
         ClusterState.Builder builder = ClusterState.builder(clusterState);
         PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
         tasks.addTask(MeteringIndexInfoTask.TASK_NAME, MeteringIndexInfoTask.TASK_NAME, new MeteringIndexInfoTaskParams(), NO_NODE_FOUND);

@@ -253,7 +253,12 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     void shuttingDown(ClusterChangedEvent event) {
         DiscoveryNode node = clusterService.localNode();
         if (isNodeShuttingDown(event, node.getId())) {
-            stopTask();
+            var persistentTask = MeteringIndexInfoTask.findTask(event.state());
+            if (persistentTask != null && persistentTask.isAssigned()) {
+                if (node.getId().equals(persistentTask.getExecutorNode())) {
+                    stopTask();
+                }
+            }
         }
     }
 
