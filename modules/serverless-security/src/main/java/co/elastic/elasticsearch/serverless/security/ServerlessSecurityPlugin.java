@@ -72,7 +72,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
     public static final Setting<Boolean> API_KEY_STRICT_REQUEST_VALIDATION = Setting.boolSetting(
         "xpack.security.authc.api_key.strict_request_validation.enabled",
-        false, // TODO : This will become true at a later time
+        true,
         Setting.Property.OperatorDynamic,
         Setting.Property.NodeScope
     );
@@ -128,7 +128,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .put(OPERATOR_PRIVILEGES_ENABLED.getKey(), true)
             .put(NATIVE_USERS_SETTING.getKey(), false)
             .put(NATIVE_ROLES_SETTING.getKey(), false)
-            .put(API_KEY_STRICT_REQUEST_VALIDATION.getKey(), false)
+            .put(API_KEY_STRICT_REQUEST_VALIDATION.getKey(), true)
             .put(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION.getKey(), false)
             .build();
     }

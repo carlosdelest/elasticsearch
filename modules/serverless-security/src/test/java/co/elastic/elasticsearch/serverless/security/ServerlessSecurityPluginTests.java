@@ -57,7 +57,7 @@ public class ServerlessSecurityPluginTests extends ESTestCase {
     }
 
     public void testDefaultValueApiKeyStrictValidationSetting() {
-        assertThat(API_KEY_STRICT_REQUEST_VALIDATION.get(plugin.additionalSettings()), equalTo(false));
+        assertThat(API_KEY_STRICT_REQUEST_VALIDATION.get(plugin.additionalSettings()), equalTo(true));
     }
 
     public void testHasPrivilegesStrictValidationSettingIsRegistered() {
