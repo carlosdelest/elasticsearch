@@ -44,6 +44,7 @@ import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.features.NodeFeature;
+import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.node.NodeRoleSettings;
@@ -84,6 +85,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     private MeteringService service;
 
     private volatile IngestMetricsCollector ingestMetricsCollector;
+    private volatile SystemIndices systemIndices;
 
     public MeteringPlugin(Settings settings) {
         this.hasSearchRole = DiscoveryNode.hasRole(settings, DiscoveryNodeRole.SEARCH_ROLE);
@@ -107,6 +109,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     @Override
     public Collection<?> createComponents(PluginServices services) {
+        this.systemIndices = services.systemIndices();
         ClusterService clusterService = services.clusterService();
         ThreadPool threadPool = services.threadPool();
         Environment environment = services.environment();
@@ -188,6 +191,10 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         return ingestMetricsCollector;
     }
 
+    SystemIndices getSystemIndices() {
+        return systemIndices;
+    }
+
     /**
      * This method is called during node construction to allow for injection.
      * The DocumentParsingProvider instance depends on ingestMetricsCollector created during {@link #createComponents}.
@@ -196,7 +203,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
      */
     @Override
     public DocumentParsingProvider getDocumentParsingProvider() {
-        return new MeteringDocumentParsingProvider(this::getIngestMetricsCollector);
+        return new MeteringDocumentParsingProvider(this::getIngestMetricsCollector, this::getSystemIndices);
     }
 
     @Override
