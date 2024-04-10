@@ -1,0 +1,5 @@
+pr: 107262
+summary: semantic_text field mapper and inference generation
+area: Mapping
+type: feature
+issues: []
