@@ -51,6 +51,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -62,6 +64,8 @@ public class ServerlessServerCli extends ServerCli {
     static final String APM_PROJECT_ID_SETTING = "telemetry.agent.global_labels.project_id";
     static final String DIAGNOSTICS_TARGET_PATH_SYSPROP = "es.serverless.path.diagnostics";
     private static final String DEFAULT_DIAGNOSTICS_TARGET_PATH = "/mnt/elastic/diagnostics";
+    static final String DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP = "es.serverless.diagnostics_action.timeout";
+
     static final String HEAP_DUMP_PATH_JVM_OPT = "-XX:HeapDumpPath=";
     static final String REPLAY_DATA_FILE_JVM_OPT = "-XX:ReplayDataFile=";
     private static final DateTimeFormatter ZIP_FILE_SUFFIX_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
@@ -70,40 +74,64 @@ public class ServerlessServerCli extends ServerCli {
     static final CheckedConsumer<Integer, UserException> NO_OP_EXIT_ACTION = exitCode -> {};
     CheckedConsumer<Integer, UserException> onExitDiagnosticsAction = NO_OP_EXIT_ACTION;
 
+    final AtomicReference<CountDownLatch> serverlessCliFinishedLatch = new AtomicReference<>();
+
     @Override
     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) throws Exception {
-        terminal.println("Starting Serverless Elasticsearch...");
+        try {
+            terminal.println("Starting Serverless Elasticsearch...");
 
-        Path defaultsFile = env.configFile().resolve("serverless-default-settings.yml");
-        if (Files.exists(defaultsFile) == false) {
-            throw new IllegalStateException("Missing serverless defaults");
-        }
+            Path defaultsFile = env.configFile().resolve("serverless-default-settings.yml");
+            if (Files.exists(defaultsFile) == false) {
+                throw new IllegalStateException("Missing serverless defaults");
+            }
 
-        Settings defaultSettings = Settings.builder().loadFromPath(defaultsFile).build();
-        Settings nodeSettings = env.settings();
+            Settings defaultSettings = Settings.builder().loadFromPath(defaultsFile).build();
+            Settings nodeSettings = env.settings();
 
-        for (String defaultSettingName : defaultSettings.keySet()) {
-            if (nodeSettings.hasValue(defaultSettingName)) {
-                String overrideValue = nodeSettings.get(defaultSettingName);
-                terminal.println("Serverless default for [%1s] is overridden to [%1s]".formatted(defaultSettingName, overrideValue));
+            for (String defaultSettingName : defaultSettings.keySet()) {
+                if (nodeSettings.hasValue(defaultSettingName)) {
+                    String overrideValue = nodeSettings.get(defaultSettingName);
+                    terminal.println("Serverless default for [%1s] is overridden to [%1s]".formatted(defaultSettingName, overrideValue));
+                }
+            }
+            Settings.Builder finalSettingsBuilder = Settings.builder().put(defaultSettings).put(nodeSettings);
+            boolean isLinux = processInfo.sysprops().get("os.name").startsWith("Linux");
+            if (isLinux && processInfo.sysprops().containsKey(PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP)) {
+                // cgroups only apply to production on linux, no local development
+                double overcommit = Double.parseDouble(processInfo.sysprops().get(PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP));
+                addNodeProcessors(finalSettingsBuilder, overcommit, terminal);
+            }
+
+            // copy project id to apm attributes, but be lenient for tests that don't set project id...
+            if (ServerlessSharedSettings.PROJECT_ID.exists(nodeSettings)) {
+                finalSettingsBuilder.put(APM_PROJECT_ID_SETTING, ServerlessSharedSettings.PROJECT_ID.get(nodeSettings));
+            }
+
+            var newEnv = new Environment(finalSettingsBuilder.build(), env.configFile());
+
+            serverlessCliFinishedLatch.set(new CountDownLatch(1));
+
+            super.execute(terminal, options, newEnv, processInfo);
+        } finally {
+            var latch = serverlessCliFinishedLatch.get();
+            if (latch != null) {
+                latch.countDown();
             }
         }
-        Settings.Builder finalSettingsBuilder = Settings.builder().put(defaultSettings).put(nodeSettings);
-        boolean isLinux = processInfo.sysprops().get("os.name").startsWith("Linux");
-        if (isLinux && processInfo.sysprops().containsKey(PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP)) {
-            // cgroups only apply to production on linux, no local development
-            double overcommit = Double.parseDouble(processInfo.sysprops().get(PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP));
-            addNodeProcessors(finalSettingsBuilder, overcommit, terminal);
+    }
+
+    @Override
+    public void close() {
+        super.close();
+        try {
+            var latch = serverlessCliFinishedLatch.get();
+            if (latch != null) {
+                latch.await();
+            }
+        } catch (InterruptedException e) {
+            throw new AssertionError("Thread got interrupted while waiting for the serverless CLI process to shutdown.");
         }
-
-        // copy project id to apm attributes, but be lenient for tests that don't set project id...
-        if (ServerlessSharedSettings.PROJECT_ID.exists(nodeSettings)) {
-            finalSettingsBuilder.put(APM_PROJECT_ID_SETTING, ServerlessSharedSettings.PROJECT_ID.get(nodeSettings));
-        }
-
-        var newEnv = new Environment(finalSettingsBuilder.build(), env.configFile());
-
-        super.execute(terminal, options, newEnv, processInfo);
     }
 
     void moveDiagnosticsToTargetPath(

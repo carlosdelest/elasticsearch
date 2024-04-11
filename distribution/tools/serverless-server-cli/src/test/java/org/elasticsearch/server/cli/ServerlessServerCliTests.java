@@ -19,6 +19,7 @@ package org.elasticsearch.server.cli;
 
 import co.elastic.elasticsearch.serverless.buildinfo.ServerlessBuildExtension;
 import joptsimple.OptionSet;
+import junit.framework.AssertionFailedError;
 
 import org.elasticsearch.Build;
 import org.elasticsearch.bootstrap.ServerArgs;
@@ -27,12 +28,14 @@ import org.elasticsearch.cli.CommandTestCase;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.cli.UserException;
+import org.elasticsearch.common.cli.EnvironmentAwareCommand;
 import org.elasticsearch.common.hash.MessageDigests;
 import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.settings.KeyStoreWrapper;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.env.Environment;
 import org.junit.Before;
@@ -41,10 +44,19 @@ import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import static org.elasticsearch.server.cli.ServerlessServerCli.DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP;
 import static org.hamcrest.Matchers.arrayContaining;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -57,6 +69,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.startsWith;
 
 public class ServerlessServerCliTests extends CommandTestCase {
@@ -467,6 +480,111 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
     }
 
+    public void testExecuteWithOnExitActionExits() throws Exception {
+        var validTargetDir = createTempDir();
+        var serverlessCli = newCommand();
+        serverlessCli.initializeOnExitDiagnosticsAction(
+            Map.of(ServerlessServerCli.DIAGNOSTICS_TARGET_PATH_SYSPROP, validTargetDir.toString()),
+            createMockServerArgs(),
+            List.of(ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo"),
+            terminal
+        );
+        assertThat(serverlessCli.onExitDiagnosticsAction, is(not(ServerlessServerCli.NO_OP_EXIT_ACTION)));
+        execute(serverlessCli);
+
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get(), notNullValue());
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get().getCount(), is(0L));
+    }
+
+    public void testExecuteWithoutOnExitActionExits() throws Exception {
+        sysprops.put(DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP, Long.toString(1));
+        var serverlessCli = newCommand();
+        serverlessCli.onExitDiagnosticsAction = ServerlessServerCli.NO_OP_EXIT_ACTION;
+        execute(serverlessCli);
+
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get(), notNullValue());
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get().getCount(), is(0L));
+    }
+
+    public void testExecuteWithExceptionOnExitActionExits() throws Exception {
+        sysprops.put(DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP, Long.toString(1));
+        var serverlessCli = newCommand();
+        serverlessCli.onExitDiagnosticsAction = x -> { throw new RuntimeException("Bang"); };
+        expectThrows(RuntimeException.class, () -> execute(serverlessCli));
+
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get(), notNullValue());
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get().getCount(), is(0L));
+    }
+
+    public void testCallingCloseBeforeExecuteBlocks() throws Exception {
+        sysprops.put(DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP, Long.toString(1));
+        var serverlessCli = newCommand();
+        serverlessCli.onExitDiagnosticsAction = x -> {
+            assertThat(serverlessCli.serverlessCliFinishedLatch.get(), notNullValue());
+            assertThat(serverlessCli.serverlessCliFinishedLatch.get().getCount(), is(1L));
+        };
+
+        execute(serverlessCli);
+
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get(), notNullValue());
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get().getCount(), is(0L));
+    }
+
+    public void testCallingCloseAfterExecuteFinishedDoNotBlock() throws Exception {
+        sysprops.put(DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP, Long.toString(1));
+        var serverlessCli = newCommand();
+        serverlessCli.onExitDiagnosticsAction = ServerlessServerCli.NO_OP_EXIT_ACTION;
+
+        execute(serverlessCli);
+
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get(), notNullValue());
+        assertThat(serverlessCli.serverlessCliFinishedLatch.get().getCount(), is(0L));
+
+        assertTimeout(Duration.ofSeconds(5), serverlessCli::close);
+    }
+
+    public void testCallingCloseBeforeExecuteFinishedBlocks() throws Exception {
+        sysprops.put(DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP, Long.toString(1));
+        var serverlessCli = newCommand();
+
+        CountDownLatch exitActionStarted = new CountDownLatch(1);
+        CountDownLatch finishExitAction = new CountDownLatch(1);
+
+        serverlessCli.onExitDiagnosticsAction = x -> {
+            exitActionStarted.countDown();
+            try {
+                finishExitAction.await();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        };
+
+        // Simulate the shutdown hook calling close after the exit action started
+        var shutdownThread = new Thread(checked(() -> {
+            exitActionStarted.await();
+            serverlessCli.close();
+        }));
+        shutdownThread.start();
+
+        var executeThread = new Thread(checked(() -> execute(serverlessCli)));
+        executeThread.start();
+
+        assertBusy(() -> assertSame(shutdownThread.getState(), Thread.State.WAITING));
+        assertBusy(() -> assertSame(executeThread.getState(), Thread.State.WAITING));
+
+        // Let the onExitDiagnosticsAction finish and exit
+        finishExitAction.countDown();
+
+        // Join the threads. A timeout here would indicate a problem. Both threads should exit "quickly", but let's give them some
+        // larger margin to accommodate for slow CI machines.
+        final int timeoutInMillis = 10000;
+        // Once the onExitDiagnosticsAction is done, the execute action in the main thread should finish "quickly"
+        executeThread.join(timeoutInMillis);
+        // Once the execute action is finished, the close() action in the shutdown hook (simulated by shutdownThread) should also
+        // finish "quickly"
+        shutdownThread.join(timeoutInMillis);
+    }
+
     private static Settings emptySettings() {
         return Settings.builder().build();
     }
@@ -527,11 +645,14 @@ public class ServerlessServerCliTests extends CommandTestCase {
     }
 
     @Override
-    protected Command newCommand() {
+    protected ServerlessServerCli newCommand() {
         return new ServerlessServerCli() {
             @Override
             protected Command loadTool(String toolname, String libs) {
-                throw new AssertionError("tests shoudln't be loading tools");
+                return new EnvironmentAwareCommand("NO-OP") {
+                    @Override
+                    public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) {}
+                };
             }
 
             @Override
@@ -562,6 +683,40 @@ public class ServerlessServerCliTests extends CommandTestCase {
             @Override
             protected int getAvailableProcessors() {
                 return availableProcessors;
+            }
+        };
+    }
+
+    private static void assertTimeout(Duration timeout, CheckedRunnable<Exception> supplier) throws ExecutionException,
+        InterruptedException {
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        try {
+            Future<Void> future = executorService.submit(() -> {
+                try {
+                    supplier.run();
+                    return null;
+                } catch (Throwable throwable) {
+                    throw new AssertionError(throwable);
+                }
+            });
+
+            long timeoutInMillis = timeout.toMillis();
+            try {
+                future.get(timeoutInMillis, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException ex) {
+                throw new AssertionFailedError("Execution timed out");
+            }
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    private static <E extends Exception> Runnable checked(CheckedRunnable<E> checkedRunnable) {
+        return () -> {
+            try {
+                checkedRunnable.run();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
         };
     }
