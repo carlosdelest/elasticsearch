@@ -1,5 +1,5 @@
 #!/bin/bash
-set -exuo pipefail
+set -euo pipefail
 
 scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 

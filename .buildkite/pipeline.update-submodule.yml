@@ -16,6 +16,8 @@ steps:
   - label: ":git: Update elasticsearch submodule commit"
     if: 'build.env("UPDATE_SUBMODULE") != "false"'
     command: ".buildkite/scripts/update-es-submodule.sh"
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
