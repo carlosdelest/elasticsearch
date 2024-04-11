@@ -42,6 +42,7 @@ public class ServerlessTransportVersions {
     public static final TransportVersion SEARCH_LOAD_AUTOSCALING = def(8_618_01_0);
     public static final TransportVersion BLOB_LOCATION_WITHOUT_BLOB_LENGTH = def(8_619_01_0);
     public static final TransportVersion METERING_SHARD_INFO_REQUEST_TOKEN_ADDED = def(8_620_01_0);
+    public static final TransportVersion EXPLICIT_BCC_REFERENCES_TRACKING_ADDED = def(8_627_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
