@@ -22,7 +22,7 @@ import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
-import org.elasticsearch.rest.RestChannel;
+import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
@@ -38,6 +38,7 @@ import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,7 +84,7 @@ public class ServerlessRestControllerTests extends ESTestCase {
             mock(Tracer.class),
             false
         );
-        this.restHandler = new DummyRestHandler();
+        this.restHandler = new DummyRestHandler(randomAlphaOfLength(3) + "_" + randomAlphaOfLength(5));
     }
 
     @After
@@ -222,11 +223,90 @@ public class ServerlessRestControllerTests extends ESTestCase {
         );
     }
 
+    public void testValidationErrorForPreferenceParameterWithNonOperator() throws Exception {
+        final String path = "/" + randomAlphaOfLength(3) + "/" + randomAlphaOfLength(5);
+        final String preferenceValue = "_" + randomAlphaOfLengthBetween(2, 8);
+        final Map<String, String> parameters = Map.of("preference", preferenceValue);
+        final String errorMessage = expectParameterValidationFailure(path, parameters);
+        assertThat(
+            errorMessage,
+            is(
+                "Parameter validation failed for ["
+                    + path
+                    + "]: The value ["
+                    + preferenceValue
+                    + "] for the 'preference' parameter is not valid in serverless mode - preferences must not start with '_'"
+            )
+        );
+    }
+
+    public void testValidationSuccessForPreferenceParameterWithNonOperator() throws Exception {
+        final String path = "/" + randomAlphaOfLength(3) + "/" + randomAlphaOfLength(5);
+        final String preferenceValue = randomAlphaOfLengthBetween(2, 8);
+        final Map<String, String> parameters = Map.of("preference", preferenceValue);
+        try {
+            validateRequest(path, parameters, false);
+        } catch (ElasticsearchStatusException e) {
+            fail("Expected validation of parameter value [" + preferenceValue + "] to succeed, but failed with " + e);
+        }
+    }
+
+    public void testValidationErrorForBatchedReduceSizeParameterWithNonOperatorOnAsyncSearch() throws Exception {
+        this.restHandler = new DummyRestHandler("async_search_submit_action");
+        final String path = "/" + randomAlphaOfLength(3) + "/" + randomAlphaOfLength(5);
+        final String parameterValue;
+        if (randomBoolean()) {
+            parameterValue = randomAlphaOfLengthBetween(2, 8);
+        } else {
+            parameterValue = Integer.toString(randomBoolean() ? randomIntBetween(1, 4) : randomIntBetween(65, Integer.MAX_VALUE));
+        }
+        final Map<String, String> parameters = Map.of("batched_reduce_size", parameterValue);
+        final String errorMessage = expectParameterValidationFailure(path, parameters);
+        assertThat(
+            errorMessage,
+            is(
+                "Parameter validation failed for ["
+                    + path
+                    + "]: The value ["
+                    + parameterValue
+                    + "] for the 'batched_reduce_size' parameter is not valid in serverless mode - it must be between 5 and 64"
+            )
+        );
+    }
+
+    public void testValidationSuccessForBatchedReduceSizeParameterWithNonOperatorOnAsyncSearch() throws Exception {
+        this.restHandler = new DummyRestHandler("async_search_submit_action");
+        final String path = "/" + randomAlphaOfLength(3) + "/" + randomAlphaOfLength(5);
+        final String parameterValue = String.valueOf(randomIntBetween(5, 64));
+        final Map<String, String> parameters = Map.of("batched_reduce_size", parameterValue);
+        try {
+            validateRequest(path, parameters, false);
+        } catch (ElasticsearchStatusException e) {
+            fail("Expected validation of parameter value [" + parameterValue + "] to succeed, but failed with " + e);
+        }
+    }
+
+    public void testValidationErrorForBatchedReduceSizeParameterWithNonOperatorOnRegularSearch() throws Exception {
+        this.restHandler = new DummyRestHandler("search_action");
+        final String path = "/" + randomAlphaOfLength(3) + "/" + randomAlphaOfLength(5);
+        final String parameterValue = String.valueOf(randomIntBetween(5, 64));
+        final Map<String, String> parameters = Map.of("batched_reduce_size", parameterValue);
+        final String errorMessage = expectParameterValidationFailure(path, parameters);
+        assertThat(
+            errorMessage,
+            is(
+                "Parameter validation failed for ["
+                    + path
+                    + "]: In serverless mode, only async search requests may include the [batched_reduce_size] parameter"
+            )
+        );
+    }
+
     public void testAllHttpParametersAllowedForOperator() throws Exception {
         if (randomBoolean()) {
             this.restHandler = new RestGetAction();
         } else {
-            this.restHandler = new DummyRestHandler();
+            this.restHandler = new DummyRestHandler(randomAlphaOfLength(3) + "_" + randomAlphaOfLength(5));
         }
         final String path = "/" + randomAlphaOfLength(3) + "/" + randomAlphaOfLength(5);
         final List<String> operatorOnlyParamNames = randomNonEmptySubsetOf(RestrictedRestParameters.GLOBALLY_REJECTED_PARAMETERS);
@@ -242,7 +322,7 @@ public class ServerlessRestControllerTests extends ESTestCase {
         );
         Map<String, String> parameters = new HashMap<>();
         Stream.concat(operatorOnlyParamNames.stream(), Stream.concat(validatedParamNames.stream(), permittedParamNames.stream()))
-            .forEach(name -> parameters.put(name, randomAlphaOfLengthBetween(2, 8)));
+            .forEach(name -> parameters.put(name, (randomBoolean() ? "_" : "") + randomAlphaOfLengthBetween(2, 8)));
 
         assertThat(parameters.size(), equalTo(operatorOnlyParamNames.size() + validatedParamNames.size() + permittedParamNames.size()));
         validateRequest(path, parameters, true);
@@ -285,10 +365,29 @@ public class ServerlessRestControllerTests extends ESTestCase {
         controller.validateRequest(req, restHandler, client);
     }
 
-    private static class DummyRestHandler implements RestHandler {
-        @Override
-        public void handleRequest(RestRequest request, RestChannel channel, NodeClient client) throws Exception {
-            // no-op
+    private class DummyRestHandler extends BaseRestHandler {
+
+        private final String name;
+
+        private DummyRestHandler(String name) {
+            this.name = name;
         }
+
+        @Override
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public List<Route> routes() {
+            return List.of();
+        }
+
+        @Override
+        protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
+            // no-op
+            return ignore -> {};
+        }
+
     }
 }
