@@ -33,10 +33,8 @@ import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
-import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.persistent.NotPersistentTaskNodeException;
 import org.elasticsearch.persistent.PersistentTaskNodeNotAssignedException;
 import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
@@ -60,7 +58,7 @@ import java.util.stream.StreamSupport;
 
 import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
 
-public class TransportGetMeteringStatsAction extends HandledTransportAction<
+abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
     GetMeteringStatsAction.Request,
     GetMeteringStatsAction.Response> {
 
@@ -76,8 +74,8 @@ public class TransportGetMeteringStatsAction extends HandledTransportAction<
     private final TransportService transportService;
     private final String persistentTaskName;
 
-    @Inject
-    public TransportGetMeteringStatsAction(
+    TransportGetMeteringStatsAction(
+        String actionName,
         TransportService transportService,
         ActionFilters actionFilters,
         ClusterService clusterService,
@@ -85,6 +83,7 @@ public class TransportGetMeteringStatsAction extends HandledTransportAction<
         MeteringIndexInfoService meteringIndexInfoService
     ) {
         this(
+            actionName,
             transportService,
             actionFilters,
             clusterService,
@@ -95,6 +94,7 @@ public class TransportGetMeteringStatsAction extends HandledTransportAction<
     }
 
     TransportGetMeteringStatsAction(
+        String actionName,
         TransportService transportService,
         ActionFilters actionFilters,
         ClusterService clusterService,
@@ -102,7 +102,7 @@ public class TransportGetMeteringStatsAction extends HandledTransportAction<
         MeteringIndexInfoService meteringIndexInfoService,
         ExecutorService executor
     ) {
-        super(GetMeteringStatsAction.NAME, transportService, actionFilters, GetMeteringStatsAction.Request::new, executor);
+        super(actionName, transportService, actionFilters, GetMeteringStatsAction.Request::new, executor);
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.indexNameExpressionResolver = indexNameExpressionResolver;
@@ -156,18 +156,20 @@ public class TransportGetMeteringStatsAction extends HandledTransportAction<
             executor.execute(() -> {
                 try {
                     final var shardsInfo = meteringIndexInfoService.getMeteringShardInfo();
-                    var concreteIndicesNames = indexNameExpressionResolver.concreteIndexNames(clusterState, request);
-                    final var concreteIndexNames = Stream.concat(
+                    final var concreteIndicesNames = indexNameExpressionResolver.concreteIndexNames(clusterState, request);
+                    final var dataStreamConcreteIndicesNames = DataStreamsActionUtil.resolveConcreteIndexNames(
+                        indexNameExpressionResolver,
+                        clusterState,
+                        request.indices(),
+                        request.indicesOptions()
+                    );
+
+                    final var allConcreteIndicesNames = Stream.concat(
                         concreteIndicesNames != null ? Arrays.stream(concreteIndicesNames) : Stream.empty(),
-                        DataStreamsActionUtil.resolveConcreteIndexNames(
-                            indexNameExpressionResolver,
-                            clusterState,
-                            request.indices(),
-                            request.indicesOptions()
-                        )
+                        dataStreamConcreteIndicesNames
                     ).toArray(String[]::new);
 
-                    listener.onResponse(createResponse(shardsInfo, clusterState, concreteIndexNames));
+                    listener.onResponse(createResponse(shardsInfo, clusterState, allConcreteIndicesNames));
                 } catch (Exception e) {
                     listener.onFailure(e);
                 }
@@ -273,14 +275,9 @@ public class TransportGetMeteringStatsAction extends HandledTransportAction<
         Map<String, String> indexToDatastreamModifiableMap = new HashMap<>();
         Map<String, GetMeteringStatsAction.MeteringStats> datastreamToStatsModifiableMap = new HashMap<>();
 
-        final Set<ShardId> shardIds;
-        if (indicesNames == null || indicesNames.length == 0) {
-            shardIds = clusterState.routingTable().allShards().map(ShardRouting::shardId).collect(Collectors.toSet());
-        } else {
-            shardIds = StreamSupport.stream(clusterState.routingTable().allShards(indicesNames).spliterator(), false)
-                .map(ShardRouting::shardId)
-                .collect(Collectors.toSet());
-        }
+        var shardIds = StreamSupport.stream(clusterState.routingTable().allShards(indicesNames).spliterator(), false)
+            .map(ShardRouting::shardId)
+            .collect(Collectors.toSet());
 
         for (var shardId : shardIds) {
             var shardInfo = shardsInfo.getMeteringShardInfoMap(shardId);

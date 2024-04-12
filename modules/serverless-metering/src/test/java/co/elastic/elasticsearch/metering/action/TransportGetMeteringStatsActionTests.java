@@ -101,6 +101,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     private class TestTransportGetMeteringStatsAction extends TransportGetMeteringStatsAction {
         TestTransportGetMeteringStatsAction() {
             super(
+                GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
                 transportService,
                 new ActionFilters(Set.of()),
                 clusterService,
@@ -291,7 +292,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var requestsToPersistentNode = capturedRequests.get("node_1");
         var getMeteringRequests = requestsToPersistentNode.stream()
-            .filter(x -> x.action().startsWith(GetMeteringStatsAction.NAME))
+            .filter(x -> x.action().startsWith(GetMeteringStatsAction.FOR_SECONDARY_USER_NAME))
             .toList();
         assertThat(getMeteringRequests, hasSize(1));
     }
@@ -343,11 +344,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var requestsToOldPersistentNode = capturedRequests.get("node_1");
         assertThat(requestsToOldPersistentNode, hasSize(1));
-        assertThat(requestsToOldPersistentNode.get(0).action(), is(GetMeteringStatsAction.NAME));
+        assertThat(requestsToOldPersistentNode.get(0).action(), is(GetMeteringStatsAction.FOR_SECONDARY_USER_NAME));
 
         var requestsToNewPersistentNode = capturedRequests.get("node_2");
         assertThat(requestsToNewPersistentNode, hasSize(1));
-        assertThat(requestsToNewPersistentNode.get(0).action(), is(GetMeteringStatsAction.NAME));
+        assertThat(requestsToNewPersistentNode.get(0).action(), is(GetMeteringStatsAction.FOR_SECONDARY_USER_NAME));
 
         assertThat(listener.response, is(node2Response));
         assertThat(listener.exception, nullValue());
@@ -401,8 +402,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var requestsToPersistentNode = capturedRequests.get("node_1");
         assertThat(requestsToPersistentNode, hasSize(2));
-        assertThat(requestsToPersistentNode.get(0).action(), is(GetMeteringStatsAction.NAME));
-        assertThat(requestsToPersistentNode.get(1).action(), is(GetMeteringStatsAction.NAME));
+        assertThat(requestsToPersistentNode.get(0).action(), is(GetMeteringStatsAction.FOR_SECONDARY_USER_NAME));
+        assertThat(requestsToPersistentNode.get(1).action(), is(GetMeteringStatsAction.FOR_SECONDARY_USER_NAME));
 
         assertThat(listener.response, is(node2Response));
         assertThat(listener.exception, nullValue());
@@ -448,7 +449,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var requestsToPersistentNode = capturedRequests.get("node_1");
         assertThat(requestsToPersistentNode, hasSize(1));
-        assertThat(requestsToPersistentNode.get(0).action(), is(GetMeteringStatsAction.NAME));
+        assertThat(requestsToPersistentNode.get(0).action(), is(GetMeteringStatsAction.FOR_SECONDARY_USER_NAME));
 
         assertThat(listener.response, nullValue());
         assertThat(listener.exception, instanceOf(PersistentTaskNodeNotAssignedException.class));
@@ -459,7 +460,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(clusterService, 3, 2, b -> {});
 
-        var response = TransportGetMeteringStatsAction.createResponse(mockShardsInfo, clusterService.state(), null);
+        var response = TransportGetMeteringStatsAction.createResponse(mockShardsInfo, clusterService.state(), new String[0]);
 
         assertThat(response.totalDocCount, is(0L));
         assertThat(response.totalSizeInBytes, is(0L));
@@ -489,7 +490,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(mockShardsInfo, clusterService.state(), null);
+        var response = TransportGetMeteringStatsAction.createResponse(
+            mockShardsInfo,
+            clusterService.state(),
+            new String[] { "index1", "index2" }
+        );
 
         assertThat(response.totalDocCount, is(300L));
         assertThat(response.totalSizeInBytes, is(30L));
@@ -538,7 +543,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(mockShardsInfo, clusterService.state(), null);
+        var response = TransportGetMeteringStatsAction.createResponse(
+            mockShardsInfo,
+            clusterService.state(),
+            new String[] { "index1", "index2" }
+        );
 
         assertThat(response.totalDocCount, is(300L));
         assertThat(response.totalSizeInBytes, is(30L));
@@ -789,7 +798,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(mockShardsInfo, clusterService.state(), null);
+        var response = TransportGetMeteringStatsAction.createResponse(
+            mockShardsInfo,
+            clusterService.state(),
+            new String[] { "index1", "index2" }
+        );
 
         assertThat(response.totalDocCount, is(300L));
         assertThat(response.totalSizeInBytes, is(30L));
@@ -821,7 +834,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(mockShardsInfo, clusterService.state(), null);
+        var response = TransportGetMeteringStatsAction.createResponse(
+            mockShardsInfo,
+            clusterService.state(),
+            new String[] { "index1", "index2" }
+        );
 
         assertThat(response.totalDocCount, is(100L));
         assertThat(response.totalSizeInBytes, is(10L));

@@ -75,7 +75,7 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         var masterNode = clusterService().state().nodes().getMasterNode();
         var transportService = MockTransportService.getInstance(masterNode.getName());
 
-        transportService.addRequestHandlingBehavior(GetMeteringStatsAction.NAME, (handler, request, channel, task) -> {
+        transportService.addRequestHandlingBehavior(GetMeteringStatsAction.FOR_SECONDARY_USER_NAME, (handler, request, channel, task) -> {
             getMeteringStatsHandled.incrementAndGet();
             handler.messageReceived(request, channel, task);
         });
@@ -84,7 +84,7 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         // Start a request before enabling the task executor
         transportService.sendRequest(
             masterNode,
-            GetMeteringStatsAction.NAME,
+            GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
             new GetMeteringStatsAction.Request(),
             new ActionListenerResponseHandler<>(listener, GetMeteringStatsAction.Response::new, EsExecutors.DIRECT_EXECUTOR_SERVICE)
         );
@@ -123,21 +123,24 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         var newTaskNodeReadyLatch = new CountDownLatch(1);
         var persistentTaskNode1Requests = new AtomicInteger();
         var persistentTaskNode1TransportService = MockTransportService.getInstance(persistentTaskNode1.getName());
-        persistentTaskNode1TransportService.addRequestHandlingBehavior(GetMeteringStatsAction.NAME, (handler, request, channel, task) -> {
-            logger.info("GetMeteringStatsAction Request received on OLD PersistentTaskNode[{}]", persistentTaskNode1.getName());
-            persistentTaskNode1Requests.incrementAndGet();
-            requestOnOldTaskNodeLatch.countDown();
-            safeAwait(newTaskNodeReadyLatch);
-            logger.info(
-                "GetMeteringStatsAction start handling messageReceived on OLD PersistentTaskNode[{}]",
-                persistentTaskNode1.getName()
-            );
-            handler.messageReceived(request, channel, task);
-            logger.info(
-                "GetMeteringStatsAction finished handling messageReceived on OLD PersistentTaskNode[{}]",
-                persistentTaskNode1.getName()
-            );
-        });
+        persistentTaskNode1TransportService.addRequestHandlingBehavior(
+            GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
+            (handler, request, channel, task) -> {
+                logger.info("GetMeteringStatsAction Request received on OLD PersistentTaskNode[{}]", persistentTaskNode1.getName());
+                persistentTaskNode1Requests.incrementAndGet();
+                requestOnOldTaskNodeLatch.countDown();
+                safeAwait(newTaskNodeReadyLatch);
+                logger.info(
+                    "GetMeteringStatsAction start handling messageReceived on OLD PersistentTaskNode[{}]",
+                    persistentTaskNode1.getName()
+                );
+                handler.messageReceived(request, channel, task);
+                logger.info(
+                    "GetMeteringStatsAction finished handling messageReceived on OLD PersistentTaskNode[{}]",
+                    persistentTaskNode1.getName()
+                );
+            }
+        );
 
         // Send the request to another node, wait for it to be forwarded to persistentTaskNode1
         PlainActionFuture<GetMeteringStatsAction.Response> listener = new PlainActionFuture<>();
@@ -151,7 +154,7 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         var transportService = MockTransportService.getInstance(notPersistentTaskNode.get().getName());
         transportService.sendRequest(
             notPersistentTaskNode.get(),
-            GetMeteringStatsAction.NAME,
+            GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
             new GetMeteringStatsAction.Request(),
             new ActionListenerResponseHandler<>(
                 listener,
@@ -186,7 +189,7 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         // Intercept GetMeteringStatsAction on the new node too
         var persistentTaskNode2Requests = new AtomicInteger();
         MockTransportService.getInstance(persistentTaskNode2.getName())
-            .addRequestHandlingBehavior(GetMeteringStatsAction.NAME, (handler, request, channel, task) -> {
+            .addRequestHandlingBehavior(GetMeteringStatsAction.FOR_SECONDARY_USER_NAME, (handler, request, channel, task) -> {
                 logger.info("GetMeteringStatsAction Request received on NEW PersistentTaskNode[{}]", persistentTaskNode2.getName());
                 persistentTaskNode2Requests.incrementAndGet();
                 logger.info(

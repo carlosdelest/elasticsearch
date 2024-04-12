@@ -24,6 +24,6 @@ import java.util.Set;
 public class ServerlessSecondaryAuthActions implements SecondaryAuthActions {
     @Override
     public Set<String> get() {
-        return Set.of("cluster:monitor/get/metering/stats");
+        return Set.of("indices:monitor/get/metering/stats");
     }
 }

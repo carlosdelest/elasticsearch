@@ -24,7 +24,8 @@ import co.elastic.elasticsearch.metering.action.LocalNodeMeteringShardInfoCache;
 import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
 import co.elastic.elasticsearch.metering.action.TransportCollectMeteringShardInfoAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringShardInfoAction;
-import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsAction;
+import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForPrimaryUserAction;
+import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSecondaryUserAction;
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
@@ -245,15 +246,22 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             CollectMeteringShardInfoAction.INSTANCE,
             TransportCollectMeteringShardInfoAction.class
         );
-        var getMeteringStats = new ActionPlugin.ActionHandler<>(GetMeteringStatsAction.INSTANCE, TransportGetMeteringStatsAction.class);
+        var getMeteringStatsSecondaryUser = new ActionPlugin.ActionHandler<>(
+            GetMeteringStatsAction.FOR_SECONDARY_USER_INSTANCE,
+            TransportGetMeteringStatsForSecondaryUserAction.class
+        );
+        var getMeteringStatsPrimaryUser = new ActionPlugin.ActionHandler<>(
+            GetMeteringStatsAction.FOR_PRIMARY_USER_INSTANCE,
+            TransportGetMeteringStatsForPrimaryUserAction.class
+        );
         if (hasSearchRole) {
             var getMeteringShardInfo = new ActionPlugin.ActionHandler<>(
                 GetMeteringShardInfoAction.INSTANCE,
                 TransportGetMeteringShardInfoAction.class
             );
-            return List.of(getMeteringShardInfo, getMeteringStats, collectMeteringShardInfo);
+            return List.of(getMeteringShardInfo, getMeteringStatsSecondaryUser, getMeteringStatsPrimaryUser, collectMeteringShardInfo);
         } else {
-            return List.of(getMeteringStats, collectMeteringShardInfo);
+            return List.of(getMeteringStatsSecondaryUser, getMeteringStatsPrimaryUser, collectMeteringShardInfo);
         }
     }
 }

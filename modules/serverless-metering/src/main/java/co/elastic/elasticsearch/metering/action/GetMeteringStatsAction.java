@@ -38,8 +38,22 @@ import java.util.Objects;
 
 public class GetMeteringStatsAction {
 
-    public static final String NAME = "cluster:monitor/get/metering/stats";
-    public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
+    /*
+     * Both these actions are protected at REST layer by operator privileges. The REST layer switches between them based on the
+     * presence or not of secondary authentication in the REST request: the FOR_SECONDARY_USER variant requires secondary authentication
+     * and will use the secondary user's privileges
+     */
+    public static final String FOR_SECONDARY_USER_NAME = "indices:monitor/get/metering/stats";
+    public static final String FOR_PRIMARY_USER_NAME = "indices:admin/get/metering/stats";
+
+    /**
+     * The GetMeteringStats action to be used with secondary authentication; this action will use the secondary user's privileges
+     */
+    public static final ActionType<Response> FOR_SECONDARY_USER_INSTANCE = new ActionType<>(FOR_SECONDARY_USER_NAME);
+    /**
+     * The GetMeteringStats action to be used with primary (regular) authentication; this action will use the primary user's privileges
+     */
+    public static final ActionType<Response> FOR_PRIMARY_USER_INSTANCE = new ActionType<>(FOR_PRIMARY_USER_NAME);
 
     private GetMeteringStatsAction() {/* no instances */}
 
@@ -56,9 +70,9 @@ public class GetMeteringStatsAction {
         }
     }
 
-    public static class Request extends ActionRequest implements IndicesRequest {
+    public static class Request extends ActionRequest implements IndicesRequest, IndicesRequest.Replaceable {
 
-        private final String[] indices;
+        private String[] indices;
         private static final IndicesOptions ALL_INDICES_OPTIONS = IndicesOptions.builder()
             .wildcardOptions(IndicesOptions.WildcardOptions.builder().includeHidden(true))
             .build();
@@ -95,8 +109,19 @@ public class GetMeteringStatsAction {
         }
 
         @Override
+        public boolean includeDataStreams() {
+            return true;
+        }
+
+        @Override
         public ActionRequestValidationException validate() {
             return null;
+        }
+
+        @Override
+        public IndicesRequest indices(String... indices) {
+            this.indices = indices;
+            return this;
         }
     }
 
