@@ -21,12 +21,14 @@ import co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupporte
 
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.util.set.Sets;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 import org.elasticsearch.xpack.core.security.authz.RoleRestrictionTests;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
+import org.elasticsearch.xpack.core.security.support.MetadataUtils;
 import org.hamcrest.Matcher;
 import org.junit.BeforeClass;
 
@@ -35,7 +37,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator.SUPPORTED_APPLICATION_NAMES;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.PREDEFINED_ROLE_METADATA_ALLOWLIST;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.PUBLIC_METADATA_KEY;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.RESERVED_ROLE_NAME_PREFIX;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.SUPPORTED_APPLICATION_NAMES;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
@@ -43,7 +48,7 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 
-public class ServerlessCustomRoleValidatorTests extends ESTestCase {
+public class ServerlessRoleValidatorTests extends ESTestCase {
 
     @BeforeClass
     public static void init() {
@@ -53,12 +58,75 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
     }
 
     public void testValidCustomRole() {
-        final ServerlessCustomRoleValidator validator = new ServerlessCustomRoleValidator();
-        assertThat(validator.validate(randomRoleDescriptor()), is(nullValue()));
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        assertThat(validator.validateCustomRole(randomRoleDescriptor()), is(nullValue()));
+    }
+
+    public void testValidPublicPredefinedRole() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        var role = randomRoleDescriptor(true, false, Map.of(PUBLIC_METADATA_KEY, true));
+        assertThat(validator.validatePredefinedRole(role), is(nullValue()));
+    }
+
+    public void testValidCustomRoleCannotHavePublicMetadataFlag() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        var role = randomRoleDescriptor(true, false, Map.of(PUBLIC_METADATA_KEY, true));
+        var ex = validator.validateCustomRole(role);
+        assertThat(ex.getMessage(), containsString("role descriptor metadata keys may not start with [_] but found these keys: [_public]"));
+    }
+
+    public void testNonpublicPredefinedRoleNotLimited() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        final List<String> indexPrivileges = new ArrayList<>();
+        indexPrivileges.add(
+            randomValueOtherThanMany(
+                ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames()::contains,
+                () -> randomFrom(IndexPrivilege.names().toArray(new String[0]))
+            )
+        );
+        indexPrivileges.add(randomFrom(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames().toArray(new String[0])));
+        final RoleDescriptor role = new RoleDescriptor(
+            RESERVED_ROLE_NAME_PREFIX + randomAlphaOfLengthBetween(5, 10),
+            null,
+            new RoleDescriptor.IndicesPrivileges[] { indexBuilderWithPrivileges(indexPrivileges, true, true).build() },
+            null,
+            null,
+            null,
+            Map.of(),
+            Map.of(),
+            null,
+            null
+        );
+        assertThat(validator.validatePredefinedRole(role), is(nullValue()));
+    }
+
+    public void testPublicPredefinedRoleDisallowsOtherReservedMetadata() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        String unknownMetadataKey = randomValueOtherThanMany(
+            PREDEFINED_ROLE_METADATA_ALLOWLIST::contains,
+            () -> MetadataUtils.RESERVED_PREFIX + randomAlphaOfLengthBetween(2, 10)
+        );
+        var role = randomRoleDescriptor(true, false, Map.of(PUBLIC_METADATA_KEY, true, unknownMetadataKey, randomInt()));
+        assertThat(
+            validator.validatePredefinedRole(role).getMessage(),
+            containsString(
+                Strings.format("role descriptor metadata keys may not start with [_] but found these keys: [%s]", unknownMetadataKey)
+            )
+        );
+    }
+
+    public void testPrivatePredefinedRoleAllowsOtherReservedMetadata() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        String unknownMetadataKey = randomValueOtherThanMany(
+            PREDEFINED_ROLE_METADATA_ALLOWLIST::contains,
+            () -> MetadataUtils.RESERVED_PREFIX + randomAlphaOfLengthBetween(2, 10)
+        );
+        var role = randomRoleDescriptor(true, false, Map.of(PUBLIC_METADATA_KEY, false, unknownMetadataKey, randomInt()));
+        assertThat(validator.validatePredefinedRole(role), is(nullValue()));
     }
 
     public void testInvalidCustomRole() {
-        final ServerlessCustomRoleValidator validator = new ServerlessCustomRoleValidator();
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
 
         final int roleNameCaseNo = randomIntBetween(0, 2);
         final String roleName = switch (roleNameCaseNo) {
@@ -151,7 +219,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             restriction
         );
 
-        final ActionRequestValidationException ex = validator.validate(roleDescriptor);
+        final ActionRequestValidationException ex = validator.validateCustomRole(roleDescriptor);
         assertThat(ex, is(notNullValue()));
         final List<String> validationErrors = ex.validationErrors();
         final List<Matcher<? super String>> itemMatchers = new ArrayList<>();
@@ -165,7 +233,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             itemMatchers.add(
                 allOf(
                     containsString("unknown cluster privilege"),
-                    containsString(ServerlessCustomRoleValidator.mustBePredefinedClusterPrivilegeMessage())
+                    containsString(ServerlessRoleValidator.mustBePredefinedClusterPrivilegeMessage())
                 )
             );
         }
@@ -173,7 +241,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             itemMatchers.add(
                 allOf(
                     containsString("exists but is not supported when running in serverless mode"),
-                    containsString(ServerlessCustomRoleValidator.mustBePredefinedClusterPrivilegeMessage())
+                    containsString(ServerlessRoleValidator.mustBePredefinedClusterPrivilegeMessage())
                 )
             );
         }
@@ -181,7 +249,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             itemMatchers.add(
                 allOf(
                     containsString("unknown index privilege"),
-                    containsString(ServerlessCustomRoleValidator.mustBePredefinedIndexPrivilegeMessage())
+                    containsString(ServerlessRoleValidator.mustBePredefinedIndexPrivilegeMessage())
                 )
             );
         }
@@ -189,7 +257,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             itemMatchers.add(
                 allOf(
                     containsString("exists but is not supported when running in serverless mode"),
-                    containsString(ServerlessCustomRoleValidator.mustBePredefinedIndexPrivilegeMessage())
+                    containsString(ServerlessRoleValidator.mustBePredefinedIndexPrivilegeMessage())
                 )
             );
         }
@@ -209,14 +277,14 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
     }
 
     public static RoleDescriptor randomRoleDescriptor() {
-        return randomRoleDescriptor(true, true);
+        return randomRoleDescriptor(true, true, Map.of());
     }
 
     public static RoleDescriptor randomRoleDescriptorWithoutFlsDlsOrRestriction() {
-        return randomRoleDescriptor(false, false);
+        return randomRoleDescriptor(false, false, Map.of());
     }
 
-    private static RoleDescriptor randomRoleDescriptor(boolean allowDlsFls, boolean allowRestriction) {
+    private static RoleDescriptor randomRoleDescriptor(boolean allowDlsFls, boolean allowRestriction, Map<String, Object> metadata) {
         return new RoleDescriptor(
             randomValueOtherThanMany(ReservedRolesStore::isReserved, () -> randomAlphaOfLengthBetween(3, 90)),
             randomSubsetOf(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames()).toArray(String[]::new),
@@ -224,7 +292,7 @@ public class ServerlessCustomRoleValidatorTests extends ESTestCase {
             randomApplicationPrivileges(),
             null,
             null,
-            Map.of(),
+            metadata,
             Map.of(),
             null,
             allowRestriction ? RoleRestrictionTests.randomWorkflowsRestriction(1, 2) : null

@@ -25,6 +25,7 @@ import co.elastic.elasticsearch.serverless.security.privilege.ServerlessGetBuilt
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessHasPrivilegesRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessPutRoleRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessReservedRoleNameChecker;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
 import org.elasticsearch.xpack.core.security.action.apikey.BulkUpdateApiKeyRequestTranslator;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyRequestBuilderFactory;
@@ -34,6 +35,7 @@ import org.elasticsearch.xpack.core.security.action.role.PutRoleRequestBuilderFa
 import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesRequestBuilderFactory;
 import org.elasticsearch.xpack.security.authc.support.SecondaryAuthActions;
 import org.elasticsearch.xpack.security.authz.AuthorizationDenialMessages;
+import org.elasticsearch.xpack.security.authz.FileRoleValidator;
 import org.elasticsearch.xpack.security.authz.ReservedRoleNameChecker;
 
 module org.elasticsearch.internal.security {
@@ -60,5 +62,6 @@ module org.elasticsearch.internal.security {
     provides HasPrivilegesRequestBuilderFactory with ServerlessHasPrivilegesRequestBuilderFactory;
     provides AuthorizationDenialMessages with ServerlessAuthorizationDenialMessages;
     provides ReservedRoleNameChecker.Factory with ServerlessReservedRoleNameChecker.Factory;
+    provides FileRoleValidator with ServerlessRoleValidator;
     provides SecondaryAuthActions with ServerlessSecondaryAuthActions;
 }

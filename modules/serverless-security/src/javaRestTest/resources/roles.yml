@@ -11,3 +11,18 @@ _es_test_root:
       resources: [ "*" ]
 file_based_role:
   cluster: [ "ALL" ]
+_public_predefined_role:
+  metadata:
+    _public: true
+  cluster: [ "ALL" ]
+  indices:
+    - names: [ "*" ]
+      privileges: [ "ALL" ]
+_nonpublic_predefined_role:
+  metadata:
+    _public: false
+  cluster: [ "ALL" ]
+  indices:
+    - names: [ "*" ]
+      allow_restricted_indices: true
+      privileges: [ "ALL" ]

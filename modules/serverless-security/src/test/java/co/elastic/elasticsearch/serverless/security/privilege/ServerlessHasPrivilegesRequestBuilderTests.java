@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.security.privilege;
 
-import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -47,8 +47,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidatorTests.indexBuilderWithPrivileges;
-import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidatorTests.randomRoleDescriptorWithoutFlsDlsOrRestriction;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidatorTests.indexBuilderWithPrivileges;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidatorTests.randomRoleDescriptorWithoutFlsDlsOrRestriction;
 import static org.elasticsearch.common.xcontent.XContentHelper.convertToMap;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -167,7 +167,7 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
             itemMatchers.add(
                 allOf(
                     containsString("unknown cluster privilege"),
-                    containsString(ServerlessCustomRoleValidator.mustBePredefinedClusterPrivilegeMessage())
+                    containsString(ServerlessRoleValidator.mustBePredefinedClusterPrivilegeMessage())
                 )
             );
         }
@@ -175,7 +175,7 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
             itemMatchers.add(
                 allOf(
                     containsString("exists but is not supported when running in serverless mode"),
-                    containsString(ServerlessCustomRoleValidator.mustBePredefinedClusterPrivilegeMessage())
+                    containsString(ServerlessRoleValidator.mustBePredefinedClusterPrivilegeMessage())
                 )
             );
         }
@@ -183,7 +183,7 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
             itemMatchers.add(
                 allOf(
                     containsString("unknown index privilege"),
-                    containsString(ServerlessCustomRoleValidator.mustBePredefinedIndexPrivilegeMessage())
+                    containsString(ServerlessRoleValidator.mustBePredefinedIndexPrivilegeMessage())
                 )
             );
         }
@@ -191,7 +191,7 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
             itemMatchers.add(
                 allOf(
                     containsString("exists but is not supported when running in serverless mode"),
-                    containsString(ServerlessCustomRoleValidator.mustBePredefinedIndexPrivilegeMessage())
+                    containsString(ServerlessRoleValidator.mustBePredefinedIndexPrivilegeMessage())
                 )
             );
         }

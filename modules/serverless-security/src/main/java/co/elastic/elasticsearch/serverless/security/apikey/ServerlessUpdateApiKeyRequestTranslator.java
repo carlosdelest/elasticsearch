@@ -19,7 +19,7 @@ package co.elastic.elasticsearch.serverless.security.apikey;
 
 import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleParser;
-import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
@@ -34,24 +34,24 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
     private static final ConstructingObjectParser<Payload, Void> PARSER = createParser(
         ServerlessCustomRoleParser::parseWithWorkflowRestrictionAllowed
     );
-    private final ServerlessCustomRoleValidator serverlessCustomRoleValidator;
+    private final ServerlessRoleValidator serverlessRoleValidator;
     private final Supplier<Boolean> strictRequestValidationEnabled;
 
     // Needed for java module
     public ServerlessUpdateApiKeyRequestTranslator() {
-        this(new ServerlessCustomRoleValidator(), () -> false);
+        this(new ServerlessRoleValidator(), () -> false);
     }
 
     // For SPI
     public ServerlessUpdateApiKeyRequestTranslator(ServerlessSecurityPlugin plugin) {
-        this(new ServerlessCustomRoleValidator(), plugin::strictApiKeyRequestValidationEnabled);
+        this(new ServerlessRoleValidator(), plugin::strictApiKeyRequestValidationEnabled);
     }
 
     ServerlessUpdateApiKeyRequestTranslator(
-        ServerlessCustomRoleValidator serverlessCustomRoleValidator,
+        ServerlessRoleValidator serverlessRoleValidator,
         Supplier<Boolean> strictRequestValidationEnabled
     ) {
-        this.serverlessCustomRoleValidator = serverlessCustomRoleValidator;
+        this.serverlessRoleValidator = serverlessRoleValidator;
         this.strictRequestValidationEnabled = strictRequestValidationEnabled;
     }
 
@@ -95,7 +95,7 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
 
     private UpdateApiKeyRequest parseWithValidation(RequestWithApiKeyId requestWithApiKeyId) throws IOException {
         final UpdateApiKeyRequest updateApiKeyRequest = parse(requestWithApiKeyId);
-        serverlessCustomRoleValidator.validateAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
+        serverlessRoleValidator.validateAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
         return updateApiKeyRequest;
     }
 

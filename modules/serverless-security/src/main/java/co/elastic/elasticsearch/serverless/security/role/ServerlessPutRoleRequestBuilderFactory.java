@@ -36,12 +36,12 @@ public class ServerlessPutRoleRequestBuilderFactory implements PutRoleRequestBui
 
     static class ServerlessPutRoleRequestBuilder extends PutRoleRequestBuilder {
         private final boolean restrictRequest;
-        private final ServerlessCustomRoleValidator serverlessCustomRoleValidator;
+        private final ServerlessRoleValidator serverlessRoleValidator;
 
         ServerlessPutRoleRequestBuilder(Client client, boolean restrictRequest) {
             super(client);
             this.restrictRequest = restrictRequest;
-            this.serverlessCustomRoleValidator = new ServerlessCustomRoleValidator();
+            this.serverlessRoleValidator = new ServerlessRoleValidator();
         }
 
         @Override
@@ -66,7 +66,9 @@ public class ServerlessPutRoleRequestBuilderFactory implements PutRoleRequestBui
         }
 
         private void validate(PutRoleRequest request) {
-            final ActionRequestValidationException validationException = serverlessCustomRoleValidator.validate(request.roleDescriptor());
+            final ActionRequestValidationException validationException = serverlessRoleValidator.validateCustomRole(
+                request.roleDescriptor()
+            );
             if (validationException != null) {
                 throw validationException;
             }

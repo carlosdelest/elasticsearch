@@ -39,8 +39,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Supplier;
 
-import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator.mustBePredefinedClusterPrivilegeMessage;
-import static co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator.mustBePredefinedIndexPrivilegeMessage;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.mustBePredefinedClusterPrivilegeMessage;
+import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.mustBePredefinedIndexPrivilegeMessage;
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 
 public class ServerlessHasPrivilegesRequestBuilderFactory implements HasPrivilegesRequestBuilderFactory {

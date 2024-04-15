@@ -19,7 +19,7 @@ package co.elastic.elasticsearch.serverless.security.apikey;
 
 import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleParser;
-import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -62,13 +62,13 @@ public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKey
             ServerlessCustomRoleParser::parseWithWorkflowRestrictionAllowed
         );
         private final boolean restrictRequest;
-        private final ServerlessCustomRoleValidator serverlessCustomRoleValidator;
+        private final ServerlessRoleValidator serverlessRoleValidator;
         private final Supplier<Boolean> strictRequestValidationEnabled;
 
         ServerlessCreateApiKeyRequestBuilder(Client client, boolean restrictRequest, Supplier<Boolean> strictRequestValidationEnabled) {
             super(client);
             this.restrictRequest = restrictRequest;
-            this.serverlessCustomRoleValidator = new ServerlessCustomRoleValidator();
+            this.serverlessRoleValidator = new ServerlessRoleValidator();
             this.strictRequestValidationEnabled = strictRequestValidationEnabled;
         }
 
@@ -110,7 +110,7 @@ public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKey
                 )
             ) {
                 final CreateApiKeyRequest createApiKeyRequest = PARSER.parse(parser, null);
-                serverlessCustomRoleValidator.validateAndThrow(createApiKeyRequest.getRoleDescriptors(), false);
+                serverlessRoleValidator.validateAndThrow(createApiKeyRequest.getRoleDescriptors(), false);
                 return createApiKeyRequest;
             }
         }

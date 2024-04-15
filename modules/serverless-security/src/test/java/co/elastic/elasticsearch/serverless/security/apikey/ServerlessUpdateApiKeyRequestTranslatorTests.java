@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.security.apikey;
 
-import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -37,7 +37,7 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
 
     public void testValidPayload() throws IOException {
         var strictValidationEnabled = randomBoolean();
-        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessCustomRoleValidator(), () -> strictValidationEnabled);
+        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> strictValidationEnabled);
 
         final String json = "{ \"role_descriptors\": { \"role-a\": {\"cluster\":[\"all\"]} } }";
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(
@@ -53,7 +53,7 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
     }
 
     public void testStrictValidationDisabled() throws IOException {
-        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessCustomRoleValidator(), () -> false);
+        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> false);
 
         final String json = "{ \"role_descriptors\": { \"role-a\": {\"cluster\":[\"manage_ilm\"]} } }";
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(
@@ -69,7 +69,7 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
     }
 
     public void testStrictValidationEnabled() {
-        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessCustomRoleValidator(), () -> true);
+        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> true);
 
         final String json = "{ \"role_descriptors\": { \"role-a\": {\"cluster\":[\"manage_ilm\"]} } }";
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(

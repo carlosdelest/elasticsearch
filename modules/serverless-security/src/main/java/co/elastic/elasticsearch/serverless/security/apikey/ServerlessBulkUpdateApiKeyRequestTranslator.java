@@ -19,7 +19,7 @@ package co.elastic.elasticsearch.serverless.security.apikey;
 
 import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleParser;
-import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleValidator;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
@@ -33,24 +33,24 @@ public class ServerlessBulkUpdateApiKeyRequestTranslator extends BulkUpdateApiKe
     private static final ConstructingObjectParser<BulkUpdateApiKeyRequest, Void> PARSER = createParser(
         ServerlessCustomRoleParser::parseWithWorkflowRestrictionAllowed
     );
-    private final ServerlessCustomRoleValidator serverlessCustomRoleValidator;
+    private final ServerlessRoleValidator serverlessRoleValidator;
     private final Supplier<Boolean> strictRequestValidationEnabled;
 
     // Needed for java module
     public ServerlessBulkUpdateApiKeyRequestTranslator() {
-        this(new ServerlessCustomRoleValidator(), () -> false);
+        this(new ServerlessRoleValidator(), () -> false);
     }
 
     // For SPI
     public ServerlessBulkUpdateApiKeyRequestTranslator(ServerlessSecurityPlugin plugin) {
-        this(new ServerlessCustomRoleValidator(), plugin::strictApiKeyRequestValidationEnabled);
+        this(new ServerlessRoleValidator(), plugin::strictApiKeyRequestValidationEnabled);
     }
 
     ServerlessBulkUpdateApiKeyRequestTranslator(
-        ServerlessCustomRoleValidator serverlessCustomRoleValidator,
+        ServerlessRoleValidator serverlessRoleValidator,
         Supplier<Boolean> strictRequestValidationEnabled
     ) {
-        this.serverlessCustomRoleValidator = serverlessCustomRoleValidator;
+        this.serverlessRoleValidator = serverlessRoleValidator;
         this.strictRequestValidationEnabled = strictRequestValidationEnabled;
     }
 
@@ -82,7 +82,7 @@ public class ServerlessBulkUpdateApiKeyRequestTranslator extends BulkUpdateApiKe
 
     private BulkUpdateApiKeyRequest parseWithValidation(RestRequest request) throws IOException {
         final BulkUpdateApiKeyRequest updateApiKeyRequest = PARSER.parse(request.contentParser(), null);
-        serverlessCustomRoleValidator.validateAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
+        serverlessRoleValidator.validateAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
         return updateApiKeyRequest;
     }
 }
