@@ -1,0 +1,11 @@
+no_privilege:
+monitor_foo_indices:
+  indices:
+    - names: [ 'foo-*' ]
+      privileges:
+        - monitor
+monitor_bar_indices:
+  indices:
+    - names: [ 'bar-*' ]
+      privileges:
+        - monitor

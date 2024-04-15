@@ -28,6 +28,7 @@ import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForPrim
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSecondaryUserAction;
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
+import co.elastic.elasticsearch.metering.stats.rest.RestGetMeteringStatsAction;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
 
 import org.elasticsearch.action.ActionRequest;
@@ -36,10 +37,14 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.env.Environment;
@@ -58,6 +63,8 @@ import org.elasticsearch.plugins.PersistentTaskPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.plugins.internal.DocumentParsingProviderPlugin;
+import org.elasticsearch.rest.RestController;
+import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ParseField;
@@ -66,6 +73,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_ID;
@@ -181,6 +190,21 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         }
 
         return cs;
+    }
+
+    @Override
+    public Collection<RestHandler> getRestHandlers(
+        Settings settings,
+        NamedWriteableRegistry namedWriteableRegistry,
+        RestController restController,
+        ClusterSettings clusterSettings,
+        IndexScopedSettings indexScopedSettings,
+        SettingsFilter settingsFilter,
+        IndexNameExpressionResolver indexNameExpressionResolver,
+        Supplier<DiscoveryNodes> nodesInCluster,
+        Predicate<NodeFeature> clusterSupportsFeature
+    ) {
+        return List.of(new RestGetMeteringStatsAction());
     }
 
     @Override
