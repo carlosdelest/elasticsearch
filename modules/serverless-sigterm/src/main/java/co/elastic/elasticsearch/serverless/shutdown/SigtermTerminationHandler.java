@@ -26,6 +26,7 @@ import org.elasticsearch.action.admin.indices.recovery.RecoveryResponse;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.OriginSettingClient;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
+import org.elasticsearch.common.logging.ESLogMessage;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.node.internal.TerminationHandler;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -34,6 +35,7 @@ import org.elasticsearch.xpack.shutdown.GetShutdownStatusAction;
 import org.elasticsearch.xpack.shutdown.PutShutdownNodeAction;
 import org.elasticsearch.xpack.shutdown.SingleNodeShutdownStatus;
 
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -62,6 +64,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
     @Override
     public void handleTermination() {
         logger.info("handling graceful shutdown request");
+        final long started = threadPool.rawRelativeTimeInMillis();
         CountDownLatch latch = new CountDownLatch(1);
         AtomicReference<SingleNodeShutdownStatus> lastStatus = new AtomicReference<>();
         client.execute(
@@ -74,10 +77,25 @@ public class SigtermTerminationHandler implements TerminationHandler {
         );
         try {
             boolean latchReachedZero = latch.await(timeout.millis(), TimeUnit.MILLISECONDS);
-            if (latchReachedZero == false && timeout.millis() != 0) {
+            boolean timedOut = latchReachedZero == false && timeout.millis() != 0;
+            if (timedOut) {
                 maybeLogDetailedRecoveryStatus(lastStatus.get());
                 logger.warn("timed out waiting for graceful shutdown, shutting down anyway, last status: {}", lastStatus.get());
             }
+            var duration = threadPool.rawRelativeTimeInMillis() - started;
+            logger.info(
+                new ESLogMessage("shutdown completed after [{}] ms with status [{}]", duration, lastStatus.get()) //
+                    .withFields(
+                        Map.of(
+                            "elasticsearch.shutdown.status",
+                            lastStatus.get().overallStatus(),
+                            "elasticsearch.shutdown.duration",
+                            duration,
+                            "elasticsearch.shutdown.timed-out",
+                            timedOut
+                        )
+                    )
+            );
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(ex);
@@ -134,12 +152,12 @@ public class SigtermTerminationHandler implements TerminationHandler {
         client.execute(GetShutdownStatusAction.INSTANCE, request, ActionListener.wrap(res -> {
             assert res.getShutdownStatuses().size() == 1 : "got more than this node's shutdown status";
             SingleNodeShutdownStatus status = res.getShutdownStatuses().get(0);
+            lastStatus.set(status);
             if (status.overallStatus().equals(SingleNodeShutdownMetadata.Status.COMPLETE)) {
-                logger.info("node ready for shutdown with status [{}]: {}", status.overallStatus(), status);
+                logger.debug("node ready for shutdown with status [{}]: {}", status.overallStatus(), status);
                 latch.countDown();
             } else {
                 logger.info("polled for shutdown status: {}", status);
-                lastStatus.set(status);
                 threadPool.schedule(() -> pollStatusAndLoop(latch, lastStatus), pollInterval, threadPool.generic());
             }
         }, ex -> {
