@@ -18,6 +18,7 @@
 import co.elastic.elasticsearch.serverless.security.ServerlessSecondaryAuthActions;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessBulkUpdateApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessCreateApiKeyRequestBuilderFactory;
+import co.elastic.elasticsearch.serverless.security.apikey.ServerlessGrantApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessUpdateApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.authz.ServerlessAuthorizationDenialMessages;
 import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorOnlyRegistry;
@@ -37,6 +38,7 @@ import org.elasticsearch.xpack.security.authc.support.SecondaryAuthActions;
 import org.elasticsearch.xpack.security.authz.AuthorizationDenialMessages;
 import org.elasticsearch.xpack.security.authz.FileRoleValidator;
 import org.elasticsearch.xpack.security.authz.ReservedRoleNameChecker;
+import org.elasticsearch.xpack.security.rest.action.apikey.RestGrantApiKeyAction;
 
 module org.elasticsearch.internal.security {
 
@@ -53,6 +55,7 @@ module org.elasticsearch.internal.security {
     exports co.elastic.elasticsearch.serverless.security.privilege to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.authz to org.elasticsearch.server;
 
+    provides RestGrantApiKeyAction.RequestTranslator with ServerlessGrantApiKeyRequestTranslator;
     provides UpdateApiKeyRequestTranslator with ServerlessUpdateApiKeyRequestTranslator;
     provides BulkUpdateApiKeyRequestTranslator with ServerlessBulkUpdateApiKeyRequestTranslator;
     provides org.elasticsearch.xpack.security.operator.OperatorOnlyRegistry with ServerlessOperatorOnlyRegistry;

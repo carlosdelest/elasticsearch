@@ -20,14 +20,17 @@ package co.elastic.elasticsearch.serverless.security.apikey;
 import co.elastic.elasticsearch.serverless.security.AbstractServerlessCustomRolesRestTestCase;
 
 import org.elasticsearch.client.Request;
+import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
+import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
+import org.elasticsearch.xpack.core.security.authc.support.UsernamePasswordToken;
 import org.junit.ClassRule;
 
 import java.io.IOException;
@@ -61,6 +64,7 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
         doTestApiKeyWithCustomRoleValidationError();
         doTestApiKeyWithRoleParsingError();
         doTestApiKeyWithMixedValidAndInvalidRoles();
+        doTestGrantApiKeyWithCustomRoleValidationError();
     }
 
     public void testApiKeysStrictValidationDisabled() throws IOException {
@@ -183,6 +187,16 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
         executeApiKeyActionsAndAssertFailure(TEST_OPERATOR_USER, payload, "unknown cluster privilege [invalid_privilege]");
     }
 
+    private void doTestGrantApiKeyWithCustomRoleValidationError() throws IOException {
+        final var payload = """
+            {
+              "role-0": {
+                "cluster": ["all", "manage_ilm"]
+              }
+            }""";
+        grantApiKeyAndAssertSuccess(TEST_USER, payload);
+    }
+
     private void doTestApiKeyWithCustomRoleValidationErrorStrictValidationDisabled() throws IOException {
         disableStrictValidation();
         final var payload = """
@@ -273,6 +287,7 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
               "role_descriptors": %s
             }
             """, id, roleDescriptorsPayload));
+        grantApiKeyAndAssertSuccess(username, roleDescriptorsPayload);
     }
 
     private void executeApiKeyActionsAndAssertSuccess(String username) throws IOException {
@@ -297,6 +312,31 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
         final Response response = executeAndAssertSuccess(username, request);
         final Map<String, Object> createApiKeyResponseMap = responseAsMap(response);
         return (String) createApiKeyResponseMap.get("id");
+    }
+
+    private String grantApiKeyAndAssertSuccess(String username, String roleDescriptorsPayload) throws IOException {
+        final Request request = new Request("POST", "_security/api_key/grant");
+        request.setOptions(
+            RequestOptions.DEFAULT.toBuilder()
+                .addHeader("Authorization", UsernamePasswordToken.basicAuthHeaderValue(TEST_OPERATOR_USER, new SecureString(TEST_PASSWORD)))
+        );
+        final String payload = Strings.format("""
+            {
+              "grant_type": "password",
+              "username": "%s",
+              "password": "%s",
+              "api_key": {
+                "name": "api-key-0",
+                "role_descriptors": %s
+              }
+            }
+            """, username, TEST_PASSWORD, roleDescriptorsPayload);
+        request.setJsonEntity(payload);
+
+        // Note: not a type - the API is internal and *must* be executed by the operator user
+        final Response response = executeAndAssertSuccess(TEST_OPERATOR_USER, request);
+        final Map<String, Object> responseBody = entityAsMap(response);
+        return (String) responseBody.get("id");
     }
 
     private void updateApiKeyAndAssertSuccess(String username, String id, String payload) throws IOException {
