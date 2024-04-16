@@ -19,12 +19,13 @@ data_streams.lifecycle.target.merge.policy.merge_factor: 8
 #  node instances
 indices.merge.policy.max_time_based_merged_segment: 20gb
 
-# TEMPORARY: until CP-3935 is resolved, the controller will force kill nodes shutting down after 10 minutes
-# this override temporarily sets the ES timeout to less than 10 minutes so that we ensure (1) that we log that
-# we breached the timeout and (2) that the polling aligns so that we don't timeout just before the last
-# poll can actually run.
-serverless.sigterm.timeout: 590s
-serverless.sigterm.poll_interval: 59s
+# Force-termination happens after 1h, see ES-8164, so if we haven't shut down
+# by then we try and time out just before that in order to record the failure
+# in the logs.
+serverless.sigterm.timeout: 3590s
+
+# Log the current state every ~5min while waiting for shutdown.
+serverless.sigterm.poll_interval: 299s
 
 # Remediation for ES-7057; caches the last successfully loaded role mappings and returns these if security index
 # is unavailable
