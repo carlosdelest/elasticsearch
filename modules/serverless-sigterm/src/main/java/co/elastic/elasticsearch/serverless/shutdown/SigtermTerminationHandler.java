@@ -78,17 +78,20 @@ public class SigtermTerminationHandler implements TerminationHandler {
         try {
             boolean latchReachedZero = latch.await(timeout.millis(), TimeUnit.MILLISECONDS);
             boolean timedOut = latchReachedZero == false && timeout.millis() != 0;
+            SingleNodeShutdownStatus shutdownStatus = lastStatus.get();
             if (timedOut) {
-                maybeLogDetailedRecoveryStatus(lastStatus.get());
-                logger.warn("timed out waiting for graceful shutdown, shutting down anyway, last status: {}", lastStatus.get());
+                if (shutdownStatus != null && shutdownStatus.migrationStatus().getShardsRemaining() > 0) {
+                    logDetailedRecoveryStatus();
+                }
+                logger.warn("timed out waiting for graceful shutdown, shutting down anyway, last status: {}", shutdownStatus);
             }
             var duration = threadPool.rawRelativeTimeInMillis() - started;
             logger.info(
-                new ESLogMessage("shutdown completed after [{}] ms with status [{}]", duration, lastStatus.get()) //
+                new ESLogMessage("shutdown completed after [{}] ms with status [{}]", duration, shutdownStatus) //
                     .withFields(
                         Map.of(
                             "elasticsearch.shutdown.status",
-                            lastStatus.get().overallStatus(),
+                            shutdownStatus != null ? shutdownStatus.overallStatus() : null,
                             "elasticsearch.shutdown.duration",
                             duration,
                             "elasticsearch.shutdown.timed-out",
@@ -102,10 +105,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
         }
     }
 
-    private void maybeLogDetailedRecoveryStatus(SingleNodeShutdownStatus lastStatus) {
-        if (lastStatus.migrationStatus().getShardsRemaining() == 0) {
-            return;
-        }
+    private void logDetailedRecoveryStatus() {
         logger.info("Timed out waiting for graceful shutdown, retrieving current recoveries status");
 
         CountDownLatch latch = new CountDownLatch(1);
