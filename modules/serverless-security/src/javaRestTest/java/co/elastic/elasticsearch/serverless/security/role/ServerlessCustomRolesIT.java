@@ -538,7 +538,9 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         assertThat(actualRoleDescriptor.getName(), equalTo(roleName));
         assertThat(
             actualRoleDescriptor,
-            equalTo(RoleDescriptor.parse(actualRoleDescriptor.getName(), new BytesArray(rolePayload), false, XContentType.JSON))
+            equalTo(
+                RoleDescriptor.parserBuilder().build().parse(actualRoleDescriptor.getName(), new BytesArray(rolePayload), XContentType.JSON)
+            )
         );
     }
 
@@ -579,7 +581,7 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         parser.nextToken();
         parser.nextToken();
         parser.nextToken();
-        return RoleDescriptor.parse(roleName, parser, false);
+        return RoleDescriptor.parserBuilder().build().parse(roleName, parser);
     }
 
     private Set<String> getRoles(String username, String... roleNames) throws IOException {
