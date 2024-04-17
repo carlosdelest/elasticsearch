@@ -24,8 +24,7 @@ indices.merge.policy.max_time_based_merged_segment: 20gb
 # in the logs.
 serverless.sigterm.timeout: 3590s
 
-# Log the current state every ~5min while waiting for shutdown.
-serverless.sigterm.poll_interval: 299s
+serverless.sigterm.poll_interval: 30s
 
 # Remediation for ES-7057; caches the last successfully loaded role mappings and returns these if security index
 # is unavailable

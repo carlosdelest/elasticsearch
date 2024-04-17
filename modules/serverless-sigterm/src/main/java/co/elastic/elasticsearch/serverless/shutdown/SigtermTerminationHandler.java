@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.shutdown;
 
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.ActionListener;
@@ -71,7 +72,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
         client.execute(
             PutShutdownNodeAction.INSTANCE,
             shutdownRequest(),
-            ActionListener.wrap(res -> pollStatusAndLoop(latch, lastStatus), ex -> {
+            ActionListener.wrap(res -> pollStatusAndLoop(0, latch, lastStatus), ex -> {
                 var duration = threadPool.rawRelativeTimeInMillis() - started;
                 logger.warn(
                     new ESLogMessage("failed to register graceful shutdown request, stopping immediately") //
@@ -151,7 +152,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
         return request;
     }
 
-    private void pollStatusAndLoop(CountDownLatch latch, AtomicReference<SingleNodeShutdownStatus> lastStatus) {
+    private void pollStatusAndLoop(int poll, CountDownLatch latch, AtomicReference<SingleNodeShutdownStatus> lastStatus) {
         final var request = new GetShutdownStatusAction.Request(nodeId);
         request.masterNodeTimeout(timeout);
         client.execute(GetShutdownStatusAction.INSTANCE, request, ActionListener.wrap(res -> {
@@ -162,8 +163,8 @@ public class SigtermTerminationHandler implements TerminationHandler {
                 logger.debug("node ready for shutdown with status [{}]: {}", status.overallStatus(), status);
                 latch.countDown();
             } else {
-                logger.info("polled for shutdown status: {}", status);
-                threadPool.schedule(() -> pollStatusAndLoop(latch, lastStatus), pollInterval, threadPool.generic());
+                logger.log(poll % 10 == 0 ? Level.INFO : Level.DEBUG, "polled for shutdown status: {}", status);
+                threadPool.schedule(() -> pollStatusAndLoop(poll + 1, latch, lastStatus), pollInterval, threadPool.generic());
             }
         }, ex -> {
             logger.warn("failed to get shutdown status for this node while waiting for shutdown, stopping immediately", ex);
