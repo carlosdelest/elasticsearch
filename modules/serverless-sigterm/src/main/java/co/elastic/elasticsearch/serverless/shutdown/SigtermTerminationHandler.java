@@ -36,6 +36,7 @@ import org.elasticsearch.xpack.shutdown.PutShutdownNodeAction;
 import org.elasticsearch.xpack.shutdown.SingleNodeShutdownStatus;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -71,38 +72,42 @@ public class SigtermTerminationHandler implements TerminationHandler {
             PutShutdownNodeAction.INSTANCE,
             shutdownRequest(),
             ActionListener.wrap(res -> pollStatusAndLoop(latch, lastStatus), ex -> {
-                logger.warn("failed to register graceful shutdown request with an exception, stopping immediately", ex);
+                var duration = threadPool.rawRelativeTimeInMillis() - started;
+                logger.warn(
+                    new ESLogMessage("failed to register graceful shutdown request, stopping immediately") //
+                        .withFields(createShutdownFields("FAILED", duration, false)),
+                    ex
+                );
                 latch.countDown();
             })
         );
         try {
             boolean latchReachedZero = latch.await(timeout.millis(), TimeUnit.MILLISECONDS);
             boolean timedOut = latchReachedZero == false && timeout.millis() != 0;
-            SingleNodeShutdownStatus shutdownStatus = lastStatus.get();
-            if (timedOut) {
-                if (shutdownStatus != null && shutdownStatus.migrationStatus().getShardsRemaining() > 0) {
-                    logDetailedRecoveryStatus();
-                }
-                logger.warn("timed out waiting for graceful shutdown, shutting down anyway, last status: {}", shutdownStatus);
+            SingleNodeShutdownStatus status = lastStatus.get();
+            if (timedOut && status != null && status.migrationStatus().getShardsRemaining() > 0) {
+                logDetailedRecoveryStatus();
             }
             var duration = threadPool.rawRelativeTimeInMillis() - started;
             logger.info(
-                new ESLogMessage("shutdown completed after [{}] ms with status [{}]", duration, shutdownStatus) //
-                    .withFields(
-                        Map.of(
-                            "elasticsearch.shutdown.status",
-                            shutdownStatus != null ? shutdownStatus.overallStatus() : null,
-                            "elasticsearch.shutdown.duration",
-                            duration,
-                            "elasticsearch.shutdown.timed-out",
-                            timedOut
-                        )
-                    )
+                new ESLogMessage("shutdown completed after [{}] ms with status [{}]", duration, status) //
+                    .withFields(createShutdownFields(status != null ? status.overallStatus().toString() : null, duration, timedOut))
             );
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(ex);
         }
+    }
+
+    private static Map<String, Object> createShutdownFields(String status, long duration, boolean timedOut) {
+        return Map.of(
+            "elasticsearch.shutdown.status",
+            Objects.toString(status),
+            "elasticsearch.shutdown.duration",
+            duration,
+            "elasticsearch.shutdown.timed-out",
+            timedOut
+        );
     }
 
     private void logDetailedRecoveryStatus() {
