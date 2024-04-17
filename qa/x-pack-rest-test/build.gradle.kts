@@ -102,7 +102,10 @@ tasks {
             "ml/frequent_item_sets_agg/*",
 
             // Enrich stats API is not available on Serverless
-            "enrich/10_basic/*"
+            "enrich/10_basic/*",
+
+            // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1634
+            "ml/p_value_significant_term_score/Test p_value significant terms score"
         ).joinToString(","))
     }
 }
