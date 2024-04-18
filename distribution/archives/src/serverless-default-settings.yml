@@ -42,3 +42,12 @@ xpack.profiling.enabled: false
 
 # Shards always recover from the object store in Serverless
 indices.recovery.use_snapshots: false
+
+# In serverless the network will promptly report failures so we don't need to
+# rely on the application-level cluster coordination timeouts to remove
+# disconnected nodes from the cluster. If a node remains connected but is slow
+# to respond then that's a bug for which removing the node from the cluster is
+# almost certainly going to make things worse.
+cluster.fault_detection.follower_check.timeout: 20m
+cluster.follower_lag.timeout: 1h
+
