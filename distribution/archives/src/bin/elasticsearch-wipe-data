@@ -1,0 +1,5 @@
+#!/bin/bash
+
+CLI_NAME=serverless-wipe-data
+CLI_LIBS=lib/tools/server-cli,lib/tools/serverless-wipe-data-cli
+source "`dirname "$0"`"/elasticsearch-cli

@@ -106,6 +106,7 @@ include(":distribution:docker")
  * Distribution tools
  */
 include(":distribution:tools:serverless-server-cli")
+include(":distribution:tools:serverless-wipe-data-cli")
 
 /*
  * QA Projects

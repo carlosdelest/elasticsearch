@@ -14,6 +14,7 @@ val copyDistributionDefaults by tasks.registering(Sync::class) {
 project(":modules").subprojects.forEach { distro.copyModule(copyDistributionDefaults, it) }
 
 val serverCli by configurations.creating
+val serverWipeDataCli by configurations.creating
 val bundledPlugins by configurations.creating {
     attributes {
         attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE)
@@ -22,8 +23,13 @@ val bundledPlugins by configurations.creating {
 val xpackTemplateResources by configurations.creating
 val additionalLibJars by configurations.creating
 
+repositories {
+    mavenCentral()
+}
+
 dependencies {
     serverCli(project(":distribution:tools:serverless-server-cli"))
+    serverWipeDataCli(project(":distribution:tools:serverless-wipe-data-cli"))
     bundledPlugins("org.elasticsearch.plugin:analysis-icu")
     bundledPlugins("org.elasticsearch.plugin:analysis-nori")
     bundledPlugins("org.elasticsearch.plugin:analysis-smartcn")
@@ -112,6 +118,9 @@ distribution_archives {
                         from(if (name.contains("windows")) "src/bin/elasticsearch.bat" else "src/bin/elasticsearch") {
                             fileMode = 0b111_101_101
                         }
+                        from("src/bin/elasticsearch-wipe-data") {
+                            fileMode = 0b111_101_101
+                        }
                     }
                     into("config") {
                         from((project.extensions["jvmOptionsDir"] as File).parent)
@@ -119,6 +128,9 @@ distribution_archives {
                     }
                     into("lib/tools/serverless-server-cli") {
                         from(serverCli)
+                    }
+                    into("lib/tools/serverless-wipe-data-cli") {
+                        from(serverWipeDataCli)
                     }
                     into("lib") {
                         from(additionalLibJars)
