@@ -30,12 +30,14 @@ import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.xpack.core.security.SecurityContext;
 import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -87,6 +89,8 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
     private AtomicBoolean apiKeyStrictRequestValidation;
     private AtomicBoolean hasPrivilegesStrictRequestValidation;
 
+    private final AtomicReference<SecurityContext> securityContext = new AtomicReference<>();
+
     @Override
     public Collection<?> createComponents(PluginServices services) {
         if (OPERATOR_PRIVILEGES_ENABLED.get(services.environment().settings()) == false) {
@@ -102,6 +106,9 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION,
             this::configureStrictHasPrivilegesRequestValidation
         );
+
+        this.securityContext.set(new SecurityContext(services.environment().settings(), services.threadPool().getThreadContext()));
+
         return Collections.emptyList();
     }
 
@@ -169,5 +176,9 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
     public boolean strictHasPrivilegesRequestValidationEnabled() {
         return hasPrivilegesStrictRequestValidation != null && hasPrivilegesStrictRequestValidation.get();
+    }
+
+    public SecurityContext getSecurityContext() {
+        return securityContext.get();
     }
 }

@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.serverless.security.apikey.ServerlessCreateApiKe
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessGrantApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessUpdateApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.authz.ServerlessAuthorizationDenialMessages;
+import co.elastic.elasticsearch.serverless.security.logging.ServerlessUserLoggingDataProvider;
 import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorOnlyRegistry;
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessGetBuiltinPrivilegesResponseTranslator;
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessHasPrivilegesRequestBuilderFactory;
@@ -54,6 +55,7 @@ module org.elasticsearch.internal.security {
     exports co.elastic.elasticsearch.serverless.security.role to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.privilege to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.authz to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.serverless.security.logging to org.elasticsearch.server;
 
     provides RestGrantApiKeyAction.RequestTranslator with ServerlessGrantApiKeyRequestTranslator;
     provides UpdateApiKeyRequestTranslator with ServerlessUpdateApiKeyRequestTranslator;
@@ -67,4 +69,6 @@ module org.elasticsearch.internal.security {
     provides ReservedRoleNameChecker.Factory with ServerlessReservedRoleNameChecker.Factory;
     provides FileRoleValidator with ServerlessRoleValidator;
     provides SecondaryAuthActions with ServerlessSecondaryAuthActions;
+
+    provides org.elasticsearch.plugins.internal.LoggingDataProvider with ServerlessUserLoggingDataProvider;
 }
