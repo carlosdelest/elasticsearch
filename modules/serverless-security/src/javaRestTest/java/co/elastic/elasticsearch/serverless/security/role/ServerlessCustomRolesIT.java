@@ -128,7 +128,7 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             "custom_role",
             rolePayload,
             "invalid application name [kibana-.*]. name must be a wildcard [*] or "
-                + "one of the supported application names [apm,kibana-.kibana]",
+                + "one of the supported application names [apm,fleet,kibana-.kibana]",
             "action_request_validation_exception"
         );
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
@@ -162,6 +162,11 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 {
                   "application": "apm",
                   "privileges": [ "event:write", "config_agent:read" ],
+                  "resources": [ "*" ]
+                },
+                {
+                  "application": "fleet",
+                  "privileges": [ "no-privileges" ],
                   "resources": [ "*" ]
                 }
               ],

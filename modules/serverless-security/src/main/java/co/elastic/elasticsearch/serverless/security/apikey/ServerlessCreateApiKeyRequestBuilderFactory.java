@@ -74,12 +74,8 @@ public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKey
 
         @Override
         public CreateApiKeyRequest parse(BytesReference source, XContentType xContentType) throws IOException {
-            if (false == restrictRequest) {
-                return super.parse(source, xContentType);
-            }
-
             final SourceWithXContentType sourceWithXContentType = new SourceWithXContentType(source, xContentType);
-            if (strictRequestValidationEnabled.get()) {
+            if (restrictRequest && strictRequestValidationEnabled.get()) {
                 try {
                     return parseWithValidation(sourceWithXContentType);
                 } catch (Exception ex) {
@@ -110,7 +106,7 @@ public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKey
                 )
             ) {
                 final CreateApiKeyRequest createApiKeyRequest = PARSER.parse(parser, null);
-                serverlessRoleValidator.validateAndThrow(createApiKeyRequest.getRoleDescriptors(), false);
+                serverlessRoleValidator.validateCustomRoleAndThrow(createApiKeyRequest.getRoleDescriptors(), false);
                 return createApiKeyRequest;
             }
         }

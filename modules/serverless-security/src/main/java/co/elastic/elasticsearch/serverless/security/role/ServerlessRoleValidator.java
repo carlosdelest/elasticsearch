@@ -52,7 +52,7 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
     Logger logger = LogManager.getLogger(ServerlessRoleValidator.class);
 
     // package-private for testing
-    static final Set<String> SUPPORTED_APPLICATION_NAMES = Set.of("apm", "kibana-.kibana");
+    static final Set<String> SUPPORTED_APPLICATION_NAMES = Set.of("apm", "fleet", "kibana-.kibana");
     static final String RESERVED_ROLE_NAME_PREFIX = "_";
     static final String PUBLIC_METADATA_KEY = MetadataUtils.RESERVED_PREFIX + "public";
     static final Set<String> PREDEFINED_ROLE_METADATA_ALLOWLIST = Set.of(PUBLIC_METADATA_KEY);
@@ -63,7 +63,7 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
         return validateCustomRole(roleDescriptor, true);
     }
 
-    public void validateAndThrow(@Nullable List<RoleDescriptor> roleDescriptors, boolean validateRoleName) {
+    public void validateCustomRoleAndThrow(@Nullable List<RoleDescriptor> roleDescriptors, boolean validateRoleName) {
         if (roleDescriptors == null || roleDescriptors.isEmpty()) {
             return;
         }

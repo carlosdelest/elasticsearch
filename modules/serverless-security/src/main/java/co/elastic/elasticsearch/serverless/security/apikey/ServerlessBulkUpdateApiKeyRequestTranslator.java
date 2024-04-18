@@ -56,11 +56,8 @@ public class ServerlessBulkUpdateApiKeyRequestTranslator extends BulkUpdateApiKe
 
     @Override
     public BulkUpdateApiKeyRequest translate(RestRequest request) throws IOException {
-        if (false == request.hasParam(RestRequest.PATH_RESTRICTED)) {
-            return super.translate(request);
-        }
-
-        if (strictRequestValidationEnabled.get()) {
+        final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
+        if (restrictRequest && strictRequestValidationEnabled.get()) {
             try {
                 return parseWithValidation(request);
             } catch (Exception ex) {
@@ -82,7 +79,7 @@ public class ServerlessBulkUpdateApiKeyRequestTranslator extends BulkUpdateApiKe
 
     private BulkUpdateApiKeyRequest parseWithValidation(RestRequest request) throws IOException {
         final BulkUpdateApiKeyRequest updateApiKeyRequest = PARSER.parse(request.contentParser(), null);
-        serverlessRoleValidator.validateAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
+        serverlessRoleValidator.validateCustomRoleAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
         return updateApiKeyRequest;
     }
 }

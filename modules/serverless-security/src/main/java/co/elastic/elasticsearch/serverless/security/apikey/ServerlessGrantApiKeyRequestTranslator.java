@@ -56,7 +56,7 @@ public class ServerlessGrantApiKeyRequestTranslator extends RestGrantApiKeyActio
     private GrantApiKeyRequest parseWithValidation(RestRequest request) throws IOException {
         try (XContentParser xContentParser = request.contentParser()) {
             final GrantApiKeyRequest grantApiKeyRequest = PARSER.parse(xContentParser, null);
-            serverlessRoleValidator.validateAndThrow(grantApiKeyRequest.getApiKeyRequest().getRoleDescriptors(), false);
+            serverlessRoleValidator.validateCustomRoleAndThrow(grantApiKeyRequest.getApiKeyRequest().getRoleDescriptors(), false);
             return grantApiKeyRequest;
         }
     }

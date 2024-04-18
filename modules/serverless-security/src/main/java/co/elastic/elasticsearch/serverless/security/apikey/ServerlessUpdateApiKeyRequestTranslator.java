@@ -57,10 +57,6 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
 
     @Override
     public UpdateApiKeyRequest translate(RestRequest request) throws IOException {
-        if (false == request.hasParam(RestRequest.PATH_RESTRICTED)) {
-            return super.translate(request);
-        }
-
         // Note that we use `ids` here even though we only support a single ID. This is because the route where this translator is used
         // shares a path prefix with `RestClearApiKeyCacheAction` and our current REST implementation requires that path params have the
         // same wildcard if their paths share a prefix
@@ -70,7 +66,8 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
         }
 
         final RequestWithApiKeyId requestWithApiKeyId = new RequestWithApiKeyId(apiKeyId, request);
-        if (strictRequestValidationEnabled.get()) {
+        final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
+        if (restrictRequest && strictRequestValidationEnabled.get()) {
             try {
                 return parseWithValidation(requestWithApiKeyId);
             } catch (Exception ex) {
@@ -95,7 +92,7 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
 
     private UpdateApiKeyRequest parseWithValidation(RequestWithApiKeyId requestWithApiKeyId) throws IOException {
         final UpdateApiKeyRequest updateApiKeyRequest = parse(requestWithApiKeyId);
-        serverlessRoleValidator.validateAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
+        serverlessRoleValidator.validateCustomRoleAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
         return updateApiKeyRequest;
     }
 

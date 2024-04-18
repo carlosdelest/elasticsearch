@@ -118,6 +118,11 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
                     "application": "apm",
                     "privileges": [ "event:write", "config_agent:read" ],
                     "resources": [ "*" ]
+                  },
+                  {
+                    "application": "fleet",
+                    "privileges": [ "no-privileges" ],
+                    "resources": [ "*" ]
                   }
                 ],
                 "metadata": {
@@ -315,7 +320,7 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
     }
 
     private String grantApiKeyAndAssertSuccess(String username, String roleDescriptorsPayload) throws IOException {
-        final Request request = new Request("POST", "_security/api_key/grant");
+        final Request request = new Request("POST", "/_security/api_key/grant");
         request.setOptions(
             RequestOptions.DEFAULT.toBuilder()
                 .addHeader("Authorization", UsernamePasswordToken.basicAuthHeaderValue(TEST_OPERATOR_USER, new SecureString(TEST_PASSWORD)))
