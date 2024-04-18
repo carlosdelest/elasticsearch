@@ -62,6 +62,7 @@ public class ServerlessServerCli extends ServerCli {
 
     static final String PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP = "es.serverless.processors_overcommit_factor";
     static final String APM_PROJECT_ID_SETTING = "telemetry.agent.global_labels.project_id";
+    static final String APM_PROJECT_TYPE_SETTING = "telemetry.agent.global_labels.project_type";
     static final String DIAGNOSTICS_TARGET_PATH_SYSPROP = "es.serverless.path.diagnostics";
     private static final String DEFAULT_DIAGNOSTICS_TARGET_PATH = "/mnt/elastic/diagnostics";
     static final String DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP = "es.serverless.diagnostics_action.timeout";
@@ -106,6 +107,9 @@ public class ServerlessServerCli extends ServerCli {
             // copy project id to apm attributes, but be lenient for tests that don't set project id...
             if (ServerlessSharedSettings.PROJECT_ID.exists(nodeSettings)) {
                 finalSettingsBuilder.put(APM_PROJECT_ID_SETTING, ServerlessSharedSettings.PROJECT_ID.get(nodeSettings));
+            }
+            if (ServerlessSharedSettings.PROJECT_TYPE.exists(nodeSettings)) {
+                finalSettingsBuilder.put(APM_PROJECT_TYPE_SETTING, ServerlessSharedSettings.PROJECT_TYPE.get(nodeSettings));
             }
 
             var newEnv = new Environment(finalSettingsBuilder.build(), env.configFile());
