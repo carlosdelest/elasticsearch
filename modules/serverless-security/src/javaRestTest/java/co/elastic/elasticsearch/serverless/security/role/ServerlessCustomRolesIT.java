@@ -21,7 +21,6 @@ import co.elastic.elasticsearch.serverless.security.AbstractServerlessCustomRole
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupportedPrivilegesRegistry;
 
 import org.elasticsearch.client.Request;
-import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.common.Strings;
@@ -507,32 +506,6 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 contains(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames().stream().sorted().toArray())
             );
         }
-    }
-
-    public void testAuthorizationDeniedMessages() throws IOException {
-        final var createApiKeyRequest = new Request("POST", "/_security/api_key");
-        createApiKeyRequest.setJsonEntity("""
-            {
-              "name": "api-key",
-              "role_descriptors": {
-                "empty": {"cluster": []}
-              }
-            }
-            """);
-        final var apiKeyResponse = executeAndAssertSuccess(TEST_USER, createApiKeyRequest);
-
-        final var unauthorizedRequest = new Request("GET", "/_ingest/pipeline");
-        final ResponseException e = expectThrows(ResponseException.class, () -> {
-            unauthorizedRequest.setOptions(
-                RequestOptions.DEFAULT.toBuilder().addHeader("Authorization", "ApiKey " + responseAsMap(apiKeyResponse).get("encoded"))
-            );
-            client().performRequest(unauthorizedRequest);
-        });
-        assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(403));
-        assertThat(
-            e.getMessage(),
-            containsString("this action is granted by the cluster privileges [read_pipeline,manage_pipeline,manage,all]")
-        );
     }
 
     private void putRoleAndAssertSuccess(String username, String roleName, String rolePayload) throws IOException {

@@ -43,6 +43,7 @@ public record ServerlessSupportedPrivilegesRegistry() {
             ClusterPrivilegeResolver.MANAGE_BEHAVIORAL_ANALYTICS,
             ClusterPrivilegeResolver.MANAGE_ENRICH,
             ClusterPrivilegeResolver.MANAGE_IDX_TEMPLATES,
+            ClusterPrivilegeResolver.MANAGE_INGEST_PIPELINES,
             ClusterPrivilegeResolver.MANAGE_LOGSTASH_PIPELINES,
             ClusterPrivilegeResolver.MANAGE_ML,
             ClusterPrivilegeResolver.MANAGE_OWN_API_KEY,

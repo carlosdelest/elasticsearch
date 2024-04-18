@@ -17,11 +17,10 @@
 
 package co.elastic.elasticsearch.serverless.security.authz;
 
-import org.elasticsearch.action.ingest.GetPipelineAction;
-import org.elasticsearch.action.ingest.GetPipelineRequest;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.ilm.action.ExplainLifecycleAction;
+import org.elasticsearch.xpack.core.ilm.action.GetLifecycleAction;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationTestHelper;
 import org.elasticsearch.xpack.core.security.user.User;
@@ -40,15 +39,13 @@ public class ServerlessAuthorizationDenialMessagesTests extends ESTestCase {
             .realmRef(new Authentication.RealmRef("test", "test", "foo"))
             .build(false);
 
-        final TransportRequest request = new GetPipelineRequest(randomAlphaOfLengthBetween(6, 8));
+        final TransportRequest request = new GetLifecycleAction.Request(randomAlphaOfLengthBetween(6, 8));
 
-        final String actionName = GetPipelineAction.NAME;
+        // Note: in practice this should never happen since ILM is unavailable, but it's a valid test to exercise the overall flow
+        final String actionName = GetLifecycleAction.NAME;
         final String actualServerless = denialMessages.actionDenied(authentication, null, actionName, request, null);
         assertThat(actualServerless, containsString("[" + actionName + "] is unauthorized for user [" + user.principal() + "]"));
-        assertThat(
-            actualServerless,
-            containsString("this action is granted by the cluster privileges [read_pipeline,manage_pipeline,manage,all]")
-        );
+        assertThat(actualServerless, containsString("this action is granted by the cluster privileges [manage,all]"));
 
         final String actualStateful = new AuthorizationDenialMessages.Default().actionDenied(
             authentication,
@@ -58,12 +55,7 @@ public class ServerlessAuthorizationDenialMessagesTests extends ESTestCase {
             null
         );
         assertThat(actualStateful, containsString("[" + actionName + "] is unauthorized for user [" + user.principal() + "]"));
-        assertThat(
-            actualStateful,
-            containsString(
-                "this action is granted by the cluster privileges [read_pipeline,manage_ingest_pipelines,manage_pipeline,manage,all]"
-            )
-        );
+        assertThat(actualStateful, containsString("this action is granted by the cluster privileges [read_ilm,manage_ilm,manage,all]"));
     }
 
     public void testIndexActionDeniedMessageOnlyIncludesSupportedPrivileges() {

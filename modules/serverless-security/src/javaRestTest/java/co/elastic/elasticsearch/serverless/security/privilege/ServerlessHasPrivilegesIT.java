@@ -20,8 +20,8 @@ package co.elastic.elasticsearch.serverless.security.privilege;
 import co.elastic.elasticsearch.serverless.security.AbstractServerlessCustomRolesRestTestCase;
 
 import org.elasticsearch.client.Request;
+import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
-import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.core.Strings;
@@ -33,8 +33,8 @@ import org.elasticsearch.xcontent.json.JsonXContent;
 import org.junit.ClassRule;
 
 import java.io.IOException;
+import java.util.List;
 
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 
 public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRestTestCase {
@@ -53,6 +53,11 @@ public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRest
     }
 
     public void testValidHasPrivilegesChecks() throws IOException {
+        if (randomBoolean()) {
+            enableStrictValidation();
+        } else {
+            disableStrictValidation();
+        }
         final var payload = """
             {
               "cluster": [ "monitor", "manage", "cluster:foo/bar" ],
@@ -101,28 +106,26 @@ public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRest
               }
             }
             """;
-        enableStrictValidation();
-        checkPrivilegesAndAssertExpectedResponse(TEST_USER, payload, expectedResponseTemplate);
-        checkPrivilegesAndAssertExpectedResponse(TEST_OPERATOR_USER, payload, expectedResponseTemplate);
-
-        disableStrictValidation();
         checkPrivilegesAndAssertExpectedResponse(TEST_USER, payload, expectedResponseTemplate);
         checkPrivilegesAndAssertExpectedResponse(TEST_OPERATOR_USER, payload, expectedResponseTemplate);
     }
 
     public void testInvalidHasPrivilegesChecks() throws IOException {
-        enableStrictValidation();
+        if (randomBoolean()) {
+            enableStrictValidation();
+        } else {
+            disableStrictValidation();
+        }
         {
             final var payload = """
                 {
-                  "cluster": [ "manage_ilm", "manage" ]
+                  "cluster": [ "manage_ilm", "manage", "delegate_pki" ]
                 }""";
-            checkPrivilegesAndAssertFailure(
-                TEST_USER,
-                payload,
-                "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode"
-            );
-            checkPrivilegesAndAssertSuccess(TEST_OPERATOR_USER, payload);
+            final String expectedWarning = "HasPrivileges request includes privileges for features not available in serverless mode;"
+                + " you will not have access to these features regardless of your permissions; "
+                + "cluster privileges: [delegate_pki,manage_ilm];";
+            checkPrivilegesAndAssertHeaderWarning(TEST_USER, payload, expectedWarning);
+            checkPrivilegesAndAssertHeaderWarning(TEST_OPERATOR_USER, payload, expectedWarning);
         }
 
         {
@@ -131,65 +134,34 @@ public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRest
                   "index" : [
                     {
                       "names": [ "suppliers", "products" ],
-                      "privileges": [ "read_cross_cluster" ]
+                      "privileges": [ "read_cross_cluster", "manage_follow_index" ]
                     }
                   ]
                 }""";
-            checkPrivilegesAndAssertFailure(
-                TEST_USER,
-                payload,
-                "index privilege [read_cross_cluster] exists but is not supported when running in serverless mode"
-            );
-            checkPrivilegesAndAssertSuccess(TEST_OPERATOR_USER, payload);
+            final String expectedWarning = "HasPrivileges request includes privileges for features not available in serverless mode; "
+                + "you will not have access to these features regardless of your permissions; "
+                + "index privileges: [manage_follow_index,read_cross_cluster];";
+            checkPrivilegesAndAssertHeaderWarning(TEST_USER, payload, expectedWarning);
+            checkPrivilegesAndAssertHeaderWarning(TEST_OPERATOR_USER, payload, expectedWarning);
         }
 
         {
             final var payload = """
                 {
-                  "cluster": [ "unknown" ]
-                }""";
-            checkPrivilegesAndAssertFailure(TEST_USER, payload, "unknown cluster privilege [unknown]");
-            // can't test this for an operator user because this currently trips an assertion
-        }
-
-        {
-            final var payload = """
-                {
+                  "cluster": [ "manage_ilm", "manage", "delegate_pki" ],
                   "index" : [
                     {
                       "names": [ "suppliers", "products" ],
-                      "privileges": [ "unknown" ]
+                      "privileges": [ "read_cross_cluster", "manage_follow_index" ]
                     }
                   ]
                 }""";
-            checkPrivilegesAndAssertFailure(TEST_USER, payload, "unknown index privilege [unknown]");
-            // can't test this for an operator user because this currently trips an assertion
-        }
-    }
-
-    public void testInvalidHasPrivilegesChecksStrictValidationDisabled() throws IOException {
-        disableStrictValidation();
-        {
-            final var payload = """
-                {
-                  "cluster": [ "manage_ilm", "manage" ]
-                }""";
-            checkPrivilegesAndAssertSuccess(TEST_USER, payload);
-            checkPrivilegesAndAssertSuccess(TEST_OPERATOR_USER, payload);
-        }
-
-        {
-            final var payload = """
-                {
-                  "index" : [
-                    {
-                      "names": [ "suppliers", "products" ],
-                      "privileges": [ "read_cross_cluster" ]
-                    }
-                  ]
-                }""";
-            checkPrivilegesAndAssertSuccess(TEST_USER, payload);
-            checkPrivilegesAndAssertSuccess(TEST_OPERATOR_USER, payload);
+            final String expectedWarning = "HasPrivileges request includes privileges for features not available in serverless mode; "
+                + "you will not have access to these features regardless of your permissions; "
+                + "cluster privileges: [delegate_pki,manage_ilm]; "
+                + "index privileges: [manage_follow_index,read_cross_cluster];";
+            checkPrivilegesAndAssertHeaderWarning(TEST_USER, payload, expectedWarning);
+            checkPrivilegesAndAssertHeaderWarning(TEST_OPERATOR_USER, payload, expectedWarning);
         }
     }
 
@@ -216,12 +188,13 @@ public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRest
         }
     }
 
-    private void checkPrivilegesAndAssertFailure(String username, String payload, String message) {
+    private void checkPrivilegesAndAssertHeaderWarning(String username, String payload, String message) throws IOException {
         final var hasPrivilegesRequest = new Request("POST", "/_security/user/_has_privileges");
         hasPrivilegesRequest.setJsonEntity(payload);
-        final ResponseException e = expectThrows(ResponseException.class, () -> executeAsUser(username, hasPrivilegesRequest));
-        assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(400));
-        assertThat(e.getMessage(), containsString(message));
+        hasPrivilegesRequest.setOptions(
+            RequestOptions.DEFAULT.toBuilder().setWarningsHandler(warnings -> warnings.equals(List.of(message)) == false).build()
+        );
+        executeAndAssertSuccess(username, hasPrivilegesRequest);
     }
 
     private void enableStrictValidation() throws IOException {

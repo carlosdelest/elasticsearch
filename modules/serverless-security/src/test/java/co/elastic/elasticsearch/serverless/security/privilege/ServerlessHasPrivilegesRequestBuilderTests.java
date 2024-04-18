@@ -17,10 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.security.privilege;
 
-import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
-
 import org.elasticsearch.ElasticsearchParseException;
-import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -36,8 +33,6 @@ import org.elasticsearch.xpack.core.security.authz.RoleDescriptorTests;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
-import org.hamcrest.Matcher;
-import org.hamcrest.Matchers;
 import org.junit.BeforeClass;
 
 import java.io.IOException;
@@ -50,8 +45,6 @@ import java.util.Map;
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidatorTests.indexBuilderWithPrivileges;
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidatorTests.randomRoleDescriptorWithoutFlsDlsOrRestriction;
 import static org.elasticsearch.common.xcontent.XContentHelper.convertToMap;
-import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.core.Is.is;
 import static org.hamcrest.core.IsNull.notNullValue;
@@ -69,32 +62,33 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
     public void testValidRequest() throws IOException {
         final Map<String, Object> privilegesToCheck = randomValidPrivilegesToCheckAsMap();
         final ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder builder =
-            new ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder(
-                mock(),
-                randomBoolean(),
-                ESTestCase::randomBoolean
-            );
+            new ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder(mock());
         final HasPrivilegesRequestBuilder actual = builder.source("username", mapToBytes(privilegesToCheck), XContentType.JSON);
         assertThat(actual.request(), is(notNullValue()));
     }
 
-    public void testValidRequestWithRawActions() throws IOException {
+    public void testValidRequestWithRawActionsOrUnknownPrivileges() throws IOException {
         final RoleDescriptor roleDescriptor = new RoleDescriptor(
             randomAlphaOfLength(20),
-            new String[] { "cluster:" + randomFrom(randomAlphaOfLengthBetween(5, 10), randomAlphaOfLengthBetween(5, 10) + "/*") },
+            new String[] {
+                randomFrom(
+                    randomAlphaOfLength(50),
+                    "cluster:" + randomFrom(randomAlphaOfLengthBetween(5, 10), randomAlphaOfLengthBetween(5, 10) + "/*")
+                ) },
             new RoleDescriptor.IndicesPrivileges[] {
                 RoleDescriptor.IndicesPrivileges.builder()
                     .indices(generateRandomStringArray(10, 10, false, false))
-                    .privileges("indices:" + randomFrom(randomAlphaOfLengthBetween(5, 10), randomAlphaOfLengthBetween(5, 10) + "/*"))
+                    .privileges(
+                        randomFrom(
+                            randomAlphaOfLength(50),
+                            "indices:" + randomFrom(randomAlphaOfLengthBetween(5, 10), randomAlphaOfLengthBetween(5, 10) + "/*")
+                        )
+                    )
                     .build() },
             null
         );
         final ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder builder =
-            new ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder(
-                mock(),
-                randomBoolean(),
-                ESTestCase::randomBoolean
-            );
+            new ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder(mock());
         final HasPrivilegesRequestBuilder actual = builder.source(
             roleDescriptor.getName(),
             mapToBytes(roleDescriptorToPrivilegesToCheckMap(roleDescriptor)),
@@ -103,18 +97,12 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
         assertThat(actual.request(), is(notNullValue()));
     }
 
-    public void testInvalidRequest() throws IOException {
-        final boolean unknownClusterPrivilege = randomBoolean();
+    public void testInvalidRequestResultsInHeaderWarning() throws IOException {
         final boolean unsupportedClusterPrivilege = randomBoolean();
-        final boolean unknownIndexPrivilege = randomBoolean();
         // ensure at least one validation error
-        final boolean unsupportedIndexPrivilege = false == (unknownClusterPrivilege && unsupportedClusterPrivilege && unknownIndexPrivilege)
-            || randomBoolean();
+        final boolean unsupportedIndexPrivilege = false == unsupportedClusterPrivilege || randomBoolean();
 
         final List<String> clusterPrivileges = new ArrayList<>();
-        if (unknownClusterPrivilege) {
-            clusterPrivileges.add(randomValueOtherThanMany(ClusterPrivilegeResolver.names()::contains, () -> randomAlphaOfLength(10)));
-        }
         if (unsupportedClusterPrivilege) {
             clusterPrivileges.add(
                 randomValueOtherThanMany(
@@ -125,9 +113,6 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
         }
 
         final List<String> indexPrivileges = new ArrayList<>();
-        if (unknownIndexPrivilege) {
-            indexPrivileges.add(randomValueOtherThanMany(IndexPrivilege.names()::contains, () -> randomAlphaOfLength(10)));
-        }
         if (unsupportedIndexPrivilege) {
             indexPrivileges.add(
                 randomValueOtherThanMany(
@@ -136,8 +121,9 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
                 )
             );
         }
-        final RoleDescriptor.IndicesPrivileges[] indicesPrivileges = new RoleDescriptor.IndicesPrivileges[] {
-            indexBuilderWithPrivileges(indexPrivileges, randomBoolean(), false).build() };
+        final RoleDescriptor.IndicesPrivileges[] indicesPrivileges = unsupportedIndexPrivilege
+            ? new RoleDescriptor.IndicesPrivileges[] { indexBuilderWithPrivileges(indexPrivileges, randomBoolean(), false).build() }
+            : null;
 
         final RoleDescriptor roleDescriptor = new RoleDescriptor(
             randomAlphaOfLength(10),
@@ -154,48 +140,23 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
 
         final Map<String, Object> privilegesToCheck = roleDescriptorToPrivilegesToCheckMap(roleDescriptor);
         final ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder builder =
-            new ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder(mock(), true, () -> true);
+            new ServerlessHasPrivilegesRequestBuilderFactory.ServerlessHasPrivilegesRequestBuilder(mock());
 
-        final ActionRequestValidationException ex = expectThrows(
-            ActionRequestValidationException.class,
-            () -> builder.source(roleDescriptor.getName(), mapToBytes(privilegesToCheck), XContentType.JSON)
+        final HasPrivilegesRequestBuilder actual = builder.source(
+            roleDescriptor.getName(),
+            mapToBytes(privilegesToCheck),
+            XContentType.JSON
         );
-        assertThat(ex, Matchers.is(Matchers.notNullValue()));
-        final List<String> validationErrors = ex.validationErrors();
-        final List<Matcher<? super String>> itemMatchers = new ArrayList<>();
-        if (unknownClusterPrivilege) {
-            itemMatchers.add(
-                allOf(
-                    containsString("unknown cluster privilege"),
-                    containsString(ServerlessRoleValidator.mustBePredefinedClusterPrivilegeMessage())
-                )
-            );
-        }
+        assertThat(actual.request(), is(notNullValue()));
+        String expected = "HasPrivileges request includes privileges for features not available in serverless mode; "
+            + "you will not have access to these features regardless of your permissions;";
         if (unsupportedClusterPrivilege) {
-            itemMatchers.add(
-                allOf(
-                    containsString("exists but is not supported when running in serverless mode"),
-                    containsString(ServerlessRoleValidator.mustBePredefinedClusterPrivilegeMessage())
-                )
-            );
-        }
-        if (unknownIndexPrivilege) {
-            itemMatchers.add(
-                allOf(
-                    containsString("unknown index privilege"),
-                    containsString(ServerlessRoleValidator.mustBePredefinedIndexPrivilegeMessage())
-                )
-            );
+            expected += " cluster privileges: [" + clusterPrivileges.get(0) + "];";
         }
         if (unsupportedIndexPrivilege) {
-            itemMatchers.add(
-                allOf(
-                    containsString("exists but is not supported when running in serverless mode"),
-                    containsString(ServerlessRoleValidator.mustBePredefinedIndexPrivilegeMessage())
-                )
-            );
+            expected += " index privileges: [" + indexPrivileges.get(0) + "];";
         }
-        assertThat(validationErrors, containsInAnyOrder(itemMatchers));
+        assertWarnings(expected);
     }
 
     public void testUseOfFieldLevelSecurityThrowsException() {

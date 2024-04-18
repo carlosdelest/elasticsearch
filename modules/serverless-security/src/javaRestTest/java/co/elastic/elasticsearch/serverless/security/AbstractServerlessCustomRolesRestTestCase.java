@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.serverless.security;
 
 import org.elasticsearch.client.Request;
-import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
@@ -45,7 +44,8 @@ public abstract class AbstractServerlessCustomRolesRestTestCase extends ESRestTe
 
     protected Response executeAsUser(String username, Request request) throws IOException {
         request.setOptions(
-            RequestOptions.DEFAULT.toBuilder()
+            request.getOptions()
+                .toBuilder()
                 .addHeader("Authorization", basicAuthHeaderValue(username, new SecureString(TEST_PASSWORD.toCharArray())))
         );
         return client().performRequest(request);
