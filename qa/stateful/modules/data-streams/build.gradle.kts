@@ -6,7 +6,8 @@ tasks {
             "data_stream/40_supported_apis/*"
         ).joinToString(","))
         systemProperty("yaml.rest.tests.set_num_nodes", "false")
-
-        exclude("**/.DataStreamLifecyclePermissionsRestIT.class")
+    }
+    javaRestTest {
+        exclude("**/DataStreamLifecyclePermissionsRestIT.class")
     }
 }
