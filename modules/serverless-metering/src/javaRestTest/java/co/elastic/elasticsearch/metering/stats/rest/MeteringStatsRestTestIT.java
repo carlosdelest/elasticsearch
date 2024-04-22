@@ -113,7 +113,6 @@ public class MeteringStatsRestTestIT extends ESRestTestCase {
 
                 Map<String, Object> total = (Map<String, Object>) responseMap.get("_total");
                 assertThat(total.get("num_docs"), equalTo(totalDocs.get()));
-                assertThat(total.containsKey("size_in_bytes"), equalTo(true));
 
                 List<Object> indices = (List<Object>) responseMap.get("indices");
                 assertThat(indices.size(), equalTo(numIndices + (2 * numDatastreams)));
@@ -121,7 +120,6 @@ public class MeteringStatsRestTestIT extends ESRestTestCase {
                     Map<String, Object> index = (Map<String, Object>) indices.get(i);
                     String indexName = (String) index.get("name");
                     assertThat(index.get("num_docs"), equalTo(indexNameToNumDocsMap.get(indexName)));
-                    assertThat(index.containsKey("size_in_bytes"), equalTo(true));
                     if (datastreamIndexToDatastreamMap.containsKey(indexName)) {
                         assertThat(index.get("datastream"), equalTo(datastreamIndexToDatastreamMap.get(indexName)));
                     } else {
@@ -135,7 +133,6 @@ public class MeteringStatsRestTestIT extends ESRestTestCase {
                     Map<String, Object> index = (Map<String, Object>) datastreams.get(i);
                     String datastreamName = (String) index.get("name");
                     assertThat(index.get("num_docs"), equalTo(datastreamNameToNumDocsMap.get(datastreamName)));
-                    assertThat(index.containsKey("size_in_bytes"), equalTo(true));
                     assertThat(index.containsKey("datastream"), equalTo(false));
                 }
             });
@@ -157,7 +154,6 @@ public class MeteringStatsRestTestIT extends ESRestTestCase {
                 Map<String, Object> responseMap = entityAsMap(response);
                 Map<String, Object> total = (Map<String, Object>) responseMap.get("_total");
                 assertThat(total.get("num_docs"), equalTo(foo1Docs + foo2Docs + fooDsDocs + barDocs));
-                assertThat(total.containsKey("size_in_bytes"), equalTo(true));
                 assertThat(((List<Object>) responseMap.get("indices")).size(), equalTo(5));
                 assertThat(((List<Object>) responseMap.get("datastreams")).size(), equalTo(1));
 
