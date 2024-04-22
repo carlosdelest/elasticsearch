@@ -51,3 +51,9 @@ indices.recovery.use_snapshots: false
 cluster.fault_detection.follower_check.timeout: 20m
 cluster.follower_lag.timeout: 1h
 
+# Lots of threads read from the blob store in parallel, and we don't want any
+# of them to fail just because the connection pool is exhausted. See comments
+# on ES-8103 for the current (at time of writing) threadpool sizes for
+# different node sizes. This value just has to be large enough to accommodate
+# one connection per thread, it's ok if we set it to a larger value.
+s3.client.default.max_connections: 150
