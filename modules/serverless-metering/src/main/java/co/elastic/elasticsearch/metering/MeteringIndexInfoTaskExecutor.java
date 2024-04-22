@@ -56,7 +56,7 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
 
     public static final Setting<Boolean> ENABLED_SETTING = Setting.boolSetting(
         "metering.index-info-task.enabled",
-        false,
+        true,
         Setting.Property.Dynamic,
         Setting.Property.NodeScope
     );

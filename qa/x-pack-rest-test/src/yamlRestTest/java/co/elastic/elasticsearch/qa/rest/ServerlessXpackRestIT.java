@@ -60,7 +60,9 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
 
     @Override
     protected Predicate<String> waitForPendingTasksFilter() {
-        return super.waitForPendingTasksFilter().or(task -> task.contains(ObjectStoreGCTask.TASK_NAME));
+        return super.waitForPendingTasksFilter().or(
+            task -> task.contains(ObjectStoreGCTask.TASK_NAME) || task.contains("metering-index-info")
+        );
     }
 
     @Override
