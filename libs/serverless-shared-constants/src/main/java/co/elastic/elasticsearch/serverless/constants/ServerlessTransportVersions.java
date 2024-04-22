@@ -44,6 +44,7 @@ public class ServerlessTransportVersions {
     public static final TransportVersion METERING_SHARD_INFO_REQUEST_TOKEN_ADDED = def(8_620_01_0);
     public static final TransportVersion EXPLICIT_BCC_REFERENCES_TRACKING_ADDED = def(8_627_01_0);
     public static final TransportVersion COMPOUND_COMMIT_WITH_INTERNAL_FILES = def(8_632_01_0);
+    public static final TransportVersion REGISTER_BATCHED_COMPOUND_COMMIT_ON_SEARCH_SHARD_RECOVERY = def(8_638_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
