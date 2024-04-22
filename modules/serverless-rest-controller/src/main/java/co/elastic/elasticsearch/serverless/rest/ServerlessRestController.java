@@ -51,6 +51,7 @@ public class ServerlessRestController extends RestController {
     private static final String PROJECT_ID_REST_HEADER = "X-Elastic-Project-Id";
     private static final String PROJECT_ID_THREADCONTEXT_HEADER = "project.id";
 
+    // TODO: Remove this flag (and all the "log but don't fail" behaviour)
     private final boolean logValidationErrorsAsWarnings;
 
     public ServerlessRestController(
@@ -61,7 +62,7 @@ public class ServerlessRestController extends RestController {
         Tracer tracer
 
     ) {
-        this(restInterceptor, client, circuitBreakerService, usageService, tracer, true);
+        this(restInterceptor, client, circuitBreakerService, usageService, tracer, false);
     }
 
     protected ServerlessRestController(
