@@ -48,6 +48,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -329,11 +330,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
                     .setReason("shutdown for a unit test")
                     .setType(type)
                     .setStartedAtMillis(randomNonNegativeLong())
-                    .setGracePeriod(
-                        type == SingleNodeShutdownMetadata.Type.SIGTERM
-                            ? TimeValue.parseTimeValue(randomTimeValue(), this.getTestName())
-                            : null
-                    )
+                    .setGracePeriod(type == SingleNodeShutdownMetadata.Type.SIGTERM ? tmpRandomTimeValue() : null)
                     .build()
             )
         );
@@ -341,6 +338,11 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
         return ClusterState.builder(clusterState)
             .metadata(Metadata.builder(clusterState.metadata()).putCustom(NodesShutdownMetadata.TYPE, nodesShutdownMetadata).build())
             .build();
+    }
+
+    @Deprecated(forRemoval = true) // replace with ESTestCase#randomTimeValue after https://github.com/elastic/elasticsearch/pull/107689
+    private static TimeValue tmpRandomTimeValue() {
+        return new TimeValue(between(0, 1000), randomFrom(TimeUnit.values()));
     }
 
     private ClusterState stateWithLocalAssignedIndexSizeTask(ClusterState clusterState) {
