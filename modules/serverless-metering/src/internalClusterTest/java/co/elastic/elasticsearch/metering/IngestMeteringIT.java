@@ -55,7 +55,8 @@ import static org.hamcrest.Matchers.startsWith;
 
 public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
-    protected static final int DEFAULT_SEARCH_POWER = 200;
+    protected static final int DEFAULT_SEARCH_POWER = 100;
+    protected static final int OVERRIDE_SEARCH_POWER = 150;
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
 
@@ -76,11 +77,12 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         "boost_window",
         (int) TimeValue.timeValueDays(3).seconds(),
         "search_power",
-        1234
+        OVERRIDE_SEARCH_POWER
     );
     Settings.Builder overrideSettings = Settings.builder()
         .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), TimeValue.timeValueDays(3))
-        .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), 1234);
+        .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), OVERRIDE_SEARCH_POWER)
+        .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), OVERRIDE_SEARCH_POWER);
 
     @Override
     @SuppressWarnings("unchecked")
@@ -98,7 +100,8 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
-            .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), DEFAULT_SEARCH_POWER)
+            .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), DEFAULT_SEARCH_POWER)
+            .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), DEFAULT_SEARCH_POWER)
             .build();
     }
 

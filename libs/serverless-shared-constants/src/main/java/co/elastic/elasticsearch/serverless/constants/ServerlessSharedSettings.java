@@ -20,6 +20,10 @@ package co.elastic.elasticsearch.serverless.constants;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.core.TimeValue;
 
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
 /**
  * Settings that may be read across multiple serverless modules.
  */
@@ -34,9 +38,79 @@ public class ServerlessSharedSettings {
         Setting.Property.Dynamic
     );
     public static final Setting<Integer> SEARCH_POWER_SETTING = Setting.intSetting(
+        // to be removed in future PR `serverless.search.search_power`, we keep it for now for BWC
+        // is it currently only used as a fallback settings in case min-max are not defined.
         "serverless.search.search_power",
         100,
         0,
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+    public static final Setting<Integer> SEARCH_POWER_MIN_SETTING = Setting.intSetting(
+        "serverless.search.search_power_min",
+        SEARCH_POWER_SETTING,
+        0,
+        new Setting.Validator<>() {
+            @Override
+            public void validate(Integer value) {}
+
+            @Override
+            public void validate(final Integer searchPowerMin, final Map<Setting<?>, Object> settings) {
+                int searchPowerMax = (int) settings.get(SEARCH_POWER_MAX_SETTING);
+                if (searchPowerMin > searchPowerMax) {
+                    throw new IllegalArgumentException(
+                        ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey()
+                            + " ["
+                            + searchPowerMin
+                            + "] must be <= "
+                            + ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey()
+                            + " ["
+                            + searchPowerMax
+                            + "]"
+                    );
+                }
+            }
+
+            @Override
+            public Iterator<Setting<?>> settings() {
+                final List<Setting<?>> settings = List.of(SEARCH_POWER_MAX_SETTING);
+                return settings.iterator();
+            }
+        },
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+    public static final Setting<Integer> SEARCH_POWER_MAX_SETTING = Setting.intSetting(
+        "serverless.search.search_power_max",
+        SEARCH_POWER_MIN_SETTING,
+        0,
+        new Setting.Validator<>() {
+            @Override
+            public void validate(Integer value) {}
+
+            @Override
+            public void validate(final Integer searchPowerMax, final Map<Setting<?>, Object> settings) {
+                int searchPowerMin = (int) settings.get(SEARCH_POWER_MIN_SETTING);
+                if (searchPowerMax < searchPowerMin) {
+                    throw new IllegalArgumentException(
+                        ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey()
+                            + " ["
+                            + searchPowerMin
+                            + "] must be <= "
+                            + ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey()
+                            + " ["
+                            + searchPowerMax
+                            + "]"
+                    );
+                }
+            }
+
+            @Override
+            public Iterator<Setting<?>> settings() {
+                final List<Setting<?>> settings = List.of(SEARCH_POWER_MIN_SETTING);
+                return settings.iterator();
+            }
+        },
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );

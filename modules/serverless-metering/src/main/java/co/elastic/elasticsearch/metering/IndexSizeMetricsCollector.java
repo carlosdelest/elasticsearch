@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
@@ -38,6 +39,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static org.elasticsearch.core.Strings.format;
 
@@ -56,17 +59,43 @@ class IndexSizeMetricsCollector implements MetricsCollector {
     private static final String SHARD = "shard";
     private static final String SEARCH_POWER = "search_power";
     final IndicesService indicesService;
-    private volatile int searchPowerSetting;
+    private volatile int searchPowerMinSetting;
+    private volatile int searchPowerMaxSetting;
 
     IndexSizeMetricsCollector(IndicesService indicesService, ClusterSettings clusterSettings, Settings settings) {
         this.indicesService = indicesService;
-        this.searchPowerSetting = SEARCH_POWER_SETTING.get(settings);
-        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_SETTING, sp -> this.searchPowerSetting = sp);
+        this.searchPowerMinSetting = SEARCH_POWER_MIN_SETTING.get(settings);
+        this.searchPowerMaxSetting = SEARCH_POWER_MAX_SETTING.get(settings);
+        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_MIN_SETTING, sp -> this.searchPowerMinSetting = sp);
+        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_MAX_SETTING, sp -> this.searchPowerMaxSetting = sp);
+        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_SETTING, sp -> {
+            if (this.searchPowerMinSetting == this.searchPowerMaxSetting) {
+                this.searchPowerMinSetting = sp;
+                this.searchPowerMaxSetting = sp;
+            } else {
+                throw new IllegalArgumentException(
+                    "Updating "
+                        + ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey()
+                        + " ["
+                        + sp
+                        + "] while "
+                        + ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey()
+                        + " ["
+                        + this.searchPowerMinSetting
+                        + "] and "
+                        + ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey()
+                        + " ["
+                        + this.searchPowerMaxSetting
+                        + "] are not equal."
+                );
+            }
+        });
     }
 
     @Override
     public Collection<MetricValue> getMetrics() {
-        Map<String, Object> settings = Map.of(SEARCH_POWER, searchPowerSetting);
+        // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
+        Map<String, Object> settings = Map.of(SEARCH_POWER, this.searchPowerMinSetting);
 
         List<MetricValue> metrics = new ArrayList<>();
         for (final IndexService indexService : indicesService) {

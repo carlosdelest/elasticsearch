@@ -28,6 +28,8 @@ public class ServerlessSharedSettingsExtension implements SettingsExtension {
         return List.of(
             ServerlessSharedSettings.BOOST_WINDOW_SETTING,
             ServerlessSharedSettings.SEARCH_POWER_SETTING,
+            ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING,
+            ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING,
             ServerlessSharedSettings.BWC_PROJECT_ID,
             ServerlessSharedSettings.PROJECT_ID,
             ServerlessSharedSettings.PROJECT_TYPE

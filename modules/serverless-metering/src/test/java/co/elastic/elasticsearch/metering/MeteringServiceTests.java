@@ -127,6 +127,8 @@ public class MeteringServiceTests extends ESTestCase {
                 ServerlessSharedSettings.PROJECT_ID,
                 MeteringService.REPORT_PERIOD,
                 ServerlessSharedSettings.BOOST_WINDOW_SETTING,
+                ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING,
+                ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING,
                 ServerlessSharedSettings.SEARCH_POWER_SETTING
             )
         );

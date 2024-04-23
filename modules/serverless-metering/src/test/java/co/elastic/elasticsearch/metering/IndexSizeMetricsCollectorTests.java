@@ -49,6 +49,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -60,8 +62,8 @@ import static org.mockito.Mockito.when;
 
 public class IndexSizeMetricsCollectorTests extends ESTestCase {
     protected final ClusterSettings clusterSettings = new ClusterSettings(
-        Settings.builder().put(SEARCH_POWER_SETTING.getKey(), 100).build(),
-        Set.of(SEARCH_POWER_SETTING)
+        Settings.builder().put(SEARCH_POWER_MIN_SETTING.getKey(), 100).put(SEARCH_POWER_MAX_SETTING.getKey(), 200).build(),
+        Set.of(SEARCH_POWER_MIN_SETTING, SEARCH_POWER_MAX_SETTING, SEARCH_POWER_SETTING)
     );
 
     public void testGetMetrics() throws IOException {

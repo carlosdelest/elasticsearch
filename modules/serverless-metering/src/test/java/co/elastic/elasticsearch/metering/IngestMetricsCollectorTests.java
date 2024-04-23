@@ -28,14 +28,24 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.BOOST_WINDOW_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 
 public class IngestMetricsCollectorTests extends ESTestCase {
+    private final int spMin = 100;
+    private final int spMax = 200;
+
+    private final Settings settings = Settings.builder()
+        .put(SEARCH_POWER_MIN_SETTING.getKey(), spMin)
+        .put(SEARCH_POWER_MAX_SETTING.getKey(), spMax)
+        .put(BOOST_WINDOW_SETTING.getKey(), TimeValue.timeValueDays(5))
+        .build();
     protected final ClusterSettings clusterSettings = new ClusterSettings(
-        Settings.builder().put(SEARCH_POWER_SETTING.getKey(), 100).put(BOOST_WINDOW_SETTING.getKey(), TimeValue.timeValueDays(5)).build(),
-        Set.of(SEARCH_POWER_SETTING, BOOST_WINDOW_SETTING)
+        settings,
+        Set.of(SEARCH_POWER_MIN_SETTING, SEARCH_POWER_MAX_SETTING, BOOST_WINDOW_SETTING, SEARCH_POWER_SETTING)
     );
 
     public void testMetricIdUniqueness() {
@@ -137,5 +147,4 @@ public class IngestMetricsCollectorTests extends ESTestCase {
         assertThat(valueSum, equalTo(totalOps * docSize));
         assertThat(itemsLeft, is(0));
     }
-
 }
