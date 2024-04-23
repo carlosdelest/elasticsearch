@@ -67,7 +67,6 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
             doAnswer(invocation -> {
                 PutShutdownNodeAction.Request putRequest = invocation.getArgument(1, PutShutdownNodeAction.Request.class);
                 assertEquals(timeout, putRequest.ackTimeout());
-                assertEquals(timeout, putRequest.timeout());
                 assertEquals(timeout, putRequest.masterNodeTimeout());
                 assertThat(putRequest.getNodeId(), equalTo(nodeId));
                 assertThat(putRequest.getType(), equalTo(SingleNodeShutdownMetadata.Type.SIGTERM));

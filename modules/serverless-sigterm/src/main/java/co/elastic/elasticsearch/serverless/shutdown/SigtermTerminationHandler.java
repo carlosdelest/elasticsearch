@@ -147,7 +147,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
             timeout
         );
         request.masterNodeTimeout(timeout);
-        request.timeout(timeout);
+        request.ackTimeout(timeout);
         assert request.validate() == null;
         return request;
     }

@@ -124,7 +124,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
         var countDownListener = new CountDownActionListener(3, tierResponsesListener);
 
         TimeValue timeoutPerMetric = TimeValue.timeValueMillis(
-            Math.max((long) (request.timeout().millis() * PER_METRIC_TIMEOUT_SHARE), MIN_TIMEOUT_PER_METRIC_MS)
+            Math.max((long) (request.ackTimeout().millis() * PER_METRIC_TIMEOUT_SHARE), MIN_TIMEOUT_PER_METRIC_MS)
         );
 
         // execute requests for every tier, note: log in debug to not flood the production log with stack traces
@@ -184,11 +184,11 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             request,
             ListenerTimeouts.wrapWithTimeout(
                 threadPool,
-                request.timeout(),
+                request.ackTimeout(),
                 threadPool.generic(),
                 ActionListener.runAfter(listener, () -> countDownActionListener.onResponse(null)),
                 (ignore) -> {
-                    listener.onFailure(new ElasticsearchTimeoutException("timed out after [" + request.timeout() + "]"));
+                    listener.onFailure(new ElasticsearchTimeoutException("timed out after [" + request.ackTimeout() + "]"));
                     countDownActionListener.onResponse(null);
                 }
             )
