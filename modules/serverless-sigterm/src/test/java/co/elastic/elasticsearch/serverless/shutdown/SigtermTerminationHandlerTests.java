@@ -35,6 +35,7 @@ import org.elasticsearch.xpack.shutdown.PutShutdownNodeAction;
 import org.elasticsearch.xpack.shutdown.SingleNodeShutdownStatus;
 
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -54,8 +55,8 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
         value = "co.elastic.elasticsearch.serverless.shutdown.SigtermTerminationHandler:INFO"
     )
     public void testShutdownCompletesImmediate() {
-        final TimeValue pollInterval = TimeValue.parseTimeValue(randomPositiveTimeValue(), this.getTestName());
-        final TimeValue timeout = TimeValue.parseTimeValue(randomPositiveTimeValue(), this.getTestName());
+        final TimeValue pollInterval = tmpRandomPositiveTimeValue();
+        final TimeValue timeout = tmpRandomPositiveTimeValue();
         final String nodeId = randomAlphaOfLength(10);
         TestThreadPool threadPool = new TestThreadPool(this.getTestName());
 
@@ -127,6 +128,11 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
         } finally {
             threadPool.shutdownNow();
         }
+    }
+
+    @Deprecated(forRemoval = true) // replace with ESTestCase#randomTimeValue after https://github.com/elastic/elasticsearch/pull/107689
+    private static TimeValue tmpRandomPositiveTimeValue() {
+        return new TimeValue(between(1, 1000), randomFrom(TimeUnit.values()));
     }
 
     public void testShutdownStalledRequiresPolling() {
