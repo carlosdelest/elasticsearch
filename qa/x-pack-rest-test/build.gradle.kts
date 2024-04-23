@@ -105,7 +105,10 @@ tasks {
             "enrich/10_basic/*",
 
             // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1634
-            "ml/p_value_significant_term_score/Test p_value significant terms score"
+            "ml/p_value_significant_term_score/Test p_value significant terms score",
+
+            // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1777
+            "ml/inference_crud/Test force delete given model with alias referenced by pipeline"
         ).joinToString(","))
     }
 }
