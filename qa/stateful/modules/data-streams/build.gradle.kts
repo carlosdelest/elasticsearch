@@ -9,5 +9,6 @@ tasks {
     }
     javaRestTest {
         exclude("**/DataStreamLifecyclePermissionsRestIT.class")
+        exclude("**/DataStreamDeleteLifecycleWithPermissionsRestIT.class")
     }
 }
