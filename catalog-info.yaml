@@ -373,8 +373,6 @@ spec:
       teams:
         elasticsearch-team:
           access_level: MANAGE_BUILD_AND_READ
-        enterprise-search:
-          access_level: BUILD_AND_READ
         cloud-observability:
           access_level: BUILD_AND_READ
         control-plane-serverless:
@@ -417,8 +415,6 @@ spec:
       teams:
         elasticsearch-team:
           access_level: MANAGE_BUILD_AND_READ
-        enterprise-search:
-          access_level: BUILD_AND_READ
         cloud-observability:
           access_level: BUILD_AND_READ
         control-plane-serverless:
