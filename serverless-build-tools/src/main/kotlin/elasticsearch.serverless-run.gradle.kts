@@ -19,6 +19,8 @@ val runCluster by testClusters.registering {
     setting("xpack.security.enabled", "true")
     setting("xpack.watcher.enabled", "false")
     setting("xpack.security.operator_privileges.enabled", "true")
+    setting("serverless.sigterm.timeout", "1s")
+    setting("serverless.sigterm.poll_interval", "1s")
     keystore("bootstrap.password", "password")
     extraConfigFile("operator_users.yml", file("${rootDir}/serverless-build-tools/src/main/resources/operator_users.yml"));
     extraConfigFile("service_tokens", file("${rootDir}/serverless-build-tools/src/main/resources/service_tokens"));
