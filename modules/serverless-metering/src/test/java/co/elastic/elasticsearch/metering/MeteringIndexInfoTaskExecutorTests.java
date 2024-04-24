@@ -31,7 +31,6 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.features.FeatureService;
 import org.elasticsearch.persistent.PersistentTaskState;
 import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
@@ -48,7 +47,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -330,7 +328,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
                     .setReason("shutdown for a unit test")
                     .setType(type)
                     .setStartedAtMillis(randomNonNegativeLong())
-                    .setGracePeriod(type == SingleNodeShutdownMetadata.Type.SIGTERM ? tmpRandomTimeValue() : null)
+                    .setGracePeriod(type == SingleNodeShutdownMetadata.Type.SIGTERM ? randomTimeValue() : null)
                     .build()
             )
         );
@@ -338,11 +336,6 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
         return ClusterState.builder(clusterState)
             .metadata(Metadata.builder(clusterState.metadata()).putCustom(NodesShutdownMetadata.TYPE, nodesShutdownMetadata).build())
             .build();
-    }
-
-    @Deprecated(forRemoval = true) // replace with ESTestCase#randomTimeValue after https://github.com/elastic/elasticsearch/pull/107689
-    private static TimeValue tmpRandomTimeValue() {
-        return new TimeValue(between(0, 1000), randomFrom(TimeUnit.values()));
     }
 
     private ClusterState stateWithLocalAssignedIndexSizeTask(ClusterState clusterState) {
