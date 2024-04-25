@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.serverless.health;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 
+import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.health.Diagnosis;
@@ -27,10 +28,13 @@ import org.elasticsearch.health.HealthIndicatorImpact;
 import org.elasticsearch.health.HealthIndicatorResult;
 import org.elasticsearch.health.HealthStatus;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.test.transport.MockTransportService;
 
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.CLUSTER_TOTAL_SHARDS_PER_NODE_SETTING;
 import static org.elasticsearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_SHARDS_PER_NODE_SETTING;
@@ -42,6 +46,7 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
         var plugins = new HashSet<>(super.nodePlugins());
+        plugins.add(MockTransportService.TestPlugin.class);
         plugins.add(ServerlessShardsHealthPlugin.class);
         return plugins;
     }
@@ -112,6 +117,57 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
         // Start one more search node so everything can go green
         startSearchNode();
         waitForStatusAndGet(HealthStatus.GREEN);
+    }
+
+    public void testReplicaShardsForNewPrimariesAvailabilityOnServerless() throws Exception {
+        startMasterOnlyNode();
+        startIndexNode();
+        startSearchNode();
+
+        // Shard health treats all replicas allocated as a "everything is green" sort of situation.
+        // However, the replicas.areAllAvailable() correctly ignores replicas that are initializing.
+        // We need it to look further in more detail, so we need to force there to be at least one
+        // unassigned replica. We create an index with two replicas (there is only one search node)
+        // for this purpose.
+        createIndex("other", 1, 2);
+
+        // We hook in to the transport service and catch the "shard started" event for the
+        // soon-to-be-created "myindex" index. We want to delay it so the primary stays in the
+        // "INITIALIZING" state until we release it.
+        var masterTransportService = MockTransportService.getInstance(internalCluster().getMasterName());
+        CountDownLatch latch = new CountDownLatch(1);
+        masterTransportService.<ShardStateAction.StartedShardEntry>addRequestHandlingBehavior(
+            ShardStateAction.SHARD_STARTED_ACTION_NAME,
+            (handler, request, channel, task) -> {
+                if (request.toString().contains("[myindex]")) {
+                    latch.await(30, TimeUnit.SECONDS);
+                }
+                handler.messageReceived(request, channel, task);
+            }
+        );
+
+        // Create the index (don't bother waiting for active shards because we've delayed them
+        // until release the latch.
+        String indexName = "myindex";
+        client().admin()
+            .indices()
+            .prepareCreate(indexName)
+            .setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 1))
+            .setWaitForActiveShards(0)
+            .get();
+
+        // The health should be yellow instead of red, even though the replica is not allocated,
+        // because we treat replicas for "INITIALIZING" primaries as "special"
+        assertBusy(() -> {
+            GetHealthAction.Response health = client().execute(GetHealthAction.INSTANCE, new GetHealthAction.Request(true, 10)).get();
+            HealthIndicatorResult hir = health.findIndicator("shards_availability");
+            assertThat(hir.status(), equalTo(HealthStatus.YELLOW));
+        });
+
+        // Release the latch so the primary can move from INITIALIZING -> STARTED
+        latch.countDown();
+        // We should go green for the "myindex" index finally.
+        ensureGreen(indexName);
     }
 
     public void testIncreaseClusterShardLimit() throws Exception {
