@@ -1,0 +1,55 @@
+---
+"Rollover with conditions only allowed for operator":
+  - skip:
+      features: headers
+  - requires:
+      test_runner_features: allowed_warnings
+
+  - do:
+      allowed_warnings:
+        - "index template [my-template] has index patterns [data-*] matching patterns from existing older templates [global] with patterns (global => [*]); this template [my-template] will take precedence during new index creation"
+      indices.put_index_template:
+        name: my-template
+        body:
+          index_patterns: [data-*]
+          data_stream: {}
+
+  - do:
+      indices.create_data_stream:
+        name: data-stream-for-rollover
+  - is_true: acknowledged
+
+  - do:
+      indices.rollover:
+        alias: "data-stream-for-rollover"
+
+  - match: { old_index: "/\\.ds-data-stream-for-rollover-(\\d{4}\\.\\d{2}\\.\\d{2}-)?000001/" }
+  - match: { new_index: "/\\.ds-data-stream-for-rollover-(\\d{4}\\.\\d{2}\\.\\d{2}-)?000002/" }
+  - match: { rolled_over: true }
+  - match: { dry_run: false }
+
+  - do:
+      catch: bad_request
+      indices.rollover:
+        alias: "data-stream-for-rollover"
+        body:
+          conditions:
+            max_docs: 1
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "rollover with conditions is not supported in serverless mode" }
+
+  - do:
+      # Use an operator user, which should allow conditions
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" }
+      indices.rollover:
+        alias: "data-stream-for-rollover"
+        body:
+          conditions:
+            max_age: "0s"
+
+  - match: { old_index: "/\\.ds-data-stream-for-rollover-(\\d{4}\\.\\d{2}\\.\\d{2}-)?000002/" }
+  - match: { new_index: "/\\.ds-data-stream-for-rollover-(\\d{4}\\.\\d{2}\\.\\d{2}-)?000003/" }
+  - match: { rolled_over: true }
+  - match: { dry_run: false }
