@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.api.filtering;
 
+import co.elastic.elasticsearch.api.validation.DataStreamLifecycleValidationActionFilter;
 import co.elastic.elasticsearch.api.validation.PublicSettingsValidationActionFilter;
 import co.elastic.elasticsearch.api.validation.ReindexRequestValidator;
 
@@ -51,7 +52,8 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 new GetIndexActionSettingsFilter(context, indexScopedSettings),
                 new GetSettingsActionSettingsFilter(context, indexScopedSettings),
                 new PublicSettingsValidationActionFilter(context, indexScopedSettings),
-                new ReindexRequestValidator()
+                new ReindexRequestValidator(),
+                new DataStreamLifecycleValidationActionFilter(context)
             )
         );
 

@@ -8,7 +8,6 @@ tasks {
         systemProperty("yaml.rest.tests.set_num_nodes", "false")
     }
     javaRestTest {
-        exclude("**/DataStreamLifecyclePermissionsRestIT.class")
         exclude("**/DataStreamDeleteLifecycleWithPermissionsRestIT.class")
     }
 }

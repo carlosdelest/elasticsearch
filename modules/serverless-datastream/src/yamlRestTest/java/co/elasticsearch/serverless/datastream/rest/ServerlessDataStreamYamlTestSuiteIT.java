@@ -27,6 +27,7 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
+import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
@@ -37,11 +38,18 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 @TimeoutSuite(millis = 40 * TimeUnits.MINUTE)
 public class ServerlessDataStreamYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
 
+    private static final String OPERATOR_USER = "x_pack_rest_user";
+    private static final String OPERATOR_PASSWORD = "x-pack-test-password";
+    private static final String NOT_OPERATOR_USER = "not_operator";
+    private static final String NOT_OPERATOR_PASSWORD = "not_operator_password";
+
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
-        .user("admin-user", "x-pack-test-password")
+        .setting("xpack.security.operator_privileges.enabled", "true")
+        .user(OPERATOR_USER, OPERATOR_PASSWORD, User.ROOT_USER_ROLE, true)
+        .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.ROOT_USER_ROLE, false)
         .build();
 
     public ServerlessDataStreamYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
@@ -74,7 +82,13 @@ public class ServerlessDataStreamYamlTestSuiteIT extends ESClientYamlSuiteTestCa
 
     @Override
     protected Settings restClientSettings() {
-        String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
+        String token = basicAuthHeaderValue(NOT_OPERATOR_USER, new SecureString(NOT_OPERATOR_PASSWORD.toCharArray()));
+        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
+    }
+
+    @Override
+    protected Settings restAdminSettings() {
+        String token = basicAuthHeaderValue(OPERATOR_USER, new SecureString(OPERATOR_PASSWORD.toCharArray()));
         return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
     }
 }

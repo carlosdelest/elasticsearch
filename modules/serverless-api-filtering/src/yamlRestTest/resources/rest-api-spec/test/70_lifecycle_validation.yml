@@ -1,0 +1,59 @@
+---
+"Create component template with disabled lifecycle":
+
+  - do:
+      catch: bad_request
+      cluster.put_component_template:
+        name: test-component-template
+        body:
+          template:
+            lifecycle:
+              data_retention: "10d"
+              enabled: false
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Data stream lifecycle cannot be disabled in serverless, please remove 'enabled=false'" }
+
+---
+"Create index template with disabled lifecycle":
+
+  - do:
+      catch: bad_request
+      indices.put_index_template:
+        name: test-composable-template
+        body:
+          index_patterns: "my-data-stream"
+          template:
+            lifecycle:
+              data_retention: "10d"
+              enabled: false
+          data_stream: {}
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Data stream lifecycle cannot be disabled in serverless, please remove 'enabled=false'" }
+
+---
+"Disable lifecycle on data stream":
+  - do:
+      indices.put_index_template:
+        name: ds-template
+        body:
+          index_patterns: "my-data-stream"
+          data_stream: { }
+  - is_true: acknowledged
+
+  - do:
+      indices.create_data_stream:
+        name: my-data-stream
+  - is_true: acknowledged
+
+  - do:
+      catch: bad_request
+      indices.put_data_lifecycle:
+        name: "my-data-stream"
+        body:
+          enabled: false
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Data stream lifecycle cannot be disabled in serverless, please remove 'enabled=false'" }

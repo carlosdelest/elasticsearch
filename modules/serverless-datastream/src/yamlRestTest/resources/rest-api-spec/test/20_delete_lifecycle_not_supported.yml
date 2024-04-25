@@ -1,0 +1,33 @@
+---
+"Delete lifecycle on data stream":
+  - skip:
+        features: [ "headers" ]
+  - do:
+      indices.put_index_template:
+        name: ds-template
+        body:
+          index_patterns: "my-data-stream"
+          template:
+            lifecycle: { }
+          data_stream: { }
+  - is_true: acknowledged
+
+  - do:
+      indices.create_data_stream:
+        name: my-data-stream
+  - is_true: acknowledged
+
+  - do:
+      catch: gone
+      indices.delete_data_lifecycle:
+        name: "my-data-stream"
+
+  - match: { status: 410 }
+  - match: { error.root_cause.0.type: "api_not_available_exception" }
+  - match: { error.root_cause.0.reason: "Request for uri [/_data_stream/my-data-stream/_lifecycle?error_trace=true] with method [DELETE] exists but is not available when running in serverless mode" }
+
+  - do:
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
+      indices.delete_data_lifecycle:
+        name: "my-data-stream"
+  - is_true: acknowledged
