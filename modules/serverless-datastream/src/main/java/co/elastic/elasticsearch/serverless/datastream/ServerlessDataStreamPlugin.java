@@ -27,6 +27,8 @@ import org.elasticsearch.plugins.Plugin;
 
 import java.util.List;
 
+import static co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetention.DATA_STREAMS_DEFAULT_RETENTION_SETTING;
+import static co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetention.DATA_STREAMS_MAX_RETENTION_SETTING;
 import static org.elasticsearch.action.datastreams.autosharding.DataStreamAutoShardingService.DATA_STREAMS_AUTO_SHARDING_ENABLED;
 import static org.elasticsearch.common.settings.Setting.boolSetting;
 import static org.elasticsearch.index.mapper.SourceFieldMapper.LOSSY_PARAMETERS_ALLOWED_SETTING_NAME;
@@ -78,7 +80,9 @@ public class ServerlessDataStreamPlugin extends Plugin {
             DATA_STREAMS_LIFECYCLE_ONLY_MODE,
             FAILURE_STORE_REFRESH_INTERVAL_SETTING,
             DATA_STREAM_AUTO_SHARDING_ENABLED_SETTING,
-            SOURCE_MAPPER_LOSSY_PARAMETERS_ALLOWED_SETTING
+            SOURCE_MAPPER_LOSSY_PARAMETERS_ALLOWED_SETTING,
+            DATA_STREAMS_DEFAULT_RETENTION_SETTING,
+            DATA_STREAMS_MAX_RETENTION_SETTING
         );
     }
 }

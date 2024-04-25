@@ -18,4 +18,12 @@
 module org.elasticsearch.serverless.datastream {
     requires org.elasticsearch.server;
     requires org.elasticsearch.base;
+    requires org.elasticsearch.logging;
+    requires org.apache.logging.log4j;
+
+    exports co.elastic.elasticsearch.serverless.datastream to org.elasticsearch.server;
+
+    provides org.elasticsearch.cluster.metadata.DataStreamFactoryRetention
+        with
+            co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetention;
 }
