@@ -36,5 +36,7 @@ steps:
         SERVICE_VERSION: ${SERVICE_VERSION:0:12}
         SERVICE_TYPE_FIELD: kubernetes.container.name
         CHECK_ALERTS: true
+        CHECK_SLO: true
+        CHECK_SLO_TAG: "quality-gate"
         CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
         CHECK_ALERTS_TRANSIENT_LOOKBACK: 30m # 30 minutes is the default lookback for transient alerts
