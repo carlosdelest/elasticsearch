@@ -56,6 +56,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.elasticsearch.server.cli.ProcessUtil.nonInterruptibleVoid;
 import static org.elasticsearch.server.cli.ServerlessServerCli.DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP;
 import static org.hamcrest.Matchers.arrayContaining;
 import static org.hamcrest.Matchers.contains;
@@ -90,6 +91,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Files.createDirectories(cpuShares.getParent());
         Files.writeString(cpuShares, "1024\n"); // mimic the extra whitespace that may appear in the cgroup fs files
         availableProcessors = 2;
+        mockServer.waitForAction = null;
+        mockServer.stopAction = null;
+        mockServer.forceStopAction = null;
     }
 
     public void testDefaultsOverridden() throws Exception {
@@ -585,6 +589,64 @@ public class ServerlessServerCliTests extends CommandTestCase {
         shutdownThread.join(timeoutInMillis);
     }
 
+    public void testFastShutdownAlreadyExists() throws Exception {
+        Path fastShutdownMarker = createTempFile();
+        var serverlessCli = executeWithFastShutdown(fastShutdownMarker, null);
+
+        // now shut it down. If force stop is not called we will block indefinitely in close and trip the timeout waiting on this thread
+        var shutdownThread = new Thread(checked(serverlessCli::close));
+        shutdownThread.start();
+
+        shutdownThread.join(TimeUnit.SECONDS.toMillis(10));
+    }
+
+    public void testFastShutdownCreatedDuringShutdown() throws Exception {
+        Path fastShutdownMarker = createTempDir().resolve("shut-it-down");
+
+        var stopRunningLatch = new CountDownLatch(1);
+        var serverlessCli = executeWithFastShutdown(fastShutdownMarker, stopRunningLatch);
+
+        // now shut it down. If force stop is not called we will block indefinitely in close and trip the timeout waiting on this thread
+        var shutdownThread = new Thread(checked(serverlessCli::close));
+        shutdownThread.start();
+
+        // wait until we are actually in stop before creating the file
+        assertTrue(stopRunningLatch.await(10, TimeUnit.SECONDS));
+        Files.createFile(fastShutdownMarker);
+
+        shutdownThread.join(TimeUnit.SECONDS.toMillis(10));
+    }
+
+    private ServerlessServerCli executeWithFastShutdown(Path fastShutdownMarker, CountDownLatch stopRunningLatch) {
+        sysprops.put(ServerlessServerCli.FAST_SHUTDOWN_MARKER_FILE_SYSPROP, fastShutdownMarker.toString());
+
+        var executeBlockLatch = new CountDownLatch(1);
+        var executeRunningLatch = new CountDownLatch(1);
+        var stopLatch = new CountDownLatch(1);
+        mockServer.waitForAction = () -> {
+            executeRunningLatch.countDown();
+            nonInterruptibleVoid(executeBlockLatch::await);
+        };
+        mockServer.stopAction = () -> {
+            if (stopRunningLatch != null) {
+                stopRunningLatch.countDown();
+            }
+            nonInterruptibleVoid(stopLatch::await);
+        };
+        mockServer.forceStopAction = () -> {
+            executeBlockLatch.countDown();
+            stopLatch.countDown();
+        };
+        var serverlessCli = newCommand();
+        var executeThread = new Thread(checked(() -> execute(serverlessCli)));
+        executeThread.start();
+
+        // wait for the process to be "started"
+        nonInterruptibleVoid(executeRunningLatch::await);
+
+        return serverlessCli;
+    }
+
     private static Settings emptySettings() {
         return Settings.builder().build();
     }
@@ -622,6 +684,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
     private class MockServerlessProcess extends ServerProcess {
         ServerArgs args;
+        volatile Runnable waitForAction = null;
+        volatile Runnable stopAction = null;
+        volatile Runnable forceStopAction = null;
 
         MockServerlessProcess() {
             super(null, null);
@@ -637,11 +702,25 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         @Override
         public int waitFor() {
+            if (waitForAction != null) {
+                waitForAction.run();
+            }
             return 0;
         }
 
         @Override
-        public void stop() {}
+        public void stop() {
+            if (stopAction != null) {
+                stopAction.run();
+            }
+        }
+
+        @Override
+        public void forceStop() {
+            if (forceStopAction != null) {
+                forceStopAction.run();
+            }
+        }
     }
 
     @Override

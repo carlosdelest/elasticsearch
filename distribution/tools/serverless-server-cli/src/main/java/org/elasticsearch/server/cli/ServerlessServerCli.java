@@ -61,6 +61,7 @@ import java.util.zip.ZipOutputStream;
 public class ServerlessServerCli extends ServerCli {
 
     static final String PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP = "es.serverless.processors_overcommit_factor";
+    static final String FAST_SHUTDOWN_MARKER_FILE_SYSPROP = "es.serverless.fast_shutdown_marker_file";
     static final String APM_PROJECT_ID_SETTING = "telemetry.agent.global_labels.project_id";
     static final String APM_PROJECT_TYPE_SETTING = "telemetry.agent.global_labels.project_type";
     static final String DIAGNOSTICS_TARGET_PATH_SYSPROP = "es.serverless.path.diagnostics";
@@ -74,13 +75,20 @@ public class ServerlessServerCli extends ServerCli {
 
     static final CheckedConsumer<Integer, UserException> NO_OP_EXIT_ACTION = exitCode -> {};
     CheckedConsumer<Integer, UserException> onExitDiagnosticsAction = NO_OP_EXIT_ACTION;
+    volatile FastShutdownFileWatcher fastShutdownWatcher = null;
 
     final AtomicReference<CountDownLatch> serverlessCliFinishedLatch = new AtomicReference<>();
 
     @Override
     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) throws Exception {
+        terminal.println("Starting Serverless Elasticsearch...");
+
+        if (processInfo.sysprops().containsKey(FAST_SHUTDOWN_MARKER_FILE_SYSPROP)) {
+            var file = processInfo.sysprops().get(FAST_SHUTDOWN_MARKER_FILE_SYSPROP);
+            fastShutdownWatcher = new FastShutdownFileWatcher(terminal, Paths.get(file), this::getServer);
+        }
+
         try {
-            terminal.println("Starting Serverless Elasticsearch...");
 
             Path defaultsFile = env.configFile().resolve("serverless-default-settings.yml");
             if (Files.exists(defaultsFile) == false) {
@@ -127,6 +135,9 @@ public class ServerlessServerCli extends ServerCli {
 
     @Override
     public void close() {
+        if (fastShutdownWatcher != null) {
+            fastShutdownWatcher.start();
+        }
         super.close();
         try {
             var latch = serverlessCliFinishedLatch.get();
@@ -135,6 +146,11 @@ public class ServerlessServerCli extends ServerCli {
             }
         } catch (InterruptedException e) {
             throw new AssertionError("Thread got interrupted while waiting for the serverless CLI process to shutdown.");
+        }
+        if (fastShutdownWatcher != null) {
+            // stop this watcher to kill its own thread. it doesn't matter in the real world, but without it tests have thread leaks.
+            // ideally there would be a "watch for the file one time" option so it would self-stop
+            fastShutdownWatcher.stop();
         }
     }
 
@@ -242,7 +258,7 @@ public class ServerlessServerCli extends ServerCli {
     }
 
     @Override
-    protected ServerProcess startServer(Terminal terminal, ProcessInfo processInfo, ServerArgs args) throws Exception {
+    protected synchronized ServerProcess startServer(Terminal terminal, ProcessInfo processInfo, ServerArgs args) throws Exception {
         var tempDir = ServerProcessUtils.setupTempDir(processInfo);
         var jvmOptions = JvmOptionsParser.determineJvmOptions(args, processInfo, tempDir);
 
@@ -352,4 +368,5 @@ public class ServerlessServerCli extends ServerCli {
     protected int getAvailableProcessors() {
         return Runtime.getRuntime().availableProcessors();
     }
+
 }
