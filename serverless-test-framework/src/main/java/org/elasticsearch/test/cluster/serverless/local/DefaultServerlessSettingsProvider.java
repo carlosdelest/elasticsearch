@@ -17,11 +17,14 @@
 
 package org.elasticsearch.test.cluster.serverless.local;
 
+import com.carrotsearch.randomizedtesting.RandomizedContext;
+
 import org.elasticsearch.test.cluster.local.DefaultSettingsProvider;
 import org.elasticsearch.test.cluster.local.LocalClusterSpec;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 public class DefaultServerlessSettingsProvider extends DefaultSettingsProvider {
     private static final List<String> EXCLUDED_SETTINGS = List.of("cluster.deprecation_indexing.enabled");
@@ -29,6 +32,8 @@ public class DefaultServerlessSettingsProvider extends DefaultSettingsProvider {
     @Override
     public Map<String, String> get(LocalClusterSpec.LocalNodeSpec nodeSpec) {
         Map<String, String> defaultSettings = super.get(nodeSpec);
+        final Random random = RandomizedContext.current().getRandom();
+        defaultSettings.put("stateless.upload.delayed", String.valueOf(random.nextBoolean()));
         EXCLUDED_SETTINGS.forEach(defaultSettings::remove);
         return defaultSettings;
     }
