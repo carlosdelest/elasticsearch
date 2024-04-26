@@ -1,25 +1,2 @@
-/*
- * ELASTICSEARCH CONFIDENTIAL
- * __________________
- *
- * Copyright Elasticsearch B.V. All rights reserved.
- *
- * NOTICE:  All information contained herein is, and remains
- * the property of Elasticsearch B.V. and its suppliers, if any.
- * The intellectual and technical concepts contained herein
- * are proprietary to Elasticsearch B.V. and its suppliers and
- * may be covered by U.S. and Foreign Patents, patents in
- * process, and are protected by trade secret or copyright
- * law.  Dissemination of this information or reproduction of
- * this material is strictly forbidden unless prior written
- * permission is obtained from Elasticsearch B.V.
- */
-
-tasks {
-    yamlRestTest {
-        systemProperty("tests.rest.blacklist", listOf(
-            // Disabled _source not supported in Serverless
-            "aggregations/top_hits_nested_metric/top_hits aggregation with nested documents and disabled _source",
-        ).joinToString(","))
-    }
-}
+// Gradle throws a deprecation warning on non existing project directories
+// Therefore we keep this emmpty build script here
