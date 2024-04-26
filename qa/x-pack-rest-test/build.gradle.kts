@@ -98,6 +98,9 @@ tasks {
             // Muted in severless, awaitsfix https://github.com/elastic/elasticsearch-serverless/issues/826
             "dlm/10_usage/Test data stream lifecycle usage stats",
 
+            // Muted in severless, awaitsfix https://github.com/elastic/elasticsearch-serverless/issues/1833
+            "ml/frequent_item_sets_agg/*",
+
             // Enrich stats API is not available on Serverless
             "enrich/10_basic/*",
 
