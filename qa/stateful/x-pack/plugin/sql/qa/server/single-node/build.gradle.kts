@@ -30,5 +30,7 @@ tasks {
         exclude("**/RestSqlIT.class")
         // AwaitsFix: https://github.com/elastic/elasticsearch-serverless/issues/1611
         exclude("**/JdbcShardFailureIT.class")
+        // Lossy params in source mapper are not allowed in Serverless but included in these tests
+        exclude("**/FieldExtractorIT.class")
     }
 }

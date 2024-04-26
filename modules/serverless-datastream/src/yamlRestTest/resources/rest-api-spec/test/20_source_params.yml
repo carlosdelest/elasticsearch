@@ -1,0 +1,57 @@
+---
+"Source with includes failure":
+  - do:
+      catch: /Parameter \[includes\] is not allowed in source/
+      indices.create:
+        index: test
+        body:
+          mappings:
+            _source:
+              includes:
+               - name
+            properties:
+              name:
+                type: keyword
+
+---
+"Source with excludes failure":
+  - do:
+      catch: /Parameter \[excludes\] is not allowed in source/
+      indices.create:
+        index: test
+        body:
+          mappings:
+            _source:
+              excludes:
+                - name
+            properties:
+              name:
+                type: keyword
+
+---
+"Source with enabled failure":
+  - do:
+      catch: /Parameter \[enabled\] is not allowed in source/
+      indices.create:
+        index: test
+        body:
+          mappings:
+            _source:
+              enabled: false
+            properties:
+              name:
+                type: keyword
+
+---
+"Source with disabled mode failure":
+  - do:
+      catch: /Parameter \[mode=disabled\] is not allowed in source/
+      indices.create:
+        index: test
+        body:
+          mappings:
+            _source:
+              mode: disabled
+            properties:
+              name:
+                type: keyword
