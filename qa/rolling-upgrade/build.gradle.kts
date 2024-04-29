@@ -17,18 +17,11 @@
 
 plugins {
     id("elasticsearch.internal-java-rest-test")
+    id("elasticsearch.serverless-bwc")
 }
 
 dependencies {
     javaRestTestImplementation(testArtifact(xpackModule("plugin")))
     javaRestTestImplementation(testArtifact(xpackModule("core")))
     javaRestTestImplementation(testArtifact("org.elasticsearch.plugin.security.qa:service-account", "javaRestTest"))
-}
-
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-        usesBwcDistribution()
-        onlyIf("disabled") { !System.getProperty("tests.upgrade.skip", "false").toBoolean() }
-    }
 }

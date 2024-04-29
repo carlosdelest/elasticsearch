@@ -36,8 +36,11 @@ fun DependencyHandler.testArtifact(dependency: ModuleDependency, sourceSet: Stri
 }
 
 fun StandaloneRestIntegTestTask.usesDefaultDistribution() {
-    val closure = this.extensions.extraProperties.get("usesDefaultDistribution") as Closure<*>
-    closure.call(this)
+    if (!this.extra.has("usingDefaultDistro")) {
+        val closure = this.extra.get("usesDefaultDistribution") as Closure<*>
+        closure.call(this)
+        this.extra.set("usingDefaultDistro", true)
+    }
 }
 
 fun StandaloneRestIntegTestTask.usesBwcDistribution() {
@@ -49,6 +52,12 @@ fun StandaloneRestIntegTestTask.usesBwcDistribution() {
     // Fetch the actual "stack" version of the BWC distribution and pass it into the tests as a system property
     val systemProperties = extensions.getByType(SystemPropertyCommandLineArgumentProvider::class.java)
     systemProperties.systemProperty("tests.serverless.bwc_stack_version") {
-        project.tasks.getByPath(":distribution:bwc:checkoutBwcBranch").extra["stackVersion"].toString()
+        // Later versions of IntelliJ resolve argument providers at configuration time, so we need to be lenient here
+        project.tasks.getByPath(":distribution:bwc:checkoutBwcBranch").extra
+            .runCatching { get("stackVersion") }.getOrElse { "" }
+            .toString()
     }
+
+    // Disable BWC tests
+    onlyIf("disabled") { !System.getProperty("tests.upgrade.skip", "false").toBoolean() }
 }

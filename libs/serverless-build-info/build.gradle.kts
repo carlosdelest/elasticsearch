@@ -10,12 +10,6 @@ dependencies {
     testImplementation("org.elasticsearch.test:framework")
 }
 
-tasks {
-    yamlRestTest {
-        usesDefaultDistribution()
-    }
-}
-
 restResources {
     restApi {
         include ("_common","nodes.info")

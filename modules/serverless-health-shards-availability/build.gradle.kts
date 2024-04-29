@@ -40,9 +40,3 @@ dependencies {
     implementation("org.elasticsearch:server")
     internalClusterTestImplementation(testArtifact(project(":modules:stateless"), "internalClusterTest"))
 }
-
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}

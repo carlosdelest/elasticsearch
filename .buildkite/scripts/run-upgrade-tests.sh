@@ -51,7 +51,7 @@ for commit in ${UNIQUE_COMMITS[@]}; do
   PIPELINE+=$(cat <<EOF
 
       - label: ":java: Run upgrade tests for '$(environments_for $commit)'"
-        command: ".buildkite/scripts/run-gradle.sh :qa:rolling-upgrade:check -Dtests.bwc.tag=${commit}"
+        command: ".buildkite/scripts/run-gradle.sh bwcTest -Dtests.bwc.tag=${commit}"
         agents:
           provider: "gcp"
           machineType: "n1-standard-16"

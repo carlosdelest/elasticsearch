@@ -23,9 +23,3 @@ dependencies {
     javaRestTestImplementation(testArtifact(xpackModule("plugin")))
     javaRestTestImplementation(testArtifact(xpackModule("core")))
 }
-
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}

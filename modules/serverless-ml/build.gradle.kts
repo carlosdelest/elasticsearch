@@ -32,12 +32,3 @@ dependencies {
     yamlRestTestImplementation(testArtifact(xpackModule("core")))
     yamlRestTestImplementation(testArtifact(xpackModule("ml")))
 }
-
-tasks {
-    yamlRestTest {
-        usesDefaultDistribution()
-    }
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}

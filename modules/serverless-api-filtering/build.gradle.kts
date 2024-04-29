@@ -25,10 +25,3 @@ dependencies {
     compileOnly(xpackModule("core"))
     compileOnly(xpackModule("enrich"))
 }
-
-tasks {
-    yamlRestTest {
-        usesDefaultDistribution()
-    }
-}
-

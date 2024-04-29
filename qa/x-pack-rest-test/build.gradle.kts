@@ -25,7 +25,6 @@ restResources {
 
 tasks {
     yamlRestTest {
-        usesDefaultDistribution()
         systemProperty("tests.rest.blacklist", listOf(
             // aggregate-metrics is sensitive to shards/replicas settings
             "aggregate-metrics/*/*",

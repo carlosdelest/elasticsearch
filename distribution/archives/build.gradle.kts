@@ -104,7 +104,6 @@ distribution_archives {
                     exclude("*/modules/snapshot-based-recoveries")
                     // this jar is redefined, see libs/serverless-xpack-template-resources
                     exclude("*/modules/x-pack-core/x-pack-template-resources*.jar")
-                    exclude("*/modules/x-pack-esql")
                     exclude("*/modules/rest-root")
                     exclude("*/modules/health-shards-availability")
                     exclude("*/modules/x-pack-deprecation")

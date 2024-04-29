@@ -1,3 +1,5 @@
+import org.elasticsearch.gradle.testclusters.StandaloneRestIntegTestTask
+
 allprojects {
     pluginManager.withPlugin("elasticsearch.internal-yaml-rest-test") {
         dependencies {
@@ -7,6 +9,10 @@ allprojects {
             add("featuresMetadataDeps", "org.elasticsearch:server")
             add("defaultDistrofeaturesMetadataDeps", "org.elasticsearch:distribution")
         }
+
+        tasks.withType<StandaloneRestIntegTestTask>().configureEach {
+            usesDefaultDistribution()
+        }
     }
     pluginManager.withPlugin("elasticsearch.internal-java-rest-test") {
         dependencies {
@@ -15,6 +21,10 @@ allprojects {
             add("javaRestTestImplementation", project(":serverless-test-framework"))
             add("featuresMetadataDeps", "org.elasticsearch:server")
             add("defaultDistrofeaturesMetadataDeps", "org.elasticsearch:distribution")
+        }
+
+        tasks.withType<StandaloneRestIntegTestTask>().configureEach {
+            usesDefaultDistribution()
         }
     }
     pluginManager.withPlugin("elasticsearch.internal-distribution-download") {

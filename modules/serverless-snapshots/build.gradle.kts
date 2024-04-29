@@ -25,12 +25,3 @@ dependencies {
     compileOnly("org.elasticsearch:server")
     compileOnly(project(":modules:stateless"))
 }
-
-tasks {
-    yamlRestTest {
-        usesDefaultDistribution()
-    }
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}

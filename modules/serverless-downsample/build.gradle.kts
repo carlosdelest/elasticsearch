@@ -16,12 +16,6 @@ configurations {
     }
 }
 
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}
-
 dependencies {
     implementation("org.elasticsearch:server")
 

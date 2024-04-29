@@ -24,9 +24,3 @@ dependencies {
     javaRestTestImplementation(testArtifact(xpackModule("core")))
     javaRestTestImplementation(xpackModule("identity-provider"))
 }
-
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}

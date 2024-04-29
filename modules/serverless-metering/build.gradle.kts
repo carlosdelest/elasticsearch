@@ -18,12 +18,6 @@ configurations {
     }
 }
 
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}
-
 dependencies {
     implementation(project(":libs:serverless-metrics"))
     testImplementation(testArtifact("org.elasticsearch:server"))

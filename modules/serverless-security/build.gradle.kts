@@ -34,9 +34,3 @@ dependencies {
     compileOnly(xpackModule("security"))
 }
 
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}
-

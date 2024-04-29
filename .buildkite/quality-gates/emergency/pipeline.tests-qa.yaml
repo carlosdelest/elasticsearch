@@ -13,7 +13,7 @@ steps:
         IMAGE_OVERRIDE: ""
 
   - label: ":java: Verify upgrade from current staging"
-    command: ".buildkite/scripts/run-gradle.sh :qa:rolling-upgrade:check -Dtests.bwc.tag=current_staging"
+    command: ".buildkite/scripts/run-gradle.sh bwcTest -Dtests.bwc.tag=current_staging"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"

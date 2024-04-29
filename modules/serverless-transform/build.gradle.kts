@@ -29,9 +29,3 @@ dependencies {
     yamlRestTestImplementation(testArtifact(xpackModule("plugin")))
     yamlRestTestImplementation(testArtifact(xpackModule("core")))
 }
-
-tasks {
-    yamlRestTest {
-        usesDefaultDistribution()
-    }
-}

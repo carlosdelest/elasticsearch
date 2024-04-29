@@ -24,9 +24,3 @@ esplugin {
   description = "Overrides RestController with serverless implementation"
   classname = "co.elastic.elasticsearch.serverless.rest.ServerlessRestControllerPlugin"
 }
-
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-}

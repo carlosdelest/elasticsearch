@@ -17,16 +17,6 @@ configurations {
     }
 }
 
-tasks {
-    javaRestTest {
-        usesDefaultDistribution()
-    }
-
-    yamlRestTest {
-        usesDefaultDistribution()
-    }
-}
-
 dependencies {
     compileOnly("org.elasticsearch:server")
 

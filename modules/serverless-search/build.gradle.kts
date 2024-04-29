@@ -38,9 +38,3 @@ dependencies {
     yamlRestTestRuntimeOnly(testArtifact(xpackModule("core")))
     compileOnly(xpackModule("core"))
 }
-
-tasks {
-    yamlRestTest {
-        usesDefaultDistribution()
-    }
-}

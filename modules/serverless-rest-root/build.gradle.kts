@@ -16,12 +16,6 @@ dependencies {
   yamlRestTestImplementation(project(":libs:serverless-shared-constants"))
 }
 
-tasks {
-  yamlRestTest {
-    usesDefaultDistribution()
-  }
-}
-
 restResources {
   restApi {
     include ("_common","info")

@@ -35,7 +35,6 @@ tasks {
         isSkipHasRestTestCheck = true
     }
     yamlRestTest {
-        usesDefaultDistribution()
         systemProperty(
             "tests.rest.blacklist", listOf(
 
