@@ -114,6 +114,12 @@ public class ServerlessSharedSettings {
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
+    public static final Setting<Boolean> ENABLE_REPLICAS_FOR_INSTANT_FAILOVER = Setting.boolSetting(
+        "serverless.search.enable_replicas_for_instant_failover",
+        false,
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
 
     // TODO: This setting name is what the ES controller passes currently.
     // Remove once the controller is changed to pass with the serverless prefix.
