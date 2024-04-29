@@ -58,6 +58,7 @@ public class RestoreProjectRestTestIT extends ESRestTestCase {
         return cluster.getHttpAddresses();
     }
 
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/1855")
     public void testSystemIndicesCanBeRestored() throws Exception {
 
         // create an ordinary index called test_index_1 and put some documents into it
