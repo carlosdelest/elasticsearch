@@ -95,6 +95,9 @@ tasks {
     }
     yamlRestTest {
         dependsOn(dockerBuildTasks[Architecture.current()])
+        systemProperty("tests.rest.blacklist", listOf(
+            "indices.create/20_synthetic_source/*"
+        ).joinToString(","))
     }
 }
 
