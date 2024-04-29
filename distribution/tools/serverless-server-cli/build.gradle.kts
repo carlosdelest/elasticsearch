@@ -32,3 +32,9 @@ dependencies {
     testImplementation("org.elasticsearch:server")
     testImplementation("org.elasticsearch:elasticsearch-cli")
 }
+
+tasks {
+  test {
+    systemProperty("tests.system_call_filter", "false")
+  }
+}

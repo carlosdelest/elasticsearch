@@ -260,7 +260,7 @@ public class ServerlessServerCli extends ServerCli {
     @Override
     protected synchronized ServerProcess startServer(Terminal terminal, ProcessInfo processInfo, ServerArgs args) throws Exception {
         var tempDir = ServerProcessUtils.setupTempDir(processInfo);
-        var jvmOptions = JvmOptionsParser.determineJvmOptions(args, processInfo, tempDir);
+        var jvmOptions = JvmOptionsParser.determineJvmOptions(args, processInfo, tempDir, new ServerlessMachineDependentHeap());
 
         initializeOnExitDiagnosticsAction(processInfo.sysprops(), args, jvmOptions, terminal);
 
