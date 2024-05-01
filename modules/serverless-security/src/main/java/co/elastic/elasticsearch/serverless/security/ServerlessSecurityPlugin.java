@@ -72,6 +72,18 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
+    /**
+     * Registers the setting for enabling the {@code ClusterStateRoleMapper} from the x-pack Security plugin.
+     * The serverless Security plugin enables the {@code ClusterStateRoleMapper} because the
+     * {@code ReservedRoleMappingAction} (also from the x-pack Security plugin) uses it to enact the role
+     * mappings from the `settings.json` file.
+     */
+    public static final Setting<Boolean> CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING = Setting.boolSetting(
+        "xpack.security.authc.cluster_state_role_mappings.enabled",
+        false,
+        Setting.Property.NodeScope
+    );
+
     public static final Setting<Boolean> API_KEY_STRICT_REQUEST_VALIDATION = Setting.boolSetting(
         "xpack.security.authc.api_key.strict_request_validation.enabled",
         true,
@@ -135,6 +147,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .put(OPERATOR_PRIVILEGES_ENABLED.getKey(), true)
             .put(NATIVE_USERS_SETTING.getKey(), false)
             .put(NATIVE_ROLES_SETTING.getKey(), false)
+            .put(CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), true) // the setting is false by default; this sets it to true
             .put(API_KEY_STRICT_REQUEST_VALIDATION.getKey(), true)
             .put(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION.getKey(), false)
             .build();
@@ -146,6 +159,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             INCLUDED_RESERVED_ROLES_SETTING,
             NATIVE_USERS_SETTING,
             NATIVE_ROLES_SETTING,
+            CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
             EXCLUDE_ROLES,
             API_KEY_STRICT_REQUEST_VALIDATION,
             HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION
