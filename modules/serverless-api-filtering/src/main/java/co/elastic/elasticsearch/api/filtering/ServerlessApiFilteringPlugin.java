@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.api.filtering;
 
 import co.elastic.elasticsearch.api.validation.DataStreamLifecycleValidationActionFilter;
+import co.elastic.elasticsearch.api.validation.IndicesAliasRequestValidator;
 import co.elastic.elasticsearch.api.validation.PublicSettingsValidationActionFilter;
 import co.elastic.elasticsearch.api.validation.ReindexRequestValidator;
 import co.elastic.elasticsearch.api.validation.RolloverRequestValidator;
@@ -55,7 +56,8 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 new PublicSettingsValidationActionFilter(context, indexScopedSettings),
                 new ReindexRequestValidator(),
                 new RolloverRequestValidator(context),
-                new DataStreamLifecycleValidationActionFilter(context)
+                new DataStreamLifecycleValidationActionFilter(context),
+                new IndicesAliasRequestValidator()
             )
         );
 

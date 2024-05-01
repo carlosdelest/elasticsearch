@@ -1,0 +1,49 @@
+setup:
+  - do:
+      indices.create:
+        index: test_index
+        body:
+          mappings:
+            properties:
+             test_field:
+                 type: keyword
+
+---
+"Add alias with routing":
+
+  - do:
+      catch: bad_request
+      indices.put_alias:
+        index: test_index
+        name: test_alias
+        body:
+          routing: test_field
+
+---
+"Add alias with index routing":
+  - do:
+      catch: bad_request
+      indices.put_alias:
+        index: test_index
+        name: test_alias
+        body:
+          index_routing: test_field
+
+---
+"Add alias with search routing":
+  - do:
+      catch: bad_request
+      indices.put_alias:
+        index: test_index
+        name: test_alias
+        body:
+          search_routing: test_field
+
+---
+"Add alias without routing":
+  - do:
+      indices.put_alias:
+        index: test_index
+        name: test_alias
+        body:
+          is_write_index:  true

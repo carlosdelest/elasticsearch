@@ -119,6 +119,17 @@ tasks {
                 "tsdb/80_index_resize/shrink",
                 "tsdb/80_index_resize/split",
 
+                // Relies on Alias routing
+                "indices.update_aliases/20_routing/*",
+                "indices.update_aliases/10_basic/Basic test for aliases",
+                "indices.update_aliases/10_basic/Basic test for multiple aliases",
+                "indices.delete_alias/10_basic/Basic test for delete alias",
+                "indices.delete_alias/all_path_options/*",
+                "cat.aliases/10_basic/Complex alias",
+                "tsdb/90_unsupported_operations/alias with routing",
+                "tsdb/90_unsupported_operations/alias with search_routing",
+
+
                 // AssertionError: Failure at [indices.stats/50_disk_usage:50]: value of [testindex.store_size_in_bytes] is not comparable (got [null])
                 // see https://gradle-enterprise.elastic.co/s/ezssvnid7qjnm/console-log?task=:qa:core-rest-test:yamlRestTest
                 "tsdb/110_field_caps/field caps on time_series indices",
