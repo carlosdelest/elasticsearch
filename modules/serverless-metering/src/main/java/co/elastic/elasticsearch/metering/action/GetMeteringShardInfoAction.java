@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
-
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.ActionResponse;
@@ -53,11 +51,7 @@ public class GetMeteringShardInfoAction {
 
         public Request(StreamInput in) throws IOException {
             super(in);
-            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SHARD_INFO_REQUEST_TOKEN_ADDED)) {
-                this.cacheToken = in.readString();
-            } else {
-                this.cacheToken = null;
-            }
+            this.cacheToken = in.readString();
         }
 
         @Override
@@ -73,9 +67,7 @@ public class GetMeteringShardInfoAction {
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SHARD_INFO_REQUEST_TOKEN_ADDED)) {
-                out.writeString(cacheToken);
-            }
+            out.writeString(cacheToken);
         }
 
         public String getCacheToken() {

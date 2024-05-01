@@ -17,9 +17,8 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
-
 import org.elasticsearch.TransportVersion;
+import org.elasticsearch.TransportVersions;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.persistent.PersistentTaskParams;
@@ -60,7 +59,7 @@ public class MeteringIndexInfoTaskParams implements PersistentTaskParams {
 
     @Override
     public TransportVersion getMinimalSupportedVersion() {
-        return ServerlessTransportVersions.INDEX_SIZE_SERVICE_ADDED;
+        return TransportVersions.V_8_13_0;
     }
 
     @Override

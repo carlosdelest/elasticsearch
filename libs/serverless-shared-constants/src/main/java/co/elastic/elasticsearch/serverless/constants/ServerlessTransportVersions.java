@@ -32,19 +32,7 @@ public class ServerlessTransportVersions {
 
     static Set<Integer> IDS = new HashSet<>();
 
-    public static final TransportVersion DUMMY_PRIMARY_RELOCATION_CHANGE = def(8_515_01_0);
-    public static final TransportVersion DUMMY_PRIMARY_RELOCATION_CHANGE_FIX = def(8_517_01_0);
-    public static final TransportVersion STALE_INDICES_GC = def(8_531_01_0);
-    public static final TransportVersion COMPOUND_COMMIT_WITH_SIZE = def(8_594_01_0);
-    public static final TransportVersion INDEX_SIZE_SERVICE_ADDED = def(8_594_02_0);
-    public static final TransportVersion NEW_COMMIT_NOTIFICATION_WITH_BCC_INFO = def(8_612_01_0);
-    public static final TransportVersion METERING_SHARD_INFO_DOC_COUNT_ADDED = def(8_612_02_0);
-    public static final TransportVersion SEARCH_LOAD_AUTOSCALING = def(8_618_01_0);
-    public static final TransportVersion BLOB_LOCATION_WITHOUT_BLOB_LENGTH = def(8_619_01_0);
-    public static final TransportVersion METERING_SHARD_INFO_REQUEST_TOKEN_ADDED = def(8_620_01_0);
-    public static final TransportVersion EXPLICIT_BCC_REFERENCES_TRACKING_ADDED = def(8_627_01_0);
-    public static final TransportVersion COMPOUND_COMMIT_WITH_INTERNAL_FILES = def(8_632_01_0);
-    public static final TransportVersion REGISTER_BATCHED_COMPOUND_COMMIT_ON_SEARCH_SHARD_RECOVERY = def(8_638_01_0);
+    public static final TransportVersion REMOVE_DUMMY_PRIMARY_RELOCATION_CHANGE = def(8_647_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
