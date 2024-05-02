@@ -169,6 +169,7 @@ public final class ServerlessSsoIT extends ESRestTestCase {
 
     private record UserInfo(String principal, String name, String email, String[] groups) {}
 
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/898")
     public void testSamlAuthenticationAndAccess() throws Exception {
         waitForSearchableSecurityIndex();
         waitForRoleMapping("elastic-cloud-sso-kibana-do-not-change"); // from role-mappings.json
