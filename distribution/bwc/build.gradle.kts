@@ -38,8 +38,9 @@ tasks {
         extra["remote"] = remote
     }
 
-    named("fetchLatest") {
+    named<LoggedExec>("fetchLatest") {
         dependsOn(initSubmodule)
+        commandLine("git", "fetch", "--tags", "--prune", "--prune-tags", remote, "--force", "--recurse-submodules")
     }
 
     named("checkoutBwcBranch") {
