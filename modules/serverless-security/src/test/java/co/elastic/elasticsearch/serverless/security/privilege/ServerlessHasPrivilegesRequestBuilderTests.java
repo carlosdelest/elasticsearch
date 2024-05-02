@@ -135,6 +135,7 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
             Map.of(),
             Map.of(),
             null,
+            null,
             null
         );
 

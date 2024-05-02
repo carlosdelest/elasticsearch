@@ -95,6 +95,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             Map.of(),
             Map.of(),
             null,
+            null,
             null
         );
         assertThat(validator.validatePredefinedRole(role), is(nullValue()));
@@ -216,6 +217,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             Map.of(),
             Map.of(),
             null,
+            null,
             restriction
         );
 
@@ -294,6 +296,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             null,
             metadata,
             Map.of(),
+            null,
             null,
             allowRestriction ? RoleRestrictionTests.randomWorkflowsRestriction(1, 2) : null
         );

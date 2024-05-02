@@ -62,6 +62,7 @@ tasks {
             "users/*/*",
             "change_password/*/*",
             "service_accounts/*/*",
+            "roles/50_remote_only/*",
             // Uses "wait_for_active_shards"
             "security/authz/31_rollover_using_alias/*",
             // Some ML APIs

@@ -140,6 +140,7 @@ public final class ServerlessCustomRoleParser {
             metadata,
             null,
             null,
+            null,
             restriction
         );
     }
