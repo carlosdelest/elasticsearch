@@ -31,6 +31,7 @@ import static co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRe
 import static co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetention.DATA_STREAMS_MAX_RETENTION_SETTING;
 import static org.elasticsearch.action.datastreams.autosharding.DataStreamAutoShardingService.DATA_STREAMS_AUTO_SHARDING_ENABLED;
 import static org.elasticsearch.common.settings.Setting.boolSetting;
+import static org.elasticsearch.index.mapper.SourceFieldMapper.LOSSY_PARAMETERS_ALLOWED_SETTING_NAME;
 
 /**
  * Serverless plugin that registers data stream settings.
@@ -54,6 +55,12 @@ public class ServerlessDataStreamPlugin extends Plugin {
         Setting.Property.NodeScope
     );
 
+    public static final Setting<Boolean> SOURCE_MAPPER_LOSSY_PARAMETERS_ALLOWED_SETTING = boolSetting(
+        LOSSY_PARAMETERS_ALLOWED_SETTING_NAME,
+        false,
+        Setting.Property.NodeScope
+    );
+
     @Override
     public Settings additionalSettings() {
         // We explicitly configure these settings here, as they're read in the open source distribution where the
@@ -63,6 +70,7 @@ public class ServerlessDataStreamPlugin extends Plugin {
             .put(DATA_STREAMS_LIFECYCLE_ONLY_MODE.getKey(), true)
             .put(FAILURE_STORE_REFRESH_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(30))
             .put(DATA_STREAMS_AUTO_SHARDING_ENABLED, true)
+            .put(LOSSY_PARAMETERS_ALLOWED_SETTING_NAME, false)
             .build();
     }
 
@@ -72,6 +80,7 @@ public class ServerlessDataStreamPlugin extends Plugin {
             DATA_STREAMS_LIFECYCLE_ONLY_MODE,
             FAILURE_STORE_REFRESH_INTERVAL_SETTING,
             DATA_STREAM_AUTO_SHARDING_ENABLED_SETTING,
+            SOURCE_MAPPER_LOSSY_PARAMETERS_ALLOWED_SETTING,
             DATA_STREAMS_DEFAULT_RETENTION_SETTING,
             DATA_STREAMS_MAX_RETENTION_SETTING
         );
