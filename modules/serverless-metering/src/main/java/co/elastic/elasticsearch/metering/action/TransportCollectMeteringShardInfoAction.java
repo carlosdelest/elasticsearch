@@ -37,6 +37,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -140,6 +141,10 @@ public class TransportCollectMeteringShardInfoAction extends HandledTransportAct
         final int expectedOps = nodes.size();
         logger.trace("querying {} data nodes based on cluster state version [{}]", expectedOps, clusterState.version());
 
+        if (expectedOps == 0) {
+            ActionListener.completeWith(listener, TransportCollectMeteringShardInfoAction::buildEmptyResponse);
+            return;
+        }
         final AtomicInteger counterOps = new AtomicInteger();
         // Since we will not concurrently update individual entries (each node will update a single indexed reference) we do not need
         // a AtomicReferenceArray
@@ -165,6 +170,10 @@ public class TransportCollectMeteringShardInfoAction extends HandledTransportAct
                 }
             }));
         }
+    }
+
+    private static CollectMeteringShardInfoAction.Response buildEmptyResponse() {
+        return new CollectMeteringShardInfoAction.Response(Map.of(), List.of());
     }
 
     private CollectMeteringShardInfoAction.Response buildResponse(SingleNodeResponse[] responses) {

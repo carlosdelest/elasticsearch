@@ -37,7 +37,6 @@ import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.persistent.NotPersistentTaskNodeException;
 import org.elasticsearch.persistent.PersistentTaskNodeNotAssignedException;
-import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.ActionTransportException;
@@ -57,6 +56,8 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
+import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING;
+import static co.elastic.elasticsearch.metering.action.utils.PersistentTaskUtils.findPersistentTaskNode;
 
 abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
     GetMeteringStatsAction.Request,
@@ -74,6 +75,8 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
     private final TransportService transportService;
     private final String persistentTaskName;
 
+    private volatile TimeValue meteringShardInfoUpdatePeriod;
+
     TransportGetMeteringStatsAction(
         String actionName,
         TransportService transportService,
@@ -89,8 +92,11 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
             clusterService,
             indexNameExpressionResolver,
             meteringIndexInfoService,
-            transportService.getThreadPool().executor(ThreadPool.Names.MANAGEMENT)
+            transportService.getThreadPool().executor(ThreadPool.Names.MANAGEMENT),
+            POLL_INTERVAL_SETTING.get(clusterService.getSettings())
         );
+
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(POLL_INTERVAL_SETTING, this::setMeteringShardInfoUpdatePeriod);
     }
 
     TransportGetMeteringStatsAction(
@@ -100,7 +106,8 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         ClusterService clusterService,
         IndexNameExpressionResolver indexNameExpressionResolver,
         MeteringIndexInfoService meteringIndexInfoService,
-        ExecutorService executor
+        ExecutorService executor,
+        TimeValue meteringShardInfoUpdatePeriod
     ) {
         super(actionName, transportService, actionFilters, GetMeteringStatsAction.Request::new, executor);
         this.transportService = transportService;
@@ -109,22 +116,19 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         this.meteringIndexInfoService = meteringIndexInfoService;
         this.executor = executor;
         this.persistentTaskName = MeteringIndexInfoTask.TASK_NAME;
+        this.meteringShardInfoUpdatePeriod = meteringShardInfoUpdatePeriod;
     }
 
-    private static DiscoveryNode findPersistentTaskNode(ClusterState clusterState, String taskName) {
-        PersistentTasksCustomMetadata taskMetadata = clusterState.getMetadata().custom(PersistentTasksCustomMetadata.TYPE);
-        if (taskMetadata == null) {
-            return null;
-        }
-        PersistentTasksCustomMetadata.PersistentTask<?> task = taskMetadata.getTask(taskName);
-        if (task == null || task.isAssigned() == false) {
-            return null;
-        }
-        return clusterState.nodes().get(task.getAssignment().getExecutorNode());
+    void setMeteringShardInfoUpdatePeriod(TimeValue meteringShardInfoUpdatePeriod) {
+        this.meteringShardInfoUpdatePeriod = meteringShardInfoUpdatePeriod;
     }
 
+    /**
+     * We want to give the transport action as much time as it is sensible to execute before timing out, as long as we are returning valid
+     * (up-to-date) information. For this reason, we link the timeout to the persistent task polling interval.
+     */
     TimeValue getPersistentTaskNodeTransportActionTimeout() {
-        var transportActionTimeout = (long) (meteringIndexInfoService.getMeteringShardInfoUpdatePeriod().millis() * 0.75);
+        var transportActionTimeout = (long) (meteringShardInfoUpdatePeriod.millis() * 0.75);
         if (transportActionTimeout < MINIMUM_TRANSPORT_ACTION_TIMEOUT_MILLIS) {
             transportActionTimeout = MINIMUM_TRANSPORT_ACTION_TIMEOUT_MILLIS;
         }
@@ -183,20 +187,24 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
             ) {
                 @Override
                 public void handleResponse(GetMeteringStatsAction.Response response) {
-                    ClusterState updatedClusterState = clusterService.state();
-                    DiscoveryNode postActionPersistentTaskNode = findPersistentTaskNode(updatedClusterState, persistentTaskName);
-                    if (postActionPersistentTaskNode == null) {
-                        listener.onFailure(new PersistentTaskNodeNotAssignedException(persistentTaskName));
-                    } else if (persistentTaskNode.getId().equals(postActionPersistentTaskNode.getId()) == false) {
-                        logger.trace(
-                            "PersistentTask [{}] changed from node [{}] to node [{}]",
-                            persistentTaskName,
-                            persistentTaskNode,
-                            postActionPersistentTaskNode
-                        );
-                        listener.onFailure(new NotPersistentTaskNodeException(persistentTaskNode.getId(), persistentTaskName));
-                    } else {
-                        listener.onResponse(response);
+                    try {
+                        ClusterState updatedClusterState = clusterService.state();
+                        DiscoveryNode postActionPersistentTaskNode = findPersistentTaskNode(updatedClusterState, persistentTaskName);
+                        if (postActionPersistentTaskNode == null) {
+                            listener.onFailure(new PersistentTaskNodeNotAssignedException(persistentTaskName));
+                        } else if (persistentTaskNode.getId().equals(postActionPersistentTaskNode.getId()) == false) {
+                            logger.trace(
+                                "PersistentTask [{}] changed from node [{}] to node [{}]",
+                                persistentTaskName,
+                                persistentTaskNode,
+                                postActionPersistentTaskNode
+                            );
+                            listener.onFailure(new NotPersistentTaskNodeException(persistentTaskNode.getId(), persistentTaskName));
+                        } else {
+                            listener.onResponse(response);
+                        }
+                    } catch (Exception ex) {
+                        listener.onFailure(ex);
                     }
                 }
 

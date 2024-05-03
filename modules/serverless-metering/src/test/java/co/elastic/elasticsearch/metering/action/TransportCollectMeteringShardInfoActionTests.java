@@ -53,8 +53,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.TASK_ALLOCATION_ID;
 import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.awaitForkedTasks;
 import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterState;
+import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterStateWithPersistentTask;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
@@ -64,7 +66,6 @@ import static org.mockito.Mockito.when;
 
 public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     private static final String TEST_THREAD_POOL_NAME = "test_thread_pool";
-    private static final long ALLOCATION_ID = 1L;
     private static ThreadPool THREAD_POOL;
 
     private ClusterService clusterService;
@@ -154,7 +155,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
             assertThat(capturedRequest.request(), instanceOf(GetMeteringShardInfoAction.Request.class));
             assertThat(
                 asInstanceOf(GetMeteringShardInfoAction.Request.class, capturedRequest.request()).getCacheToken(),
-                equalTo(Long.toString(ALLOCATION_ID))
+                equalTo(Long.toString(TASK_ALLOCATION_ID))
             );
         }
     }
@@ -303,20 +304,5 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
 
         var exception = expectThrows(ExecutionException.class, listener::get);
         assertThat(exception.getCause(), instanceOf(NotPersistentTaskNodeException.class));
-    }
-
-    private static void createMockClusterStateWithPersistentTask(ClusterService clusterService) {
-        PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
-
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
-        when(task.isAssigned()).thenReturn(true);
-        when(task.getAllocationId()).thenReturn(ALLOCATION_ID);
-        when(task.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
-
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
-
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
     }
 }

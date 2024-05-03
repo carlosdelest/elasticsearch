@@ -17,18 +17,23 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
+
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.node.DiscoveryNodeUtils;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
 import org.elasticsearch.test.ESTestCase;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -36,20 +41,27 @@ import java.util.function.Consumer;
 
 import static java.util.Collections.emptySet;
 import static org.elasticsearch.test.ClusterServiceUtils.setState;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class TestTransportActionUtils {
     private static final String TEST_CLUSTER = "test-cluster";
 
     static final String LOCAL_NODE_ID = "node_0";
+    static final String NON_LOCAL_NODE_ID = "node_1";
+    static final long TASK_ALLOCATION_ID = 1L;
 
-    static void createMockClusterState(ClusterService clusterService) {
+    static ClusterState createMockClusterState() {
         int numberOfNodes = ESTestCase.randomIntBetween(3, 5);
         int numberOfSearchNodes = ESTestCase.randomIntBetween(1, numberOfNodes);
-        createMockClusterState(clusterService, numberOfNodes, numberOfSearchNodes, b -> {});
+        return createMockClusterState(numberOfNodes, numberOfSearchNodes, b -> {});
     }
 
-    static void createMockClusterState(
-        ClusterService clusterService,
+    static void createMockClusterState(ClusterService clusterService) {
+        setState(clusterService, createMockClusterState());
+    }
+
+    static ClusterState createMockClusterState(
         int numberOfNodes,
         int numberOfSearchNodes,
         Consumer<ClusterState.Builder> clusterStateBuilderConsumer
@@ -73,8 +85,48 @@ class TestTransportActionUtils {
 
         clusterStateBuilderConsumer.accept(stateBuilder);
 
-        ClusterState clusterState = stateBuilder.build();
-        setState(clusterService, clusterState);
+        return stateBuilder.build();
+    }
+
+    static void createMockClusterState(
+        ClusterService clusterService,
+        int numberOfNodes,
+        int numberOfSearchNodes,
+        Consumer<ClusterState.Builder> clusterStateBuilderConsumer
+    ) {
+        setState(clusterService, createMockClusterState(numberOfNodes, numberOfSearchNodes, clusterStateBuilderConsumer));
+    }
+
+    static ClusterState createMockClusterStateWithPersistentTask(String nodeId) {
+        PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
+
+        when(task.isAssigned()).thenReturn(true);
+        when(task.getAllocationId()).thenReturn(TASK_ALLOCATION_ID);
+        when(task.getExecutorNode()).thenReturn(nodeId);
+
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+
+        return createMockClusterState(3, 2, b -> {
+            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
+        });
+    }
+
+    static ClusterState createMockClusterStateWithPersistentTask(ClusterState currentState, String nodeId) {
+        PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
+
+        when(task.isAssigned()).thenReturn(true);
+        when(task.getAllocationId()).thenReturn(TASK_ALLOCATION_ID);
+        when(task.getExecutorNode()).thenReturn(nodeId);
+
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+
+        return ClusterState.builder(currentState)
+            .metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
+            .build();
+    }
+
+    static void createMockClusterStateWithPersistentTask(ClusterService clusterService) {
+        setState(clusterService, createMockClusterStateWithPersistentTask(TestTransportActionUtils.LOCAL_NODE_ID));
     }
 
     static MeteringShardInfo createMeteringShardInfo(ShardId shardId) {

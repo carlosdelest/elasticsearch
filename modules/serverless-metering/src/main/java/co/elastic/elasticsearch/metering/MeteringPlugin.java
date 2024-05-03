@@ -88,6 +88,12 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
 
+    public static final Setting<Boolean> NEW_IX_METRIC_SETTING = Setting.boolSetting(
+        "metering.new-index-size.enabled",
+        false,
+        Setting.Property.NodeScope
+    );
+
     private MeteringIndexInfoTaskExecutor meteringIndexInfoTaskExecutor;
     private final boolean hasSearchRole;
     private List<MetricsCollector> metricsCollectors;
@@ -108,7 +114,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             MeteringReporter.METERING_URL,
             MeteringReporter.BATCH_SIZE,
             MeteringIndexInfoTaskExecutor.ENABLED_SETTING,
-            MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING
+            MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING,
+            NEW_IX_METRIC_SETTING
         );
     }
 
@@ -128,21 +135,33 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         String projectId = PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
+        boolean useNewIndexSizeMetric = NEW_IX_METRIC_SETTING.get(environment.settings());
+        log.info("Using new IX metric: [{}]", useNewIndexSizeMetric);
+
         ingestMetricsCollector = new IngestMetricsCollector(
             nodeEnvironment.nodeId(),
             clusterService.getClusterSettings(),
             environment.settings()
         );
 
+        var indexSizeService = new MeteringIndexInfoService();
+        clusterService.addListener(indexSizeService);
+
         List<MetricsCollector> builtInMetrics = new ArrayList<>();
         List<DiscoveryNodeRole> discoveryNodeRoles = NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings());
         if (discoveryNodeRoles.contains(DiscoveryNodeRole.INGEST_ROLE) || discoveryNodeRoles.contains(DiscoveryNodeRole.INDEX_ROLE)) {
             builtInMetrics.add(ingestMetricsCollector);
         }
-        if (discoveryNodeRoles.contains(DiscoveryNodeRole.SEARCH_ROLE)) {
-            builtInMetrics.add(
-                new IndexSizeMetricsCollector(services.indicesService(), clusterService.getClusterSettings(), environment.settings())
-            );
+
+        // TODO[ES-7639]: remove this choice when migration to IX in ES is completed
+        if (useNewIndexSizeMetric) {
+            builtInMetrics.add(indexSizeService.createIndexSizeMetricsCollector(clusterService, environment.settings()));
+        } else {
+            if (discoveryNodeRoles.contains(DiscoveryNodeRole.SEARCH_ROLE)) {
+                builtInMetrics.add(
+                    new IndexSizeMetricsCollector(services.indicesService(), clusterService.getClusterSettings(), environment.settings())
+                );
+            }
         }
 
         Stream<MetricsCollector> sources = Stream.concat(builtInMetrics.stream(), metricsCollectors.stream());
@@ -166,10 +185,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             cs.add(reporter);
         }
         cs.add(service);
-        cs.addAll(builtInMetrics);
-
-        var indexSizeService = new MeteringIndexInfoService();
         cs.add(indexSizeService);
+        cs.addAll(builtInMetrics);
 
         // TODO[lor]: We should not create multiple PersistentTasksService. Instead, we should create one in Server and pass it to plugins
         // via services or via PersistentTaskPlugin#getPersistentTasksExecutor. See elasticsearch#105662

@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.action;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
+import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.FeatureMatcher;
@@ -233,6 +234,51 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             )
         );
         assertThat(secondRoundShardInfo.meteringShardInfoMap(), aMapWithSize(3));
+    }
+
+    public void testPersistentTaskNodeChangeResetShardInfo() {
+        var service = new MeteringIndexInfoService();
+        var initialShardInfo = service.getMeteringShardInfo();
+
+        var shard1Id = new ShardId("index1", "index1UUID", 1);
+        var shard2Id = new ShardId("index1", "index1UUID", 2);
+        var shard3Id = new ShardId("index1", "index1UUID", 3);
+
+        var shardsInfo = Map.ofEntries(
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1))
+        );
+
+        var client = mock(Client.class);
+        doAnswer(answer -> {
+            @SuppressWarnings("unchecked")
+            var listener = (ActionListener<CollectMeteringShardInfoAction.Response>) answer.getArgument(2, ActionListener.class);
+            listener.onResponse(new CollectMeteringShardInfoAction.Response(shardsInfo, List.of()));
+            return null;
+        }).when(client).execute(eq(CollectMeteringShardInfoAction.INSTANCE), any(), any());
+
+        service.updateMeteringShardInfo(client);
+
+        var firstRoundShardInfo = service.getMeteringShardInfo();
+
+        var previousState = TestTransportActionUtils.createMockClusterStateWithPersistentTask(TestTransportActionUtils.LOCAL_NODE_ID);
+        var currentState = TestTransportActionUtils.createMockClusterStateWithPersistentTask(
+            previousState,
+            TestTransportActionUtils.NON_LOCAL_NODE_ID
+        );
+        service.clusterChanged(new ClusterChangedEvent("TEST", currentState, previousState));
+
+        var afterNodeChangeShardInfo = service.getMeteringShardInfo();
+
+        assertThat(initialShardInfo, not(nullValue()));
+        assertThat(initialShardInfo.meteringShardInfoMap(), anEmptyMap());
+
+        assertThat(firstRoundShardInfo, not(nullValue()));
+        assertThat(firstRoundShardInfo.meteringShardInfoMap(), aMapWithSize(3));
+
+        assertThat(afterNodeChangeShardInfo, not(nullValue()));
+        assertThat(afterNodeChangeShardInfo.meteringShardInfoMap(), anEmptyMap());
     }
 
     private Matcher<MeteringShardInfo> withSizeInBytes(final long expected) {

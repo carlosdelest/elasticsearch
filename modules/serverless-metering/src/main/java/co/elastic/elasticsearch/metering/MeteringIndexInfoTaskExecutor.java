@@ -102,8 +102,6 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
         this.persistentTasksService = persistentTasksService;
         this.enabled = ENABLED_SETTING.get(settings);
         this.pollInterval = POLL_INTERVAL_SETTING.get(settings);
-
-        meteringIndexInfoService.setMeteringShardInfoUpdatePeriod(this.pollInterval);
     }
 
     private static void registerListeners(
@@ -242,7 +240,6 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     private void updatePollInterval(TimeValue pollInterval) {
         if (Objects.equals(this.pollInterval, pollInterval) == false) {
             this.pollInterval = pollInterval;
-            meteringIndexInfoService.setMeteringShardInfoUpdatePeriod(pollInterval);
             var task = executorNodeTask.get();
             if (task != null) {
                 task.requestReschedule();

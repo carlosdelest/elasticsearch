@@ -70,7 +70,9 @@ import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
 import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterState;
+import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterStateWithPersistentTask;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
+import static org.elasticsearch.test.ClusterServiceUtils.setState;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.containsString;
@@ -99,7 +101,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     private MeteringIndexInfoService meteringIndexInfoService;
 
     private class TestTransportGetMeteringStatsAction extends TransportGetMeteringStatsAction {
-        TestTransportGetMeteringStatsAction() {
+        TestTransportGetMeteringStatsAction(TimeValue meteringShardInfoUpdatePeriod) {
             super(
                 GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
                 transportService,
@@ -107,7 +109,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 clusterService,
                 indexNameExpressionResolver,
                 meteringIndexInfoService,
-                transportService.getThreadPool().executor(TEST_THREAD_POOL_NAME)
+                transportService.getThreadPool().executor(TEST_THREAD_POOL_NAME),
+                meteringShardInfoUpdatePeriod
             );
         }
     }
@@ -149,11 +152,13 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         super.setUp();
         indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
         meteringIndexInfoService = mock(MeteringIndexInfoService.class);
-        when(meteringIndexInfoService.getMeteringShardInfoUpdatePeriod()).thenReturn(TimeValue.timeValueSeconds(5));
         clusterService = createClusterService(THREAD_POOL);
     }
 
-    private TestTransportGetMeteringStatsAction createActionAndInitTransport(CapturingTransport transport) {
+    private TestTransportGetMeteringStatsAction createActionAndInitTransport(
+        CapturingTransport transport,
+        TimeValue meteringShardInfoUpdatePeriod
+    ) {
         transportService = transport.createTransportService(
             clusterService.getSettings(),
             THREAD_POOL,
@@ -164,7 +169,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         );
         transportService.start();
         transportService.acceptIncomingRequests();
-        return new TestTransportGetMeteringStatsAction();
+        return new TestTransportGetMeteringStatsAction(meteringShardInfoUpdatePeriod);
     }
 
     @After
@@ -181,22 +186,21 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNoPersistentTaskNodeRetries() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport());
-
-        when(meteringIndexInfoService.getMeteringShardInfoUpdatePeriod()).thenReturn(TimeValue.timeValueSeconds(20));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(20));
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
         when(task.isAssigned()).thenReturn(false, true);
-        when(task.getAssignment()).thenReturn(assignment);
-        when(assignment.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
+        when(task.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
+        );
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -208,7 +212,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNoPersistentTaskNodeEventuallyFails() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport());
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
         createMockClusterState(clusterService);
 
         var request = new GetMeteringStatsAction.Request();
@@ -226,19 +230,9 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
     public void testRequestExecutedOnPersistentTaskNode() throws InterruptedException, TimeoutException {
         var transport = new CapturingTransport();
-        var action = createActionAndInitTransport(transport);
-        PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
 
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
-        when(task.isAssigned()).thenReturn(true);
-        when(task.getAssignment()).thenReturn(assignment);
-        when(assignment.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
-
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
-
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        createMockClusterStateWithPersistentTask(clusterService);
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -265,20 +259,9 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 }
             }
         };
-        var action = createActionAndInitTransport(transport);
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
 
-        PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
-
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
-        when(task.isAssigned()).thenReturn(true);
-        when(task.getAssignment()).thenReturn(assignment);
-        when(assignment.getExecutorNode()).thenReturn("node_1");
-
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
-
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        setState(clusterService, createMockClusterStateWithPersistentTask("node_1"));
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -314,17 +297,13 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 }
             }
         };
-        var action = createActionAndInitTransport(transport);
-
-        when(meteringIndexInfoService.getMeteringShardInfoUpdatePeriod()).thenReturn(TimeValue.timeValueSeconds(20));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20));
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
         when(task.isAssigned()).thenReturn(true);
-        when(task.getAssignment()).thenReturn(assignment);
         // Simulate a change in PersistentTask node allocation
-        when(assignment.getExecutorNode()).thenReturn("node_1", "node_2");
+        when(task.getExecutorNode()).thenReturn("node_1", "node_2");
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
 
@@ -372,17 +351,13 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 }
             }
         };
-        var action = createActionAndInitTransport(transport);
-
-        when(meteringIndexInfoService.getMeteringShardInfoUpdatePeriod()).thenReturn(TimeValue.timeValueSeconds(20));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20));
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
         // Simulate assignement/unassignement/reassignement of PersistentTask node
         when(task.isAssigned()).thenReturn(true, false, true);
-        when(task.getAssignment()).thenReturn(assignment);
-        when(assignment.getExecutorNode()).thenReturn("node_1");
+        when(task.getExecutorNode()).thenReturn("node_1");
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
 
@@ -419,17 +394,14 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 handleResponse(requestId, node1Response);
             }
         };
-        var action = createActionAndInitTransport(transport);
-
-        when(meteringIndexInfoService.getMeteringShardInfoUpdatePeriod()).thenReturn(TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
         var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
         // Simulate assignement/unassignement of PersistentTask node
         when(task.isAssigned()).thenReturn(true, false);
-        when(task.getAssignment()).thenReturn(assignment);
-        when(assignment.getExecutorNode()).thenReturn("node_1");
+        when(task.getExecutorNode()).thenReturn("node_1");
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
 
@@ -563,7 +535,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNameFiltering() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport());
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
 
         var index1 = new Index("foo1", IndexMetadata.INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
@@ -594,14 +566,9 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         when(indexNameExpressionResolver.dataStreamNames(any(), any(), eq(query))).thenReturn(List.of());
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
-
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
         when(task.isAssigned()).thenReturn(true);
-        when(task.getAssignment()).thenReturn(assignment);
-        when(assignment.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
-
+        when(task.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
-
         createMockClusterState(clusterService, 3, 2, b -> {
             b.routingTable(
                 RoutingTable.builder()
@@ -638,7 +605,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNameFilteringIncludesDatastreams() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport());
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
 
         var index1 = new Index("foo1", IndexMetadata.INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
@@ -670,10 +637,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
         when(task.isAssigned()).thenReturn(true);
-        when(task.getAssignment()).thenReturn(assignment);
-        when(assignment.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
+        when(task.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
 
@@ -845,16 +810,12 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testPersistentTaskNodeTransportActionTimeout() {
-        var action = createActionAndInitTransport(new CapturingTransport());
-
-        when(meteringIndexInfoService.getMeteringShardInfoUpdatePeriod()).thenReturn(
-            MINIMUM_METERING_INFO_UPDATE_PERIOD,
-            TimeValue.ZERO,
-            TimeValue.timeValueSeconds(10)
-        );
+        var action = createActionAndInitTransport(new CapturingTransport(), MINIMUM_METERING_INFO_UPDATE_PERIOD);
 
         var timeout1 = action.getPersistentTaskNodeTransportActionTimeout();
+        action.setMeteringShardInfoUpdatePeriod(TimeValue.ZERO);
         var timeout2 = action.getPersistentTaskNodeTransportActionTimeout();
+        action.setMeteringShardInfoUpdatePeriod(TimeValue.timeValueSeconds(10));
         var timeout3 = action.getPersistentTaskNodeTransportActionTimeout();
 
         assertThat(timeout1.millis(), greaterThanOrEqualTo(TransportGetMeteringStatsAction.MINIMUM_TRANSPORT_ACTION_TIMEOUT_MILLIS));
@@ -863,7 +824,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testInitialRetryBackoffPeriod() {
-        var action = createActionAndInitTransport(new CapturingTransport());
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
 
         var period1 = action.getInitialRetryBackoffPeriod(TimeValue.ZERO);
         var period2 = action.getInitialRetryBackoffPeriod(TimeValue.timeValueSeconds(20));
