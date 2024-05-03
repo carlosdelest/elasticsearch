@@ -37,9 +37,9 @@ import org.elasticsearch.xpack.shutdown.PutShutdownNodeAction;
 import org.elasticsearch.xpack.shutdown.SingleNodeShutdownStatus;
 
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -69,16 +69,13 @@ public class SigtermTerminationHandler implements TerminationHandler {
         final long started = threadPool.rawRelativeTimeInMillis();
         CountDownLatch latch = new CountDownLatch(1);
         AtomicReference<SingleNodeShutdownStatus> lastStatus = new AtomicReference<>();
+        AtomicBoolean failed = new AtomicBoolean(false);
         client.execute(
             PutShutdownNodeAction.INSTANCE,
             shutdownRequest(),
             ActionListener.wrap(res -> pollStatusAndLoop(0, latch, lastStatus), ex -> {
-                var duration = threadPool.rawRelativeTimeInMillis() - started;
-                logger.warn(
-                    new ESLogMessage("failed to register graceful shutdown request, stopping immediately") //
-                        .withFields(createShutdownFields("FAILED", duration, false)),
-                    ex
-                );
+                logger.warn("failed to register graceful shutdown request, stopping immediately", ex);
+                failed.set(true);
                 latch.countDown();
             })
         );
@@ -92,7 +89,16 @@ public class SigtermTerminationHandler implements TerminationHandler {
             var duration = threadPool.rawRelativeTimeInMillis() - started;
             logger.info(
                 new ESLogMessage("shutdown completed after [{}] ms with status [{}]", duration, status) //
-                    .withFields(createShutdownFields(status != null ? status.overallStatus().toString() : null, duration, timedOut))
+                    .withFields(
+                        Map.of(
+                            "elasticsearch.shutdown.status",
+                            getShutdownStatus(failed.get(), status),
+                            "elasticsearch.shutdown.duration",
+                            duration,
+                            "elasticsearch.shutdown.timed-out",
+                            timedOut
+                        )
+                    )
             );
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -100,15 +106,14 @@ public class SigtermTerminationHandler implements TerminationHandler {
         }
     }
 
-    private static Map<String, Object> createShutdownFields(String status, long duration, boolean timedOut) {
-        return Map.of(
-            "elasticsearch.shutdown.status",
-            Objects.toString(status),
-            "elasticsearch.shutdown.duration",
-            duration,
-            "elasticsearch.shutdown.timed-out",
-            timedOut
-        );
+    private static String getShutdownStatus(boolean failed, SingleNodeShutdownStatus status) {
+        if (failed) {
+            return "FAILED";
+        } else if (status != null) {
+            return status.overallStatus().toString();
+        } else {
+            return "UNKNOWN";
+        }
     }
 
     private void logDetailedRecoveryStatus() {
