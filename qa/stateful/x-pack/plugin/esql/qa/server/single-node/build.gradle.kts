@@ -20,12 +20,4 @@ tasks {
         // Tests use a shared cluster
         maxParallelForks = 1
     }
-    yamlRestTest {
-        systemProperty(
-            "tests.rest.blacklist", listOf(
-                // Tests with lossy source params, not allowed in serverless
-                "esql/30_types/_source disabled",
-            ).joinToString(",")
-        )
-    }
 }
