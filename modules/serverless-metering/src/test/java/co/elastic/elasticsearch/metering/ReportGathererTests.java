@@ -30,6 +30,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.mockito.Mockito;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -44,8 +45,13 @@ import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.startsWith;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class ReportGathererTests extends ESTestCase {
 
@@ -137,31 +143,43 @@ public class ReportGathererTests extends ESTestCase {
     public void testReportGatheringAlwaysRunsOrderly() {
 
         var recorder = new GathererRecorder();
-        var reportPeriodInMillis = randomFrom(1, 10, 200, 1000, 5000);
-        var runningTimeInMillis = TimeValue.timeValueSeconds(10).getMillis();
+        var reportPeriod = TimeValue.timeValueMinutes(5);
+        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
 
-        MeteringService service = Mockito.mock(MeteringService.class);
-        Mockito.when(service.getMetrics()).then(a -> recorder.generateAndRecordSingleMetric());
-        Mockito.when(service.nodeId()).thenReturn("nodeId");
-        Mockito.when(service.projectId()).thenReturn("projectId");
+        MeteringService service = createMockMeteringService();
+        when(service.getMetrics()).then(a -> recorder.generateAndRecordSingleMetric());
 
+        var clock = Mockito.mock(Clock.class);
         var deterministicTaskQueue = new DeterministicTaskQueue();
+        var threadPool = deterministicTaskQueue.getThreadPool();
+        var reportGatherer = new ReportGatherer(service, recorder::report, threadPool, "test", reportPeriod, clock);
 
-        var reportGatherer = new ReportGatherer(
-            service,
-            recorder::report,
-            deterministicTaskQueue.getThreadPool(),
-            ThreadPool.Names.GENERIC,
-            TimeValue.timeValueMillis(reportPeriodInMillis)
-        );
-
+        when(clock.instant()).thenReturn(Instant.EPOCH);
         reportGatherer.start();
 
-        // Run/schedule the tasks in the queue for the given amount of time
-        while (deterministicTaskQueue.getCurrentTimeMillis() <= runningTimeInMillis) {
-            deterministicTaskQueue.runAllRunnableTasks();
+        Instant lower = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+        Instant end = lower.plus(Duration.ofHours(48));
+        while (lower.isBefore(end)) {
             deterministicTaskQueue.advanceTime();
+            Instant now = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+            when(clock.instant()).thenReturn(now);
+            assertThat(now, both(greaterThanOrEqualTo(lower)).and(lessThan(lower.plus(reportPeriodDuration))));
+
+            deterministicTaskQueue.runAllRunnableTasks();
+            verify(service).getMetrics();
+
+            lower = lower.plus(reportPeriodDuration);
+            Mockito.clearInvocations(service);
         }
+
+        deterministicTaskQueue.advanceTime();
+        Instant now = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+        // mock start & completion time so that resulting runtime exceeds report period
+        when(clock.instant()).thenReturn(now, now.plus(reportPeriodDuration).plus(Duration.ofMinutes(1)));
+
+        // we expect a 2nd run to be instantly scheduled
+        deterministicTaskQueue.runAllRunnableTasks();
+        verify(service, times(2)).getMetrics();
 
         reportGatherer.cancel();
     }
@@ -169,7 +187,7 @@ public class ReportGathererTests extends ESTestCase {
     public void testCancelIdempotent() {
         MeteringService service = createMockMeteringService();
 
-        var reportGatherer = new ReportGatherer(service, x -> {}, threadPool, ThreadPool.Names.GENERIC, TimeValue.timeValueMillis(1));
+        var reportGatherer = new ReportGatherer(service, x -> {}, threadPool, ThreadPool.Names.GENERIC, TimeValue.timeValueSeconds(1));
 
         reportGatherer.start();
 
@@ -243,9 +261,9 @@ public class ReportGathererTests extends ESTestCase {
 
     private static MeteringService createMockMeteringService() {
         MeteringService service = Mockito.mock(MeteringService.class);
-        Mockito.when(service.getMetrics()).then(a -> Stream.empty());
-        Mockito.when(service.nodeId()).thenReturn("nodeId");
-        Mockito.when(service.projectId()).thenReturn("projectId");
+        when(service.getMetrics()).then(a -> Stream.empty());
+        when(service.nodeId()).thenReturn("nodeId");
+        when(service.projectId()).thenReturn("projectId");
         return service;
     }
 }
