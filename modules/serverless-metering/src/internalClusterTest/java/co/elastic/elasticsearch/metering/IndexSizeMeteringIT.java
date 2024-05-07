@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
+import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
 import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.index.IndexRequest;
@@ -38,6 +39,7 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 
+@AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/1936")
 public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
     protected static final int DEFAULT_SEARCH_POWER_SELECTED = 100;
