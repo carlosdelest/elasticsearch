@@ -201,6 +201,17 @@ tasks {
                 "indices.open/10_basic/?wait_for_active_shards=index-setting is deprecated",
                 "indices.open/10_basic/Close index with wait_for_active_shards set to all",
 
+                // Tests with lossy source params, not allowed in serverless
+                "get_source/85_source_missing/Missing document source with ignore",
+                "get_source/85_source_missing/Missing document source with catch",
+                "search.inner_hits/10_basic/Inner hits with disabled _source",
+                "search.inner_hits/20_highlighting/Unified highlighter",
+                "search.inner_hits/20_highlighting/Unified highlighter with stored fields",
+                "search.inner_hits/20_highlighting/Unified highlighter with stored fields and disabled source",
+                "search/330_fetch_fields/Test disable source",
+                "tsdb/20_mapping/disabled source",
+                "tsdb/20_mapping/source include/exclude",
+
             ).joinToString(",")
         )
     }
