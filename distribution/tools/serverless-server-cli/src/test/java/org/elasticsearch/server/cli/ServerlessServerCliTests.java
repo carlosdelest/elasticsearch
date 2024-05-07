@@ -451,14 +451,14 @@ public class ServerlessServerCliTests extends CommandTestCase {
         );
     }
 
-    public void testOnExitActionInitializationNoDumpArgNoOp() {
+    public void testOnExitActionInitializationNoDumpArgNoOp() throws IOException {
         try (var serverlessCli = new ServerlessServerCli()) {
             serverlessCli.initializeOnExitDiagnosticsAction(Map.of(), createMockServerArgs(), List.of(), terminal);
             assertThat(serverlessCli.onExitDiagnosticsAction, is(ServerlessServerCli.NO_OP_EXIT_ACTION));
         }
     }
 
-    public void testOnExitActionInitializationNoTargetDirNoOp() {
+    public void testOnExitActionInitializationNoTargetDirNoOp() throws IOException {
         var invalidTargetDir = createTempDir().resolve("NO_PATH");
         try (var serverlessCli = new ServerlessServerCli()) {
             serverlessCli.initializeOnExitDiagnosticsAction(
@@ -471,7 +471,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
     }
 
-    public void testOnExitActionInitializationValid() {
+    public void testOnExitActionInitializationValid() throws IOException {
         var validTargetDir = createTempDir();
         try (var serverlessCli = new ServerlessServerCli()) {
             serverlessCli.initializeOnExitDiagnosticsAction(

@@ -20,6 +20,7 @@ package org.elasticsearch.server.cli;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.common.file.AbstractFileWatchingService;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.function.Supplier;
 
@@ -35,7 +36,7 @@ class FastShutdownFileWatcher extends AbstractFileWatchingService {
     }
 
     @Override
-    protected void processFileChanges() {
+    protected void processFileChanges() throws IOException {
         ServerProcess process = server.get();
         if (process != null) {
             terminal.println("Fast shutdown marker detected. Killing Elasticsearch...");

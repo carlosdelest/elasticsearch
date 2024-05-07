@@ -134,7 +134,7 @@ public class ServerlessServerCli extends ServerCli {
     }
 
     @Override
-    public void close() {
+    public void close() throws IOException {
         if (fastShutdownWatcher != null) {
             fastShutdownWatcher.start();
         }
