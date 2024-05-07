@@ -14,6 +14,7 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.test.cluster.MutableSettingsProvider;
 import org.elasticsearch.test.cluster.serverless.ServerlessBwcVersion;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.Version;
@@ -28,6 +29,14 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class ServerlessRollingUpgradeIT extends ESRestTestCase {
 
+    // TODO: remove once old versions support BCC fully
+    private static final MutableSettingsProvider OLD_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER = new MutableSettingsProvider();
+    static {
+        OLD_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER.put("stateless.upload.max_commits", "1");
+    }
+
+    private static final MutableSettingsProvider NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER = new MutableSettingsProvider();
+
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .version(ServerlessBwcVersion.instance())
@@ -35,6 +44,8 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
         .setting("stateless.enabled", "true")
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
+        .settings(OLD_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER)
+        .settings(NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER)
         .user("admin-user", "x-pack-test-password")
         .withNode(
             indexNodeSpec -> indexNodeSpec.name("index-node-2")
@@ -88,9 +99,19 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
     }
 
     private void performUpgrade() throws IOException {
+        randomUploadDelayedSettingsForNewCluster();
         cluster.upgradeToVersion(Version.CURRENT);
         closeClients();
         initClient();
+    }
+
+    private static void randomUploadDelayedSettingsForNewCluster() {
+        OLD_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER.clear();
+        final boolean uploadDelayed = randomBoolean();
+        NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER.put("stateless.upload.delayed", String.valueOf(uploadDelayed));
+        if (uploadDelayed) {
+            NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER.put("stateless.upload.max_commits", String.valueOf(between(1, 10)));
+        }
     }
 
     private static void waitForNodes(int numberOfNodes) throws Exception {
