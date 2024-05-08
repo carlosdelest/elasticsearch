@@ -192,6 +192,12 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
                 }
             }
         }
+        if (roleDescriptor.hasDescription()) {
+            Validation.Error error = Validation.Roles.validateRoleDescription(roleDescriptor.getDescription());
+            if (error != null) {
+                validationException = addValidationError(error.toString(), validationException);
+            }
+        }
         return validationException;
     }
 

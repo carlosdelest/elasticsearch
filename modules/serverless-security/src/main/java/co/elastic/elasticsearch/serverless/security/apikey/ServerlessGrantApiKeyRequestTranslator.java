@@ -34,7 +34,7 @@ public class ServerlessGrantApiKeyRequestTranslator extends RestGrantApiKeyActio
     private static final Logger logger = LogManager.getLogger(ServerlessGrantApiKeyRequestTranslator.class);
 
     private static final ObjectParser<GrantApiKeyRequest, Void> PARSER = createParser(
-        ServerlessCustomRoleParser::parseWithWorkflowRestrictionAllowed
+        ServerlessCustomRoleParser::parseApiKeyRoleDescriptor
     );
 
     private final ServerlessRoleValidator serverlessRoleValidator;

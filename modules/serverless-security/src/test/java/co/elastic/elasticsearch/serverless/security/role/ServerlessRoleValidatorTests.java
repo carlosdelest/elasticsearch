@@ -41,6 +41,7 @@ import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleVa
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.PUBLIC_METADATA_KEY;
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.RESERVED_ROLE_NAME_PREFIX;
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.SUPPORTED_APPLICATION_NAMES;
+import static org.elasticsearch.xpack.core.security.support.Validation.Roles.MAX_DESCRIPTION_LENGTH;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
@@ -64,13 +65,13 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
 
     public void testValidPublicPredefinedRole() {
         final ServerlessRoleValidator validator = new ServerlessRoleValidator();
-        var role = randomRoleDescriptor(true, false, Map.of(PUBLIC_METADATA_KEY, true));
+        var role = randomRoleDescriptor(true, false, true, Map.of(PUBLIC_METADATA_KEY, true));
         assertThat(validator.validatePredefinedRole(role), is(nullValue()));
     }
 
     public void testValidCustomRoleCannotHavePublicMetadataFlag() {
         final ServerlessRoleValidator validator = new ServerlessRoleValidator();
-        var role = randomRoleDescriptor(true, false, Map.of(PUBLIC_METADATA_KEY, true));
+        var role = randomRoleDescriptor(true, false, true, Map.of(PUBLIC_METADATA_KEY, true));
         var ex = validator.validateCustomRole(role);
         assertThat(ex.getMessage(), containsString("role descriptor metadata keys may not start with [_] but found these keys: [_public]"));
     }
@@ -96,6 +97,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             Map.of(),
             null,
             null,
+            null,
             null
         );
         assertThat(validator.validatePredefinedRole(role), is(nullValue()));
@@ -107,7 +109,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             PREDEFINED_ROLE_METADATA_ALLOWLIST::contains,
             () -> MetadataUtils.RESERVED_PREFIX + randomAlphaOfLengthBetween(2, 10)
         );
-        var role = randomRoleDescriptor(true, false, Map.of(PUBLIC_METADATA_KEY, true, unknownMetadataKey, randomInt()));
+        var role = randomRoleDescriptor(true, false, true, Map.of(PUBLIC_METADATA_KEY, true, unknownMetadataKey, randomInt()));
         assertThat(
             validator.validatePredefinedRole(role).getMessage(),
             containsString(
@@ -122,7 +124,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             PREDEFINED_ROLE_METADATA_ALLOWLIST::contains,
             () -> MetadataUtils.RESERVED_PREFIX + randomAlphaOfLengthBetween(2, 10)
         );
-        var role = randomRoleDescriptor(true, false, Map.of(PUBLIC_METADATA_KEY, false, unknownMetadataKey, randomInt()));
+        var role = randomRoleDescriptor(true, false, true, Map.of(PUBLIC_METADATA_KEY, false, unknownMetadataKey, randomInt()));
         assertThat(validator.validatePredefinedRole(role), is(nullValue()));
     }
 
@@ -144,6 +146,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
         final boolean restrictedIndexAccess = randomBoolean();
         final boolean invalidApplicationName = randomBoolean();
         final boolean invalidApplicationPrivilege = randomBoolean();
+        final boolean invalidDescription = randomBoolean();
         // ensure at least one validation error
         final boolean invalidWorkflowRestriction = false == (invalidRoleName
             && unknownClusterPrivilege
@@ -152,7 +155,8 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             && unsupportedIndexPrivilege
             && restrictedIndexAccess
             && invalidApplicationName
-            && invalidApplicationPrivilege) || randomBoolean();
+            && invalidApplicationPrivilege
+            && invalidDescription) || randomBoolean();
 
         final List<String> clusterPrivileges = new ArrayList<>();
         if (unknownClusterPrivilege) {
@@ -206,6 +210,12 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
         } else {
             restriction = RoleRestrictionTests.randomWorkflowsRestriction(1, 2);
         }
+        final String description;
+        if (invalidDescription) {
+            description = randomAlphaOfLength(MAX_DESCRIPTION_LENGTH + 1);
+        } else {
+            description = randomAlphaOfLength(20);
+        }
 
         final RoleDescriptor roleDescriptor = new RoleDescriptor(
             roleName,
@@ -218,7 +228,8 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             Map.of(),
             null,
             null,
-            restriction
+            restriction,
+            description
         );
 
         final ActionRequestValidationException ex = validator.validateCustomRole(roleDescriptor);
@@ -275,18 +286,26 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
         if (invalidWorkflowRestriction) {
             itemMatchers.add(containsString("Unknown workflow"));
         }
+        if (invalidDescription) {
+            itemMatchers.add(containsString(Strings.format("Role description must be less than %s characters.", MAX_DESCRIPTION_LENGTH)));
+        }
         assertThat(validationErrors, containsInAnyOrder(itemMatchers));
     }
 
     public static RoleDescriptor randomRoleDescriptor() {
-        return randomRoleDescriptor(true, true, Map.of());
+        return randomRoleDescriptor(true, true, true, Map.of());
     }
 
     public static RoleDescriptor randomRoleDescriptorWithoutFlsDlsOrRestriction() {
-        return randomRoleDescriptor(false, false, Map.of());
+        return randomRoleDescriptor(false, false, false, Map.of());
     }
 
-    private static RoleDescriptor randomRoleDescriptor(boolean allowDlsFls, boolean allowRestriction, Map<String, Object> metadata) {
+    private static RoleDescriptor randomRoleDescriptor(
+        boolean allowDlsFls,
+        boolean allowRestriction,
+        boolean allowDescription,
+        Map<String, Object> metadata
+    ) {
         return new RoleDescriptor(
             randomValueOtherThanMany(ReservedRolesStore::isReserved, () -> randomAlphaOfLengthBetween(3, 90)),
             randomSubsetOf(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames()).toArray(String[]::new),
@@ -298,7 +317,8 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             Map.of(),
             null,
             null,
-            allowRestriction ? RoleRestrictionTests.randomWorkflowsRestriction(1, 2) : null
+            allowRestriction ? RoleRestrictionTests.randomWorkflowsRestriction(1, 2) : null,
+            allowDescription ? randomAlphaOfLengthBetween(0, 20) : null
         );
     }
 

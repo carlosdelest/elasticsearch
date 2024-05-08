@@ -32,7 +32,7 @@ import java.util.function.Supplier;
 
 public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequestTranslator.Default {
     private static final ConstructingObjectParser<Payload, Void> PARSER = createParser(
-        ServerlessCustomRoleParser::parseWithWorkflowRestrictionAllowed
+        ServerlessCustomRoleParser::parseApiKeyRoleDescriptor
     );
     private final ServerlessRoleValidator serverlessRoleValidator;
     private final Supplier<Boolean> strictRequestValidationEnabled;

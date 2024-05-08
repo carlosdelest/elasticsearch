@@ -171,7 +171,8 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
               ],
               "metadata": {
                 "env": ["prod"]
-              }
+              },
+              "description": "My custom role!"
             }""";
         putRoleAndAssertSuccess(TEST_USER, "custom_role", rolePayload);
         putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
@@ -517,7 +518,10 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         assertThat(
             actualRoleDescriptor,
             equalTo(
-                RoleDescriptor.parserBuilder().build().parse(actualRoleDescriptor.getName(), new BytesArray(rolePayload), XContentType.JSON)
+                RoleDescriptor.parserBuilder()
+                    .allowDescription(true)
+                    .build()
+                    .parse(actualRoleDescriptor.getName(), new BytesArray(rolePayload), XContentType.JSON)
             )
         );
     }
@@ -559,7 +563,7 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         parser.nextToken();
         parser.nextToken();
         parser.nextToken();
-        return RoleDescriptor.parserBuilder().build().parse(roleName, parser);
+        return RoleDescriptor.parserBuilder().allowDescription(true).build().parse(roleName, parser);
     }
 
     private Set<String> getRoles(String username, String... roleNames) throws IOException {

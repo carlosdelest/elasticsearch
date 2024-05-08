@@ -61,6 +61,7 @@ public class ServerlessPutRoleRequestBuilderFactory implements PutRoleRequestBui
             request.addApplicationPrivileges(roleDescriptor.getApplicationPrivileges());
             request.metadata(roleDescriptor.getMetadata());
             request.restrictRequest(restrictRequest);
+            request.description(roleDescriptor.getDescription());
             validate(request);
             return this;
         }

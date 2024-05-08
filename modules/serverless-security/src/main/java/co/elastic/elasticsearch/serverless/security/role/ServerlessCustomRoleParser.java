@@ -38,15 +38,16 @@ public final class ServerlessCustomRoleParser {
     public static RoleDescriptor parse(String name, BytesReference source, XContentType xContentType) throws IOException {
         assert name != null;
         try (XContentParser parser = createParser(source, xContentType)) {
-            return parse(name, parser, false);
+            return parse(name, parser, false, true);
         }
     }
 
-    public static RoleDescriptor parseWithWorkflowRestrictionAllowed(String name, XContentParser parser) throws IOException {
-        return parse(name, parser, true);
+    public static RoleDescriptor parseApiKeyRoleDescriptor(String name, XContentParser parser) throws IOException {
+        return parse(name, parser, true, false);
     }
 
-    public static RoleDescriptor parse(String name, XContentParser parser, boolean allowRestriction) throws IOException {
+    public static RoleDescriptor parse(String name, XContentParser parser, boolean allowRestriction, boolean allowDescription)
+        throws IOException {
         // validate name
         Validation.Error validationError = Validation.Roles.validateRoleName(name, true);
         if (validationError != null) {
@@ -66,6 +67,7 @@ public final class ServerlessCustomRoleParser {
         RoleDescriptor.ApplicationResourcePrivileges[] applicationPrivileges = null;
         Map<String, Object> metadata = null;
         RoleDescriptor.Restriction restriction = null;
+        String description = null;
 
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
@@ -124,6 +126,8 @@ public final class ServerlessCustomRoleParser {
                     name,
                     currentFieldName
                 );
+            } else if (allowDescription && RoleDescriptor.Fields.DESCRIPTION.match(currentFieldName, parser.getDeprecationHandler())) {
+                description = parser.text();
             } else if (RoleDescriptor.Fields.TYPE.match(currentFieldName, parser.getDeprecationHandler())) {
                 // don't need it
             } else {
@@ -141,7 +145,8 @@ public final class ServerlessCustomRoleParser {
             null,
             null,
             null,
-            restriction
+            restriction,
+            description
         );
     }
 

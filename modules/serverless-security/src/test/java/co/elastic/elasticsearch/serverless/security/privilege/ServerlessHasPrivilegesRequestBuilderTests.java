@@ -29,7 +29,7 @@ import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xcontent.json.JsonXContent;
 import org.elasticsearch.xpack.core.security.action.user.HasPrivilegesRequestBuilder;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
-import org.elasticsearch.xpack.core.security.authz.RoleDescriptorTests;
+import org.elasticsearch.xpack.core.security.authz.RoleDescriptorTestHelper;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
@@ -129,11 +129,12 @@ public class ServerlessHasPrivilegesRequestBuilderTests extends ESTestCase {
             randomAlphaOfLength(10),
             clusterPrivileges.toArray(String[]::new),
             indicesPrivileges,
-            RoleDescriptorTests.randomApplicationPrivileges(),
+            RoleDescriptorTestHelper.randomApplicationPrivileges(),
             null,
             null,
             Map.of(),
             Map.of(),
+            null,
             null,
             null,
             null
