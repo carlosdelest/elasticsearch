@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.datastreams.DataStreamsActionUtil;
@@ -35,6 +36,7 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.persistent.NotPersistentTaskNodeException;
 import org.elasticsearch.persistent.PersistentTaskNodeNotAssignedException;
 import org.elasticsearch.tasks.Task;
@@ -260,6 +262,9 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
 
                 @Override
                 public boolean shouldRetry(Exception e) {
+                    if (ExceptionsHelper.unwrap(e, IndexNotFoundException.class) != null) {
+                        return false;
+                    }
                     return retryableExceptions.stream().anyMatch(clazz -> clazz.isAssignableFrom(e.getClass()));
                 }
             };

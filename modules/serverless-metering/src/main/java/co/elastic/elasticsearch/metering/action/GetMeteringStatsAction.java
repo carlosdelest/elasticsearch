@@ -74,7 +74,7 @@ public class GetMeteringStatsAction {
 
         private String[] indices;
         private static final IndicesOptions ALL_INDICES_OPTIONS = IndicesOptions.builder()
-            .wildcardOptions(IndicesOptions.WildcardOptions.builder().includeHidden(true))
+            .wildcardOptions(IndicesOptions.WildcardOptions.builder().allowEmptyExpressions(false).includeHidden(true))
             .build();
 
         public Request() {

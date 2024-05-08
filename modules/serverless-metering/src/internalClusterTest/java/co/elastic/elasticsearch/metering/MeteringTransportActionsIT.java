@@ -19,12 +19,14 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
 
+import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.persistent.PersistentTasksClusterService;
 import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
 import org.elasticsearch.plugins.Plugin;
@@ -36,11 +38,13 @@ import org.junit.After;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
@@ -105,8 +109,16 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
 
         // Now we have an assigned node, and the request is completed.
         assertThat(persistentTaskNode, notNullValue());
-        var result = listener.get(5, TimeUnit.SECONDS);
-        assertThat(result, notNullValue());
+
+        // We expect an exception since there are no indices that match:
+        ExecutionException responseException = expectThrows(ExecutionException.class, () -> listener.get(5, TimeUnit.SECONDS));
+        IndexNotFoundException indexNotFoundException = (IndexNotFoundException) ExceptionsHelper.unwrap(
+            responseException,
+            IndexNotFoundException.class
+        );
+        assertNotNull(indexNotFoundException);
+        assertThat(indexNotFoundException.getMessage(), containsString("no such index"));
+
         assertThat(getMeteringStatsHandled.get(), greaterThanOrEqualTo(1));
     }
 
@@ -213,8 +225,14 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
 
         newTaskNodeReadyLatch.countDown();
 
-        var result = listener.get();
-        assertThat(result, notNullValue());
+        // We expect an exception since there are no indices that match:
+        ExecutionException responseException = expectThrows(ExecutionException.class, listener::get);
+        IndexNotFoundException indexNotFoundException = (IndexNotFoundException) ExceptionsHelper.unwrap(
+            responseException,
+            IndexNotFoundException.class
+        );
+        assertNotNull(indexNotFoundException);
+        assertThat(indexNotFoundException.getMessage(), containsString("no such index"));
         assertThat(persistentTaskNode1Requests.get(), greaterThanOrEqualTo(1));
 
         if (persistentTaskNode2.equals(persistentTaskNode1)) {

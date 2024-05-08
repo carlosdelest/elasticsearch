@@ -125,21 +125,18 @@ public class MeteringStatsPermissionsRestTestIT extends ESRestTestCase {
             String datastreamName = (String) datastream.get("name");
             assertThat(datastreamName, equalTo("foo-datastream-1"));
 
-            meteringStatsRequest = new Request("GET", "/_metering/stats/bar*");
-            meteringStatsRequest.setOptions(getFooRequestOptions());
-            response = client.performRequest(meteringStatsRequest);
-            responseMap = entityAsMap(response);
-            indices = (List<Object>) responseMap.get("indices");
-            assertThat("expected no indices, but got " + getPrintableIndexNames(indices), indices.size(), equalTo(0));
-            datastreams = (List<Object>) responseMap.get("datastreams");
-            assertThat(datastreams.size(), equalTo(0));
+            final Request wildcardMeteringStatsRequest = new Request("GET", "/_metering/stats/bar*");
+            wildcardMeteringStatsRequest.setOptions(getFooRequestOptions());
+            ResponseException responseException = expectThrows(
+                ResponseException.class,
+                () -> client.performRequest(wildcardMeteringStatsRequest)
+            );
+            assertThat(responseException.getResponse().getStatusLine().getStatusCode(), is(404));
+            assertThat(responseException.getMessage(), containsString("no such index [bar*]"));
 
             Request badMeteringStatsRequest = new Request("GET", "/_metering/stats/bar-test-1");
             badMeteringStatsRequest.setOptions(getFooRequestOptions());
-            ResponseException responseException = expectThrows(
-                ResponseException.class,
-                () -> client.performRequest(badMeteringStatsRequest)
-            );
+            responseException = expectThrows(ResponseException.class, () -> client.performRequest(badMeteringStatsRequest));
             assertThat(responseException.getResponse().getStatusLine().getStatusCode(), is(403));
             assertThat(
                 responseException.getMessage(),
