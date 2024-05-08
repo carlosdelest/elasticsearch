@@ -41,6 +41,7 @@ import java.util.function.Consumer;
 
 class ReportGatherer {
     private static final Logger log = LogManager.getLogger(ReportGatherer.class);
+    static final double MAX_JITTER_FACTOR = 0.25;
 
     private final MeteringService service;
     private final Consumer<List<UsageRecord>> reporter;
@@ -164,7 +165,7 @@ class ReportGatherer {
 
     private TimeValue timeToNextRun(Instant now, Instant nextSampleTimestamp) {
         // add up to 25% jitter
-        double jitterFactor = Randomness.get().nextDouble() * 0.25;
+        double jitterFactor = Randomness.get().nextDouble() * MAX_JITTER_FACTOR;
         Duration jitter = Duration.ofNanos((long) (reportPeriodDuration.toNanos() * jitterFactor));
         long nanosUntilNextRun = now.until(nextSampleTimestamp.plus(jitter), ChronoUnit.NANOS);
         return nanosUntilNextRun > 0 ? TimeValue.timeValueNanos(nanosUntilNextRun) : TimeValue.ZERO;

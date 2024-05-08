@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
+import static co.elastic.elasticsearch.metering.ReportGatherer.MAX_JITTER_FACTOR;
 import static co.elastic.elasticsearch.metering.ReportGatherer.calculateSampleTimestamp;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.allOf;
@@ -175,7 +176,8 @@ public class ReportGathererTests extends ESTestCase {
         deterministicTaskQueue.advanceTime();
         Instant now = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
         // mock start & completion time so that resulting runtime exceeds report period
-        when(clock.instant()).thenReturn(now, now.plus(reportPeriodDuration).plus(Duration.ofMinutes(1)));
+        Duration maxJitter = Duration.ofNanos((long) Math.ceil(reportPeriodDuration.toNanos() * MAX_JITTER_FACTOR));
+        when(clock.instant()).thenReturn(now, now.plus(reportPeriodDuration).plus(maxJitter));
 
         // we expect a 2nd run to be instantly scheduled
         deterministicTaskQueue.runAllRunnableTasks();
