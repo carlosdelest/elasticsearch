@@ -22,3 +22,6 @@ tests:
 #  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
 #    method: testCrankyEvaluateBlockWithoutNulls
 #    issue: https://github.com/elastic/elasticsearch/...
+  - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+    method: test {stats.SumOfDouble SYNC}
+    issue: https://github.com/elastic/elasticsearch-serverless/issues/1939
