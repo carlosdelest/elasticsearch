@@ -56,6 +56,14 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         return List.of(MockTransportService.TestPlugin.class, MeteringPlugin.class);
     }
 
+    @Override
+    protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
+        return Settings.builder()
+            .put(super.nodeSettings(nodeOrdinal, otherSettings))
+            .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
+            .build();
+    }
+
     @After
     public void cleanUp() {
         updateClusterSettings(
