@@ -134,7 +134,7 @@ public class ServerlessSharedSettings {
     public static final Setting<ProjectType> PROJECT_TYPE = Setting.enumSetting(
         ProjectType.class,
         "serverless.project_type",
-        ProjectType.ELASTICSEARCH_SEARCH,
+        ProjectType.ELASTICSEARCH_GENERAL_PURPOSE,
         Setting.Property.NodeScope
     );
 

@@ -23,6 +23,7 @@ package co.elastic.elasticsearch.serverless.constants;
  * Project type constants may have subtypes, separated by an underscore from the main project type.
  */
 public enum ProjectType {
+    ELASTICSEARCH_GENERAL_PURPOSE(3),
     ELASTICSEARCH_SEARCH(3),
     ELASTICSEARCH_VECTOR(5),
     ELASTICSEARCH_TIMESERIES(1),
