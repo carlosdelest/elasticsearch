@@ -396,7 +396,7 @@ public final class DocumentParser {
                 fieldMapper.parse(context);
             }
             if (context.isWithinCopyTo() == false) {
-                List<String> copyToFields = fieldMapper.copyTo().copyToFields();
+                List<String> copyToFields = context.mappingLookup().copyToFieldsForParsing(mapper.name());
                 if (copyToFields.isEmpty() == false) {
                     XContentParser.Token currentToken = context.parser().currentToken();
                     if (currentToken.isValue() == false && currentToken != XContentParser.Token.VALUE_NULL) {
@@ -696,10 +696,6 @@ public final class DocumentParser {
      */
     private static void parseCopyFields(DocumentParserContext context, List<String> copyToFields) throws IOException {
         for (String field : copyToFields) {
-            if (context.mappingLookup().inferenceFields().get(field) != null) {
-                // ignore copy_to that targets inference fields, values are already extracted in the coordinating node to perform inference.
-                continue;
-            }
             // In case of a hierarchy of nested documents, we need to figure out
             // which document the field should go to
             LuceneDocument targetDoc = null;

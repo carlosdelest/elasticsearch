@@ -135,6 +135,7 @@ public final class MappingLookup {
         this.mapping = mapping;
         Map<String, Mapper> fieldMappers = new HashMap<>();
         Map<String, ObjectMapper> objects = new HashMap<>();
+        Map<String, List<String>> effectiveCopyTo = new HashMap<>();
 
         List<NestedObjectMapper> nestedMappers = new ArrayList<>();
         for (ObjectMapper mapper : objectMappers) {
@@ -446,6 +447,19 @@ public final class MappingLookup {
      */
     public Set<String> sourcePaths(String field) {
         return fieldTypesLookup().sourcePaths(field);
+    }
+
+    /**
+     * Retrieves the effective copy to fields for the given field that should be parsed. Some fields may skip
+     * parsing as the value may have already been calculated by another process and doesn't need to be parsed
+     * by the document parser
+     *
+     * @param field the  field for which to look up the _source path. Note that the field. Note that the field should be a
+     *             concrete field and *not* an alias.
+     * @return A list of field names that the field should be copied to for parsing
+     */
+    public List<String> copyToFieldsForParsing(String field) {
+        return fieldTypesLookup().copyToFields(field);
     }
 
     /**

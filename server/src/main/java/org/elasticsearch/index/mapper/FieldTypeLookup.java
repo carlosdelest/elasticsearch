@@ -14,6 +14,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -36,6 +37,12 @@ final class FieldTypeLookup {
      */
     private final Map<String, Set<String>> fieldToCopiedFields;
 
+    /**
+     * Contains the effective copy_to fields for each field. Fields that don't have
+     * to be actually parsed by the target copy_to fields will be removed from this list.
+     */
+    private final Map<String, List<String>> copyToFields;
+
     private final int maxParentPathDots;
 
     FieldTypeLookup(
@@ -48,6 +55,8 @@ final class FieldTypeLookup {
         final Map<String, String> fullSubfieldNameToParentPath = new HashMap<>();
         final Map<String, DynamicFieldType> dynamicFieldTypes = new HashMap<>();
         final Map<String, Set<String>> fieldToCopiedFields = new HashMap<>();
+        final Map<String, List<String>> effectiveCopyTo = new HashMap<>();
+        final Set<String> inferenceFieldMappers = new HashSet<>();
         for (FieldMapper fieldMapper : fieldMappers) {
             String fieldName = fieldMapper.name();
             MappedFieldType fieldType = fieldMapper.fieldType();
@@ -56,7 +65,9 @@ final class FieldTypeLookup {
             if (fieldType instanceof DynamicFieldType) {
                 dynamicFieldTypes.put(fieldType.name(), (DynamicFieldType) fieldType);
             }
-            for (String targetField : fieldMapper.copyTo().copyToFields()) {
+            List<String> copyToFields = fieldMapper.copyTo().copyToFields();
+            effectiveCopyTo.put(fieldName, copyToFields);
+            for (String targetField : copyToFields) {
                 Set<String> sourcePath = fieldToCopiedFields.get(targetField);
                 if (sourcePath == null) {
                     Set<String> copiedFields = new HashSet<>();
@@ -65,6 +76,14 @@ final class FieldTypeLookup {
                 }
                 fieldToCopiedFields.get(targetField).add(fieldName);
             }
+            if (fieldMapper instanceof InferenceFieldMapper) {
+                inferenceFieldMappers.add(fieldName);
+            }
+        }
+
+        // Remove all inference field mappers from the effective copy to list
+        for (FieldMapper fieldMapper : fieldMappers) {
+            effectiveCopyTo.get(fieldMapper.name()).removeAll(inferenceFieldMappers);
         }
 
         int maxParentPathDots = 0;
@@ -97,6 +116,8 @@ final class FieldTypeLookup {
         // make values into more compact immutable sets to save memory
         fieldToCopiedFields.entrySet().forEach(e -> e.setValue(Set.copyOf(e.getValue())));
         this.fieldToCopiedFields = Map.copyOf(fieldToCopiedFields);
+        effectiveCopyTo.entrySet().forEach(e -> e.setValue(List.copyOf(e.getValue())));
+        this.copyToFields = Map.copyOf(effectiveCopyTo);
     }
 
     public static int dotCount(String path) {
@@ -203,6 +224,10 @@ final class FieldTypeLookup {
         }
 
         return fieldToCopiedFields.containsKey(resolvedField) ? fieldToCopiedFields.get(resolvedField) : Set.of(resolvedField);
+    }
+
+    List<String> copyToFields(String field) {
+        return copyToFields.getOrDefault(field, Collections.emptyList());
     }
 
     /**
