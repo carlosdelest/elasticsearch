@@ -17,11 +17,18 @@
 
 package co.elastic.elasticsearch.api.filtering;
 
-import co.elastic.elasticsearch.api.validation.DataStreamLifecycleValidationActionFilter;
+import co.elastic.elasticsearch.api.validation.CreateIndexSettingsValidator;
 import co.elastic.elasticsearch.api.validation.IndicesAliasRequestValidator;
-import co.elastic.elasticsearch.api.validation.PublicSettingsValidationActionFilter;
+import co.elastic.elasticsearch.api.validation.PutComponentTemplateDataStreamLifecycleValidator;
+import co.elastic.elasticsearch.api.validation.PutComponentTemplateSettingsValidator;
+import co.elastic.elasticsearch.api.validation.PutComposableIndexTemplateDataStreamLifecycleValidator;
+import co.elastic.elasticsearch.api.validation.PutComposableTemplateSettingsValidator;
+import co.elastic.elasticsearch.api.validation.PutDataStreamLifecycleValidator;
 import co.elastic.elasticsearch.api.validation.ReindexRequestValidator;
 import co.elastic.elasticsearch.api.validation.RolloverRequestValidator;
+import co.elastic.elasticsearch.api.validation.SimulateIndexTemplateDataStreamLifecycleValidator;
+import co.elastic.elasticsearch.api.validation.SimulateTemplateDataStreamLifecycleValidator;
+import co.elastic.elasticsearch.api.validation.UpdateSettingsValidator;
 
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.common.settings.IndexScopedSettings;
@@ -53,10 +60,17 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 new GetComponentTemplateSettingsFilter(context, indexScopedSettings),
                 new GetIndexActionSettingsFilter(context, indexScopedSettings),
                 new GetSettingsActionSettingsFilter(context, indexScopedSettings),
-                new PublicSettingsValidationActionFilter(context, indexScopedSettings),
+                new UpdateSettingsValidator(context, indexScopedSettings),
+                new CreateIndexSettingsValidator(context, indexScopedSettings),
+                new PutComponentTemplateSettingsValidator(context, indexScopedSettings),
+                new PutComposableTemplateSettingsValidator(context, indexScopedSettings),
                 new ReindexRequestValidator(),
                 new RolloverRequestValidator(context),
-                new DataStreamLifecycleValidationActionFilter(context),
+                new PutComponentTemplateDataStreamLifecycleValidator(context),
+                new PutComposableIndexTemplateDataStreamLifecycleValidator(context),
+                new PutDataStreamLifecycleValidator(context),
+                new SimulateIndexTemplateDataStreamLifecycleValidator(context),
+                new SimulateTemplateDataStreamLifecycleValidator(context),
                 new IndicesAliasRequestValidator()
             )
         );

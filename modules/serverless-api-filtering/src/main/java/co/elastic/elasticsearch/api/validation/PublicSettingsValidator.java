@@ -17,27 +17,54 @@
 
 package co.elastic.elasticsearch.api.validation;
 
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionRequest;
+import org.elasticsearch.action.ActionResponse;
+import org.elasticsearch.action.support.ActionFilterChain;
+import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.tasks.Task;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 
 import java.util.List;
 import java.util.Optional;
 
 /**
- * A class to perform validation on Setting.Property.ServerlessPublic
+ * An action filter that performs a validation of incoming requests with settings object.
+ * The validation is preventing public users to use non-public settings.
  */
-public class PublicSettingsValidator {
-
+public abstract class PublicSettingsValidator<RequestType extends ActionRequest> implements MappedActionFilter {
     private final ThreadContext threadContext;
-    private IndexScopedSettings indexScopedSettings;
+    private final IndexScopedSettings indexScopedSettings;
 
     public PublicSettingsValidator(ThreadContext threadContext, IndexScopedSettings indexScopedSettings) {
         this.threadContext = threadContext;
         this.indexScopedSettings = indexScopedSettings;
+    }
+
+    protected abstract Settings getSettingsFromRequest(RequestType request);
+
+    @Override
+    public int order() {
+        return 0;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <Request extends ActionRequest, Response extends ActionResponse> void apply(
+        Task task,
+        String action,
+        Request request,
+        ActionListener<Response> listener,
+        ActionFilterChain<Request, Response> chain
+    ) {
+        Settings apply = getSettingsFromRequest((RequestType) request);
+        validateSettings(apply);
+        chain.proceed(task, action, request, listener);
     }
 
     /**
@@ -47,7 +74,7 @@ public class PublicSettingsValidator {
      * @param settings - settings from the request
      * @throws IllegalArgumentException with a message indicating what settings are not allowed
      */
-    public void validateSettings(Settings settings) {
+    void validateSettings(Settings settings) {
         if (isOperator() == false) {
             Settings normalised = normaliseSettings(settings);
             List<String> list = normalised.keySet()
@@ -77,5 +104,4 @@ public class PublicSettingsValidator {
             threadContext.getHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY)
         );
     }
-
 }

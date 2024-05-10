@@ -44,11 +44,6 @@ public class CommonTestPublicSettings {
     );
     public static ThreadContext THREAD_CONTEXT = new ThreadContext(Settings.EMPTY);
 
-    public static IndexScopedSettings MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS = new IndexScopedSettings(
-        Settings.EMPTY,
-        Set.of(PUBLIC_SETTING, NON_PUBLIC_SETTING)
-    );
-
     public static final Setting.AffixSetting<List<String>> AFFIX_PUBLIC_SETTING = Setting.prefixKeySetting(
         "index.public.affix.",
         key -> Setting.stringListSetting(key, Setting.Property.Dynamic, Setting.Property.IndexScope, Setting.Property.ServerlessPublic)
@@ -58,8 +53,9 @@ public class CommonTestPublicSettings {
         "index.private.affix.",
         key -> Setting.stringListSetting(key, Setting.Property.Dynamic, Setting.Property.IndexScope)
     );
-    public static IndexScopedSettings AFFIX_SETTINGS = new IndexScopedSettings(
+
+    public static IndexScopedSettings MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS = new IndexScopedSettings(
         Settings.EMPTY,
-        Set.of(AFFIX_PRIVATE_SETTING, AFFIX_PUBLIC_SETTING)
+        Set.of(PUBLIC_SETTING, NON_PUBLIC_SETTING, AFFIX_PRIVATE_SETTING, AFFIX_PUBLIC_SETTING)
     );
 }
