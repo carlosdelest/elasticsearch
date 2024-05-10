@@ -3,50 +3,57 @@
 # this pipeline build will prevent further progression to the subsequent stage.
 
 steps:
-  - label: ":pipeline: Trigger Elasticsearch E2E tests in Staging"
-    trigger: elasticsearch-serverless-e2e-tests-staging
-    build:
-      message: "${BUILDKITE_MESSAGE}"
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
+  - group: "Run quality gates"
+    key: quality-gates
+    steps:
+      - label: ":pipeline: Trigger Elasticsearch E2E tests in Staging"
+        trigger: elasticsearch-serverless-e2e-tests-staging
+        soft_fail: true
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
 
-  - label: ":java: Verify upgrade from {{matrix}}"
-    command: ".buildkite/scripts/run-gradle.sh bwcTest -Dtests.bwc.tag={{matrix}}"
-    agents:
-      provider: "gcp"
-      machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
-    matrix:
-      - "current_production-canary"
-      - "current_production-noncanary"
+      - label: ":java: Verify upgrade from {{matrix}}"
+        command: ".buildkite/scripts/run-gradle.sh bwcTest -Dtests.bwc.tag={{matrix}}"
+        soft_fail: true
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-16"
+          image: family/elasticsearch-ubuntu-2022
+        matrix:
+          - "current_production-canary"
+          - "current_production-noncanary"
 
-  - label: "Trigger synthetic tests"
-    trigger: "esbench-serverless-synthetic-test"
-    async: true
+      - label: "Trigger synthetic tests"
+        trigger: "esbench-serverless-synthetic-test"
+        async: true
 
-  - label: ":hourglass: Wait 1 hour for environment health metrics"
-    key: staging_bake_period
-    command:
-    - echo "Waiting for 60m for indicative health metrics"
-    - sleep ${QA_GATE_WAIT_PERIOD:-3600}
+      - label: ":hourglass: Wait 1 hour for environment health metrics"
+        soft_fail: true
+        key: bake_period
+        command:
+          - echo "Waiting for 60m for indicative health metrics"
+          - sleep ${QA_GATE_WAIT_PERIOD:-3600}
 
-  - label: ":pipeline: Trigger Elasticsearch observability checks in Staging"
-    depends_on: staging_bake_period
-    trigger: serverless-quality-gates
-    build:
-      message: "${BUILDKITE_MESSAGE}"
-      env:
-        TARGET_ENV: staging
-        CHECK_LOG_ERROR_RATE: true
-        MAX_ERROR_PERCENT: 0.5
-        QUERY_WINDOW: 60m
-        LOG_LEVEL_ERROR_VALUE: ERROR
-        SERVICE: elasticsearch
-        SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
-        SERVICE_VERSION: ${SERVICE_VERSION:0:12}
-        SERVICE_TYPE_FIELD: kubernetes.container.name
-        CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
-        MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 1.0
-        CHECK_ELASTICSEARCH_CLUSTER_HEALTH_RATE: true
-        CHECK_ALERTS: true
-        CHECK_ALERTS_TRANSIENT_LOOKBACK: 60m
+      - label: ":pipeline: Trigger Elasticsearch observability checks in Staging"
+        depends_on: bake_period
+        trigger: serverless-quality-gates
+        soft_fail: true
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          env:
+            TARGET_ENV: staging
+            CHECK_LOG_ERROR_RATE: true
+            MAX_ERROR_PERCENT: 0.5
+            QUERY_WINDOW: 60m
+            LOG_LEVEL_ERROR_VALUE: ERROR
+            SERVICE: elasticsearch
+            SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+            SERVICE_VERSION: ${SERVICE_VERSION:0:12}
+            SERVICE_TYPE_FIELD: kubernetes.container.name
+            CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
+            MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 1.0
+            CHECK_ELASTICSEARCH_CLUSTER_HEALTH_RATE: true
+            CHECK_ALERTS: true
+            CHECK_ALERTS_TRANSIENT_LOOKBACK: 60m

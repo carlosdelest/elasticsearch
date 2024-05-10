@@ -3,40 +3,48 @@
 # this pipeline build will prevent further progression to the subsequent stage.
 
 steps:
-  - label: ":pipeline: Trigger Elasticsearch E2E tests in QA"
-    trigger: elasticsearch-serverless-e2e-tests-qa
-    build:
-      message: "${BUILDKITE_MESSAGE}"
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      env:
-        IMAGE_OVERRIDE: ""
+  - group: "Run quality gates"
+    key: quality-gates
+    steps:
+      - label: ":pipeline: Trigger Elasticsearch E2E tests in QA"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        soft_fail: true
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            IMAGE_OVERRIDE: ""
 
-  - label: ":java: Verify upgrade from current staging"
-    command: ".buildkite/scripts/run-gradle.sh bwcTest -Dtests.bwc.tag=current_staging"
-    agents:
-      provider: "gcp"
-      machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
-  - label: ":hourglass: Wait 30 minutes for environment health metrics"
-    key: staging_bake_period
-    command:
-    - echo "Waiting for 30m for indicative health metrics"
-    - sleep ${QA_GATE_WAIT_PERIOD:-1800}
+      - label: ":java: Verify upgrade from current staging"
+        command: ".buildkite/scripts/run-gradle.sh bwcTest -Dtests.bwc.tag=current_staging"
+        soft_fail: true
+        agents:
+          provider: "gcp"
+          machineType: "n1-standard-16"
+          image: family/elasticsearch-ubuntu-2022
 
-  - label: ":pipeline: Trigger Elasticsearch observability checks in QA"
-    depends_on: staging_bake_period
-    trigger: serverless-quality-gates
-    build:
-      message: "${BUILDKITE_MESSAGE}"
-      env:
-        TARGET_ENV: qa
-        SERVICE: elasticsearch
-        SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
-        SERVICE_VERSION: ${SERVICE_VERSION:0:12}
-        SERVICE_TYPE_FIELD: kubernetes.container.name
-        CHECK_ALERTS: true
-        CHECK_SLO: true
-        CHECK_SLO_TAG: "quality-gate"
-        CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
-        CHECK_ALERTS_TRANSIENT_LOOKBACK: 30m # 30 minutes is the default lookback for transient alerts
+      - label: ":hourglass: Wait 30 minutes for environment health metrics"
+        soft_fail: true
+        key: bake_period
+        command:
+          - echo "Waiting for 30m for indicative health metrics"
+          - sleep ${QA_GATE_WAIT_PERIOD:-1800}
+
+      - label: ":pipeline: Trigger Elasticsearch observability checks in QA"
+        depends_on: bake_period
+        trigger: serverless-quality-gates
+        soft_fail: true
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          env:
+            TARGET_ENV: qa
+            SERVICE: elasticsearch
+            SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+            SERVICE_VERSION: ${SERVICE_VERSION:0:12}
+            SERVICE_TYPE_FIELD: kubernetes.container.name
+            CHECK_ALERTS: true
+            CHECK_SLO: true
+            CHECK_SLO_TAG: "quality-gate"
+            CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
+            CHECK_ALERTS_TRANSIENT_LOOKBACK: 30m # 30 minutes is the default lookback for transient alerts

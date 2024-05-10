@@ -15,12 +15,16 @@ env:
   TEAM_CHANNEL: "#es-serverless-gitops"
 
 steps:
-  - label: ":pipeline::grey_question::seedling: Trigger Elasticsearch Tests for ${ENVIRONMENT}"
+  - label: ":pipeline: Upload quality gate steps"
     env:
       QG_PIPELINE_LOCATION: ".buildkite/quality-gates"
     command: "make -C /agent run-environment-tests"
     agents:
       image: "docker.elastic.co/ci-agent-images/quality-gate-seedling:0.0.3"
+
+  - label: ":question: Maybe add manual gate"
+    depends_on: quality-gates
+    command: ".buildkite/scripts/upload-manual-gate.sh"
 
   - label: ":git: Push promoted build tags"
     branches: "main patch/*"

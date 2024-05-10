@@ -3,31 +3,36 @@
 # this pipeline build will prevent further progression to the subsequent stage.
 
 steps:
-  - label: ":hourglass: Wait 24 hours for environment health metrics"
-    if: build.env("ENVIRONMENT") == "production-canary"
-    key: production_bake_period
-    command:
-      - echo "Waiting for 24h for indicative health metrics"
-      - sleep ${PROD_CANARY_GATE_WAIT_PERIOD:-86400}
+  - group: "Run quality gates"
+    key: quality-gates
+    steps:
+      - label: ":hourglass: Wait 24 hours for environment health metrics"
+        if: build.env("ENVIRONMENT") == "production-canary"
+        soft_fail: true
+        key: production_bake_period
+        command:
+          - echo "Waiting for 24h for indicative health metrics"
+          - sleep ${PROD_CANARY_GATE_WAIT_PERIOD:-86400}
 
-  - label: ":pipeline: Trigger Elasticsearch observability checks in Production"
-    if: build.env("ENVIRONMENT") == "production-canary"
-    depends_on: production_bake_period
-    trigger: serverless-quality-gates
-    build:
-      message: "${BUILDKITE_MESSAGE}"
-      env:
-        TARGET_ENV: ${ENVIRONMENT}
-        CHECK_LOG_ERROR_RATE: true
-        MAX_ERROR_PERCENT: 0.01
-        QUERY_WINDOW: 24h
-        LOG_LEVEL_ERROR_VALUE: ERROR
-        SERVICE: elasticsearch
-        SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
-        SERVICE_VERSION: ${SERVICE_VERSION:0:12}
-        SERVICE_TYPE_FIELD: kubernetes.container.name
-        CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
-        MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 0.05
-        CHECK_ALERTS: true
-        CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
-        CHECK_ALERTS_TRANSIENT_LOOKBACK: 24h
+      - label: ":pipeline: Trigger Elasticsearch observability checks in Production"
+        if: build.env("ENVIRONMENT") == "production-canary"
+        depends_on: production_bake_period
+        soft_fail: true
+        trigger: serverless-quality-gates
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          env:
+            TARGET_ENV: ${ENVIRONMENT}
+            CHECK_LOG_ERROR_RATE: true
+            MAX_ERROR_PERCENT: 0.01
+            QUERY_WINDOW: 24h
+            LOG_LEVEL_ERROR_VALUE: ERROR
+            SERVICE: elasticsearch
+            SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+            SERVICE_VERSION: ${SERVICE_VERSION:0:12}
+            SERVICE_TYPE_FIELD: kubernetes.container.name
+            CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
+            MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 0.05
+            CHECK_ALERTS: true
+            CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
+            CHECK_ALERTS_TRANSIENT_LOOKBACK: 24h
