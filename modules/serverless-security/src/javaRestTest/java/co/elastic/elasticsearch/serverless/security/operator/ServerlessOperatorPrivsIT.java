@@ -38,6 +38,9 @@ import java.nio.charset.StandardCharsets;
 
 import static org.hamcrest.Matchers.equalTo;
 
+/**
+ * Test the operator privilege is enforced in serverless.
+ */
 public class ServerlessOperatorPrivsIT extends ESRestTestCase {
 
     private static final String OPERATOR_USER = "x_pack_rest_user";
