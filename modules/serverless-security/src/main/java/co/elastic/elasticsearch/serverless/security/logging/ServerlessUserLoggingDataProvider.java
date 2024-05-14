@@ -49,7 +49,7 @@ public class ServerlessUserLoggingDataProvider implements LoggingDataProvider {
 
     @Override
     public void collectData(Map<String, String> data) {
-        final Authentication authentication = securityContext.get().getAuthentication();
+        final Authentication authentication = getAuthentication();
         if (authentication != null) {
             final Subject subject = authentication.getEffectiveSubject();
             final User user = subject.getUser();
@@ -65,4 +65,9 @@ public class ServerlessUserLoggingDataProvider implements LoggingDataProvider {
             data.put("auth.type", authentication.getAuthenticationType().name());
         }
     }
+
+    private Authentication getAuthentication() {
+        return securityContext.get() != null ? securityContext.get().getAuthentication() : null;
+    }
+
 }

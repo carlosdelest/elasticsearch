@@ -26,7 +26,9 @@ import org.elasticsearch.xpack.core.security.authc.AuthenticationTestHelper;
 import org.elasticsearch.xpack.core.security.user.User;
 import org.hamcrest.Matchers;
 import org.junit.Before;
+import org.mockito.Mockito;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -41,6 +43,26 @@ public class ServerlessUserLoggingDataProviderTests extends ESTestCase {
         this.threadContext = new ThreadContext(Settings.EMPTY);
         this.securityContext = new SecurityContext(Settings.EMPTY, threadContext);
         this.provider = new ServerlessUserLoggingDataProvider(() -> securityContext);
+    }
+
+    public void testNoSecurityContextSet() {
+        ServerlessUserLoggingDataProvider provider = new ServerlessUserLoggingDataProvider(() -> null);
+
+        Map<String, String> map = new HashMap<>();
+        provider.collectData(map);
+
+        assertThat(map, Matchers.anEmptyMap());
+    }
+
+    public void testNoAuthentication() {
+        SecurityContext securityContextMock = Mockito.mock(SecurityContext.class);
+        Mockito.when(securityContextMock.getAuthentication()).thenReturn(null);
+        ServerlessUserLoggingDataProvider provider = new ServerlessUserLoggingDataProvider(() -> securityContextMock);
+
+        Map<String, String> map = new HashMap<>();
+        provider.collectData(map);
+
+        assertThat(map, Matchers.anEmptyMap());
     }
 
     public void testLogUser() {
