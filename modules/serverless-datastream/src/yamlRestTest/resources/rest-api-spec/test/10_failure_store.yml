@@ -26,7 +26,7 @@
   - do:
       indices.get_data_stream:
         name: failure-data-stream
-  - set: { data_streams.0.failure_indices.0.index_name: failure_index }
+  - set: { data_streams.0.failure_store.indices.0.index_name: failure_index }
   - do:
       indices.get_settings:
         index: $failure_index
