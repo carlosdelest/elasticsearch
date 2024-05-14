@@ -61,8 +61,10 @@ public class TransportGetMachineLearningTierMetrics extends HandledTransportActi
 
     @Override
     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-        GetMlAutoscalingStats.Request autoscalingStatsRequest = new GetMlAutoscalingStats.Request(request.ackTimeout());
-        autoscalingStatsRequest.masterNodeTimeout(request.masterNodeTimeout());
+        GetMlAutoscalingStats.Request autoscalingStatsRequest = new GetMlAutoscalingStats.Request(
+            request.masterNodeTimeout(),
+            request.requestTimeout()
+        );
 
         TaskId parentTaskId = new TaskId(clusterService.localNode().getId(), task.getId());
         Client parentTaskAssigningClient = new ParentTaskAssigningClient(client, parentTaskId);

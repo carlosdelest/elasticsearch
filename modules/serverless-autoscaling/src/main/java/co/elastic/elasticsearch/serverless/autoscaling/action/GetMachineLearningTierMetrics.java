@@ -36,8 +36,8 @@ public class GetMachineLearningTierMetrics {
     private GetMachineLearningTierMetrics() {/* no instances */}
 
     public static class Request extends AbstractTierMetricsRequest<Request> {
-        Request(TimeValue timeout) {
-            super(TIER_NAME, timeout);
+        Request(TimeValue masterNodeTimeout, TimeValue requestTimeout) {
+            super(TIER_NAME, masterNodeTimeout, requestTimeout);
         }
 
         public Request(StreamInput in) throws IOException {

@@ -65,7 +65,7 @@ public class TransportGetAutoscalingMetricsActionTests extends ESTestCase {
             client,
             threadPool,
             GetSearchTierMetrics.INSTANCE,
-            new GetSearchTierMetrics.Request(TimeValue.timeValueSeconds(10)),
+            new GetSearchTierMetrics.Request(TimeValue.THIRTY_SECONDS, TimeValue.timeValueSeconds(10)),
             ActionListener.wrap(response -> searchTierMetricsRef.set(response.getMetrics()), exceptionRef::set),
             countDownListener
         );
@@ -100,7 +100,7 @@ public class TransportGetAutoscalingMetricsActionTests extends ESTestCase {
             client,
             threadPool,
             GetSearchTierMetrics.INSTANCE,
-            new GetSearchTierMetrics.Request(TimeValue.timeValueMillis(10)),
+            new GetSearchTierMetrics.Request(TimeValue.THIRTY_SECONDS, TimeValue.timeValueMillis(10)),
             ActionListener.wrap(response -> searchTierMetricsRef.set(response.getMetrics()), exceptionRef::set),
             countDownListener
         );
@@ -135,7 +135,7 @@ public class TransportGetAutoscalingMetricsActionTests extends ESTestCase {
             client,
             threadPool,
             GetSearchTierMetrics.INSTANCE,
-            new GetSearchTierMetrics.Request(TimeValue.timeValueMillis(10)),
+            new GetSearchTierMetrics.Request(TimeValue.THIRTY_SECONDS, TimeValue.timeValueMillis(10)),
             ActionListener.wrap(r -> searchTierMetricsRef.set(r.getMetrics()), exceptionRef::set),
             countDownListener
         );

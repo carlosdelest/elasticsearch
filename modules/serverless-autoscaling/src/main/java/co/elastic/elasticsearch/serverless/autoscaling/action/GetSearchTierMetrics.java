@@ -36,8 +36,8 @@ public class GetSearchTierMetrics {
     public GetSearchTierMetrics() {/* no instances */}
 
     public static class Request extends AbstractTierMetricsRequest<Request> {
-        Request(TimeValue timeout) {
-            super(TIER_NAME, timeout);
+        Request(TimeValue masterNodeTimeout, TimeValue requestTimeout) {
+            super(TIER_NAME, masterNodeTimeout, requestTimeout);
         }
 
         Request(final StreamInput input) throws IOException {

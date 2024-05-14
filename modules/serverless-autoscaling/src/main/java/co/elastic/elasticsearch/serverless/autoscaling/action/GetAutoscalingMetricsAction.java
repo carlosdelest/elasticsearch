@@ -24,7 +24,7 @@ import co.elastic.elasticsearch.stateless.autoscaling.search.SearchTierMetrics;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.ActionType;
-import org.elasticsearch.action.support.master.AcknowledgedRequest;
+import org.elasticsearch.action.support.master.MasterNodeRequest;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.core.Nullable;
@@ -46,19 +46,33 @@ public class GetAutoscalingMetricsAction {
 
     private GetAutoscalingMetricsAction() {/* no instances */}
 
-    public static class Request extends AcknowledgedRequest<Request> {
+    public static class Request extends MasterNodeRequest<Request> {
 
-        public Request(TimeValue timeout) {
-            super(timeout);
+        private final TimeValue requestTimeout;
+
+        public Request(TimeValue masterNodeTimeout, TimeValue requestTimeout) {
+            super(masterNodeTimeout);
+            this.requestTimeout = requestTimeout;
         }
 
         public Request(final StreamInput in) throws IOException {
             super(in);
+            requestTimeout = in.readTimeValue();
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            super.writeTo(out);
+            out.writeTimeValue(requestTimeout);
         }
 
         @Override
         public ActionRequestValidationException validate() {
             return null;
+        }
+
+        public TimeValue requestTimeout() {
+            return requestTimeout;
         }
 
         @Override

@@ -124,7 +124,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
         var countDownListener = new CountDownActionListener(3, tierResponsesListener);
 
         TimeValue timeoutPerMetric = TimeValue.timeValueMillis(
-            Math.max((long) (request.ackTimeout().millis() * PER_METRIC_TIMEOUT_SHARE), MIN_TIMEOUT_PER_METRIC_MS)
+            Math.max((long) (request.requestTimeout().millis() * PER_METRIC_TIMEOUT_SHARE), MIN_TIMEOUT_PER_METRIC_MS)
         );
 
         // execute requests for every tier, note: log in debug to not flood the production log with stack traces
@@ -132,7 +132,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             parentTaskAssigningClient,
             threadPool,
             GetIndexTierMetrics.INSTANCE,
-            new GetIndexTierMetrics.Request(timeoutPerMetric),
+            new GetIndexTierMetrics.Request(request.masterNodeTimeout(), timeoutPerMetric),
             ActionListener.wrap(response -> indexTierMetricsRef.set(response.getMetrics()), e -> {
                 logger.warn("failed to retrieve index tier metrics", e);
                 indexTierMetricsRef.set(new IndexTierMetrics(getFailureReason(e), wrapExceptionIfNecessary(e)));
@@ -143,7 +143,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             parentTaskAssigningClient,
             threadPool,
             GetSearchTierMetrics.INSTANCE,
-            new GetSearchTierMetrics.Request(timeoutPerMetric),
+            new GetSearchTierMetrics.Request(request.masterNodeTimeout(), timeoutPerMetric),
             ActionListener.wrap(response -> searchTierMetricsRef.set(response.getMetrics()), e -> {
                 logger.warn("failed to retrieve search tier metrics", e);
                 searchTierMetricsRef.set(new SearchTierMetrics(getFailureReason(e), wrapExceptionIfNecessary(e)));
@@ -154,7 +154,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             parentTaskAssigningClient,
             threadPool,
             GetMachineLearningTierMetrics.INSTANCE,
-            new GetMachineLearningTierMetrics.Request(timeoutPerMetric),
+            new GetMachineLearningTierMetrics.Request(request.masterNodeTimeout(), timeoutPerMetric),
             ActionListener.wrap(response -> machineLearningMetricsRef.set(response.getMetrics()), e -> {
                 logger.warn("failed to retrieve ml tier metrics", e);
                 machineLearningMetricsRef.set(new MachineLearningTierMetrics(getFailureReason(e), wrapExceptionIfNecessary(e)));
@@ -184,11 +184,11 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             request,
             ListenerTimeouts.wrapWithTimeout(
                 threadPool,
-                request.ackTimeout(),
+                request.requestTimeout(),
                 threadPool.generic(),
                 ActionListener.runAfter(listener, () -> countDownActionListener.onResponse(null)),
                 (ignore) -> {
-                    listener.onFailure(new ElasticsearchTimeoutException("timed out after [" + request.ackTimeout() + "]"));
+                    listener.onFailure(new ElasticsearchTimeoutException("timed out after [" + request.requestTimeout() + "]"));
                     countDownActionListener.onResponse(null);
                 }
             )

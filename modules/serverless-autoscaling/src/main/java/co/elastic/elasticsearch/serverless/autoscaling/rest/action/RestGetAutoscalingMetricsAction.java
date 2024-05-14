@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.serverless.autoscaling.rest.action;
 
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetAutoscalingMetricsAction;
 
+import org.elasticsearch.action.support.master.MasterNodeRequest;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.rest.BaseRestHandler;
@@ -56,7 +57,7 @@ public class RestGetAutoscalingMetricsAction extends BaseRestHandler {
 
         return channel -> new RestCancellableNodeClient(client, request.getHttpChannel()).execute(
             GetAutoscalingMetricsAction.INSTANCE,
-            new GetAutoscalingMetricsAction.Request(timeout),
+            new GetAutoscalingMetricsAction.Request(MasterNodeRequest.TRAPPY_IMPLICIT_DEFAULT_MASTER_NODE_TIMEOUT, timeout),
             new RestToXContentListener<>(channel)
         );
     }
