@@ -84,6 +84,19 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
+    /**
+     * Registers the setting for disabling the {@code NativeRoleMappingStore} from the x-pack Security plugin.
+     * The serverless Security plugin disables the {@code NativeRoleMappingStore} because the
+     * the role mapping endpoints, which store the role mappings in the .security index,
+     * are not used in serverless projects, and instead it's the cluster state-based role mappings,
+     * i.e. {@code ClusterStateRoleMapper}, that are used.
+     */
+    public static final Setting<Boolean> NATIVE_ROLE_MAPPINGS_ENABLED_SETTING = Setting.boolSetting(
+        "xpack.security.authc.native_role_mappings.enabled",
+        true,
+        Setting.Property.NodeScope
+    );
+
     public static final Setting<Boolean> API_KEY_STRICT_REQUEST_VALIDATION = Setting.boolSetting(
         "xpack.security.authc.api_key.strict_request_validation.enabled",
         true,
@@ -160,6 +173,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             NATIVE_USERS_SETTING,
             NATIVE_ROLES_SETTING,
             CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
+            NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
             EXCLUDE_ROLES,
             API_KEY_STRICT_REQUEST_VALIDATION,
             HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION
