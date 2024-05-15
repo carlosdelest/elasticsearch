@@ -83,38 +83,56 @@ class ShardReader {
                 long primaryTerm = shard.getOperationPrimaryTerm();
                 long generation = segmentInfos.getGeneration();
 
-                var cachedShardInfo = localNodeMeteringShardInfoCache.getCachedShardInfo(
-                    shardId,
-                    primaryTerm,
-                    generation,
-                    requestCacheToken
-                );
-                var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
-                logger.debug(
-                    "cached shard size for [{}] at [{}:{}] is [{}]",
-                    shardId,
-                    primaryTerm,
-                    generation,
-                    cachedShardInfo.map(x -> Long.toString(x.sizeInBytes())).orElse("<not present>")
-                );
-                if (cachedShardInfo.isEmpty()
-                    || cachedShardInfo.get().sizeInBytes() != shardSizeAndDocCount.sizeInBytes
-                    || cachedShardInfo.get().docCount() != shardSizeAndDocCount.docCount) {
+                var cachedShardInfo = localNodeMeteringShardInfoCache.getCachedShardInfo(shardId, primaryTerm, generation);
+
+                if (cachedShardInfo.isPresent()) {
+                    // Cached information is up-to-date
+                    logger.debug(
+                        "cached shard size for [{}] at [{}:{}] is [{}]",
+                        shardId,
+                        primaryTerm,
+                        generation,
+                        Long.toString(cachedShardInfo.get().sizeInBytes())
+                    );
+
+                    // If requester changed from the last time, include this shard info in the response and update the cache entry with
+                    // the new request token
+                    if (cachedShardInfo.get().token().equals(requestCacheToken) == false) {
+                        shardIds.put(
+                            shardId,
+                            new MeteringShardInfo(
+                                cachedShardInfo.get().sizeInBytes(),
+                                cachedShardInfo.get().docCount(),
+                                primaryTerm,
+                                generation
+                            )
+                        );
+                        localNodeMeteringShardInfoCache.updateCachedShardInfo(
+                            shardId,
+                            primaryTerm,
+                            generation,
+                            cachedShardInfo.get().sizeInBytes(),
+                            cachedShardInfo.get().docCount(),
+                            requestCacheToken
+                        );
+                    }
+                } else {
+                    // Cached information is outdated or missing: re-compute shard stats, include in response, and update cache entry
+                    var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
                     shardIds.put(
                         shardId,
                         new MeteringShardInfo(shardSizeAndDocCount.sizeInBytes(), shardSizeAndDocCount.docCount(), primaryTerm, generation)
                     );
-                }
-
-                if (requestCacheToken != null) {
-                    localNodeMeteringShardInfoCache.updateCachedShardInfo(
-                        shardId,
-                        primaryTerm,
-                        generation,
-                        shardSizeAndDocCount.sizeInBytes(),
-                        shardSizeAndDocCount.docCount(),
-                        requestCacheToken
-                    );
+                    if (requestCacheToken != null) {
+                        localNodeMeteringShardInfoCache.updateCachedShardInfo(
+                            shardId,
+                            primaryTerm,
+                            generation,
+                            shardSizeAndDocCount.sizeInBytes(),
+                            shardSizeAndDocCount.docCount(),
+                            requestCacheToken
+                        );
+                    }
                 }
             }
         }
