@@ -99,7 +99,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
-        assertTrue(masterFileSettingsService.watching());
+        assertBusy(() -> assertTrue(masterFileSettingsService.watching()));
         assertFalse(dataFileSettingsService.watching());
 
         writeJSONFile(masterNode, savedClusterState.secretsVersion, testJSON, "foo");
@@ -126,7 +126,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
-        assertTrue(masterFileSettingsService.watching());
+        assertBusy(() -> assertTrue(masterFileSettingsService.watching()));
         assertFalse(dataFileSettingsService.watching());
 
         writeJSONFile(masterNode, savedClusterState.secretsVersion, malformedJSON, "foo");
@@ -152,7 +152,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
-        assertTrue(masterFileSettingsService.watching());
+        assertBusy(() -> assertTrue(masterFileSettingsService.watching()));
         assertFalse(dataFileSettingsService.watching());
 
         writeJSONFile(masterNode, savedClusterState.secretsVersion, badSettingJSON, "foo");
@@ -184,7 +184,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
-        assertTrue(masterFileSettingsService.watching());
+        assertBusy(() -> assertTrue(masterFileSettingsService.watching()));
         assertFalse(dataFileSettingsService.watching());
 
         writeJSONFile(masterNode, savedClusterState.secretsVersion, testJSON, "foo");
@@ -220,7 +220,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         FileSecureSettingsService masterFileSettingsService = internalCluster().getInstance(FileSecureSettingsService.class, masterNode);
 
-        assertTrue(masterFileSettingsService.watching());
+        assertBusy(() -> assertTrue(masterFileSettingsService.watching()));
         assertFalse(dataFileSettingsService.watching());
 
         writeJSONFile(masterNode, savedClusterState.secretsVersion, testJSON, "foo");
