@@ -104,7 +104,8 @@ class ShardReader {
                                 cachedShardInfo.get().sizeInBytes(),
                                 cachedShardInfo.get().docCount(),
                                 primaryTerm,
-                                generation
+                                generation,
+                                cachedShardInfo.get().storedIngestSizeInBytes()
                             )
                         );
                         localNodeMeteringShardInfoCache.updateCachedShardInfo(
@@ -113,7 +114,8 @@ class ShardReader {
                             generation,
                             cachedShardInfo.get().sizeInBytes(),
                             cachedShardInfo.get().docCount(),
-                            requestCacheToken
+                            requestCacheToken,
+                            cachedShardInfo.get().storedIngestSizeInBytes()
                         );
                     }
                 } else {
@@ -121,7 +123,13 @@ class ShardReader {
                     var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
                     shardIds.put(
                         shardId,
-                        new MeteringShardInfo(shardSizeAndDocCount.sizeInBytes(), shardSizeAndDocCount.docCount(), primaryTerm, generation)
+                        new MeteringShardInfo(
+                            shardSizeAndDocCount.sizeInBytes(),
+                            shardSizeAndDocCount.docCount(),
+                            primaryTerm,
+                            generation,
+                            null // TODO
+                        )
                     );
                     if (requestCacheToken != null) {
                         localNodeMeteringShardInfoCache.updateCachedShardInfo(
@@ -130,7 +138,8 @@ class ShardReader {
                             generation,
                             shardSizeAndDocCount.sizeInBytes(),
                             shardSizeAndDocCount.docCount(),
-                            requestCacheToken
+                            requestCacheToken,
+                            null // TODO
                         );
                     }
                 }

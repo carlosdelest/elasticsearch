@@ -17,15 +17,19 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
+
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 
 import java.io.IOException;
 
-public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTerm, long generation) implements Writeable {
+public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTerm, long generation, Long storedIngestSizeInBytes)
+    implements
+        Writeable {
 
-    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0);
+    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0, null);
 
     public MeteringShardInfo {
         assert sizeInBytes >= 0 : "size must be non negative";
@@ -33,12 +37,14 @@ public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTer
 
     public static MeteringShardInfo from(StreamInput in) throws IOException {
         var sizeInBytes = in.readVLong();
-
         long docCount = in.readVLong();
         var primaryTerm = in.readVLong();
         var generation = in.readVLong();
-
-        return new MeteringShardInfo(sizeInBytes, docCount, primaryTerm, generation);
+        Long ingestedSizeInBytes = null;
+        if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.ADD_INGESTED_SIZE_STORAGE_FIELD)) {
+            ingestedSizeInBytes = in.readOptionalVLong();
+        }
+        return new MeteringShardInfo(sizeInBytes, docCount, primaryTerm, generation, ingestedSizeInBytes);
     }
 
     @Override
@@ -47,5 +53,8 @@ public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTer
         out.writeVLong(docCount);
         out.writeVLong(primaryTerm);
         out.writeVLong(generation);
+        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.ADD_INGESTED_SIZE_STORAGE_FIELD)) {
+            out.writeOptionalVLong(storedIngestSizeInBytes);
+        }
     }
 }

@@ -76,9 +76,9 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L))
         );
 
         var client = mock(Client.class);
@@ -117,14 +117,14 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, null)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, null)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, null))
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 2)),
-            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 1))
+            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 2, null)),
+            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 1, null))
         );
 
         var client = mock(Client.class);
@@ -181,14 +181,14 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, null)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, null)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, null))
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1)),
-            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 2))
+            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, null)),
+            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 2, null))
         );
 
         var client = mock(Client.class);
@@ -245,9 +245,9 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, null)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, null)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, null))
         );
 
         var client = mock(Client.class);

@@ -96,7 +96,7 @@ public class ShardReaderTests extends ESTestCase {
         var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
 
         verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
-        verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"));
+        verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"), any());
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
     }
@@ -109,7 +109,7 @@ public class ShardReaderTests extends ESTestCase {
         var indicesService = mock(IndicesService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
         when(shardInfoCache.getCachedShardInfo(eq(shardId3), anyLong(), anyLong())).thenReturn(
-            Optional.of(new LocalNodeMeteringShardInfoCache.CacheEntry(1L, 1L, 10L, 100L, "TEST-NODE"))
+            Optional.of(new LocalNodeMeteringShardInfoCache.CacheEntry(1L, 1L, 10L, 100L, "TEST-NODE", null))
         );
 
         var shardReader = new ShardReader(indicesService);
@@ -140,7 +140,7 @@ public class ShardReaderTests extends ESTestCase {
 
         verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
         // updateCachedShardInfo is not invoked when both generation and requestToken are up-to-date
-        verify(shardInfoCache, times(2)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"));
+        verify(shardInfoCache, times(2)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"), any());
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2));
     }

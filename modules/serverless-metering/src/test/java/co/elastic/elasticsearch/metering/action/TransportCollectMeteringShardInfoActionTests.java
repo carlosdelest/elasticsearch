@@ -234,18 +234,19 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         final Map<String, Map<ShardId, MeteringShardInfo>> nodesShardAnswer = Map.of(
             searchNodes.get(0).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1)),
-                Map.entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2)),
-                Map.entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1))
+                Map.entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 14L)),
+                Map.entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 15L)),
+                Map.entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 16L))
             ),
             searchNodes.get(1).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new MeteringShardInfo(21L, 210L, 2, 1)),
-                Map.entry(shard2Id, new MeteringShardInfo(22L, 220L, 1, 1))
+                Map.entry(shard1Id, new MeteringShardInfo(21L, 210L, 2, 1, 24L)),
+                Map.entry(shard2Id, new MeteringShardInfo(22L, 220L, 1, 1, 25L))
             )
         );
 
         var expectedSizes = Map.of(shard1Id, 21L, shard2Id, 12L, shard3Id, 13L);
+        var expectedIngestedSizes = Map.of(shard1Id, 24L, shard2Id, 15L, shard3Id, 16L);
 
         var request = new CollectMeteringShardInfoAction.Request();
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
@@ -269,6 +270,10 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         assertThat(response.getShardInfo().get(shard1Id).sizeInBytes(), is(expectedSizes.get(shard1Id)));
         assertThat(response.getShardInfo().get(shard2Id).sizeInBytes(), is(expectedSizes.get(shard2Id)));
         assertThat(response.getShardInfo().get(shard3Id).sizeInBytes(), is(expectedSizes.get(shard3Id)));
+
+        assertThat(response.getShardInfo().get(shard1Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard1Id)));
+        assertThat(response.getShardInfo().get(shard2Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard2Id)));
+        assertThat(response.getShardInfo().get(shard3Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard3Id)));
     }
 
     public void testNoPersistentTaskNodeFails() {

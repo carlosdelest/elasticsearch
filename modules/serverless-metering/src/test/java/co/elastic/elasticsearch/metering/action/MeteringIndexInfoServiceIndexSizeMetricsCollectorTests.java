@@ -80,7 +80,7 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         int shardIdInt = 0;
         var shard1Id = new ShardId(indexName, "index1UUID", shardIdInt);
 
-        var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1)));
+        var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 11L)));
         var indexInfoService = new MeteringIndexInfoService();
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
@@ -103,7 +103,8 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
 
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
             var shardId = new ShardId(indexName, "index1UUID", id);
-            return entry(shardId, new MeteringShardInfo(10L + id, 110L, 1, 1));
+            var size = 10L + id;
+            return entry(shardId, new MeteringShardInfo(size, 110L, 1, 1, size));
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
         var indexInfoService = new MeteringIndexInfoService();
@@ -131,7 +132,7 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
             var shardId = new ShardId(indexName, "index1UUID", id);
             var size = failedIndex == id ? 0 : 10L + id;
-            return entry(shardId, new MeteringShardInfo(size, 110L, 1, 1));
+            return entry(shardId, new MeteringShardInfo(size, 110L, 1, 1, size));
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
         var indexInfoService = new MeteringIndexInfoService();

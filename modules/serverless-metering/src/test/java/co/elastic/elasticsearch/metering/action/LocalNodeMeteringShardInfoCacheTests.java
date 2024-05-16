@@ -34,15 +34,15 @@ public class LocalNodeMeteringShardInfoCacheTests extends ESTestCase {
 
         try (var shardSizeService = new LocalNodeMeteringShardInfoCache()) {
             var shard1QueryResult = shardSizeService.getCachedShardInfo(shardId1, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId1, 1, 1, 10L, 100L, testNodeToken);
+            shardSizeService.updateCachedShardInfo(shardId1, 1, 1, 10L, 100L, testNodeToken, 11L);
             var secondShard1QueryResult = shardSizeService.getCachedShardInfo(shardId1, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId1, 1, 1, 11L, 110L, testNodeToken);
+            shardSizeService.updateCachedShardInfo(shardId1, 1, 1, 11L, 110L, testNodeToken, 12L);
             var thirdShard1QueryResult = shardSizeService.getCachedShardInfo(shardId1, 1, 1);
 
             var shard2QueryResult = shardSizeService.getCachedShardInfo(shardId2, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId2, 1, 1, 20L, 200L, testNodeToken);
+            shardSizeService.updateCachedShardInfo(shardId2, 1, 1, 20L, 200L, testNodeToken, 21L);
             var secondShard2QueryResult = shardSizeService.getCachedShardInfo(shardId2, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId2, 1, 1, 21L, 210L, testNodeToken);
+            shardSizeService.updateCachedShardInfo(shardId2, 1, 1, 21L, 210L, testNodeToken, 22L);
             var thirdShard2QueryResult = shardSizeService.getCachedShardInfo(shardId2, 1, 1);
 
             assertThat(shard1QueryResult, isEmpty());
@@ -56,9 +56,11 @@ public class LocalNodeMeteringShardInfoCacheTests extends ESTestCase {
             assertThat(shard2QueryResult, isEmpty());
             assertThat(secondShard2QueryResult, isPresent());
             assertThat(secondShard2QueryResult.get().sizeInBytes(), is(20L));
+            assertThat(secondShard2QueryResult.get().storedIngestSizeInBytes(), is(21L));
             assertThat(secondShard2QueryResult.get().docCount(), is(200L));
             assertThat(thirdShard2QueryResult, isPresent());
             assertThat(thirdShard2QueryResult.get().sizeInBytes(), is(21L));
+            assertThat(thirdShard2QueryResult.get().storedIngestSizeInBytes(), is(22L));
             assertThat(thirdShard2QueryResult.get().docCount(), is(210L));
         }
     }
@@ -70,11 +72,11 @@ public class LocalNodeMeteringShardInfoCacheTests extends ESTestCase {
 
         try (var shardSizeService = new LocalNodeMeteringShardInfoCache()) {
             var firstQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId, 1, 1, 10L, 100L, testNodeToken);
+            shardSizeService.updateCachedShardInfo(shardId, 1, 1, 10L, 100L, testNodeToken, 20L);
             var secondQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
             var differentPrimaryQueryResult = shardSizeService.getCachedShardInfo(shardId, 2, 1);
             var differentGenerationQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 2);
-            shardSizeService.updateCachedShardInfo(shardId, 2, 2, 11L, 110L, testNodeToken);
+            shardSizeService.updateCachedShardInfo(shardId, 2, 2, 11L, 110L, testNodeToken, 21L);
             var updatedQueryResult = shardSizeService.getCachedShardInfo(shardId, 2, 2);
 
             assertThat(firstQueryResult, isEmpty());
@@ -83,6 +85,7 @@ public class LocalNodeMeteringShardInfoCacheTests extends ESTestCase {
             assertThat(differentGenerationQueryResult, isEmpty());
             assertThat(updatedQueryResult, isPresent());
             assertThat(updatedQueryResult.get().sizeInBytes(), is(11L));
+            assertThat(updatedQueryResult.get().storedIngestSizeInBytes(), is(21L));
             assertThat(updatedQueryResult.get().docCount(), is(110L));
         }
     }
@@ -95,10 +98,10 @@ public class LocalNodeMeteringShardInfoCacheTests extends ESTestCase {
 
         try (var shardSizeService = new LocalNodeMeteringShardInfoCache()) {
             var firstQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId, 1, 1, 10L, 100L, testNodeToken1);
+            shardSizeService.updateCachedShardInfo(shardId, 1, 1, 10L, 100L, testNodeToken1, null);
             var secondQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
             var differentTokenQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId, 2, 2, 11L, 110L, testNodeToken2);
+            shardSizeService.updateCachedShardInfo(shardId, 2, 2, 11L, 110L, testNodeToken2, null);
             var updatedQueryResult = shardSizeService.getCachedShardInfo(shardId, 2, 2);
 
             assertThat(firstQueryResult, isEmpty());

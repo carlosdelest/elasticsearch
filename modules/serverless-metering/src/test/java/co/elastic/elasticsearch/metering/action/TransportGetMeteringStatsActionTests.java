@@ -447,8 +447,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
             Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0))
+                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
+                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L))
             ),
             Set.of()
         );
@@ -486,8 +486,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
             Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0))
+                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
+                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L))
             ),
             Set.of()
         );
@@ -551,10 +551,10 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
             Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0)),
-                Map.entry(shardId3, new MeteringShardInfo(30L, 300L, 0, 0)),
-                Map.entry(shardId4, new MeteringShardInfo(40L, 400L, 0, 0))
+                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
+                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L)),
+                Map.entry(shardId3, new MeteringShardInfo(30L, 300L, 0, 0, 30L)),
+                Map.entry(shardId4, new MeteringShardInfo(40L, 400L, 0, 0, 40L))
             ),
             Set.of()
         );
@@ -621,10 +621,10 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
             Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0)),
-                Map.entry(shardId3, new MeteringShardInfo(30L, 300L, 0, 0)),
-                Map.entry(dsShardId, new MeteringShardInfo(40L, 400L, 0, 0))
+                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
+                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L)),
+                Map.entry(shardId3, new MeteringShardInfo(30L, 300L, 0, 0, 30L)),
+                Map.entry(dsShardId, new MeteringShardInfo(40L, 400L, 0, 0, 40L))
             ),
             Set.of()
         );
@@ -700,8 +700,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
             Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0))
+                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
+                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L))
             ),
             Set.of()
         );
@@ -786,7 +786,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
-            Map.of(shardId1, new MeteringShardInfo(10L, 100L, 0, 0)),
+            Map.of(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, null)),
             Set.of()
         );
 

@@ -130,7 +130,8 @@ class TestTransportActionUtils {
     }
 
     static MeteringShardInfo createMeteringShardInfo(ShardId shardId) {
-        return new MeteringShardInfo(ESTestCase.randomLongBetween(0, 10000), ESTestCase.randomLongBetween(0, 10000), 0, 0);
+        var size = ESTestCase.randomLongBetween(0, 10000);
+        return new MeteringShardInfo(size, ESTestCase.randomLongBetween(0, 10000), 0, 0, size);
     }
 
     static void awaitForkedTasks(ExecutorService executor) {
