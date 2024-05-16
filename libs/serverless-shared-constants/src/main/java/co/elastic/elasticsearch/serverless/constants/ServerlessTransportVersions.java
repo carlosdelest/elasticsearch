@@ -33,6 +33,7 @@ public class ServerlessTransportVersions {
     static Set<Integer> IDS = new HashSet<>();
 
     public static final TransportVersion REMOVE_DUMMY_PRIMARY_RELOCATION_CHANGE = def(8_647_01_0);
+    public static final TransportVersion NEW_COMMIT_NOTIFICATION_WITH_CLUSTER_STATE_VERSION_AND_NODE_ID = def(8_658_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
