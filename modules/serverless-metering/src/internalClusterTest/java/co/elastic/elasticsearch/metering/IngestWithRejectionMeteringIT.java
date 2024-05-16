@@ -167,16 +167,19 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
 
     private long executeRequests(BulkRequest request1, BulkRequest request2) throws IOException {
         long successCount = 0;
+        final ActionFuture<BulkResponse> bulkFuture1 = client().bulk(request1);
+        final ActionFuture<BulkResponse> bulkFuture2 = client().bulk(request2);
         try {
-            final ActionFuture<BulkResponse> bulkFuture1 = client().bulk(request1);
-            final ActionFuture<BulkResponse> bulkFuture2 = client().bulk(request2);
-
             BulkResponse bulkItemResponses1 = bulkFuture1.actionGet();
-            BulkResponse bulkItemResponses2 = bulkFuture2.actionGet();
             logger.info("response 1: " + formatResponse(bulkItemResponses1));
-            logger.info("response 2: " + formatResponse(bulkItemResponses2));
-
             successCount += Arrays.stream(bulkItemResponses1.getItems()).filter(b -> b.isFailed() == false).count();
+        } catch (EsRejectedExecutionException e) {
+            logger.info(e);
+            // ignored, one of the two bulk requests was rejected outright due to the write queue being full
+        }
+        try {
+            BulkResponse bulkItemResponses2 = bulkFuture2.actionGet();
+            logger.info("response 2: " + formatResponse(bulkItemResponses2));
             successCount += Arrays.stream(bulkItemResponses2.getItems()).filter(b -> b.isFailed() == false).count();
         } catch (EsRejectedExecutionException e) {
             logger.info(e);
