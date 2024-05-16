@@ -25,6 +25,7 @@ import org.elasticsearch.cli.ExitCodes;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
 import org.elasticsearch.cli.UserException;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.common.hash.MessageDigests;
 import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.settings.Settings;
@@ -33,6 +34,7 @@ import org.elasticsearch.core.CheckedConsumer;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.env.Environment;
+import org.elasticsearch.node.NodeRoleSettings;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -51,6 +53,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -63,6 +66,7 @@ public class ServerlessServerCli extends ServerCli {
     static final String PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP = "es.serverless.processors_overcommit_factor";
     static final String FAST_SHUTDOWN_MARKER_FILE_SYSPROP = "es.serverless.fast_shutdown_marker_file";
     static final String APM_PROJECT_ID_SETTING = "telemetry.agent.global_labels.project_id";
+    static final String APM_NODE_ROLE_SETTING = "telemetry.agent.global_labels.node_tier";
     static final String APM_PROJECT_TYPE_SETTING = "telemetry.agent.global_labels.project_type";
     static final String DIAGNOSTICS_TARGET_PATH_SYSPROP = "es.serverless.path.diagnostics";
     private static final String DEFAULT_DIAGNOSTICS_TARGET_PATH = "/mnt/elastic/diagnostics";
@@ -119,6 +123,9 @@ public class ServerlessServerCli extends ServerCli {
             if (ServerlessSharedSettings.PROJECT_TYPE.exists(nodeSettings)) {
                 finalSettingsBuilder.put(APM_PROJECT_TYPE_SETTING, ServerlessSharedSettings.PROJECT_TYPE.get(nodeSettings));
             }
+            if (NodeRoleSettings.NODE_ROLES_SETTING.exists(nodeSettings)) {
+                finalSettingsBuilder.put(APM_NODE_ROLE_SETTING, indexOrSearchOrMlNodeRole(nodeSettings));
+            }
 
             var newEnv = new Environment(finalSettingsBuilder.build(), env.configFile());
 
@@ -131,6 +138,26 @@ public class ServerlessServerCli extends ServerCli {
                 latch.countDown();
             }
         }
+    }
+
+    /**
+     * This is used for setting  {@link ServerlessServerCli#APM_NODE_ROLE_SETTING}
+     * which will send as a field in metrics and stored as a keyword field.
+     * In production deployment we are expecting only one role per node (either index, search or ml), however in local development env
+     * you can start nodes with multiple values.
+     * Also, node has additional node roles like master, remote etc which we do not care about on this metric field
+     *
+     * This method picks either index, search or ml role (whichever first) or defaults to ''
+     */
+    private static String indexOrSearchOrMlNodeRole(Settings nodeSettings) {
+        Set<DiscoveryNodeRole> nodeRoles = Set.of(DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.SEARCH_ROLE, DiscoveryNodeRole.ML_ROLE);
+
+        return NodeRoleSettings.NODE_ROLES_SETTING.get(nodeSettings)
+            .stream()
+            .filter(nodeRoles::contains)
+            .map(DiscoveryNodeRole::roleName)
+            .findFirst()
+            .orElse("");
     }
 
     @Override

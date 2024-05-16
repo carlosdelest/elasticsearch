@@ -136,6 +136,34 @@ public class ServerlessServerCliTests extends CommandTestCase {
         assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("2.0"));
     }
 
+    public void testProjectId() throws Exception {
+        execute("-E", "serverless.project_id=abc123");
+        assertThat(mockServer.args.nodeSettings().get(ServerlessServerCli.APM_PROJECT_ID_SETTING), is("abc123"));
+    }
+
+    public void testProjectType() throws Exception {
+        execute("-E", "serverless.project_type=OBSERVABILITY");
+        assertThat(mockServer.args.nodeSettings().get(ServerlessServerCli.APM_PROJECT_TYPE_SETTING), is("OBSERVABILITY"));
+    }
+
+    public void testNodeTierSettings() throws Exception {
+        execute("-E", "node.roles=index");
+        assertThat(mockServer.args.nodeSettings().get(ServerlessServerCli.APM_NODE_ROLE_SETTING), is("index"));
+
+        execute("-E", "node.roles=search");
+        assertThat(mockServer.args.nodeSettings().get(ServerlessServerCli.APM_NODE_ROLE_SETTING), is("search"));
+
+        execute("-E", "node.roles=ml");
+        assertThat(mockServer.args.nodeSettings().get(ServerlessServerCli.APM_NODE_ROLE_SETTING), is("ml"));
+
+        execute("-E", "node.roles=index,search,ml");
+        assertThat(mockServer.args.nodeSettings().get(ServerlessServerCli.APM_NODE_ROLE_SETTING), is("index"));
+
+        String nodeTier = randomFrom("index", "search", "ml");
+        execute("-E", "node.roles=master,remote_cluster_client," + nodeTier);
+        assertThat(mockServer.args.nodeSettings().get(ServerlessServerCli.APM_NODE_ROLE_SETTING), is(nodeTier));
+    }
+
     public void testOvercommitIgnoredOutsideLinux() throws Exception {
         sysprops.put("os.name", "MacOS");
         executeOvercommit(1.0);
