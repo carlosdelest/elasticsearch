@@ -40,3 +40,6 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/1987"
   method: "testOngoingTasksAreReflectedInSearchLoad"
+- class: "co.elastic.elasticsearch.settings.secure.FileSecureSettingsServiceIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2013"
+  method: "testSettingsApplied"
