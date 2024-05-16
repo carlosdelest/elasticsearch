@@ -43,3 +43,6 @@ tests:
 - class: "co.elastic.elasticsearch.settings.secure.FileSecureSettingsServiceIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2013"
   method: "testSettingsApplied"
+- class: "co.elastic.elasticsearch.metering.IngestWithRejectionMeteringIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2014"
+  method: "testDocumentsNotMeteredWhenRejectionAfterPipeline"
