@@ -1,7 +1,7 @@
 stateless.enabled: true
 search.query_phase_parallel_collection_enabled: true
 # TODO remove the following line once we are confident that there are no file deletions issues
-logger.stateless.object_store.shard_files_deletes: DEBUG
+logger.co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService.shard_files_deletes: DEBUG
 
 # allow more concurrent recoveries in serverless, since we wait for object store during recovery.
 cluster.routing.allocation.node_concurrent_recoveries: 10
