@@ -37,12 +37,14 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.IOUtils;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.env.Environment;
 import org.junit.Before;
 
 import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -58,7 +60,6 @@ import java.util.concurrent.TimeoutException;
 
 import static org.elasticsearch.server.cli.ProcessUtil.nonInterruptibleVoid;
 import static org.elasticsearch.server.cli.ServerlessServerCli.DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP;
-import static org.hamcrest.Matchers.arrayContaining;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
@@ -66,8 +67,10 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.emptyArray;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItemInArray;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.hasToString;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -200,7 +203,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Path logsDir = createEmptyTempDir();
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(0, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+            serverlessCli.moveDiagnosticsToTargetPath(0, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
         }
 
         try (var targetPathFiles = Files.list(targetPath)) {
@@ -214,7 +217,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Path logsDir = createEmptyTempDir();
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
         }
 
         try (var targetPathFiles = Files.list(targetPath)) {
@@ -231,12 +234,12 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Files.writeString(mockDumpFile, "MOCK-DUMP");
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -254,12 +257,12 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         try (var serverlessCli = new ServerlessServerCli()) {
             var settings = Settings.builder().put("serverless.project_id", "PRJ_ID").put("node.name", "NODE_NAME").build();
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, settings, terminal);
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, settings, terminal);
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
         assertThat(targetPathFiles[0].getFileName().toString(), startsWith("PRJ_ID_NODE_NAME"));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
@@ -279,12 +282,12 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Files.writeString(mockDumpFile2, "MOCK-DUMP");
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -307,12 +310,12 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Files.writeString(logFile2, "{}");
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
@@ -324,32 +327,6 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Path targetPath = createEmptyTempDir();
         Path heapDumpDataPath = createEmptyTempDir();
         Path logsDir = createEmptyTempDir();
-        Path replayDir = createEmptyTempDir();
-
-        var mockDumpFile1 = heapDumpDataPath.resolve("mock1.hprof");
-        Files.writeString(mockDumpFile1, "MOCK-DUMP");
-
-        var replayFile = replayDir.resolve("replay_1234.log");
-        Files.writeString(replayFile, "Some replay content");
-
-        try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, replayDir, logsDir, emptySettings(), terminal);
-        }
-
-        var targetPathFiles = FileSystemUtils.files(targetPath);
-
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
-
-        assertThat(filesInZip, hasSize(2));
-        assertThat(filesInZip, containsInAnyOrder("/mock1.hprof", "/replay_1234.log"));
-    }
-
-    public void testMoveDiagnosticsIncludeReplayLogsInZipOnce() throws UserException, IOException {
-        Path targetPath = createEmptyTempDir();
-        Path heapDumpDataPath = createEmptyTempDir();
-        Path logsDir = createEmptyTempDir();
 
         var mockDumpFile1 = heapDumpDataPath.resolve("mock1.hprof");
         Files.writeString(mockDumpFile1, "MOCK-DUMP");
@@ -358,17 +335,41 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Files.writeString(replayFile, "Some replay content");
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
 
         List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
 
         assertThat(filesInZip, hasSize(2));
         assertThat(filesInZip, containsInAnyOrder("/mock1.hprof", "/logs/replay_1234.log"));
+    }
+
+    public void testMoveDiagnosticsIncludeFatalErrorLogsInZip() throws UserException, IOException {
+        Path targetPath = createEmptyTempDir();
+        Path heapDumpDataPath = createEmptyTempDir();
+        Path logsDir = createEmptyTempDir();
+
+        var fatalErrorFile1 = logsDir.resolve("hs_err_123.log");
+        var fatalErrorFile2 = logsDir.resolve("hs_err_234.log");
+        Files.writeString(fatalErrorFile1, "Some error content");
+        Files.writeString(fatalErrorFile2, "Some other error content");
+
+        try (var serverlessCli = new ServerlessServerCli()) {
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
+        }
+
+        var targetPathFiles = FileSystemUtils.files(targetPath);
+
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
+
+        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+
+        assertThat(filesInZip, hasSize(2));
+        assertThat(filesInZip, containsInAnyOrder("/logs/hs_err_123.log", "/logs/hs_err_234.log"));
     }
 
     public void testZipChecksumPrintedOnStdout() throws UserException, IOException {
@@ -386,12 +387,12 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Files.writeString(logFile2, "{}");
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
 
         String sha256;
         try (var zipFileStream = Files.newInputStream(targetPathFiles[0])) {
@@ -407,19 +408,10 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Path logsDir = Path.of("/not/existing/logs/");
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            expectThrows(
-                UserException.class,
-                () -> serverlessCli.moveDiagnosticsToTargetPath(
-                    3,
-                    targetPath,
-                    heapDumpDataPath,
-                    logsDir,
-                    logsDir,
-                    emptySettings(),
-                    terminal
-                )
-            );
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
         }
+
+        assertThat(terminal.getOutput(), containsString("No diagnostic files found, skipping post-exit diagnostic collection"));
         var targetPathFiles = FileSystemUtils.files(targetPath);
         assertThat(targetPathFiles, emptyArray());
     }
@@ -429,59 +421,24 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Path heapDumpDataPath = createEmptyTempDir();
         Path logsDir = Path.of("/not/existing/logs/");
 
-        var mockDumpFile1 = heapDumpDataPath.resolve("mock1.hprof");
-        Files.writeString(mockDumpFile1, "MOCK-DUMP");
+        var mockDumpFile = heapDumpDataPath.resolve("mock.hprof");
+        Files.writeString(mockDumpFile, "MOCK-DUMP");
 
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, logsDir, emptySettings(), terminal);
+            var settings = Settings.builder().put("serverless.project_id", "PRJ_ID").put("node.name", "NODE_NAME").build();
+            var exception = expectThrows(
+                UserException.class,
+                () -> serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, settings, terminal)
+            );
+
+            assertThat(exception.getCause(), instanceOf(NoSuchFileException.class));
+            assertThat(exception.getCause().getMessage(), containsString(logsDir.toString()));
         }
-
-        var targetPathFiles = FileSystemUtils.files(targetPath);
-
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
-
-        assertThat(filesInZip, hasSize(1));
-        assertThat(filesInZip, contains("/mock1.hprof"));
-
-        assertThat(
-            terminal.getErrorOutput(),
-            containsString("/not/existing/logs is not a valid directory. The diagnostic file will not contain log files.")
-        );
-    }
-
-    public void testMoveDiagnosticsInvalidReplayDir() throws UserException, IOException {
-        Path targetPath = createEmptyTempDir();
-        Path heapDumpDataPath = createEmptyTempDir();
-        Path logsDir = createEmptyTempDir();
-        Path replayDir = Path.of("/not/existing/replays/");
-
-        var mockDumpFile1 = heapDumpDataPath.resolve("mock1.hprof");
-        Files.writeString(mockDumpFile1, "MOCK-DUMP");
-
-        try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, replayDir, logsDir, emptySettings(), terminal);
-        }
-
-        var targetPathFiles = FileSystemUtils.files(targetPath);
-
-        assertThat(targetPathFiles, arrayContaining(hasToString(endsWith(".zip"))));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
-
-        assertThat(filesInZip, hasSize(1));
-        assertThat(filesInZip, contains("/mock1.hprof"));
-
-        assertThat(
-            terminal.getErrorOutput(),
-            containsString("/not/existing/replays is not a valid directory. The diagnostic file will not contain replay files.")
-        );
     }
 
     public void testOnExitActionInitializationNoDumpArgNoOp() throws IOException {
         try (var serverlessCli = new ServerlessServerCli()) {
-            serverlessCli.initializeOnExitDiagnosticsAction(Map.of(), createMockServerArgs(), List.of(), terminal);
+            serverlessCli.initializeOnExitDiagnosticsAction(Map.of(), createMockServerArgs(null), List.of(), terminal);
             assertThat(serverlessCli.onExitDiagnosticsAction, is(ServerlessServerCli.NO_OP_EXIT_ACTION));
         }
     }
@@ -491,7 +448,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
         try (var serverlessCli = new ServerlessServerCli()) {
             serverlessCli.initializeOnExitDiagnosticsAction(
                 Map.of(ServerlessServerCli.DIAGNOSTICS_TARGET_PATH_SYSPROP, invalidTargetDir.toString()),
-                createMockServerArgs(),
+                createMockServerArgs(null),
                 List.of(ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo"),
                 terminal
             );
@@ -499,12 +456,119 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
     }
 
-    public void testOnExitActionInitializationValid() throws IOException {
+    public void testOnExitActionInitializationInvalidLogsDirNoOp() throws UserException, IOException {
         var validTargetDir = createTempDir();
         try (var serverlessCli = new ServerlessServerCli()) {
             serverlessCli.initializeOnExitDiagnosticsAction(
                 Map.of(ServerlessServerCli.DIAGNOSTICS_TARGET_PATH_SYSPROP, validTargetDir.toString()),
-                createMockServerArgs(),
+                createMockServerArgs(null),
+                List.of(ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo"),
+                terminal
+            );
+            assertThat(serverlessCli.onExitDiagnosticsAction, is(ServerlessServerCli.NO_OP_EXIT_ACTION));
+        }
+
+        assertThat(
+            terminal.getErrorOutput(),
+            containsString("The logs path [null] is not a valid directory. The diagnostic bundle will not contain log files.")
+        );
+    }
+
+    public void testInvalidReplayDir() throws UserException, IOException {
+        Path targetPath = createEmptyTempDir();
+        Path heapDumpDataPath = createEmptyTempDir();
+        Path logsDir = createEmptyTempDir();
+
+        var validTargetDir = createTempDir();
+        var validLogsDir = createTempDir();
+        try (var serverlessCli = new ServerlessServerCli()) {
+            serverlessCli.initializeOnExitDiagnosticsAction(
+                Map.of(ServerlessServerCli.DIAGNOSTICS_TARGET_PATH_SYSPROP, validTargetDir.toString()),
+                createMockServerArgs(validLogsDir),
+                List.of(
+                    ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo",
+                    ServerlessServerCli.FATAL_ERROR_LOG_FILE_JVM_OPT + "/not/existing/replays"
+                ),
+                terminal
+            );
+            assertThat(serverlessCli.onExitDiagnosticsAction, is(not(ServerlessServerCli.NO_OP_EXIT_ACTION)));
+            assertThat(
+                terminal.getErrorOutput(),
+                containsString(
+                    Strings.format(
+                        "The fatal error log path [/not/existing/replays] is not set to the logs path [%s]; "
+                            + "fatal error logs will not be added to the diagnostic bundle.",
+                        validLogsDir
+                    )
+                )
+            );
+        }
+
+        var mockDumpFile1 = heapDumpDataPath.resolve("mock1.hprof");
+        Files.writeString(mockDumpFile1, "MOCK-DUMP");
+
+        try (var serverlessCli = new ServerlessServerCli()) {
+            serverlessCli.moveDiagnosticsToTargetPath(3, targetPath, heapDumpDataPath, logsDir, emptySettings(), terminal);
+        }
+
+        var targetPathFiles = FileSystemUtils.files(targetPath);
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
+        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        assertThat(filesInZip, hasSize(1));
+        assertThat(filesInZip, contains("/mock1.hprof"));
+    }
+
+    public void testInvalidFatalErrorLogsDir() throws UserException, IOException {
+        Path heapDumpDataPath = createEmptyTempDir();
+        Path fatalErrorLogsDir = createEmptyTempDir();
+
+        var validTargetDir = createTempDir();
+        var validLogsDir = createTempDir();
+        try (var serverlessCli = new ServerlessServerCli()) {
+            serverlessCli.initializeOnExitDiagnosticsAction(
+                Map.of(ServerlessServerCli.DIAGNOSTICS_TARGET_PATH_SYSPROP, validTargetDir.toString()),
+                createMockServerArgs(validLogsDir),
+                List.of(
+                    ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo",
+                    ServerlessServerCli.FATAL_ERROR_LOG_FILE_JVM_OPT + fatalErrorLogsDir
+                ),
+                terminal
+            );
+            assertThat(serverlessCli.onExitDiagnosticsAction, is(not(ServerlessServerCli.NO_OP_EXIT_ACTION)));
+            assertThat(
+                terminal.getErrorOutput(),
+                containsString(
+                    Strings.format(
+                        "The fatal error log path [%s] is not set to the logs path [%s]; "
+                            + "fatal error logs will not be added to the diagnostic bundle.",
+                        fatalErrorLogsDir,
+                        validLogsDir
+                    )
+                )
+            );
+        }
+
+        var mockDumpFile1 = heapDumpDataPath.resolve("mock1.hprof");
+        Files.writeString(mockDumpFile1, "MOCK-DUMP");
+
+        try (var serverlessCli = new ServerlessServerCli()) {
+            serverlessCli.moveDiagnosticsToTargetPath(3, validTargetDir, heapDumpDataPath, validLogsDir, emptySettings(), terminal);
+        }
+
+        var targetPathFiles = FileSystemUtils.files(validTargetDir);
+        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
+        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        assertThat(filesInZip, hasSize(1));
+        assertThat(filesInZip, contains("/mock1.hprof"));
+    }
+
+    public void testOnExitActionInitializationValid() throws IOException {
+        var validTargetDir = createTempDir();
+        var validLogsDir = createTempDir();
+        try (var serverlessCli = new ServerlessServerCli()) {
+            serverlessCli.initializeOnExitDiagnosticsAction(
+                Map.of(ServerlessServerCli.DIAGNOSTICS_TARGET_PATH_SYSPROP, validTargetDir.toString()),
+                createMockServerArgs(validLogsDir),
                 List.of(ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo"),
                 terminal
             );
@@ -514,10 +578,11 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
     public void testExecuteWithOnExitActionExits() throws Exception {
         var validTargetDir = createTempDir();
+        var validLogsDir = createTempDir();
         var serverlessCli = newCommand();
         serverlessCli.initializeOnExitDiagnosticsAction(
             Map.of(ServerlessServerCli.DIAGNOSTICS_TARGET_PATH_SYSPROP, validTargetDir.toString()),
-            createMockServerArgs(),
+            createMockServerArgs(validLogsDir),
             List.of(ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo"),
             terminal
         );
@@ -679,8 +744,8 @@ public class ServerlessServerCliTests extends CommandTestCase {
         return Settings.builder().build();
     }
 
-    private static ServerArgs createMockServerArgs() {
-        return new ServerArgs(false, false, null, KeyStoreWrapper.create(), null, null, null);
+    private static ServerArgs createMockServerArgs(Path logsDir) {
+        return new ServerArgs(false, false, null, KeyStoreWrapper.create(), null, null, logsDir);
     }
 
     private static Path createEmptyTempDir() throws IOException {

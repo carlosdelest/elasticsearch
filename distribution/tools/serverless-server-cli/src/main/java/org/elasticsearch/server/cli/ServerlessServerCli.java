@@ -56,6 +56,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -74,6 +75,7 @@ public class ServerlessServerCli extends ServerCli {
 
     static final String HEAP_DUMP_PATH_JVM_OPT = "-XX:HeapDumpPath=";
     static final String REPLAY_DATA_FILE_JVM_OPT = "-XX:ReplayDataFile=";
+    static final String FATAL_ERROR_LOG_FILE_JVM_OPT = "-XX:ErrorFile=";
     private static final DateTimeFormatter ZIP_FILE_SUFFIX_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
         .withZone(ZoneId.from(ZoneOffset.UTC));
 
@@ -181,39 +183,57 @@ public class ServerlessServerCli extends ServerCli {
         }
     }
 
+    private static Path[] safeFileSystemUtilsFiles(Path dir, String glob, Consumer<IOException> onFailure) {
+        try {
+            if (Files.isDirectory(dir)) {
+                return FileSystemUtils.files(dir, glob);
+            }
+        } catch (IOException ex) {
+            onFailure.accept(ex);
+        }
+        return new Path[0];
+    }
+
+    private static void addFilesToZip(Path filesSourceDir, Path[] files, ZipOutputStream stream) throws IOException {
+        for (var file : files) {
+            String target = filesSourceDir.relativize(file).toString();
+            stream.putNextEntry(new ZipEntry(target));
+            Files.copy(file, stream);
+        }
+    }
+
     void moveDiagnosticsToTargetPath(
         int exitCode,
         Path targetPath,
         Path heapDumpDataDir,
-        Path replayDir,
         Path logsDir,
         Settings settings,
         Terminal terminal
     ) throws UserException {
         try {
-            // We do not look for a specific exitCode. The exit code for a OOME error should be 3 (https://ela.st/oome-exit-code) but it is
-            // undocumented and so it seems better not to rely on it. Instead, we just look for a non-normal exit and for the presence
-            // of a dump file
+            // We do not look for a specific exitCode: there might be different exit codes for different errors/crashes, and they might be
+            // not documented (e.g. the exit code for a OOME error should be 3 (https://ela.st/oome-exit-code) but it is not officially
+            // documented).
+            // Instead, we just look for a non-normal exit and for the presence of one or more diagnostic files we care about.
             if (exitCode == ExitCodes.OK) {
                 terminal.println("Process terminated with 0 exit code, skipping post-exit diagnostic collection");
                 return;
             }
-            var dumpFiles = FileSystemUtils.files(heapDumpDataDir, "*.hprof*");
-            if (dumpFiles.length == 0) {
-                terminal.println("No hprof files found, skipping post-exit diagnostic collection");
-                return;
-            }
 
-            Path[] replayFiles = new Path[0];
-            if (replayDir.equals(logsDir) == false) {
-                // Replay files will be already included in logs
-                if (Files.isDirectory(replayDir) == false) {
-                    terminal.errorPrintln(
-                        Strings.format("%s is not a valid directory. The diagnostic file will not contain replay files.", replayDir)
-                    );
-                } else {
-                    replayFiles = FileSystemUtils.files(replayDir, "replay_*.log");
-                }
+            var fatalErrorLogFiles = safeFileSystemUtilsFiles(
+                logsDir,
+                "hs_err_*.log",
+                ex -> terminal.errorPrintln("Error listing fatal error logs: " + ex)
+            );
+            var heapDumpFiles = safeFileSystemUtilsFiles(
+                heapDumpDataDir,
+                "*.hprof*",
+                ex -> terminal.errorPrintln("Error listing heap dump files: " + ex)
+            );
+
+            if (heapDumpFiles.length == 0 && fatalErrorLogFiles.length == 0) {
+                terminal.println("No diagnostic files found, skipping post-exit diagnostic collection");
+                return;
             }
 
             String zipFileName = "";
@@ -230,23 +250,9 @@ public class ServerlessServerCli extends ServerCli {
 
             MessageDigest md = MessageDigests.sha256();
             try (ZipOutputStream stream = new ZipOutputStream(new DigestOutputStream(Files.newOutputStream(zip), md))) {
-                for (Path dumpFile : dumpFiles) {
-                    String target = heapDumpDataDir.relativize(dumpFile).toString();
-                    stream.putNextEntry(new ZipEntry(target));
-                    Files.copy(dumpFile, stream);
-                }
+                addFilesToZip(heapDumpDataDir, heapDumpFiles, stream);
 
-                for (Path replayFile : replayFiles) {
-                    String target = replayDir.relativize(replayFile).toString();
-                    stream.putNextEntry(new ZipEntry(target));
-                    Files.copy(replayFile, stream);
-                }
-
-                if (Files.isDirectory(logsDir) == false) {
-                    terminal.errorPrintln(
-                        Strings.format("%s is not a valid directory. The diagnostic file will not contain log files.", logsDir)
-                    );
-                } else {
+                {
                     Files.walkFileTree(logsDir, new SimpleFileVisitor<>() {
                         @Override
                         public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
@@ -270,17 +276,21 @@ public class ServerlessServerCli extends ServerCli {
             // Clean up files inserted in the diagnostic bundle, to avoid duplication and conflict over names (which may lead to "stale"
             // dump files). This is particularly relevant in a Docker environment, where the PID is often stable (always the same, across
             // container restarts).
-            terminal.println("Cleaning up dump files: " + Stream.of(dumpFiles).map(Path::toString).collect(Collectors.joining(";")));
-            IOUtils.deleteFilesIgnoringExceptions(dumpFiles);
-            if (replayFiles.length > 0) {
+            if (heapDumpFiles.length > 0) {
                 terminal.println(
-                    "Cleaning up replay files: " + Stream.of(replayFiles).map(Path::toString).collect(Collectors.joining(";"))
+                    "Cleaning up dump files: " + Stream.of(heapDumpFiles).map(Path::toString).collect(Collectors.joining(";"))
                 );
-                IOUtils.deleteFilesIgnoringExceptions(replayFiles);
+                IOUtils.deleteFilesIgnoringExceptions(heapDumpFiles);
+            }
+            if (fatalErrorLogFiles.length > 0) {
+                terminal.println(
+                    "Cleaning up fatal error logs: " + Stream.of(fatalErrorLogFiles).map(Path::toString).collect(Collectors.joining(";"))
+                );
+                IOUtils.deleteFilesIgnoringExceptions(fatalErrorLogFiles);
             }
             terminal.println("Finished cleaning up");
         } catch (IOException e) {
-            throw new UserException(ExitCodes.IO_ERROR, "Cannot copy diagnostic information to {targetPath}", e);
+            throw new UserException(ExitCodes.IO_ERROR, "Cannot save diagnostic information", e);
         }
     }
 
@@ -303,41 +313,97 @@ public class ServerlessServerCli extends ServerCli {
         return jvmOptions.stream().filter(x -> x.startsWith(optionPrefix)).findFirst().map(x -> x.substring(optionPrefix.length()));
     }
 
+    private static boolean isPathInLogs(String fileOrDirectoryName, Path logsDir) throws IOException {
+        var path = Paths.get(fileOrDirectoryName);
+        var dir = Files.isDirectory(path) ? path : path.getParent();
+        return Files.isSameFile(dir, logsDir);
+    }
+
     void initializeOnExitDiagnosticsAction(Map<String, String> sysProps, ServerArgs args, List<String> jvmOptions, Terminal terminal) {
         final String diagnosticsDir = sysProps.getOrDefault(DIAGNOSTICS_TARGET_PATH_SYSPROP, DEFAULT_DIAGNOSTICS_TARGET_PATH);
-
         var heapDumpDataDir = extractJvmOptionValue(HEAP_DUMP_PATH_JVM_OPT, jvmOptions);
-        var replayFile = extractJvmOptionValue(REPLAY_DATA_FILE_JVM_OPT, jvmOptions);
-        var replayDir = replayFile.map(p -> Paths.get(p).getParent()).orElse(args.logsDir());
+
         if (diagnosticsDir == null || Files.isDirectory(Paths.get(diagnosticsDir)) == false) {
             terminal.errorPrintln(
-                Strings.format("The diagnostic target path [%s] is not correctly set; OOME diagnostic will not be saved.", diagnosticsDir)
+                Strings.format("The diagnostic target path [%s] is not correctly set; error diagnostic will not be saved.", diagnosticsDir)
             );
-        } else if (heapDumpDataDir.isEmpty()) {
-            terminal.errorPrintln("The heap dump path is not correctly set; OOME diagnostic will not be saved.");
-        } else {
-            var diagnosticsPath = Paths.get(diagnosticsDir);
-            var heapDumpDataPath = Paths.get(heapDumpDataDir.get());
-            terminal.println(
+            return;
+        }
+        if (heapDumpDataDir.isEmpty()) {
+            terminal.errorPrintln("The heap dump path is not correctly set; error diagnostic will not be saved.");
+            return;
+        }
+        if (args.logsDir() == null || Files.isDirectory(args.logsDir()) == false) {
+            terminal.errorPrintln(
                 Strings.format(
-                    "OOME dumps will be read from [%s] and saved to the diagnostic target path [%s].",
-                    heapDumpDataPath.toAbsolutePath().toString(),
-                    diagnosticsPath.toAbsolutePath().toString()
+                    "The logs path [%s] is not a valid directory. The diagnostic bundle will not contain log files.",
+                    args.logsDir()
                 )
             );
-            onExitDiagnosticsAction = exitCode -> {
-                terminal.println("Starting post-exit diagnostic collection, exit code is " + exitCode);
-                moveDiagnosticsToTargetPath(
-                    exitCode,
-                    diagnosticsPath,
-                    heapDumpDataPath,
-                    replayDir,
-                    args.logsDir(),
-                    args.nodeSettings(),
-                    terminal
-                );
-            };
+            return;
         }
+
+        var replayFile = extractJvmOptionValue(REPLAY_DATA_FILE_JVM_OPT, jvmOptions);
+        var fatalErrorLogFile = extractJvmOptionValue(FATAL_ERROR_LOG_FILE_JVM_OPT, jvmOptions);
+
+        if (replayFile.isPresent()) {
+            try {
+                if (isPathInLogs(replayFile.get(), args.logsDir()) == false) {
+                    terminal.errorPrintln(
+                        Strings.format(
+                            "The replay file path [%s] is not set to the logs path [%s]; "
+                                + "replay files will not be added to the diagnostic bundle.",
+                            replayFile.get(),
+                            args.logsDir()
+                        )
+                    );
+                }
+            } catch (IOException ex) {
+                terminal.errorPrintln(
+                    Strings.format(
+                        "Cannot check the replay file path [%s]; replay files will not be added to the diagnostic bundle: [%s]",
+                        replayFile.get(),
+                        ex
+                    )
+                );
+            }
+        }
+        if (fatalErrorLogFile.isPresent()) {
+            try {
+                if (isPathInLogs(fatalErrorLogFile.get(), args.logsDir()) == false) {
+                    terminal.errorPrintln(
+                        Strings.format(
+                            "The fatal error log path [%s] is not set to the logs path [%s]; "
+                                + "fatal error logs will not be added to the diagnostic bundle.",
+                            fatalErrorLogFile.get(),
+                            args.logsDir()
+                        )
+                    );
+                }
+            } catch (IOException ex) {
+                terminal.errorPrintln(
+                    Strings.format(
+                        "Cannot check fatal error log path [%s]; fatal error logs will not be added to the diagnostic bundle: [%s]",
+                        fatalErrorLogFile.get(),
+                        ex
+                    )
+                );
+            }
+        }
+
+        var diagnosticsPath = Paths.get(diagnosticsDir);
+        var heapDumpDataPath = Paths.get(heapDumpDataDir.get());
+        terminal.println(
+            Strings.format(
+                "Heap dumps will be read from [%s] and saved to the diagnostic target path [%s].",
+                heapDumpDataPath.toAbsolutePath().toString(),
+                diagnosticsPath.toAbsolutePath().toString()
+            )
+        );
+        onExitDiagnosticsAction = exitCode -> {
+            terminal.println("Starting post-exit diagnostic collection, exit code is " + exitCode);
+            moveDiagnosticsToTargetPath(exitCode, diagnosticsPath, heapDumpDataPath, args.logsDir(), args.nodeSettings(), terminal);
+        };
     }
 
     @Override
