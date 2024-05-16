@@ -19,17 +19,16 @@ package co.elastic.elasticsearch.serverless.autoscaling.rest.action;
 
 import co.elastic.elasticsearch.serverless.autoscaling.action.GetAutoscalingMetricsAction;
 
-import org.elasticsearch.action.support.master.MasterNodeRequest;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.RestRequest;
+import org.elasticsearch.rest.RestUtils;
 import org.elasticsearch.rest.Scope;
 import org.elasticsearch.rest.ServerlessScope;
 import org.elasticsearch.rest.action.RestCancellableNodeClient;
 import org.elasticsearch.rest.action.RestToXContentListener;
 
-import java.io.IOException;
 import java.util.List;
 
 import static org.elasticsearch.core.TimeValue.timeValueSeconds;
@@ -52,12 +51,14 @@ public class RestGetAutoscalingMetricsAction extends BaseRestHandler {
     }
 
     @Override
-    protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) throws IOException {
-        TimeValue timeout = request.paramAsTime(TIMEOUT, DEFAULT_AUTOSCALING_METRICS_TIMEOUT);
-
+    protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) {
+        final var getMetricsRequest = new GetAutoscalingMetricsAction.Request(
+            RestUtils.getMasterNodeTimeout(request),
+            request.paramAsTime(TIMEOUT, DEFAULT_AUTOSCALING_METRICS_TIMEOUT)
+        );
         return channel -> new RestCancellableNodeClient(client, request.getHttpChannel()).execute(
             GetAutoscalingMetricsAction.INSTANCE,
-            new GetAutoscalingMetricsAction.Request(MasterNodeRequest.TRAPPY_IMPLICIT_DEFAULT_MASTER_NODE_TIMEOUT, timeout),
+            getMetricsRequest,
             new RestToXContentListener<>(channel)
         );
     }
