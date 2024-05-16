@@ -49,11 +49,11 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
     }
 
     @Override
-    public DocumentSizeReporter getDocumentParsingReporter(String indexName) {
+    public DocumentSizeReporter newDocumentSizeReporter(String indexName) {
         if (canReport(indexName) == false) {
             return DocumentSizeReporter.EMPTY_INSTANCE;
         }
-        return new MeteringDocumentSizeReporter(ingestMetricsCollectorSupplier.get());
+        return new MeteringDocumentSizeReporter(indexName, ingestMetricsCollectorSupplier.get());
     }
 
     private boolean canReport(String indexName) {

@@ -44,7 +44,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
             systemIndicesSupplier
         );
 
-        DocumentSizeReporter documentParsingReporter = meteringDocumentParsingProvider.getDocumentParsingReporter(testSystemIndex);
+        DocumentSizeReporter documentParsingReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(testSystemIndex);
         assertThat(documentParsingReporter, sameInstance(DocumentSizeReporter.EMPTY_INSTANCE));
     }
 
@@ -59,7 +59,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
             systemIndicesSupplier
         );
 
-        DocumentSizeReporter documentSizeReporter = meteringDocumentParsingProvider.getDocumentParsingReporter(testUserIndex);
+        DocumentSizeReporter documentSizeReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(testUserIndex);
         assertThat(documentSizeReporter, instanceOf(MeteringDocumentSizeReporter.class));
     }
 }

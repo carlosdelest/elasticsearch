@@ -19,17 +19,22 @@ package co.elastic.elasticsearch.metering.ingested_size;
 
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 
+import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
 public class MeteringDocumentSizeReporter implements DocumentSizeReporter {
-    private IngestMetricsCollector ingestMetricsCollector;
+    private final IngestMetricsCollector ingestMetricsCollector;
+    private final String indexName;
 
-    public MeteringDocumentSizeReporter(IngestMetricsCollector ingestMetricsCollector) {
+    public MeteringDocumentSizeReporter(String indexName, IngestMetricsCollector ingestMetricsCollector) {
+        this.indexName = indexName;
         this.ingestMetricsCollector = ingestMetricsCollector;
     }
 
     @Override
-    public void onCompleted(String indexName, long normalizedBytesParsed) {
+    public void onIndexingCompleted(ParsedDocument parsedDocument) {
+        var normalizedBytesParsed = parsedDocument.getDocumentSizeObserver().normalisedBytesParsed();
+
         this.ingestMetricsCollector.addIngestedDocValue(indexName, normalizedBytesParsed);
     }
 }
