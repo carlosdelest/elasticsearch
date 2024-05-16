@@ -37,10 +37,10 @@ DEPLOYMENT_NAME=$(curl -k -H "Authorization: ApiKey $API_KEY" \
      -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/$PROJECT_ID" \
      | jq -r '.name')
 
-echo "--- Updating deployment $PROJECT_ID - $DEPLOYMENT_NAME"
+echo "--- Updating deployment $PROJECT_ID - $DEPLOYMENT_NAME to use image $IMAGE_OVERRIDE"
 UPDATE_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
      -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/$PROJECT_ID" \
-     -XPUT -d "{
+     -XPATCH -d "{
         \"name\": \"$DEPLOYMENT_NAME\",
         \"overrides\": {
             \"elasticsearch\": {
@@ -50,6 +50,14 @@ UPDATE_RESULT=$(curl -k -H "Authorization: ApiKey $API_KEY" \
      }")
 
 echo $UPDATE_RESULT
+
+CONFIRM_RETURN_VALUE=$(echo "$UPDATE_RESULT" | jq -e -r '.id')
+
+# Fail if project api result is in unexpected format
+if [ "$CONFIRM_RETURN_VALUE" != "$PROJECT_ID" ]; then
+    echo "Error: Unexpected format of return from project update request." 1>&2
+    exit 1
+fi
 
 # wait for the project being ready again
 
