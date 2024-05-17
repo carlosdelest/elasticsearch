@@ -48,6 +48,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -60,16 +61,14 @@ import java.util.concurrent.TimeoutException;
 
 import static org.elasticsearch.server.cli.ProcessUtil.nonInterruptibleVoid;
 import static org.elasticsearch.server.cli.ServerlessServerCli.DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.emptyArray;
-import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasItemInArray;
 import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.hasToString;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -238,10 +237,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
-
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
+        List<String> filesInZip = getFilesInZip(zipFile.get());
 
         assertThat(filesInZip, hasSize(1));
         assertThat(filesInZip.get(0), equalTo("/mock.hprof"));
@@ -261,11 +259,11 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
 
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
-        assertThat(targetPathFiles[0].getFileName().toString(), startsWith("PRJ_ID_NODE_NAME"));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        assertThat(zipFile.get().getFileName().toString(), startsWith("PRJ_ID_NODE_NAME"));
+        List<String> filesInZip = getFilesInZip(zipFile.get());
 
         assertThat(filesInZip, hasSize(1));
         assertThat(filesInZip.get(0), equalTo("/mock.hprof"));
@@ -287,9 +285,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
 
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
+        List<String> filesInZip = getFilesInZip(zipFile.get());
 
         assertThat(filesInZip, hasSize(2));
         assertThat(filesInZip, containsInAnyOrder("/mock1.hprof", "/mock2.hprof"));
@@ -314,10 +312,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
-
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
+        List<String> filesInZip = getFilesInZip(zipFile.get());
 
         assertThat(filesInZip, hasSize(3));
         assertThat(filesInZip, containsInAnyOrder("/mock1.hprof", "/logs/log1.log", "/logs/sub/log2.json"));
@@ -339,10 +336,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
-
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
+        List<String> filesInZip = getFilesInZip(zipFile.get());
 
         assertThat(filesInZip, hasSize(2));
         assertThat(filesInZip, containsInAnyOrder("/mock1.hprof", "/logs/replay_1234.log"));
@@ -363,10 +359,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
-
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
-
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
+        List<String> filesInZip = getFilesInZip(zipFile.get());
 
         assertThat(filesInZip, hasSize(2));
         assertThat(filesInZip, containsInAnyOrder("/logs/hs_err_123.log", "/logs/hs_err_234.log"));
@@ -391,11 +386,11 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
-
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
 
         String sha256;
-        try (var zipFileStream = Files.newInputStream(targetPathFiles[0])) {
+        try (var zipFileStream = Files.newInputStream(zipFile.get())) {
             sha256 = MessageDigests.toHexString(MessageDigests.digest(zipFileStream, MessageDigests.sha256()));
         }
 
@@ -512,8 +507,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
 
         var targetPathFiles = FileSystemUtils.files(targetPath);
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
+        List<String> filesInZip = getFilesInZip(zipFile.get());
         assertThat(filesInZip, hasSize(1));
         assertThat(filesInZip, contains("/mock1.hprof"));
     }
@@ -556,8 +552,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
         }
 
         var targetPathFiles = FileSystemUtils.files(validTargetDir);
-        assertThat(targetPathFiles, hasItemInArray(hasToString(endsWith(".zip"))));
-        List<String> filesInZip = getFilesInZip(targetPathFiles[0]);
+        var zipFile = Arrays.stream(targetPathFiles).filter(x -> x.toString().endsWith(".zip")).findFirst();
+        assertThat(zipFile, isPresent());
+        List<String> filesInZip = getFilesInZip(zipFile.get());
         assertThat(filesInZip, hasSize(1));
         assertThat(filesInZip, contains("/mock1.hprof"));
     }
