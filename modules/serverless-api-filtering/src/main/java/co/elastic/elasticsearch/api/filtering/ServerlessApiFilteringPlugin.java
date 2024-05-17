@@ -30,7 +30,7 @@ import co.elastic.elasticsearch.api.validation.SimulateIndexTemplateDataStreamLi
 import co.elastic.elasticsearch.api.validation.SimulateTemplateDataStreamLifecycleValidator;
 import co.elastic.elasticsearch.api.validation.UpdateSettingsValidator;
 
-import org.elasticsearch.action.support.ActionFilter;
+import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.plugins.ActionPlugin;
@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin {
 
-    private final AtomicReference<List<ActionFilter>> actionFilters = new AtomicReference<>();
+    private final AtomicReference<List<MappedActionFilter>> actionFilters = new AtomicReference<>();
 
     public ServerlessApiFilteringPlugin() {}
 
@@ -79,7 +79,7 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
     }
 
     @Override
-    public List<ActionFilter> getActionFilters() {
+    public List<MappedActionFilter> getMappedActionFilters() {
         return actionFilters.get();
     }
 }
