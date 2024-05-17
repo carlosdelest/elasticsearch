@@ -44,7 +44,7 @@ public class DefaultServerlessSettingsProvider extends DefaultSettingsProvider {
         if (uploadDelayed == null) {
             final Random random = RandomizedContext.current().getRandom();
             uploadDelayed = random.nextBoolean();
-            uploadMaxCommits = random.nextInt(1, 10);
+            uploadMaxCommits = random.nextBoolean() ? random.nextInt(1, 10) : 100;
         }
         settings.put("stateless.upload.delayed", String.valueOf(uploadDelayed));
         settings.put("stateless.upload.max_commits", String.valueOf(uploadMaxCommits));

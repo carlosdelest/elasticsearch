@@ -110,7 +110,10 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
         final boolean uploadDelayed = randomBoolean();
         NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER.put("stateless.upload.delayed", String.valueOf(uploadDelayed));
         if (uploadDelayed) {
-            NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER.put("stateless.upload.max_commits", String.valueOf(between(1, 10)));
+            NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER.put(
+                "stateless.upload.max_commits",
+                randomBoolean() ? String.valueOf(between(1, 10)) : "100"
+            );
         }
     }
 
