@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
@@ -85,7 +86,7 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
+        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(1));
 
@@ -111,7 +112,7 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
+        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(10));
         int shard = 0;
@@ -143,7 +144,7 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         );
 
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
-        Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
+        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(10));
         var hasPartial = hasEntry("partial", "" + true);
@@ -168,7 +169,7 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         var indexInfoService = new MeteringIndexInfoService();
 
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
-        Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
+        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(0));
     }

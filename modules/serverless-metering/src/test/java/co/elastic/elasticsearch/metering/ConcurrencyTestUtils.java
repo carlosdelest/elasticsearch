@@ -87,12 +87,11 @@ class ConcurrencyTestUtils {
         // at the same time
         final CyclicBarrier barrier = new CyclicBarrier(threadsCount + collectThreadsCount);
         for (int t = 0; t < operationThreads.length; t++) {
-            var threadId = t;
             operationThreads[t] = createActionThread(
-                threadId,
+                t,
                 opsPerThread,
                 barrier,
-                () -> action.accept(threadId),
+                () -> action.accept(randomIntBetween(0, operationThreads.length - 1)),
                 intervalInMillis.get(),
                 output
             );

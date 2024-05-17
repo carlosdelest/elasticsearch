@@ -27,14 +27,13 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
 
-import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.BOOST_WINDOW_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
@@ -68,7 +67,7 @@ public class IngestMetricsCollector implements MetricsCollector {
     private static final String SEARCH_POWER = "search_power";
     private static final String BOOST_WINDOW = "boost_window";
     private final Logger logger = LogManager.getLogger(IngestMetricsCollector.class);
-    private Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
+    private final Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
@@ -109,24 +108,48 @@ public class IngestMetricsCollector implements MetricsCollector {
         clusterSettings.addSettingsUpdateConsumer(BOOST_WINDOW_SETTING, bw -> this.boostWindowSetting = bw.getSeconds());
     }
 
+    private record SnapshotEntry(String key, long value) {}
+
     @Override
-    public Collection<MetricValue> getMetrics() {
+    public MetricValues getMetrics() {
         // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
         Map<String, Object> settings = Map.of(SEARCH_POWER, this.searchPowerMinSetting, BOOST_WINDOW, boostWindowSetting);
-        Map<String, AtomicLong> oldMetrics;
-        Map<String, AtomicLong> emptyMetrics = new ConcurrentHashMap<>();
-        try (ReleasableLock ignored = exclusiveLock.acquire()) {
-            oldMetrics = metrics;
-            metrics = emptyMetrics;
-        }
-        List<MetricValue> toReturn = oldMetrics.entrySet()
-            .stream()
-            .map(e -> metricValue(e.getKey(), e.getValue().longValue(), settings))
-            .collect(Collectors.toList());
 
+        final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
+        final var toReturn = metricsSnapshot.stream().map(e -> metricValue(e.key(), e.value(), settings)).toList();
         logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
-        return toReturn;
 
+        return new MetricValues() {
+            @Override
+            public Iterator<MetricValue> iterator() {
+                return toReturn.iterator();
+            }
+
+            @Override
+            public void commit() {
+                adjustMap(metrics, metricsSnapshot);
+            }
+        };
+    }
+
+    void adjustMap(Map<String, AtomicLong> metrics, List<SnapshotEntry> metricsSnapshot) {
+        for (var snapshotEntry : metricsSnapshot) {
+            AtomicLong value = metrics.get(snapshotEntry.key);
+            assert (value != null);
+            long newSize = value.addAndGet(-snapshotEntry.value());
+            assert newSize >= 0;
+            if (newSize == 0) {
+                try (ReleasableLock ignored = exclusiveLock.acquire()) {
+                    metrics.compute(snapshotEntry.key, (k, v) -> {
+                        if (v != null && v.get() == 0) {
+                            return null;
+                        }
+                        return v;
+                    });
+                }
+            }
+            logger.trace(() -> Strings.format("Adjusted counter for index [%s], newValue [%d]", snapshotEntry.key, newSize));
+        }
     }
 
     public void addIngestedDocValue(String index, long size) {

@@ -46,7 +46,9 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.common.settings.SettingsModule;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.IOUtils;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.features.NodeFeature;
@@ -65,6 +67,8 @@ import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.plugins.internal.DocumentParsingProviderPlugin;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.threadpool.ExecutorBuilder;
+import org.elasticsearch.threadpool.FixedExecutorBuilder;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ParseField;
@@ -75,7 +79,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_ID;
 
@@ -86,6 +89,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
 
+    private static final String METERING_REPORTER_THREAD_POOL_NAME = "metering_reporter";
     static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
 
     public static final Setting<Boolean> NEW_IX_METRIC_SETTING = Setting.boolSetting(
@@ -98,7 +102,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     private final boolean hasSearchRole;
     private List<MetricsCollector> metricsCollectors;
     private MeteringReporter reporter;
-    private MeteringService service;
+    private MeteringReportingService reportingService;
 
     private volatile IngestMetricsCollector ingestMetricsCollector;
     private volatile SystemIndices systemIndices;
@@ -110,7 +114,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     @Override
     public List<Setting<?>> getSettings() {
         return List.of(
-            MeteringService.REPORT_PERIOD,
+            MeteringReportingService.REPORT_PERIOD,
             MeteringReporter.METERING_URL,
             MeteringReporter.BATCH_SIZE,
             MeteringIndexInfoTaskExecutor.ENABLED_SETTING,
@@ -122,6 +126,20 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     @Override
     public void loadExtensions(ExtensionLoader loader) {
         metricsCollectors = loader.loadExtensions(MetricsCollector.class);
+    }
+
+    @Override
+    public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
+        return List.of(
+            new FixedExecutorBuilder(
+                settings,
+                METERING_REPORTER_THREAD_POOL_NAME,
+                1,
+                1,
+                "serverless.metering.reporter.thread_pool",
+                EsExecutors.TaskTrackingConfig.DO_NOT_TRACK
+            )
+        );
     }
 
     @Override
@@ -153,6 +171,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             builtInMetrics.add(ingestMetricsCollector);
         }
 
+        TimeValue reportPeriod = MeteringReportingService.REPORT_PERIOD.get(environment.settings());
+
         // TODO[ES-7639]: remove this choice when migration to IX in ES is completed
         if (useNewIndexSizeMetric) {
             builtInMetrics.add(indexSizeService.createIndexSizeMetricsCollector(clusterService, environment.settings()));
@@ -164,7 +184,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             }
         }
 
-        Stream<MetricsCollector> sources = Stream.concat(builtInMetrics.stream(), metricsCollectors.stream());
+        builtInMetrics.addAll(metricsCollectors);
 
         if (projectId.isEmpty()) {
             log.warn(PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
@@ -172,19 +192,21 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             reporter = new MeteringReporter(environment.settings(), threadPool);
         }
 
-        service = new MeteringService(
+        reportingService = new MeteringReportingService(
             nodeEnvironment.nodeId(),
-            environment.settings(),
-            sources,
+            projectId,
+            builtInMetrics,
+            reportPeriod,
             reporter != null ? reporter::sendRecords : records -> {},
-            threadPool
+            threadPool,
+            threadPool.executor(METERING_REPORTER_THREAD_POOL_NAME)
         );
 
         List<Object> cs = new ArrayList<>();
         if (reporter != null) {
             cs.add(reporter);
         }
-        cs.add(service);
+        cs.add(reportingService);
         cs.add(indexSizeService);
         cs.addAll(builtInMetrics);
 
@@ -226,7 +248,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     @Override
     public void close() throws IOException {
-        IOUtils.close(reporter, service);
+        IOUtils.close(reporter, reportingService);
     }
 
     IngestMetricsCollector getIngestMetricsCollector() {

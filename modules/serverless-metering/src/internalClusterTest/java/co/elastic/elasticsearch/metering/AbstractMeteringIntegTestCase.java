@@ -106,7 +106,7 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
         return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
             .put(MeteringReporter.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
-            .put(MeteringService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
+            .put(MeteringReportingService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
             .put("xpack.searchable.snapshot.shared_cache.size", "16MB")
             .put("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
             .build();

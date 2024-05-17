@@ -34,7 +34,7 @@ import org.elasticsearch.logging.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +93,7 @@ class IndexSizeMetricsCollector implements MetricsCollector {
     }
 
     @Override
-    public Collection<MetricValue> getMetrics() {
+    public MetricValues getMetrics() {
         // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
         Map<String, Object> settings = Map.of(SEARCH_POWER, this.searchPowerMinSetting);
 
@@ -141,7 +141,6 @@ class IndexSizeMetricsCollector implements MetricsCollector {
                 metrics.add(new MetricValue(MeasurementType.SAMPLED, metricId, METRIC_TYPE, metadata, settings, size));
             }
         }
-        return metrics;
+        return MetricsCollector.wrapValuesWithoutCommit(Collections.unmodifiableCollection(metrics));
     }
-
 }

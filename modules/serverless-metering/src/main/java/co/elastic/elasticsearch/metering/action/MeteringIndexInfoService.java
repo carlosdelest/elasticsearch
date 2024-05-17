@@ -34,7 +34,6 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -172,11 +171,11 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         }
 
         @Override
-        public Collection<MetricValue> getMetrics() {
+        public MetricValues getMetrics() {
 
             var currentInfo = collectedShardInfo.get();
             if (currentInfo == CollectedMeteringShardInfo.EMPTY) {
-                return Collections.emptyList();
+                return MetricsCollector.NO_VALUES;
             }
 
             // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
@@ -200,7 +199,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
                 metrics.add(new MetricValue(MeasurementType.SAMPLED, metricId, METRIC_TYPE, metadata, settings, size));
             }
 
-            return metrics;
+            return MetricsCollector.wrapValuesWithoutCommit(Collections.unmodifiableCollection(metrics));
         }
     }
 

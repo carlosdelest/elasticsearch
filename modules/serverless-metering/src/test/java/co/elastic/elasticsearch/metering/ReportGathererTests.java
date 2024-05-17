@@ -36,8 +36,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Stream;
 
 import static co.elastic.elasticsearch.metering.ReportGatherer.MAX_JITTER_FACTOR;
 import static co.elastic.elasticsearch.metering.ReportGatherer.calculateSampleTimestamp;
@@ -50,8 +50,6 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.startsWith;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ReportGathererTests extends ESTestCase {
@@ -96,13 +94,20 @@ public class ReportGathererTests extends ESTestCase {
         expectThrows(AssertionError.class, () -> calculateSampleTimestamp(Instant.parse("2023-01-01T00:00:00Z"), Duration.ofHours(2)));
     }
 
-    private static class GathererRecorder {
+    private static class RecordingMetricsCollector implements MetricsCollector {
 
         private record RecordedMetric(long value, String id) {}
 
         AtomicReference<RecordedMetric> currentRecordedMetric = new AtomicReference<>();
+        AtomicInteger invocations = new AtomicInteger();
 
-        Stream<MetricsCollector.MetricValue> generateAndRecordSingleMetric() {
+        @Override
+        public MetricValues getMetrics() {
+            invocations.incrementAndGet();
+            return MetricsCollector.wrapValuesWithoutCommit(List.of(generateAndRecordSingleMetric()));
+        }
+
+        private MetricValue generateAndRecordSingleMetric() {
             var newRecord = new RecordedMetric(randomLong(), UUIDs.randomBase64UUID());
 
             // assert last metrics where taken by `report`
@@ -110,15 +115,13 @@ public class ReportGathererTests extends ESTestCase {
             assertNull("There should not be a pending recorded metric", lastRecord);
 
             // store and return new metrics
-            return Stream.of(
-                new MetricsCollector.MetricValue(
-                    MetricsCollector.MeasurementType.COUNTER,
-                    newRecord.id(),
-                    "type1",
-                    Map.of(),
-                    Map.of(),
-                    newRecord.value
-                )
+            return new MetricsCollector.MetricValue(
+                MetricsCollector.MeasurementType.COUNTER,
+                newRecord.id(),
+                "type1",
+                Map.of(),
+                Map.of(),
+                newRecord.value
             );
         }
 
@@ -143,17 +146,23 @@ public class ReportGathererTests extends ESTestCase {
 
     public void testReportGatheringAlwaysRunsOrderly() {
 
-        var recorder = new GathererRecorder();
+        var recorder = new RecordingMetricsCollector();
         var reportPeriod = TimeValue.timeValueMinutes(5);
         var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
-
-        MeteringService service = createMockMeteringService();
-        when(service.getMetrics()).then(a -> recorder.generateAndRecordSingleMetric());
 
         var clock = Mockito.mock(Clock.class);
         var deterministicTaskQueue = new DeterministicTaskQueue();
         var threadPool = deterministicTaskQueue.getThreadPool();
-        var reportGatherer = new ReportGatherer(service, recorder::report, threadPool, "test", reportPeriod, clock);
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(recorder),
+            recorder::report,
+            threadPool,
+            threadPool.generic(),
+            reportPeriod,
+            clock
+        );
 
         when(clock.instant()).thenReturn(Instant.EPOCH);
         reportGatherer.start();
@@ -167,10 +176,10 @@ public class ReportGathererTests extends ESTestCase {
             assertThat(now, both(greaterThanOrEqualTo(lower)).and(lessThan(lower.plus(reportPeriodDuration))));
 
             deterministicTaskQueue.runAllRunnableTasks();
-            verify(service).getMetrics();
+            assertThat(recorder.invocations.get(), equalTo(1));
 
             lower = lower.plus(reportPeriodDuration);
-            Mockito.clearInvocations(service);
+            recorder.invocations.set(0);
         }
 
         deterministicTaskQueue.advanceTime();
@@ -181,15 +190,22 @@ public class ReportGathererTests extends ESTestCase {
 
         // we expect a 2nd run to be instantly scheduled
         deterministicTaskQueue.runAllRunnableTasks();
-        verify(service, times(2)).getMetrics();
+        assertThat(recorder.invocations.get(), equalTo(2));
 
         reportGatherer.cancel();
     }
 
     public void testCancelIdempotent() {
-        MeteringService service = createMockMeteringService();
 
-        var reportGatherer = new ReportGatherer(service, x -> {}, threadPool, ThreadPool.Names.GENERIC, TimeValue.timeValueSeconds(1));
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            x -> {},
+            threadPool,
+            threadPool.generic(),
+            TimeValue.timeValueSeconds(1)
+        );
 
         reportGatherer.start();
 
@@ -203,15 +219,15 @@ public class ReportGathererTests extends ESTestCase {
     }
 
     public void testCancelCancels() {
-        MeteringService service = createMockMeteringService();
-
         var deterministicTaskQueue = new DeterministicTaskQueue();
 
         var reportGatherer = new ReportGatherer(
-            service,
+            "nodeId",
+            "projectId",
+            List.of(),
             x -> {},
             deterministicTaskQueue.getThreadPool(),
-            ThreadPool.Names.GENERIC,
+            deterministicTaskQueue.getThreadPool().generic(),
             TimeValue.timeValueMinutes(1)
         );
 
@@ -259,13 +275,5 @@ public class ReportGathererTests extends ESTestCase {
                 transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
             )
         );
-    }
-
-    private static MeteringService createMockMeteringService() {
-        MeteringService service = Mockito.mock(MeteringService.class);
-        when(service.getMetrics()).then(a -> Stream.empty());
-        when(service.nodeId()).thenReturn("nodeId");
-        when(service.projectId()).thenReturn("projectId");
-        return service;
     }
 }

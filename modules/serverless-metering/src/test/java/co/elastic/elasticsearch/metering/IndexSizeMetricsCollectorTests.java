@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
@@ -74,7 +75,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
+            Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
             assertThat(metrics, hasSize(1));
             int shardIdInt = 0;
@@ -95,7 +96,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
+            Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
             assertThat(metrics, hasSize(10));
             int shard = 0;
@@ -123,7 +124,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
+            Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
             assertThat(metrics, hasSize(10));
             var hasPartial = hasEntry("partial", "" + true);
@@ -170,7 +171,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             clusterSettings,
             Settings.EMPTY
         );
-        Collection<MetricsCollector.MetricValue> metrics = indexSizeMetricsCollector.getMetrics();
+        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(0));
     }
@@ -191,8 +192,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 Settings.EMPTY
             );
 
-            final long sequentialReadMetricSum = indexSizeMetricsCollector.getMetrics()
-                .stream()
+            final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
                 .mapToLong(MetricsCollector.MetricValue::value)
                 .sum();
 
@@ -200,7 +200,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 threadsCount,
                 opsPerThread,
                 () -> 0,
-                () -> results.addAll(indexSizeMetricsCollector.getMetrics()),
+                () -> indexSizeMetricsCollector.getMetrics().forEach(results::add),
                 logger::info
             );
 
@@ -227,8 +227,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 Settings.EMPTY
             );
 
-            final long sequentialReadMetricSum = indexSizeMetricsCollector.getMetrics()
-                .stream()
+            final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
                 .mapToLong(MetricsCollector.MetricValue::value)
                 .sum();
 
@@ -236,7 +235,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 threadsCount,
                 opsPerThread,
                 () -> randomIntBetween(0, 50),
-                () -> results.addAll(indexSizeMetricsCollector.getMetrics()),
+                () -> indexSizeMetricsCollector.getMetrics().forEach(results::add),
                 logger::info
             );
 
@@ -264,8 +263,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 Settings.EMPTY
             );
 
-            final long sequentialReadMetricSum = indexSizeMetricsCollector.getMetrics()
-                .stream()
+            final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
                 .mapToLong(MetricsCollector.MetricValue::value)
                 .sum();
 
@@ -273,7 +271,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 threadsCount,
                 opsPerThread,
                 () -> randomIntBetween(0, 50),
-                () -> results.addAll(indexSizeMetricsCollector.getMetrics()),
+                () -> indexSizeMetricsCollector.getMetrics().forEach(results::add),
                 logger::info
             );
 
@@ -302,8 +300,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 Settings.EMPTY
             );
 
-            final long sequentialReadMetricSum = indexSizeMetricsCollector.getMetrics()
-                .stream()
+            final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
                 .mapToLong(MetricsCollector.MetricValue::value)
                 .sum();
 
@@ -311,7 +308,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 threadsCount,
                 opsPerThread,
                 () -> randomIntBetween(0, 50),
-                () -> results.addAll(indexSizeMetricsCollector.getMetrics()),
+                () -> indexSizeMetricsCollector.getMetrics().forEach(results::add),
                 logger::info
             );
 
@@ -380,19 +377,6 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             }
             writer.commit();
         }
-        writer.close();
-        return dir;
-    }
-
-    private Directory generateSegmentInfosDir(int id) throws IOException {
-        Directory dir = newFSDirectory(createTempDir());
-        IndexWriterConfig iwc = newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE)
-            .setOpenMode(IndexWriterConfig.OpenMode.CREATE);
-        IndexWriter writer = new IndexWriter(dir, iwc);
-        writer.addDocument(
-            Arrays.asList(new StringField("id", Integer.toString(id), Field.Store.YES), new SortedNumericDocValuesField("num", id + 1_000))
-        );
-        writer.commit();
         writer.close();
         return dir;
     }

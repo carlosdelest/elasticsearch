@@ -18,6 +18,8 @@
 package co.elastic.elasticsearch.metrics;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -51,10 +53,39 @@ public interface MetricsCollector {
         long value
     ) {}
 
+    interface MetricValues extends Iterable<MetricValue> {
+        /**
+         * Called by the MetricsValues consumer when they have been successfully reported.
+         * The source MetricsCollector can then perform final cleanup - counter metrics can be (atomically) adjusted.
+         * Implementations must not be throwing.
+         */
+        void commit();
+    }
+
+    /**
+     * Builds a MetricValues instance from a collection of {@link MetricValue}. The instance commit operation is a no-op.
+     * @param metricValues the collection of {@link MetricValue} instances wrapped by MetricValues
+     * @return MetricValues wrapping the collection of {@link MetricValue} instances
+     */
+    static MetricValues wrapValuesWithoutCommit(Collection<MetricValue> metricValues) {
+        return new MetricValues() {
+            @Override
+            public void commit() {}
+
+            @Override
+            public Iterator<MetricValue> iterator() {
+                return metricValues.iterator();
+            }
+        };
+    }
+
+    MetricValues NO_VALUES = wrapValuesWithoutCommit(Collections.emptyList());
+
     /**
      * Returns the current value of the metrics collected by this class.
-     * This method may be called at any time on any thread.
-     * As part of calling this method, counter metrics should be (atomically) reset.
+     * This method may be called at any time - implementations must guarantee thread safety.
+     * However, this does not mean the method can be called by multiple threads: subsequent calls to getMetrics and
+     * {@link MetricValues#commit()} must be done by the same thread.
      */
-    Collection<MetricValue> getMetrics();
+    MetricValues getMetrics();
 }

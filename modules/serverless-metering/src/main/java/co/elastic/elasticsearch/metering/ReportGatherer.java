@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.reports.UsageMetrics;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metering.reports.UsageSource;
+import co.elastic.elasticsearch.metrics.MetricsCollector;
 
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.Strings;
@@ -34,16 +35,18 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
 class ReportGatherer {
     private static final Logger log = LogManager.getLogger(ReportGatherer.class);
     static final double MAX_JITTER_FACTOR = 0.25;
 
-    private final MeteringService service;
+    private final List<MetricsCollector> collectors;
     private final Consumer<List<UsageRecord>> reporter;
     private final ThreadPool threadPool;
     private final Executor executor;
@@ -51,32 +54,38 @@ class ReportGatherer {
     private final TimeValue reportPeriod;
     private final Duration reportPeriodDuration;
     private final String sourceId;
+    private final String projectId;
 
     private volatile boolean cancel;
     private volatile Scheduler.Cancellable nextRun;
 
     ReportGatherer(
-        MeteringService service,
+        String nodeId,
+        String projectId,
+        List<MetricsCollector> collectors,
         Consumer<List<UsageRecord>> reporter,
         ThreadPool threadPool,
-        String executorName,
+        ExecutorService executor,
         TimeValue reportPeriod
     ) {
-        this(service, reporter, threadPool, executorName, reportPeriod, Clock.systemUTC());
+        this(nodeId, projectId, collectors, reporter, threadPool, executor, reportPeriod, Clock.systemUTC());
     }
 
     ReportGatherer(
-        MeteringService service,
+        String nodeId,
+        String projectId,
+        List<MetricsCollector> collectors,
         Consumer<List<UsageRecord>> reporter,
         ThreadPool threadPool,
-        String executorName,
+        ExecutorService executor,
         TimeValue reportPeriod,
         Clock clock
     ) {
-        this.service = service;
+        this.projectId = projectId;
+        this.collectors = collectors;
         this.reporter = reporter;
         this.threadPool = threadPool;
-        this.executor = threadPool.executor(executorName);
+        this.executor = executor;
         this.reportPeriod = reportPeriod;
         this.clock = clock;
 
@@ -85,7 +94,7 @@ class ReportGatherer {
         if (reportPeriodDuration.multipliedBy(Duration.ofHours(1).dividedBy(reportPeriodDuration)).equals(Duration.ofHours(1)) == false) {
             throw new IllegalArgumentException(Strings.format("Report period [%s] needs to fit evenly into 1 hour", reportPeriod));
         }
-        this.sourceId = "es-" + service.nodeId();
+        this.sourceId = "es-" + nodeId;
     }
 
     void start() {
@@ -95,7 +104,7 @@ class ReportGatherer {
         long nanosToNextPeriod = now.until(sampleTimestamp.plus(reportPeriodDuration), ChronoUnit.NANOS);
         // schedule the first run towards the end of the current period so that collectors are more likely to have metrics available
         TimeValue timeToNextRun = TimeValue.timeValueNanos(nanosToNextPeriod * 9 / 10);
-        nextRun = threadPool.schedule(() -> gatherReports(sampleTimestamp), timeToNextRun, executor);
+        nextRun = threadPool.schedule(() -> gatherAndSendReports(sampleTimestamp), timeToNextRun, executor);
         log.trace("Scheduled first task");
     }
 
@@ -111,38 +120,37 @@ class ReportGatherer {
         return cancelled;
     }
 
-    private void gatherReports(Instant sampleTimestamp) {
+    private void gatherAndSendReports(Instant sampleTimestamp) {
         log.trace("starting to gather reports");
-        if (cancel) return; // cancelled - nothing to do
+        if (cancel) {
+            return; // cancelled - nothing to do
+        }
 
         Instant startedAt = Instant.now(clock);
-        Instant nextSampleTimestamp = sampleTimestamp.plus(reportPeriodDuration);
-        try {
-            reportMetrics(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
-        } catch (Exception e) {
-            log.error("Exception thrown reporting metrics", e);
-            // then reschedule
-        } finally {
-            Instant completedAt = Instant.now(clock);
-            checkRuntime(startedAt, completedAt);
-            TimeValue timeToNextRun = timeToNextRun(completedAt, nextSampleTimestamp);
-            if (cancel == false) {
-                try {
-                    // schedule the next run
-                    nextRun = threadPool.schedule(() -> gatherReports(nextSampleTimestamp), timeToNextRun, executor);
-                    log.trace(
-                        () -> Strings.format("scheduled next run in %s.%s seconds", timeToNextRun.getSeconds(), timeToNextRun.getMillis())
-                    );
-                } catch (EsRejectedExecutionException e) {
-                    nextRun = null;
-                    if (e.isExecutorShutdown()) {
-                        // ok - thread pool shutting down
-                        log.trace("Not rescheduling report gathering because this node is being shutdown", e);
-                    } else {
-                        log.error("Unexpected exception whilst re-scheduling report gathering", e);
-                        assert false : e;
-                        // exception can't go anywhere, just stop here
-                    }
+
+        collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
+
+        Instant completedAt = Instant.now(clock);
+        checkRuntime(startedAt, completedAt);
+
+        if (cancel == false) {
+            try {
+                Instant nextSampleTimestamp = sampleTimestamp.plus(reportPeriodDuration);
+                var timeToNextRun = timeToNextRun(completedAt, nextSampleTimestamp);
+                // schedule the next run
+                nextRun = threadPool.schedule(() -> gatherAndSendReports(nextSampleTimestamp), timeToNextRun, executor);
+                log.trace(
+                    () -> Strings.format("scheduled next run in %s.%s seconds", timeToNextRun.getSeconds(), timeToNextRun.getMillis())
+                );
+            } catch (EsRejectedExecutionException e) {
+                nextRun = null;
+                if (e.isExecutorShutdown()) {
+                    // ok - thread pool shutting down
+                    log.trace("Not rescheduling report gathering because this node is being shutdown", e);
+                } else {
+                    log.error("Unexpected exception whilst re-scheduling report gathering", e);
+                    assert false : e;
+                    // exception can't go anywhere, just stop here
                 }
             }
         }
@@ -171,13 +179,34 @@ class ReportGatherer {
         return nanosUntilNextRun > 0 ? TimeValue.timeValueNanos(nanosUntilNextRun) : TimeValue.ZERO;
     }
 
-    private void reportMetrics(Instant now, Instant sampleTimestamp) {
-        List<UsageRecord> records = service.getMetrics().map(v -> switch (v.measurementType()) {
-            case COUNTER -> getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), v.settings(), now);
-            case SAMPLED -> getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp);
-        }).toList();
+    private boolean sendReport(List<UsageRecord> report) {
+        try {
+            reporter.accept(report);
+            return true;
+        } catch (Exception e) {
+            log.error("Exception thrown reporting metrics", e);
+        }
+        return false;
+    }
 
-        reporter.accept(records);
+    private void collectMetricsAndSendReport(Instant now, Instant sampleTimestamp) {
+        List<MetricsCollector.MetricValues> metricValuesList = collectors.stream().map(MetricsCollector::getMetrics).toList();
+
+        List<UsageRecord> records = new ArrayList<>();
+        for (var metricValues : metricValuesList) {
+            for (var v : metricValues) {
+                records.add(switch (v.measurementType()) {
+                    case COUNTER -> getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), v.settings(), now);
+                    case SAMPLED -> getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp);
+                });
+            }
+        }
+
+        if (sendReport(records)) {
+            for (var metricValues : metricValuesList) {
+                metricValues.commit();
+            }
+        }
     }
 
     private static String generateId(String key, Instant time) {
@@ -213,7 +242,7 @@ class ReportGatherer {
             generateId(metric, now),
             now,
             new UsageMetrics(type, null, count, reportPeriod, null, settings, null),
-            new UsageSource(sourceId, service.projectId(), metadata)
+            new UsageSource(sourceId, projectId, metadata)
         );
     }
 
@@ -229,7 +258,7 @@ class ReportGatherer {
             generateId(metric, sampleTimestamp),
             sampleTimestamp,
             new UsageMetrics(type, null, value, reportPeriod, null, settings, null),
-            new UsageSource(sourceId, service.projectId(), metadata)
+            new UsageSource(sourceId, projectId, metadata)
         );
     }
 }

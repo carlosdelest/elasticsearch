@@ -27,6 +27,7 @@ import org.elasticsearch.test.ESTestCase;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.BOOST_WINDOW_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
@@ -56,11 +57,89 @@ public class IngestMetricsCollectorTests extends ESTestCase {
 
         ingestMetricsCollector2.addIngestedDocValue("index", 20);
 
-        MetricsCollector.MetricValue first = ingestMetricsCollector1.getMetrics().stream().findFirst().get();
-        MetricsCollector.MetricValue second = ingestMetricsCollector2.getMetrics().stream().findFirst().get();
+        MetricsCollector.MetricValue first = ingestMetricsCollector1.getMetrics().iterator().next();
+        MetricsCollector.MetricValue second = ingestMetricsCollector2.getMetrics().iterator().next();
 
         assertThat(first.id(), equalTo("ingested-doc:index:node1"));
         assertThat(second.id(), equalTo("ingested-doc:index:node2"));
+    }
+
+    public void testMetricsValueRemainsIfNotCommited() {
+        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
+        final int docSize = randomIntBetween(1, 10);
+
+        ingestMetricsCollector.addIngestedDocValue("index1", docSize);
+        ingestMetricsCollector.addIngestedDocValue("index2", docSize);
+        ingestMetricsCollector.addIngestedDocValue("index3", docSize);
+
+        var metrics = iterableToList(ingestMetricsCollector.getMetrics());
+        long valueSum = metrics.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+        assertThat(valueSum, equalTo(3L * docSize));
+
+        metrics = iterableToList(ingestMetricsCollector.getMetrics());
+        valueSum = metrics.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+        assertThat(valueSum, equalTo(3L * docSize));
+    }
+
+    public void testMetricsValueKeepsCountingUntilCommited() {
+        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
+        final int docSize = randomIntBetween(1, 10);
+
+        ingestMetricsCollector.addIngestedDocValue("index1", docSize);
+        ingestMetricsCollector.addIngestedDocValue("index2", docSize);
+        ingestMetricsCollector.addIngestedDocValue("index3", docSize);
+
+        var metrics = ingestMetricsCollector.getMetrics();
+        long valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+        assertThat(valueSum, equalTo(3L * docSize));
+
+        ingestMetricsCollector.addIngestedDocValue("index3", docSize);
+
+        metrics = ingestMetricsCollector.getMetrics();
+        valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+        assertThat(valueSum, equalTo(4L * docSize));
+
+        metrics.commit();
+
+        metrics = ingestMetricsCollector.getMetrics();
+        valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+        assertThat(valueSum, equalTo(0L));
+    }
+
+    public void testMetricsValueRestartCountingAfterCommited() {
+        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
+        final long docSize = randomIntBetween(1, 10);
+
+        ingestMetricsCollector.addIngestedDocValue("index1", docSize);
+        ingestMetricsCollector.addIngestedDocValue("index2", docSize);
+        ingestMetricsCollector.addIngestedDocValue("index3", docSize);
+
+        var metrics = ingestMetricsCollector.getMetrics();
+        long valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+        assertThat(valueSum, equalTo(3L * docSize));
+        metrics.commit();
+
+        final long docSize2 = randomIntBetween(1, 10);
+        ingestMetricsCollector.addIngestedDocValue("index3", docSize2);
+
+        metrics = ingestMetricsCollector.getMetrics();
+        valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+        assertThat(valueSum, equalTo(docSize2));
+
+        ingestMetricsCollector.addIngestedDocValue("index1", docSize2);
+        ingestMetricsCollector.addIngestedDocValue("index3", docSize2);
+
+        metrics = ingestMetricsCollector.getMetrics();
+        valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+
+        assertThat(valueSum, equalTo(3L * docSize2));
     }
 
     public void testConcurrencyManyWritersOneReaderNoWait() throws InterruptedException {
@@ -81,46 +160,21 @@ public class IngestMetricsCollectorTests extends ESTestCase {
             t -> ingestMetricsCollector.addIngestedDocValue("index" + t, docSize),
             collectThreadsCount,
             () -> 0,
-            () -> results.addAll(ingestMetricsCollector.getMetrics()),
+            () -> {
+                var metrics = ingestMetricsCollector.getMetrics();
+                metrics.forEach(results::add);
+                metrics.commit();
+            },
             logger::info
         );
 
         long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
-        var itemsLeft = ingestMetricsCollector.getMetrics().size();
-        assertThat(valueSum, equalTo(totalOps * docSize));
-        assertThat(itemsLeft, is(0));
-    }
-
-    public void testConcurrencyManyWritersManyReadersNoWait() throws InterruptedException {
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
-        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
-
-        final int writerThreadsCount = randomIntBetween(4, 10);
-        final int writeOpsPerThread = randomIntBetween(100, 2000);
-        final int collectThreadsCount = randomIntBetween(2, 4);
-        final int docSize = randomIntBetween(1, 10);
-
-        final long totalOps = (long) writeOpsPerThread * writerThreadsCount;
-
-        ConcurrencyTestUtils.runConcurrentWithCollectors(
-            writerThreadsCount,
-            writeOpsPerThread,
-            () -> 0,
-            t -> ingestMetricsCollector.addIngestedDocValue("index" + t, docSize),
-            collectThreadsCount,
-            () -> 0,
-            () -> results.addAll(ingestMetricsCollector.getMetrics()),
-            logger::info
-        );
-
-        long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
-        var itemsLeft = ingestMetricsCollector.getMetrics().size();
+        var itemsLeft = iterableToList(ingestMetricsCollector.getMetrics()).size();
         assertThat(valueSum, equalTo(totalOps * docSize));
         assertThat(itemsLeft, is(0));
     }
 
     public void testConcurrencyManyWritersOneReaderWithWait() throws InterruptedException {
-
         final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
         final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
 
@@ -138,12 +192,16 @@ public class IngestMetricsCollectorTests extends ESTestCase {
             t -> ingestMetricsCollector.addIngestedDocValue("index" + t, docSize),
             collectThreadsCount,
             () -> randomIntBetween(100, 200),
-            () -> results.addAll(ingestMetricsCollector.getMetrics()),
+            () -> {
+                var metrics = ingestMetricsCollector.getMetrics();
+                metrics.forEach(results::add);
+                metrics.commit();
+            },
             logger::info
         );
 
         long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
-        var itemsLeft = ingestMetricsCollector.getMetrics().size();
+        var itemsLeft = iterableToList(ingestMetricsCollector.getMetrics()).size();
         assertThat(valueSum, equalTo(totalOps * docSize));
         assertThat(itemsLeft, is(0));
     }
