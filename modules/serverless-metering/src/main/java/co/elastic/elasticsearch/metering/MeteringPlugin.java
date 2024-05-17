@@ -30,6 +30,7 @@ import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingPr
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metering.stats.rest.RestGetMeteringStatsAction;
 import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
@@ -81,6 +82,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_ID;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_TYPE;
 
 /**
  * Plugin responsible for starting up all serverless metering classes.
@@ -97,6 +99,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         false,
         Setting.Property.NodeScope
     );
+    private final ProjectType projectType;
 
     private MeteringIndexInfoTaskExecutor meteringIndexInfoTaskExecutor;
     private final boolean hasSearchRole;
@@ -109,6 +112,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     public MeteringPlugin(Settings settings) {
         this.hasSearchRole = DiscoveryNode.hasRole(settings, DiscoveryNodeRole.SEARCH_ROLE);
+        this.projectType = PROJECT_TYPE.get(settings);
     }
 
     @Override
@@ -267,7 +271,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
      */
     @Override
     public DocumentParsingProvider getDocumentParsingProvider() {
-        return new MeteringDocumentParsingProvider(this::getIngestMetricsCollector, this::getSystemIndices);
+        return new MeteringDocumentParsingProvider(projectType, this::getIngestMetricsCollector, this::getSystemIndices);
     }
 
     @Override

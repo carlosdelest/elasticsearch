@@ -18,9 +18,11 @@
 package co.elastic.elasticsearch.metering.ingested_size;
 
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
+import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
+import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeObserver;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
@@ -29,11 +31,14 @@ import java.util.function.Supplier;
 public class MeteringDocumentParsingProvider implements DocumentParsingProvider {
     private final Supplier<IngestMetricsCollector> ingestMetricsCollectorSupplier;
     private final Supplier<SystemIndices> systemIndicesSupplier;
+    private final ProjectType projectType;
 
     public MeteringDocumentParsingProvider(
+        ProjectType projectType,
         Supplier<IngestMetricsCollector> ingestMetricsCollectorSupplier,
         Supplier<SystemIndices> systemIndicesSupplier
     ) {
+        this.projectType = projectType;
         this.ingestMetricsCollectorSupplier = ingestMetricsCollectorSupplier;
         this.systemIndicesSupplier = systemIndicesSupplier;
     }
@@ -49,11 +54,12 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
     }
 
     @Override
-    public DocumentSizeReporter newDocumentSizeReporter(String indexName) {
+    public DocumentSizeReporter newDocumentSizeReporter(String indexName, DocumentSizeAccumulator documentSizeAccumulator) {
         if (canReport(indexName) == false) {
             return DocumentSizeReporter.EMPTY_INSTANCE;
         }
-        return new MeteringDocumentSizeReporter(indexName, ingestMetricsCollectorSupplier.get());
+
+        return new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
     }
 
     private boolean canReport(String indexName) {

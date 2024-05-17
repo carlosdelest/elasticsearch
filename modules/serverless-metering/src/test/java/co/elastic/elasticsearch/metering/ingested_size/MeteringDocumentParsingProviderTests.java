@@ -18,8 +18,10 @@
 package co.elastic.elasticsearch.metering.ingested_size;
 
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
+import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.indices.SystemIndices;
+import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 import org.elasticsearch.test.ESTestCase;
 import org.mockito.Mockito;
@@ -40,11 +42,15 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
         Supplier<SystemIndices> systemIndicesSupplier = () -> mockSystemIndices;
         MeteringDocumentParsingProvider meteringDocumentParsingProvider = new MeteringDocumentParsingProvider(
+            ProjectType.ELASTICSEARCH_SEARCH,
             () -> ingestMetricsCollector,
             systemIndicesSupplier
         );
 
-        DocumentSizeReporter documentParsingReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(testSystemIndex);
+        DocumentSizeReporter documentParsingReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(
+            testSystemIndex,
+            DocumentSizeAccumulator.EMPTY_INSTANCE
+        );
         assertThat(documentParsingReporter, sameInstance(DocumentSizeReporter.EMPTY_INSTANCE));
     }
 
@@ -55,11 +61,15 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
         Supplier<SystemIndices> systemIndicesSupplier = () -> mockSystemIndices;
         MeteringDocumentParsingProvider meteringDocumentParsingProvider = new MeteringDocumentParsingProvider(
+            ProjectType.ELASTICSEARCH_SEARCH,
             () -> ingestMetricsCollector,
             systemIndicesSupplier
         );
 
-        DocumentSizeReporter documentSizeReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(testUserIndex);
-        assertThat(documentSizeReporter, instanceOf(MeteringDocumentSizeReporter.class));
+        DocumentSizeReporter documentSizeReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(
+            testUserIndex,
+            DocumentSizeAccumulator.EMPTY_INSTANCE
+        );
+        assertThat(documentSizeReporter, instanceOf(RAIngestMetricReporter.class));
     }
 }
