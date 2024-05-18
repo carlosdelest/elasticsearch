@@ -53,7 +53,6 @@ public abstract class DataStreamLifecycleValidator<RequestType> implements Mappe
         return request == null ? null : fromTemplate(request.indexTemplate().template());
     }
 
-    @Override
     public int order() {
         return 0;
     }

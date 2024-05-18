@@ -41,7 +41,6 @@ public class RolloverRequestValidator implements MappedActionFilter {
         this.threadContext = Objects.requireNonNull(threadContext, "thread context cannot be null");
     }
 
-    @Override
     public int order() {
         return 0;
     }

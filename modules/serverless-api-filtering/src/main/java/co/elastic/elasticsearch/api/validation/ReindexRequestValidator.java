@@ -27,7 +27,7 @@ import org.elasticsearch.index.reindex.ReindexRequest;
 import org.elasticsearch.tasks.Task;
 
 public class ReindexRequestValidator implements MappedActionFilter {
-    @Override
+
     public int order() {
         return 0;
     }

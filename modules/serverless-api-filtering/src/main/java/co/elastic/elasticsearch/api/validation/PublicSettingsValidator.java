@@ -48,7 +48,6 @@ public abstract class PublicSettingsValidator<RequestType extends ActionRequest>
 
     protected abstract Settings getSettingsFromRequest(RequestType request);
 
-    @Override
     public int order() {
         return 0;
     }

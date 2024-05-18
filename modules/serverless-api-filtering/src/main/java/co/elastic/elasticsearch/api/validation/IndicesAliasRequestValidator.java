@@ -27,7 +27,6 @@ import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.tasks.Task;
 
 public class IndicesAliasRequestValidator implements MappedActionFilter {
-    @Override
     public int order() {
         return 0;
     }
