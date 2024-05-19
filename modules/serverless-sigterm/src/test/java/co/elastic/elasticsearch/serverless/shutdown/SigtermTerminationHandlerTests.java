@@ -59,8 +59,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
         final String nodeId = randomAlphaOfLength(10);
         TestThreadPool threadPool = new TestThreadPool(this.getTestName());
 
-        final var appender = new MockLogAppender();
-        try (var ignored = appender.capturing(SigtermTerminationHandler.class)) {
+        try (var appender = MockLogAppender.capture(SigtermTerminationHandler.class)) {
             Client client = mock(Client.class);
             when(client.threadPool()).thenReturn(threadPool);
             doAnswer(invocation -> {
