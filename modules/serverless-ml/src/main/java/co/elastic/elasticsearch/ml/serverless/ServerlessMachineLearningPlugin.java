@@ -26,7 +26,7 @@ import co.elastic.elasticsearch.ml.serverless.actionfilters.NodeAcknowledgedResp
 import co.elastic.elasticsearch.ml.serverless.actionfilters.UpgradeJobModelSnapshotResponseFilter;
 
 import org.apache.lucene.util.SetOnce;
-import org.elasticsearch.action.support.ActionFilter;
+import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
@@ -52,7 +52,7 @@ public class ServerlessMachineLearningPlugin extends Plugin implements ActionPlu
     );
     public static final Setting<Boolean> NLP_ENABLED = Setting.boolSetting("xpack.ml.nlp.enabled", true, Property.NodeScope);
 
-    public final SetOnce<List<ActionFilter>> actionFilters = new SetOnce<>();
+    public final SetOnce<List<MappedActionFilter>> mappedActionFilters = new SetOnce<>();
 
     public ServerlessMachineLearningPlugin() {}
 
@@ -60,7 +60,7 @@ public class ServerlessMachineLearningPlugin extends Plugin implements ActionPlu
     public Collection<?> createComponents(PluginServices services) {
         ThreadContext threadContext = services.threadPool().getThreadContext();
 
-        actionFilters.set(
+        mappedActionFilters.set(
             List.of(
                 new NodeAcknowledgedResponseFilter(threadContext, OpenJobAction.NAME),
                 new NodeAcknowledgedResponseFilter(threadContext, StartDatafeedAction.NAME),
@@ -83,7 +83,7 @@ public class ServerlessMachineLearningPlugin extends Plugin implements ActionPlu
     }
 
     @Override
-    public List<ActionFilter> getActionFilters() {
-        return actionFilters.get();
+    public List<MappedActionFilter> getMappedActionFilters() {
+        return mappedActionFilters.get();
     }
 }
