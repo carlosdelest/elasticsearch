@@ -18,7 +18,8 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
+import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.util.concurrent.DeterministicTaskQueue;
@@ -94,7 +95,7 @@ public class ReportGathererTests extends ESTestCase {
         expectThrows(AssertionError.class, () -> calculateSampleTimestamp(Instant.parse("2023-01-01T00:00:00Z"), Duration.ofHours(2)));
     }
 
-    private static class RecordingMetricsCollector implements MetricsCollector {
+    private static class RecordingMetricsCollector implements SampledMetricsCollector {
 
         private record RecordedMetric(long value, String id) {}
 
@@ -104,7 +105,7 @@ public class ReportGathererTests extends ESTestCase {
         @Override
         public MetricValues getMetrics() {
             invocations.incrementAndGet();
-            return MetricsCollector.wrapValuesWithoutCommit(List.of(generateAndRecordSingleMetric()));
+            return SampledMetricsCollector.valuesFromCollection(List.of(generateAndRecordSingleMetric()));
         }
 
         private MetricValue generateAndRecordSingleMetric() {
@@ -115,14 +116,7 @@ public class ReportGathererTests extends ESTestCase {
             assertNull("There should not be a pending recorded metric", lastRecord);
 
             // store and return new metrics
-            return new MetricsCollector.MetricValue(
-                MetricsCollector.MeasurementType.COUNTER,
-                newRecord.id(),
-                "type1",
-                Map.of(),
-                Map.of(),
-                newRecord.value
-            );
+            return new MetricValue(newRecord.id(), "type1", Map.of(), Map.of(), newRecord.value);
         }
 
         void report(List<UsageRecord> records) {
@@ -156,6 +150,7 @@ public class ReportGathererTests extends ESTestCase {
         var reportGatherer = new ReportGatherer(
             "nodeId",
             "projectId",
+            List.of(),
             List.of(recorder),
             recorder::report,
             threadPool,
@@ -201,6 +196,7 @@ public class ReportGathererTests extends ESTestCase {
             "nodeId",
             "projectId",
             List.of(),
+            List.of(),
             x -> {},
             threadPool,
             threadPool.generic(),
@@ -224,6 +220,7 @@ public class ReportGathererTests extends ESTestCase {
         var reportGatherer = new ReportGatherer(
             "nodeId",
             "projectId",
+            List.of(),
             List.of(),
             x -> {},
             deterministicTaskQueue.getThreadPool(),

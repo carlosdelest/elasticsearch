@@ -20,7 +20,8 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.reports.UsageMetrics;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metering.reports.UsageSource;
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
+import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.Strings;
@@ -46,7 +47,8 @@ class ReportGatherer {
     private static final Logger log = LogManager.getLogger(ReportGatherer.class);
     static final double MAX_JITTER_FACTOR = 0.25;
 
-    private final List<MetricsCollector> collectors;
+    private final List<CounterMetricsCollector> counterMetricsCollectors;
+    private final List<SampledMetricsCollector> sampledMetricsCollectors;
     private final Consumer<List<UsageRecord>> reporter;
     private final ThreadPool threadPool;
     private final Executor executor;
@@ -62,19 +64,31 @@ class ReportGatherer {
     ReportGatherer(
         String nodeId,
         String projectId,
-        List<MetricsCollector> collectors,
+        List<CounterMetricsCollector> counterMetricsCollectors,
+        List<SampledMetricsCollector> sampledMetricsCollectors,
         Consumer<List<UsageRecord>> reporter,
         ThreadPool threadPool,
         ExecutorService executor,
         TimeValue reportPeriod
     ) {
-        this(nodeId, projectId, collectors, reporter, threadPool, executor, reportPeriod, Clock.systemUTC());
+        this(
+            nodeId,
+            projectId,
+            counterMetricsCollectors,
+            sampledMetricsCollectors,
+            reporter,
+            threadPool,
+            executor,
+            reportPeriod,
+            Clock.systemUTC()
+        );
     }
 
     ReportGatherer(
         String nodeId,
         String projectId,
-        List<MetricsCollector> collectors,
+        List<CounterMetricsCollector> counterMetricsCollectors,
+        List<SampledMetricsCollector> sampledMetricsCollectors,
         Consumer<List<UsageRecord>> reporter,
         ThreadPool threadPool,
         ExecutorService executor,
@@ -82,7 +96,8 @@ class ReportGatherer {
         Clock clock
     ) {
         this.projectId = projectId;
-        this.collectors = collectors;
+        this.counterMetricsCollectors = counterMetricsCollectors;
+        this.sampledMetricsCollectors = sampledMetricsCollectors;
         this.reporter = reporter;
         this.threadPool = threadPool;
         this.executor = executor;
@@ -190,22 +205,29 @@ class ReportGatherer {
     }
 
     private void collectMetricsAndSendReport(Instant now, Instant sampleTimestamp) {
-        List<MetricsCollector.MetricValues> metricValuesList = collectors.stream().map(MetricsCollector::getMetrics).toList();
-
         List<UsageRecord> records = new ArrayList<>();
-        for (var metricValues : metricValuesList) {
-            for (var v : metricValues) {
-                records.add(switch (v.measurementType()) {
-                    case COUNTER -> getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), v.settings(), now);
-                    case SAMPLED -> getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp);
-                });
+
+        List<CounterMetricsCollector.MetricValues> counterMetricValuesList = counterMetricsCollectors.stream()
+            .map(CounterMetricsCollector::getMetrics)
+            .toList();
+
+        counterMetricValuesList.forEach(counterMetricValues -> {
+            for (var v : counterMetricValues) {
+                records.add(getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), v.settings(), now));
             }
-        }
+        });
+
+        sampledMetricsCollectors.stream().map(SampledMetricsCollector::getMetrics).forEach(sampledMetricValues -> {
+            for (var v : sampledMetricValues) {
+                records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp));
+            }
+        });
 
         if (sendReport(records)) {
-            for (var metricValues : metricValuesList) {
+            for (var metricValues : counterMetricValuesList) {
                 metricValues.commit();
             }
+            // TODO: "commit" sampledMetricsCollectors up to sampleTimestamp
         }
     }
 

@@ -17,7 +17,8 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
+import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.apache.lucene.index.SegmentCommitInfo;
@@ -51,7 +52,7 @@ import static org.elasticsearch.core.Strings.format;
  * and connects to the SearchService to gather segment sizes whenever it is notified by the gauge metric
  * that a new metric is required.
  */
-class IndexSizeMetricsCollector implements MetricsCollector {
+class IndexSizeMetricsCollector implements SampledMetricsCollector {
     private static final Logger logger = LogManager.getLogger(IndexSizeMetricsCollector.class);
     public static final String METRIC_TYPE = "es_indexed_data";
     private static final String PARTIAL = "partial";
@@ -138,9 +139,9 @@ class IndexSizeMetricsCollector implements MetricsCollector {
                 }
                 String metricId = format("shard-size:%s:%s", indexName, shardId);
 
-                metrics.add(new MetricValue(MeasurementType.SAMPLED, metricId, METRIC_TYPE, metadata, settings, size));
+                metrics.add(new MetricValue(metricId, METRIC_TYPE, metadata, settings, size));
             }
         }
-        return MetricsCollector.wrapValuesWithoutCommit(Collections.unmodifiableCollection(metrics));
+        return SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics));
     }
 }

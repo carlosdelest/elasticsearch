@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -57,8 +57,8 @@ public class IngestMetricsCollectorTests extends ESTestCase {
 
         ingestMetricsCollector2.addIngestedDocValue("index", 20);
 
-        MetricsCollector.MetricValue first = ingestMetricsCollector1.getMetrics().iterator().next();
-        MetricsCollector.MetricValue second = ingestMetricsCollector2.getMetrics().iterator().next();
+        var first = ingestMetricsCollector1.getMetrics().iterator().next();
+        var second = ingestMetricsCollector2.getMetrics().iterator().next();
 
         assertThat(first.id(), equalTo("ingested-doc:index:node1"));
         assertThat(second.id(), equalTo("ingested-doc:index:node2"));
@@ -73,12 +73,12 @@ public class IngestMetricsCollectorTests extends ESTestCase {
         ingestMetricsCollector.addIngestedDocValue("index3", docSize);
 
         var metrics = iterableToList(ingestMetricsCollector.getMetrics());
-        long valueSum = metrics.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        long valueSum = metrics.stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(3L * docSize));
 
         metrics = iterableToList(ingestMetricsCollector.getMetrics());
-        valueSum = metrics.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        valueSum = metrics.stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(3L * docSize));
     }
@@ -92,21 +92,21 @@ public class IngestMetricsCollectorTests extends ESTestCase {
         ingestMetricsCollector.addIngestedDocValue("index3", docSize);
 
         var metrics = ingestMetricsCollector.getMetrics();
-        long valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        long valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(3L * docSize));
 
         ingestMetricsCollector.addIngestedDocValue("index3", docSize);
 
         metrics = ingestMetricsCollector.getMetrics();
-        valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(4L * docSize));
 
         metrics.commit();
 
         metrics = ingestMetricsCollector.getMetrics();
-        valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(0L));
     }
@@ -120,7 +120,7 @@ public class IngestMetricsCollectorTests extends ESTestCase {
         ingestMetricsCollector.addIngestedDocValue("index3", docSize);
 
         var metrics = ingestMetricsCollector.getMetrics();
-        long valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        long valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(3L * docSize));
         metrics.commit();
@@ -129,7 +129,7 @@ public class IngestMetricsCollectorTests extends ESTestCase {
         ingestMetricsCollector.addIngestedDocValue("index3", docSize2);
 
         metrics = ingestMetricsCollector.getMetrics();
-        valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(docSize2));
 
@@ -137,13 +137,13 @@ public class IngestMetricsCollectorTests extends ESTestCase {
         ingestMetricsCollector.addIngestedDocValue("index3", docSize2);
 
         metrics = ingestMetricsCollector.getMetrics();
-        valueSum = iterableToList(metrics).stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(3L * docSize2));
     }
 
     public void testConcurrencyManyWritersOneReaderNoWait() throws InterruptedException {
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+        final var results = new ConcurrentLinkedQueue<MetricValue>();
         final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
 
         final int writerThreadsCount = randomIntBetween(4, 10);
@@ -168,14 +168,14 @@ public class IngestMetricsCollectorTests extends ESTestCase {
             logger::info
         );
 
-        long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        long valueSum = results.stream().mapToLong(MetricValue::value).sum();
         var itemsLeft = iterableToList(ingestMetricsCollector.getMetrics()).size();
         assertThat(valueSum, equalTo(totalOps * docSize));
         assertThat(itemsLeft, is(0));
     }
 
     public void testConcurrencyManyWritersOneReaderWithWait() throws InterruptedException {
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+        final var results = new ConcurrentLinkedQueue<MetricValue>();
         final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
 
         final int writerThreadsCount = randomIntBetween(4, 10);
@@ -200,7 +200,7 @@ public class IngestMetricsCollectorTests extends ESTestCase {
             logger::info
         );
 
-        long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        long valueSum = results.stream().mapToLong(MetricValue::value).sum();
         var itemsLeft = iterableToList(ingestMetricsCollector.getMetrics()).size();
         assertThat(valueSum, equalTo(totalOps * docSize));
         assertThat(itemsLeft, is(0));

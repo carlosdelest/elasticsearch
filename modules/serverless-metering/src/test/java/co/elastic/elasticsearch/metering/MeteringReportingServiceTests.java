@@ -18,7 +18,9 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
+import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.common.collect.Iterators;
@@ -70,7 +72,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
     private Settings settings;
     private ClusterSettings clusterSettings;
 
-    private static class TestCounter implements MetricsCollector {
+    private static class TestCounter implements CounterMetricsCollector {
         private final String id;
         private final Map<String, String> metadata;
         private final Map<String, Object> settings;
@@ -94,7 +96,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
 
             TestCommitMetricValues() {
                 this.snapshotValue = metricValue.get();
-                this.metric = new MetricValue(MeasurementType.COUNTER, id, "test", metadata, settings, snapshotValue);
+                this.metric = new MetricValue(id, "test", metadata, settings, snapshotValue);
             }
 
             @Override
@@ -115,7 +117,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
         }
     }
 
-    private static class TestSample implements MetricsCollector {
+    private static class TestSample implements SampledMetricsCollector {
         private final String id;
         private final Map<String, String> metadata;
         private final Map<String, Object> settings;
@@ -134,9 +136,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
 
         @Override
         public MetricValues getMetrics() {
-            return MetricsCollector.wrapValuesWithoutCommit(
-                List.of(new MetricValue(MeasurementType.SAMPLED, id, "test", metadata, settings, value))
-            );
+            return SampledMetricsCollector.valuesFromCollection(List.of(new MetricValue(id, "test", metadata, settings, value)));
         }
     }
 
@@ -233,7 +233,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
             MeteringReportingService service = new MeteringReportingService(
                 NODE_ID,
                 PROJECT_ID,
-                List.of(counter1, counter2, sampled1, sampled2),
+                List.of(counter1, counter2),
+                List.of(sampled1, sampled2),
                 REPORT_PERIOD,
                 records::addAll,
                 threadPool,
@@ -267,6 +268,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 NODE_ID,
                 PROJECT_ID,
                 List.of(counter1, counter2),
+                List.of(),
                 REPORT_PERIOD,
                 records::addAll,
                 threadPool,
@@ -306,6 +308,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
             MeteringReportingService service = new MeteringReportingService(
                 NODE_ID,
                 PROJECT_ID,
+                List.of(),
                 List.of(sampled1, sampled2),
                 REPORT_PERIOD,
                 records::addAll,
@@ -336,7 +339,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
 
     public void testSampledMetricsCalledConcurrentlyMatch() throws InterruptedException {
 
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+        final var results = new ConcurrentLinkedQueue<MetricValue>();
 
         final int writerThreadsCount = randomIntBetween(4, 10);
         final int writeOpsPerThread = randomIntBetween(100, 2000);
@@ -350,11 +353,12 @@ public class MeteringReportingServiceTests extends ESTestCase {
         final int totalOps = writeOpsPerThread * writerThreadsCount;
         final long expectedSum = valueForSampled1 * totalOps + valueForSampled2 * totalOps;
 
-        List<MetricsCollector> collectors = List.of(sampled1, sampled2);
+        List<SampledMetricsCollector> collectors = List.of(sampled1, sampled2);
         try (
             var ignored = new MeteringReportingService(
                 NODE_ID,
                 PROJECT_ID,
+                List.of(),
                 collectors,
                 REPORT_PERIOD,
                 x -> {},
@@ -372,18 +376,18 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 writerThreadsCount,
                 writeOpsPerThread,
                 () -> randomIntBetween(10, 50),
-                () -> addResults(results, collectors),
+                () -> addSampledResults(results, collectors),
                 logger::info
             );
         }
 
-        long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        long valueSum = results.stream().mapToLong(MetricValue::value).sum();
         assertThat(results.size(), equalTo(totalOps * 2));
         assertThat(valueSum, equalTo(expectedSum));
     }
 
     public void testCounterMetricsCalledConcurrentlyMatch() throws InterruptedException {
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+        final var results = new ConcurrentLinkedQueue<MetricValue>();
 
         final int writerThreadsCount = randomIntBetween(4, 10);
         final int writeOpsPerThread = randomIntBetween(100, 2000);
@@ -408,6 +412,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 NODE_ID,
                 PROJECT_ID,
                 Arrays.asList(counters),
+                List.of(),
                 REPORT_PERIOD,
                 x -> {},
                 threadPool,
@@ -420,10 +425,15 @@ public class MeteringReportingServiceTests extends ESTestCase {
             ConcurrencyTestUtils.runConcurrentWithCollectors(writerThreadsCount, writeOpsPerThread, () -> randomIntBetween(10, 50), t -> {
                 var counter = counters[writerThreadTargetTestCounter[t]];
                 counter.add(writerThreadCounterIncrement);
-            }, collectThreadsCount, () -> randomIntBetween(100, 200), () -> addResults(results, Arrays.asList(counters)), logger::info);
+            },
+                collectThreadsCount,
+                () -> randomIntBetween(100, 200),
+                () -> addCounterResults(results, Arrays.asList(counters)),
+                logger::info
+            );
         }
 
-        long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+        long valueSum = results.stream().mapToLong(MetricValue::value).sum();
         assertThat(valueSum, equalTo(expectedSum));
     }
 
@@ -437,7 +447,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
             MeteringReportingService service = new MeteringReportingService(
                 NODE_ID,
                 PROJECT_ID,
-                List.of(counter1, sampled1),
+                List.of(counter1),
+                List.of(sampled1),
                 REPORT_PERIOD,
                 records::addAll,
                 threadPool,
@@ -491,11 +502,12 @@ public class MeteringReportingServiceTests extends ESTestCase {
             )
         ) {
 
-            var ingestMetricsCollector = new IngestMetricsCollector(NODE_ID, clusterSettings, settings);
-            List<MetricsCollector> builtInMetrics = new ArrayList<>();
+            List<CounterMetricsCollector> builtInCounterMetrics = new ArrayList<>();
+            List<SampledMetricsCollector> builtInSampledMetrics = new ArrayList<>();
 
-            builtInMetrics.add(new IndexSizeMetricsCollector(testIndex.indicesService(), clusterSettings, settings));
-            builtInMetrics.add(ingestMetricsCollector);
+            builtInSampledMetrics.add(new IndexSizeMetricsCollector(testIndex.indicesService(), clusterSettings, settings));
+            var ingestMetricsCollector = new IngestMetricsCollector(NODE_ID, clusterSettings, settings);
+            builtInCounterMetrics.add(ingestMetricsCollector);
 
             Consumer<Integer> writerAction = t -> {
                 var indexId = t % numberOfIndexes;
@@ -507,7 +519,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 var service = new MeteringReportingService(
                     NODE_ID,
                     PROJECT_ID,
-                    builtInMetrics,
+                    builtInCounterMetrics,
+                    builtInSampledMetrics,
                     REPORT_PERIOD,
                     records::addAll,
                     threadPool,
@@ -577,7 +590,14 @@ public class MeteringReportingServiceTests extends ESTestCase {
         ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
     }
 
-    private static void addResults(ConcurrentLinkedQueue<MetricsCollector.MetricValue> results, List<MetricsCollector> collectors) {
+    private static void addSampledResults(ConcurrentLinkedQueue<MetricValue> results, List<SampledMetricsCollector> collectors) {
+        for (var collector : collectors) {
+            var metrics = collector.getMetrics();
+            metrics.forEach(results::add);
+        }
+    }
+
+    private static void addCounterResults(ConcurrentLinkedQueue<MetricValue> results, List<CounterMetricsCollector> collectors) {
         for (var collector : collectors) {
             var metrics = collector.getMetrics();
             metrics.forEach(results::add);

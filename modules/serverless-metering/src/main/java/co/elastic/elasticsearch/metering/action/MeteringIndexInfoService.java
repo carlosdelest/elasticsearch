@@ -18,7 +18,8 @@
 package co.elastic.elasticsearch.metering.action;
 
 import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
+import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.action.ActionListener;
@@ -131,7 +132,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         });
     }
 
-    private class IndexSizeMetricsCollector implements MetricsCollector {
+    private class IndexSizeMetricsCollector implements SampledMetricsCollector {
         public static final String METRIC_TYPE = "es_indexed_data";
         private static final String PARTIAL = "partial";
         private static final String INDEX = "index";
@@ -175,7 +176,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
 
             var currentInfo = collectedShardInfo.get();
             if (currentInfo == CollectedMeteringShardInfo.EMPTY) {
-                return MetricsCollector.NO_VALUES;
+                return SampledMetricsCollector.NO_VALUES;
             }
 
             // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
@@ -196,14 +197,14 @@ public class MeteringIndexInfoService implements ClusterStateListener {
                 }
                 String metricId = format("shard-size:%s:%s", indexName, shardId);
 
-                metrics.add(new MetricValue(MeasurementType.SAMPLED, metricId, METRIC_TYPE, metadata, settings, size));
+                metrics.add(new MetricValue(metricId, METRIC_TYPE, metadata, settings, size));
             }
 
-            return MetricsCollector.wrapValuesWithoutCommit(Collections.unmodifiableCollection(metrics));
+            return SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics));
         }
     }
 
-    public MetricsCollector createIndexSizeMetricsCollector(ClusterService clusterService, Settings settings) {
+    public SampledMetricsCollector createIndexSizeMetricsCollector(ClusterService clusterService, Settings settings) {
         return new IndexSizeMetricsCollector(clusterService.getClusterSettings(), settings);
     }
 

@@ -18,7 +18,8 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
+import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Setting;
@@ -44,7 +45,8 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
     private final String projectId;
     private final ThreadPool threadPool;
     private final ExecutorService executor;
-    private final List<MetricsCollector> sources;
+    private final List<CounterMetricsCollector> counterMetricsCollectors;
+    private final List<SampledMetricsCollector> sampledMetricsCollectors;
     private final TimeValue reportPeriod;
     private final Consumer<List<UsageRecord>> reporter;
 
@@ -53,7 +55,8 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
     public MeteringReportingService(
         String nodeId,
         String projectId,
-        List<MetricsCollector> sources,
+        List<CounterMetricsCollector> counterMetricsCollectors,
+        List<SampledMetricsCollector> sampledMetricsCollectors,
         TimeValue reportPeriod,
         Consumer<List<UsageRecord>> reporter,
         ThreadPool threadPool,
@@ -61,16 +64,26 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
     ) {
         this.nodeId = nodeId;
         this.projectId = projectId;
+        this.counterMetricsCollectors = counterMetricsCollectors;
+        this.sampledMetricsCollectors = sampledMetricsCollectors;
         this.threadPool = threadPool;
         this.executor = executor;
-        this.sources = sources;
         this.reportPeriod = reportPeriod;
         this.reporter = reporter;
     }
 
     @Override
     protected void doStart() {
-        reportGatherer = new ReportGatherer(nodeId, projectId, sources, reporter, threadPool, executor, reportPeriod);
+        reportGatherer = new ReportGatherer(
+            nodeId,
+            projectId,
+            counterMetricsCollectors,
+            sampledMetricsCollectors,
+            reporter,
+            threadPool,
+            executor,
+            reportPeriod
+        );
         reportGatherer.start();
     }
 

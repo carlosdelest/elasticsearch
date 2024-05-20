@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
@@ -86,12 +86,11 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(1));
 
-        var metric = (MetricsCollector.MetricValue) metrics.toArray()[0];
-        assertThat(metric.measurementType(), equalTo(MetricsCollector.MeasurementType.SAMPLED));
+        var metric = (MetricValue) metrics.toArray()[0];
         assertThat(metric.id(), equalTo("shard-size:" + indexName + ":" + shardIdInt));
         assertThat(metric.type(), equalTo("es_indexed_data"));
         assertThat(metric.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
@@ -112,12 +111,11 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(10));
         int shard = 0;
-        for (MetricsCollector.MetricValue metric : metrics) {
-            assertThat(metric.measurementType(), equalTo(MetricsCollector.MeasurementType.SAMPLED));
+        for (MetricValue metric : metrics) {
             assertThat(metric.id(), equalTo("shard-size:" + indexName + ":" + shard));
             assertThat(metric.type(), equalTo("es_indexed_data"));
             assertThat(metric.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shard)));
@@ -144,13 +142,12 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         );
 
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
-        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(10));
         var hasPartial = hasEntry("partial", "" + true);
         int shard = 0;
-        for (MetricsCollector.MetricValue metric : metrics) {
-            assertThat(metric.measurementType(), equalTo(MetricsCollector.MeasurementType.SAMPLED));
+        for (MetricValue metric : metrics) {
             assertThat(metric.id(), equalTo("shard-size:" + indexName + ":" + shard));
             assertThat(metric.type(), equalTo("es_indexed_data"));
             assertThat(metric.metadata(), hasEntry("index", indexName));
@@ -169,7 +166,7 @@ public class MeteringIndexInfoServiceIndexSizeMetricsCollectorTests extends ESTe
         var indexInfoService = new MeteringIndexInfoService();
 
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
-        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(0));
     }

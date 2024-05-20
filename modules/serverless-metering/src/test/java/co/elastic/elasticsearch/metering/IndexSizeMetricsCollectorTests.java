@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.SortedNumericDocValuesField;
@@ -75,12 +75,11 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+            Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
             assertThat(metrics, hasSize(1));
             int shardIdInt = 0;
-            var metric = (MetricsCollector.MetricValue) metrics.toArray()[0];
-            assertThat(metric.measurementType(), equalTo(MetricsCollector.MeasurementType.SAMPLED));
+            var metric = (MetricValue) metrics.toArray()[0];
             assertThat(metric.id(), equalTo("shard-size:" + indexName + ":" + shardIdInt));
             assertThat(metric.type(), equalTo("es_indexed_data"));
             assertThat(metric.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
@@ -96,12 +95,11 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+            Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
             assertThat(metrics, hasSize(10));
             int shard = 0;
-            for (MetricsCollector.MetricValue metric : metrics) {
-                assertThat(metric.measurementType(), equalTo(MetricsCollector.MeasurementType.SAMPLED));
+            for (MetricValue metric : metrics) {
                 assertThat(metric.id(), equalTo("shard-size:" + indexName + ":" + shard));
                 assertThat(metric.type(), equalTo("es_indexed_data"));
                 assertThat(metric.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shard)));
@@ -124,13 +122,12 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+            Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
             assertThat(metrics, hasSize(10));
             var hasPartial = hasEntry("partial", "" + true);
             int shard = 0;
-            for (MetricsCollector.MetricValue metric : metrics) {
-                assertThat(metric.measurementType(), equalTo(MetricsCollector.MeasurementType.SAMPLED));
+            for (MetricValue metric : metrics) {
                 assertThat(metric.id(), equalTo("shard-size:" + indexName + ":" + shard));
                 assertThat(metric.type(), equalTo("es_indexed_data"));
                 assertThat(metric.metadata(), hasEntry("index", indexName));
@@ -171,13 +168,13 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             clusterSettings,
             Settings.EMPTY
         );
-        Collection<MetricsCollector.MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
 
         assertThat(metrics, hasSize(0));
     }
 
     public void testConcurrencyOneShardNoWait() throws InterruptedException, IOException {
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+        final var results = new ConcurrentLinkedQueue<MetricValue>();
 
         final int threadsCount = randomIntBetween(4, 10);
         final int opsPerThread = randomIntBetween(100, 2000);
@@ -193,7 +190,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             );
 
             final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
-                .mapToLong(MetricsCollector.MetricValue::value)
+                .mapToLong(MetricValue::value)
                 .sum();
 
             ConcurrencyTestUtils.runConcurrent(
@@ -204,7 +201,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 logger::info
             );
 
-            long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+            long valueSum = results.stream().mapToLong(MetricValue::value).sum();
 
             assertThat(results, hasSize(totalOps));
             assertThat(valueSum, equalTo(opsPerThread * threadsCount * sequentialReadMetricSum));
@@ -212,7 +209,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
     }
 
     public void testConcurrencyOneShardRandomWait() throws InterruptedException, IOException {
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+        final var results = new ConcurrentLinkedQueue<MetricValue>();
 
         final int threadsCount = randomIntBetween(4, 10);
         final int opsPerThread = randomIntBetween(50, 200);
@@ -228,7 +225,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             );
 
             final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
-                .mapToLong(MetricsCollector.MetricValue::value)
+                .mapToLong(MetricValue::value)
                 .sum();
 
             ConcurrencyTestUtils.runConcurrent(
@@ -239,7 +236,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 logger::info
             );
 
-            long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+            long valueSum = results.stream().mapToLong(MetricValue::value).sum();
 
             assertThat(results, hasSize(totalOps));
             assertThat(valueSum, equalTo(opsPerThread * threadsCount * sequentialReadMetricSum));
@@ -247,7 +244,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
     }
 
     public void testConcurrencyMultipleShardsRandomWait() throws InterruptedException, IOException {
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+        final var results = new ConcurrentLinkedQueue<MetricValue>();
 
         final int threadsCount = randomIntBetween(4, 10);
         final int opsPerThread = randomIntBetween(50, 200);
@@ -264,7 +261,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             );
 
             final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
-                .mapToLong(MetricsCollector.MetricValue::value)
+                .mapToLong(MetricValue::value)
                 .sum();
 
             ConcurrencyTestUtils.runConcurrent(
@@ -275,7 +272,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 logger::info
             );
 
-            long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+            long valueSum = results.stream().mapToLong(MetricValue::value).sum();
 
             assertThat(results, hasSize(totalOps));
             assertThat(valueSum, equalTo(opsPerThread * threadsCount * sequentialReadMetricSum));
@@ -283,7 +280,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
     }
 
     public void testConcurrencyMultipleIndicesRandomWait() throws InterruptedException, IOException {
-        final var results = new ConcurrentLinkedQueue<MetricsCollector.MetricValue>();
+        final var results = new ConcurrentLinkedQueue<MetricValue>();
 
         final int threadsCount = randomIntBetween(4, 10);
         final int opsPerThread = randomIntBetween(20, 100);
@@ -301,7 +298,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             );
 
             final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
-                .mapToLong(MetricsCollector.MetricValue::value)
+                .mapToLong(MetricValue::value)
                 .sum();
 
             ConcurrencyTestUtils.runConcurrent(
@@ -312,7 +309,7 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 logger::info
             );
 
-            long valueSum = results.stream().mapToLong(MetricsCollector.MetricValue::value).sum();
+            long valueSum = results.stream().mapToLong(MetricValue::value).sum();
 
             assertThat(results, hasSize(totalOps));
             assertThat(valueSum, equalTo(opsPerThread * threadsCount * sequentialReadMetricSum));

@@ -17,7 +17,8 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.apache.logging.log4j.LogManager;
@@ -62,7 +63,7 @@ import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSett
  * By using nonExclusiveLock (readLock) we prevent getMetrics to be called at the same time as addIngestedDocValue
  * and we allow for concurrent addIngestedDocValue calls.
  */
-public class IngestMetricsCollector implements MetricsCollector {
+public class IngestMetricsCollector implements CounterMetricsCollector {
     public static final String METRIC_TYPE = "es_raw_data";
     private static final String SEARCH_POWER = "search_power";
     private static final String BOOST_WINDOW = "boost_window";
@@ -162,13 +163,6 @@ public class IngestMetricsCollector implements MetricsCollector {
     }
 
     private MetricValue metricValue(String index, long value, Map<String, Object> settings) {
-        return new MetricValue(
-            MeasurementType.COUNTER,
-            "ingested-doc:" + index + ":" + nodeId,
-            METRIC_TYPE,
-            Map.of("index", index),
-            settings,
-            value
-        );
+        return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, Map.of("index", index), settings, value);
     }
 }

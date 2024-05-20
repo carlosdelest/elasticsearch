@@ -29,7 +29,8 @@ import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSeco
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
 import co.elastic.elasticsearch.metering.reports.MeteringReporter;
 import co.elastic.elasticsearch.metering.stats.rest.RestGetMeteringStatsAction;
-import co.elastic.elasticsearch.metrics.MetricsCollector;
+import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
+import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.action.ActionRequest;
@@ -103,7 +104,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     private MeteringIndexInfoTaskExecutor meteringIndexInfoTaskExecutor;
     private final boolean hasSearchRole;
-    private List<MetricsCollector> metricsCollectors;
+    private List<SampledMetricsCollector> sampledMetricsCollectors;
+    private List<CounterMetricsCollector> counterMetricsCollectors;
     private MeteringReporter reporter;
     private MeteringReportingService reportingService;
 
@@ -129,7 +131,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     @Override
     public void loadExtensions(ExtensionLoader loader) {
-        metricsCollectors = loader.loadExtensions(MetricsCollector.class);
+        sampledMetricsCollectors = loader.loadExtensions(SampledMetricsCollector.class);
+        counterMetricsCollectors = loader.loadExtensions(CounterMetricsCollector.class);
     }
 
     @Override
@@ -169,26 +172,28 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         var indexSizeService = new MeteringIndexInfoService();
         clusterService.addListener(indexSizeService);
 
-        List<MetricsCollector> builtInMetrics = new ArrayList<>();
+        List<CounterMetricsCollector> builtInCounterMetrics = new ArrayList<>();
+        List<SampledMetricsCollector> builtInSampledMetrics = new ArrayList<>();
         List<DiscoveryNodeRole> discoveryNodeRoles = NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings());
         if (discoveryNodeRoles.contains(DiscoveryNodeRole.INGEST_ROLE) || discoveryNodeRoles.contains(DiscoveryNodeRole.INDEX_ROLE)) {
-            builtInMetrics.add(ingestMetricsCollector);
+            builtInCounterMetrics.add(ingestMetricsCollector);
         }
 
         TimeValue reportPeriod = MeteringReportingService.REPORT_PERIOD.get(environment.settings());
 
         // TODO[ES-7639]: remove this choice when migration to IX in ES is completed
         if (useNewIndexSizeMetric) {
-            builtInMetrics.add(indexSizeService.createIndexSizeMetricsCollector(clusterService, environment.settings()));
+            builtInSampledMetrics.add(indexSizeService.createIndexSizeMetricsCollector(clusterService, environment.settings()));
         } else {
             if (discoveryNodeRoles.contains(DiscoveryNodeRole.SEARCH_ROLE)) {
-                builtInMetrics.add(
+                builtInSampledMetrics.add(
                     new IndexSizeMetricsCollector(services.indicesService(), clusterService.getClusterSettings(), environment.settings())
                 );
             }
         }
 
-        builtInMetrics.addAll(metricsCollectors);
+        builtInCounterMetrics.addAll(counterMetricsCollectors);
+        builtInSampledMetrics.addAll(sampledMetricsCollectors);
 
         if (projectId.isEmpty()) {
             log.warn(PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
@@ -199,7 +204,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         reportingService = new MeteringReportingService(
             nodeEnvironment.nodeId(),
             projectId,
-            builtInMetrics,
+            builtInCounterMetrics,
+            builtInSampledMetrics,
             reportPeriod,
             reporter != null ? reporter::sendRecords : records -> {},
             threadPool,
@@ -212,7 +218,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         }
         cs.add(reportingService);
         cs.add(indexSizeService);
-        cs.addAll(builtInMetrics);
+        cs.addAll(builtInCounterMetrics);
+        cs.addAll(builtInSampledMetrics);
 
         // TODO[lor]: We should not create multiple PersistentTasksService. Instead, we should create one in Server and pass it to plugins
         // via services or via PersistentTaskPlugin#getPersistentTasksExecutor. See elasticsearch#105662

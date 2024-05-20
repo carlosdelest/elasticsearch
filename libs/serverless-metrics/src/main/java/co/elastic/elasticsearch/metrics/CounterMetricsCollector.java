@@ -20,38 +20,11 @@ package co.elastic.elasticsearch.metrics;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.Map;
 
 /**
- * Represents an object that collects metrics for reporting
+ * Represents an object that collects counter metrics for reporting
  */
-public interface MetricsCollector {
-
-    /**
-     * The type of metric
-     */
-    enum MeasurementType {
-        COUNTER,
-        SAMPLED
-    }
-
-    /**
-     * A single metric value for reporting
-     * @param measurementType What type of measurement
-     * @param id              An id for the metric this value is for
-     * @param type            The type to use for the record
-     * @param metadata        Associated metadata for the metric
-     * @param settings        Additional values associated with the metric
-     * @param value           The current metric value
-     */
-    record MetricValue(
-        MeasurementType measurementType,
-        String id,
-        String type,
-        Map<String, String> metadata,
-        Map<String, Object> settings,
-        long value
-    ) {}
+public interface CounterMetricsCollector {
 
     interface MetricValues extends Iterable<MetricValue> {
         /**
