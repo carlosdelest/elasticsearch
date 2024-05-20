@@ -27,7 +27,7 @@ import org.elasticsearch.cluster.metadata.ShutdownShardMigrationStatus;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
-import org.elasticsearch.test.MockLogAppender;
+import org.elasticsearch.test.MockLog;
 import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.xpack.shutdown.GetShutdownStatusAction;
@@ -59,7 +59,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
         final String nodeId = randomAlphaOfLength(10);
         TestThreadPool threadPool = new TestThreadPool(this.getTestName());
 
-        try (var appender = MockLogAppender.capture(SigtermTerminationHandler.class)) {
+        try (var mockLog = MockLog.capture(SigtermTerminationHandler.class)) {
             Client client = mock(Client.class);
             when(client.threadPool()).thenReturn(threadPool);
             doAnswer(invocation -> {
@@ -99,16 +99,16 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
                 return null; // real method is void
             }).when(client).execute(eq(GetShutdownStatusAction.INSTANCE), any(), any());
 
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
+            mockLog.addExpectation(
+                new MockLog.SeenEventExpectation(
                     "handler started message",
                     SigtermTerminationHandler.class.getCanonicalName(),
                     Level.INFO,
                     "handling graceful shutdown request"
                 )
             );
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
+            mockLog.addExpectation(
+                new MockLog.SeenEventExpectation(
                     "handler completed message",
                     SigtermTerminationHandler.class.getCanonicalName(),
                     Level.INFO,
@@ -118,7 +118,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
 
             new SigtermTerminationHandler(client, threadPool, pollInterval, timeout, nodeId).handleTermination();
 
-            appender.assertAllExpectationsMatched();
+            mockLog.assertAllExpectationsMatched();
 
             verify(client, times(1)).execute(eq(PutShutdownNodeAction.INSTANCE), any(), any());
             verify(client, times(1)).execute(eq(GetShutdownStatusAction.INSTANCE), any(), any());
