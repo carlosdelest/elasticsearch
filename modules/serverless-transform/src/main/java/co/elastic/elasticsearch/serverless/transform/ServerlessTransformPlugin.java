@@ -18,7 +18,7 @@
 package co.elastic.elasticsearch.serverless.transform;
 
 import org.apache.lucene.util.SetOnce;
-import org.elasticsearch.action.support.ActionFilter;
+import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.xpack.transform.Transform;
@@ -31,7 +31,7 @@ public class ServerlessTransformPlugin extends Transform {
 
     public static final String NAME = "serverless-transform";
 
-    public final SetOnce<List<ActionFilter>> actionFilters = new SetOnce<>();
+    public final SetOnce<List<MappedActionFilter>> actionFilters = new SetOnce<>();
 
     private final TransformExtension transformExtension = new ServerlessTransformExtension();
 
@@ -47,7 +47,7 @@ public class ServerlessTransformPlugin extends Transform {
     }
 
     @Override
-    public List<ActionFilter> getActionFilters() {
+    public List<MappedActionFilter> getMappedActionFilters() {
         return actionFilters.get();
     }
 
