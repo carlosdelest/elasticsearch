@@ -27,8 +27,11 @@ import org.elasticsearch.action.admin.indices.recovery.RecoveryResponse;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.OriginSettingClient;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
+import org.elasticsearch.common.ReferenceDocs;
 import org.elasticsearch.common.logging.ESLogMessage;
+import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.monitor.jvm.HotThreads;
 import org.elasticsearch.node.internal.TerminationHandler;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.ClientHelper;
@@ -84,7 +87,8 @@ public class SigtermTerminationHandler implements TerminationHandler {
             boolean timedOut = latchReachedZero == false && timeout.millis() != 0;
             SingleNodeShutdownStatus status = lastStatus.get();
             if (timedOut && status != null && status.migrationStatus().getShardsRemaining() > 0) {
-                logDetailedRecoveryStatus();
+                logger.info("Timed out waiting for graceful shutdown, retrieving current recoveries status");
+                logDetailedRecoveryStatusAndWait();
             }
             var duration = threadPool.rawRelativeTimeInMillis() - started;
             logger.info(
@@ -116,10 +120,18 @@ public class SigtermTerminationHandler implements TerminationHandler {
         }
     }
 
-    private void logDetailedRecoveryStatus() {
-        logger.info("Timed out waiting for graceful shutdown, retrieving current recoveries status");
-
+    private void logDetailedRecoveryStatusAndWait() {
         CountDownLatch latch = new CountDownLatch(1);
+        logDetailedRecoveryStatus(latch::countDown);
+        try {
+            latch.await(); // no need for a timeout, if this takes too long the node will shutdown anyways
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void logDetailedRecoveryStatus(Releasable releasable) {
         var request = new RecoveryRequest();
         request.activeOnly(true);
         client.execute(RecoveryAction.INSTANCE, request, ActionListener.releaseAfter(new ActionListener<>() {
@@ -132,14 +144,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
             public void onFailure(Exception ex) {
                 logger.error("Failed to get recoveries status", ex);
             }
-        }, latch::countDown));
-
-        try {
-            latch.await(); // no need for a timeout, if this takes too long the node will shutdown anyways
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
-        }
+        }, releasable));
     }
 
     private PutShutdownNodeAction.Request shutdownRequest() {
@@ -168,7 +173,24 @@ public class SigtermTerminationHandler implements TerminationHandler {
                 logger.debug("node ready for shutdown with status [{}]: {}", status.overallStatus(), status);
                 latch.countDown();
             } else {
-                logger.log(poll % 10 == 0 ? Level.INFO : Level.DEBUG, "polled for shutdown status: {}", status);
+                final var level = poll % 10 == 0 ? Level.INFO : Level.DEBUG;
+                if (logger.isEnabled(level)) {
+                    logger.log(
+                        level,
+                        new ESLogMessage("polled for shutdown status: {}", status).withFields(
+                            Map.of("elasticsearch.shutdown.poll_count", poll)
+                        )
+                    );
+                    if (poll > 0) {
+                        HotThreads.logLocalHotThreads(
+                            logger,
+                            level,
+                            "hot threads while waiting for shutdown [poll_count=" + poll + "]",
+                            ReferenceDocs.LOGGING
+                        );
+                        logDetailedRecoveryStatus(() -> {});
+                    }
+                }
                 threadPool.schedule(() -> pollStatusAndLoop(poll + 1, latch, lastStatus), pollInterval, threadPool.generic());
             }
         }, ex -> {
