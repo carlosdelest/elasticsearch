@@ -24,6 +24,17 @@ steps:
           machineType: "n1-standard-16"
           image: family/elasticsearch-ubuntu-2022
 
+      - label: ":kibana: Kibana serverless tests"
+        trigger: appex-qa-serverless-kibana-ftr-tests # https://buildkite.com/elastic/appex-qa-serverless-kibana-ftr-tests
+        soft_fail: true
+        build:
+          env:
+            ENVIRONMENT: qa
+            EC_ENV: qa
+            EC_REGION: aws-eu-west-1
+            RETRY_TESTS_ON_FAIL: "true"
+          message: "${BUILDKITE_MESSAGE} (triggered by Elasticsearch QA quality gate)"
+
       - label: ":hourglass: Wait 30 minutes for environment health metrics"
         soft_fail: true
         key: bake_period
