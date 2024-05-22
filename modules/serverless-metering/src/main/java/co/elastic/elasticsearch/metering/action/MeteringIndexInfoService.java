@@ -41,6 +41,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -132,8 +133,11 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         });
     }
 
-    private class IndexSizeMetricsCollector implements SampledMetricsCollector {
-        public static final String METRIC_TYPE = "es_indexed_data";
+    class StorageInfoMetricsCollector implements SampledMetricsCollector {
+        private static final String IX_METRIC_TYPE = "es_indexed_data";
+        static final String IX_METRIC_ID_PREFIX = "shard-size";
+        private static final String RA_S_METRIC_TYPE = "es_raw_stored_data";
+        static final String RA_S_METRIC_ID_PREFIX = "stored-ingest-size";
         private static final String PARTIAL = "partial";
         private static final String INDEX = "index";
         private static final String SHARD = "shard";
@@ -142,7 +146,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         private volatile int searchPowerMinSetting;
         private volatile int searchPowerMaxSetting;
 
-        IndexSizeMetricsCollector(ClusterSettings clusterSettings, Settings settings) {
+        StorageInfoMetricsCollector(ClusterSettings clusterSettings, Settings settings) {
             this.searchPowerMinSetting = SEARCH_POWER_MIN_SETTING.get(settings);
             this.searchPowerMaxSetting = SEARCH_POWER_MAX_SETTING.get(settings);
             clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_MIN_SETTING, sp -> this.searchPowerMinSetting = sp);
@@ -182,11 +186,12 @@ public class MeteringIndexInfoService implements ClusterStateListener {
             // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
             Map<String, Object> settings = Map.of(SEARCH_POWER, this.searchPowerMinSetting);
 
+            boolean partial = currentInfo.meteringShardInfoStatus().contains(CollectedMeteringShardInfoFlag.PARTIAL);
             List<MetricValue> metrics = new ArrayList<>();
             for (final var shardEntry : currentInfo.meteringShardInfoMap.entrySet()) {
                 int shardId = shardEntry.getKey().id();
                 long size = shardEntry.getValue().sizeInBytes();
-                boolean partial = currentInfo.meteringShardInfoStatus().contains(CollectedMeteringShardInfoFlag.PARTIAL);
+
                 var indexName = shardEntry.getKey().getIndexName();
 
                 Map<String, String> metadata = new HashMap<>();
@@ -195,9 +200,43 @@ public class MeteringIndexInfoService implements ClusterStateListener {
                 if (partial) {
                     metadata.put(PARTIAL, Boolean.TRUE.toString());
                 }
-                String metricId = format("shard-size:%s:%s", indexName, shardId);
 
-                metrics.add(new MetricValue(metricId, METRIC_TYPE, metadata, settings, size));
+                metrics.add(
+                    new MetricValue(format("%s:%s:%s", IX_METRIC_ID_PREFIX, indexName, shardId), IX_METRIC_TYPE, metadata, settings, size)
+                );
+            }
+
+            Map<String, Optional<Long>> storedIngestSizeInBytesMap = currentInfo.meteringShardInfoMap.entrySet()
+                .stream()
+                .collect(
+                    Collectors.groupingBy(
+                        e -> e.getKey().getIndexName(),
+                        Collectors.filtering(
+                            e -> e.getValue().storedIngestSizeInBytes() != null,
+                            Collectors.mapping(e -> e.getValue().storedIngestSizeInBytes(), Collectors.reducing(Long::sum))
+                        )
+                    )
+                );
+            for (final var indexEntry : storedIngestSizeInBytesMap.entrySet()) {
+                final var indexName = indexEntry.getKey();
+                final var storedIngestSizeInBytes = indexEntry.getValue();
+
+                if (storedIngestSizeInBytes.isPresent()) {
+                    Map<String, String> metadata = new HashMap<>();
+                    metadata.put(INDEX, indexName);
+                    if (partial) {
+                        metadata.put(PARTIAL, Boolean.TRUE.toString());
+                    }
+                    metrics.add(
+                        new MetricValue(
+                            format("%s:%s", RA_S_METRIC_ID_PREFIX, indexName),
+                            RA_S_METRIC_TYPE,
+                            metadata,
+                            settings,
+                            storedIngestSizeInBytes.get()
+                        )
+                    );
+                }
             }
 
             return SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics));
@@ -205,7 +244,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
     }
 
     public SampledMetricsCollector createIndexSizeMetricsCollector(ClusterService clusterService, Settings settings) {
-        return new IndexSizeMetricsCollector(clusterService.getClusterSettings(), settings);
+        return new StorageInfoMetricsCollector(clusterService.getClusterSettings(), settings);
     }
 
     static CollectedMeteringShardInfo mergeShardInfo(
