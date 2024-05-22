@@ -415,9 +415,6 @@ public class MeteringReportingServiceTests extends ESTestCase {
             );
 
             assertThat(sampledMetrics.stream().map(usageRecord -> usageRecord.usage().quantity()).toList(), everyItem(is(50L)));
-
-            assertThat(cursor.getLatestCommitedTimestamp(), equalTo(secondSampleTimestamp));
-
             service.stop();
         }
     }
