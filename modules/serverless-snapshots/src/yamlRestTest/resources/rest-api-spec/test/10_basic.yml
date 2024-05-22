@@ -87,8 +87,7 @@ setup:
 ---
 "Restore a project from the latest successful snapshot":
   - skip:
-      version: all
-      reason: AwaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1592
+      awaits_fix: https://github.com/elastic/elasticsearch-serverless/issues/1592
 
   - do:
       snapshot.restore_project:
