@@ -76,8 +76,14 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         }
     }
 
+    enum PersistentTaskNodeStatus {
+        NO_NODE,
+        THIS_NODE,
+        ANOTHER_NODE
+    }
+
     final AtomicReference<CollectedMeteringShardInfo> collectedShardInfo = new AtomicReference<>(CollectedMeteringShardInfo.EMPTY);
-    volatile boolean isPersistentTaskNode;
+    volatile PersistentTaskNodeStatus persistentTaskNodeStatus = PersistentTaskNodeStatus.NO_NODE;
 
     /**
      * Monitors cluster state changes to see if we are not the persistent task node anymore.
@@ -88,10 +94,16 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         var currentPersistentTaskNode = findPersistentTaskNodeId(event.state(), MeteringIndexInfoTask.TASK_NAME);
         var localNode = event.state().nodes().getLocalNodeId();
 
-        var wasPersistentTaskNode = isPersistentTaskNode;
-        isPersistentTaskNode = currentPersistentTaskNode != null && currentPersistentTaskNode.equals(localNode);
+        var wasPersistentTaskNode = persistentTaskNodeStatus == PersistentTaskNodeStatus.THIS_NODE;
+        if (currentPersistentTaskNode == null) {
+            persistentTaskNodeStatus = PersistentTaskNodeStatus.NO_NODE;
+        } else if (currentPersistentTaskNode.equals(localNode)) {
+            persistentTaskNodeStatus = PersistentTaskNodeStatus.THIS_NODE;
+        } else {
+            persistentTaskNodeStatus = PersistentTaskNodeStatus.ANOTHER_NODE;
+        }
 
-        if (isPersistentTaskNode == false && wasPersistentTaskNode) {
+        if (persistentTaskNodeStatus != PersistentTaskNodeStatus.THIS_NODE && wasPersistentTaskNode) {
             collectedShardInfo.set(CollectedMeteringShardInfo.EMPTY);
         }
     }
@@ -103,7 +115,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         logger.debug("Calling IndexSizeService#updateMeteringShardInfo");
         // If we get called and ask to update, that request comes from the PersistentTask, so we are definitely on
         // the PersistentTask node
-        isPersistentTaskNode = true;
+        persistentTaskNodeStatus = PersistentTaskNodeStatus.THIS_NODE;
         client.execute(CollectMeteringShardInfoAction.INSTANCE, new CollectMeteringShardInfoAction.Request(), new ActionListener<>() {
             @Override
             public void onResponse(CollectMeteringShardInfoAction.Response response) {
@@ -137,7 +149,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         private static final String IX_METRIC_TYPE = "es_indexed_data";
         static final String IX_METRIC_ID_PREFIX = "shard-size";
         private static final String RA_S_METRIC_TYPE = "es_raw_stored_data";
-        static final String RA_S_METRIC_ID_PREFIX = "stored-ingest-size";
+        static final String RA_S_METRIC_ID_PREFIX = "raw-stored-index-size";
         private static final String PARTIAL = "partial";
         private static final String INDEX = "index";
         private static final String SHARD = "shard";
@@ -176,11 +188,18 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         }
 
         @Override
-        public MetricValues getMetrics() {
-
+        public Optional<MetricValues> getMetrics() {
             var currentInfo = collectedShardInfo.get();
-            if (currentInfo == CollectedMeteringShardInfo.EMPTY) {
-                return SampledMetricsCollector.NO_VALUES;
+
+            if (persistentTaskNodeStatus == PersistentTaskNodeStatus.NO_NODE
+                || (currentInfo == CollectedMeteringShardInfo.EMPTY && persistentTaskNodeStatus == PersistentTaskNodeStatus.THIS_NODE)) {
+                // We are not ready to return metrics yet
+                return Optional.empty();
+            }
+
+            if (persistentTaskNodeStatus == PersistentTaskNodeStatus.ANOTHER_NODE || (currentInfo == CollectedMeteringShardInfo.EMPTY)) {
+                // We have nothing to report
+                return Optional.of(SampledMetricsCollector.NO_VALUES);
             }
 
             // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
@@ -238,8 +257,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
                     );
                 }
             }
-
-            return SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics));
+            return Optional.of(SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics)));
         }
     }
 

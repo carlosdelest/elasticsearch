@@ -49,12 +49,14 @@ class ReportGatherer {
 
     private final List<CounterMetricsCollector> counterMetricsCollectors;
     private final List<SampledMetricsCollector> sampledMetricsCollectors;
+    private final SampledMetricsTimeCursor sampledMetricsTimeCursor;
     private final Consumer<List<UsageRecord>> reporter;
     private final ThreadPool threadPool;
     private final Executor executor;
     private final Clock clock;
     private final TimeValue reportPeriod;
     private final Duration reportPeriodDuration;
+    private final long maxPeriodsLookback;
     private final String sourceId;
     private final String projectId;
 
@@ -66,29 +68,7 @@ class ReportGatherer {
         String projectId,
         List<CounterMetricsCollector> counterMetricsCollectors,
         List<SampledMetricsCollector> sampledMetricsCollectors,
-        Consumer<List<UsageRecord>> reporter,
-        ThreadPool threadPool,
-        ExecutorService executor,
-        TimeValue reportPeriod
-    ) {
-        this(
-            nodeId,
-            projectId,
-            counterMetricsCollectors,
-            sampledMetricsCollectors,
-            reporter,
-            threadPool,
-            executor,
-            reportPeriod,
-            Clock.systemUTC()
-        );
-    }
-
-    ReportGatherer(
-        String nodeId,
-        String projectId,
-        List<CounterMetricsCollector> counterMetricsCollectors,
-        List<SampledMetricsCollector> sampledMetricsCollectors,
+        SampledMetricsTimeCursor sampledMetricsTimeCursor,
         Consumer<List<UsageRecord>> reporter,
         ThreadPool threadPool,
         ExecutorService executor,
@@ -98,6 +78,7 @@ class ReportGatherer {
         this.projectId = projectId;
         this.counterMetricsCollectors = counterMetricsCollectors;
         this.sampledMetricsCollectors = sampledMetricsCollectors;
+        this.sampledMetricsTimeCursor = sampledMetricsTimeCursor;
         this.reporter = reporter;
         this.threadPool = threadPool;
         this.executor = executor;
@@ -109,6 +90,7 @@ class ReportGatherer {
         if (reportPeriodDuration.multipliedBy(Duration.ofHours(1).dividedBy(reportPeriodDuration)).equals(Duration.ofHours(1)) == false) {
             throw new IllegalArgumentException(Strings.format("Report period [%s] needs to fit evenly into 1 hour", reportPeriod));
         }
+        this.maxPeriodsLookback = Duration.ofHours(1).dividedBy(reportPeriodDuration);
         this.sourceId = "es-" + nodeId;
     }
 
@@ -143,7 +125,8 @@ class ReportGatherer {
 
         Instant startedAt = Instant.now(clock);
 
-        collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
+        // TODO: use this return value to make decisions about re-trying/re-schedule
+        var reportsSent = collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
 
         Instant completedAt = Instant.now(clock);
         checkRuntime(startedAt, completedAt);
@@ -204,7 +187,7 @@ class ReportGatherer {
         return false;
     }
 
-    private void collectMetricsAndSendReport(Instant now, Instant sampleTimestamp) {
+    private boolean collectMetricsAndSendReport(Instant now, Instant sampleTimestamp) {
         List<UsageRecord> records = new ArrayList<>();
 
         List<CounterMetricsCollector.MetricValues> counterMetricValuesList = counterMetricsCollectors.stream()
@@ -217,18 +200,52 @@ class ReportGatherer {
             }
         });
 
-        sampledMetricsCollectors.stream().map(SampledMetricsCollector::getMetrics).forEach(sampledMetricValues -> {
-            for (var v : sampledMetricValues) {
-                records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp));
+        var latestCommitedTimestamp = sampledMetricsTimeCursor.getLatestCommitedTimestamp();
+        var timestampsToSend = generateSampleTimestamps(latestCommitedTimestamp, sampleTimestamp);
+        boolean sampledMetricsCollectionSuccessful = true;
+        for (SampledMetricsCollector sampledMetricsCollector : sampledMetricsCollectors) {
+            try {
+                var sampledMetricValues = sampledMetricsCollector.getMetrics();
+                if (sampledMetricValues.isEmpty()) {
+                    sampledMetricsCollectionSuccessful = false;
+                    break;
+                } else {
+                    for (var v : sampledMetricValues.get()) {
+                        for (var timestamp : timestampsToSend) {
+                            records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), timestamp));
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Exception thrown collecting sampled metrics", e);
+                sampledMetricsCollectionSuccessful = false;
             }
-        });
+        }
 
-        if (sendReport(records)) {
+        if (records.isEmpty() || sendReport(records)) {
             for (var metricValues : counterMetricValuesList) {
                 metricValues.commit();
             }
-            // TODO: "commit" sampledMetricsCollectors up to sampleTimestamp
+            if (sampledMetricsCollectionSuccessful) {
+                sampledMetricsTimeCursor.commitUpTo(sampleTimestamp);
+            }
+            return true;
         }
+        return false;
+    }
+
+    /**
+     * Generates N timestamps between latestCommitedTimestamp and sampleTimestamp, increment by steps of reportPeriod
+     */
+    List<Instant> generateSampleTimestamps(Instant from, Instant to) {
+        var timestamps = new ArrayList<Instant>();
+        Instant current = to;
+        var periodInNanos = reportPeriod.getNanos();
+        for (int i = 0; i < maxPeriodsLookback && from.isBefore(current); ++i) {
+            timestamps.add(current);
+            current = current.minusNanos(periodInNanos);
+        }
+        return timestamps;
     }
 
     private static String generateId(String key, Instant time) {

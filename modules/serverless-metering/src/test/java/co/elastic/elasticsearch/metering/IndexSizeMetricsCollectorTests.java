@@ -53,6 +53,7 @@ import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
@@ -75,7 +76,10 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+
+            var metricValues = indexSizeMetricsCollector.getMetrics();
+            assertThat(metricValues, isPresent());
+            Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
             assertThat(metrics, hasSize(1));
             int shardIdInt = 0;
@@ -95,7 +99,10 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+
+            var metricValues = indexSizeMetricsCollector.getMetrics();
+            assertThat(metricValues, isPresent());
+            Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
             assertThat(metrics, hasSize(10));
             int shard = 0;
@@ -122,7 +129,10 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 clusterSettings,
                 Settings.EMPTY
             );
-            Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+
+            var metricValues = indexSizeMetricsCollector.getMetrics();
+            assertThat(metricValues, isPresent());
+            Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
             assertThat(metrics, hasSize(10));
             var hasPartial = hasEntry("partial", "" + true);
@@ -168,7 +178,10 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
             clusterSettings,
             Settings.EMPTY
         );
-        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isPresent());
+        Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
         assertThat(metrics, hasSize(0));
     }
@@ -189,15 +202,16 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 Settings.EMPTY
             );
 
-            final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
-                .mapToLong(MetricValue::value)
-                .sum();
+            var metricValues = indexSizeMetricsCollector.getMetrics();
+            assertThat(metricValues, isPresent());
+
+            final long sequentialReadMetricSum = iterableToList(metricValues.get()).stream().mapToLong(MetricValue::value).sum();
 
             ConcurrencyTestUtils.runConcurrent(
                 threadsCount,
                 opsPerThread,
                 () -> 0,
-                () -> indexSizeMetricsCollector.getMetrics().forEach(results::add),
+                () -> indexSizeMetricsCollector.getMetrics().ifPresent(x -> x.forEach(results::add)),
                 logger::info
             );
 
@@ -224,15 +238,15 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 Settings.EMPTY
             );
 
-            final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
-                .mapToLong(MetricValue::value)
-                .sum();
+            var metricValues = indexSizeMetricsCollector.getMetrics();
+            assertThat(metricValues, isPresent());
+            final long sequentialReadMetricSum = iterableToList(metricValues.get()).stream().mapToLong(MetricValue::value).sum();
 
             ConcurrencyTestUtils.runConcurrent(
                 threadsCount,
                 opsPerThread,
                 () -> randomIntBetween(0, 50),
-                () -> indexSizeMetricsCollector.getMetrics().forEach(results::add),
+                () -> indexSizeMetricsCollector.getMetrics().get().forEach(results::add),
                 logger::info
             );
 
@@ -260,15 +274,15 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 Settings.EMPTY
             );
 
-            final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
-                .mapToLong(MetricValue::value)
-                .sum();
+            var metricValues = indexSizeMetricsCollector.getMetrics();
+            assertThat(metricValues, isPresent());
+            final long sequentialReadMetricSum = iterableToList(metricValues.get()).stream().mapToLong(MetricValue::value).sum();
 
             ConcurrencyTestUtils.runConcurrent(
                 threadsCount,
                 opsPerThread,
                 () -> randomIntBetween(0, 50),
-                () -> indexSizeMetricsCollector.getMetrics().forEach(results::add),
+                () -> indexSizeMetricsCollector.getMetrics().ifPresent(x -> x.forEach(results::add)),
                 logger::info
             );
 
@@ -297,15 +311,15 @@ public class IndexSizeMetricsCollectorTests extends ESTestCase {
                 Settings.EMPTY
             );
 
-            final long sequentialReadMetricSum = iterableToList(indexSizeMetricsCollector.getMetrics()).stream()
-                .mapToLong(MetricValue::value)
-                .sum();
+            var metricValues = indexSizeMetricsCollector.getMetrics();
+            assertThat(metricValues, isPresent());
+            final long sequentialReadMetricSum = iterableToList(metricValues.get()).stream().mapToLong(MetricValue::value).sum();
 
             ConcurrencyTestUtils.runConcurrent(
                 threadsCount,
                 opsPerThread,
                 () -> randomIntBetween(0, 50),
-                () -> indexSizeMetricsCollector.getMetrics().forEach(results::add),
+                () -> indexSizeMetricsCollector.getMetrics().ifPresent(x -> x.forEach(results::add)),
                 logger::info
             );
 

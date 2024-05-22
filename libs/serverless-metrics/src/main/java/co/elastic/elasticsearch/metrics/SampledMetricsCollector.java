@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metrics;
 
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.Optional;
 
 /**
  * Represents an object that collects sampled metrics for reporting
@@ -45,10 +46,10 @@ public interface SampledMetricsCollector {
     }
 
     /**
-     * Returns the current value of the metrics collected by this class.
+     * Returns the current value of the sampled metrics collected by this class.
      * This method may be called at any time - implementations must guarantee thread safety.
-     * However, this does not mean the method can be called by multiple threads: subsequent calls to getMetrics
-     * must be done by the same thread.
+     * If the collector has not been able to sample any metrics yet, it must return Optional.empty(), so the caller knows
+     * it will need to re-try getting samples for the current timeframe.
      */
-    MetricValues getMetrics();
+    Optional<MetricValues> getMetrics();
 }

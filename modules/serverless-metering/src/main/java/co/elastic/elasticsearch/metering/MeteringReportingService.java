@@ -26,6 +26,7 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.threadpool.ThreadPool;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
@@ -43,12 +44,14 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
 
     private final String nodeId;
     private final String projectId;
+    private final SampledMetricsTimeCursor sampledMetricsTimeCursor;
     private final ThreadPool threadPool;
     private final ExecutorService executor;
     private final List<CounterMetricsCollector> counterMetricsCollectors;
     private final List<SampledMetricsCollector> sampledMetricsCollectors;
     private final TimeValue reportPeriod;
     private final Consumer<List<UsageRecord>> reporter;
+    private final Clock clock;
 
     private ReportGatherer reportGatherer;
 
@@ -57,19 +60,48 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
         String projectId,
         List<CounterMetricsCollector> counterMetricsCollectors,
         List<SampledMetricsCollector> sampledMetricsCollectors,
+        SampledMetricsTimeCursor sampledMetricsTimeCursor,
         TimeValue reportPeriod,
         Consumer<List<UsageRecord>> reporter,
         ThreadPool threadPool,
         ExecutorService executor
     ) {
+        this(
+            nodeId,
+            projectId,
+            counterMetricsCollectors,
+            sampledMetricsCollectors,
+            sampledMetricsTimeCursor,
+            reportPeriod,
+            reporter,
+            threadPool,
+            executor,
+            Clock.systemUTC()
+        );
+    }
+
+    MeteringReportingService(
+        String nodeId,
+        String projectId,
+        List<CounterMetricsCollector> counterMetricsCollectors,
+        List<SampledMetricsCollector> sampledMetricsCollectors,
+        SampledMetricsTimeCursor sampledMetricsTimeCursor,
+        TimeValue reportPeriod,
+        Consumer<List<UsageRecord>> reporter,
+        ThreadPool threadPool,
+        ExecutorService executor,
+        Clock clock
+    ) {
         this.nodeId = nodeId;
         this.projectId = projectId;
         this.counterMetricsCollectors = counterMetricsCollectors;
         this.sampledMetricsCollectors = sampledMetricsCollectors;
+        this.sampledMetricsTimeCursor = sampledMetricsTimeCursor;
         this.threadPool = threadPool;
         this.executor = executor;
         this.reportPeriod = reportPeriod;
         this.reporter = reporter;
+        this.clock = clock;
     }
 
     @Override
@@ -79,10 +111,12 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
             projectId,
             counterMetricsCollectors,
             sampledMetricsCollectors,
+            sampledMetricsTimeCursor,
             reporter,
             threadPool,
             executor,
-            reportPeriod
+            reportPeriod,
+            clock
         );
         reportGatherer.start();
     }

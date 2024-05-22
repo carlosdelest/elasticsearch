@@ -40,6 +40,7 @@ import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSett
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static java.util.Map.entry;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.both;
@@ -83,7 +84,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         Set<MeteringIndexInfoService.CollectedMeteringShardInfoFlag> flags
     ) {
         indexInfoService.collectedShardInfo.set(new MeteringIndexInfoService.CollectedMeteringShardInfo(data, flags));
-        indexInfoService.isPersistentTaskNode = true;
+        indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.THIS_NODE;
     }
 
     public void testGetMetrics() {
@@ -96,7 +97,9 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isPresent());
+        Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
         assertThat(metrics, hasSize(2));
 
@@ -124,7 +127,9 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isPresent());
+        Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
         assertThat(metrics, hasSize(1));
 
@@ -150,7 +155,9 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isPresent());
+        Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -194,7 +201,9 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isPresent());
+        Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -240,7 +249,9 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
-        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isPresent());
+        Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -283,7 +294,10 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         );
 
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
-        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isPresent());
+        Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
         assertThat(metrics, hasSize(11));
         var hasPartial = hasEntry("partial", "" + true);
@@ -305,12 +319,36 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         }
     }
 
-    public void testEmptyIndexInfo() {
+    public void testNoPersistentTaskNode() {
         var indexInfoService = new MeteringIndexInfoService();
 
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
-        Collection<MetricValue> metrics = iterableToList(indexSizeMetricsCollector.getMetrics());
+        indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.NO_NODE;
+
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isEmpty());
+    }
+
+    public void testAnotherNodeIsPersistentTaskNode() {
+        var indexInfoService = new MeteringIndexInfoService();
+
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.ANOTHER_NODE;
+
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isPresent());
+        Collection<MetricValue> metrics = iterableToList(metricValues.get());
 
         assertThat(metrics, hasSize(0));
+    }
+
+    public void testThisNodeIsPersistentTaskNodeButNotReady() {
+        var indexInfoService = new MeteringIndexInfoService();
+
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.THIS_NODE;
+
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        assertThat(metricValues, isEmpty());
     }
 }

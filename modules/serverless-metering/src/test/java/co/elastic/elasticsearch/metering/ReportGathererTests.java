@@ -36,9 +36,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import static co.elastic.elasticsearch.metering.ReportGatherer.MAX_JITTER_FACTOR;
 import static co.elastic.elasticsearch.metering.ReportGatherer.calculateSampleTimestamp;
@@ -46,11 +48,14 @@ import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.startsWith;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class ReportGathererTests extends ESTestCase {
@@ -102,10 +107,19 @@ public class ReportGathererTests extends ESTestCase {
         AtomicReference<RecordedMetric> currentRecordedMetric = new AtomicReference<>();
         AtomicInteger invocations = new AtomicInteger();
 
+        private volatile boolean failCollecting;
+
+        public void setFailCollecting(boolean b) {
+            failCollecting = b;
+        }
+
         @Override
-        public MetricValues getMetrics() {
+        public Optional<MetricValues> getMetrics() {
             invocations.incrementAndGet();
-            return SampledMetricsCollector.valuesFromCollection(List.of(generateAndRecordSingleMetric()));
+            if (failCollecting) {
+                throw new RuntimeException("Metrics collection failure");
+            }
+            return Optional.of(SampledMetricsCollector.valuesFromCollection(List.of(generateAndRecordSingleMetric())));
         }
 
         private MetricValue generateAndRecordSingleMetric() {
@@ -147,11 +161,16 @@ public class ReportGathererTests extends ESTestCase {
         var clock = Mockito.mock(Clock.class);
         var deterministicTaskQueue = new DeterministicTaskQueue();
         var threadPool = deterministicTaskQueue.getThreadPool();
+
+        Instant lower = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+        Instant end = lower.plus(Duration.ofHours(48));
+
         var reportGatherer = new ReportGatherer(
             "nodeId",
             "projectId",
             List.of(),
             List.of(recorder),
+            new InMemorySampledMetricsTimeCursor(lower.minus(reportPeriodDuration)),
             recorder::report,
             threadPool,
             threadPool.generic(),
@@ -162,8 +181,6 @@ public class ReportGathererTests extends ESTestCase {
         when(clock.instant()).thenReturn(Instant.EPOCH);
         reportGatherer.start();
 
-        Instant lower = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
-        Instant end = lower.plus(Duration.ofHours(48));
         while (lower.isBefore(end)) {
             deterministicTaskQueue.advanceTime();
             Instant now = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
@@ -197,10 +214,12 @@ public class ReportGathererTests extends ESTestCase {
             "projectId",
             List.of(),
             List.of(),
+            new InMemorySampledMetricsTimeCursor(),
             x -> {},
             threadPool,
             threadPool.generic(),
-            TimeValue.timeValueSeconds(1)
+            TimeValue.timeValueSeconds(1),
+            Clock.systemUTC()
         );
 
         reportGatherer.start();
@@ -222,10 +241,12 @@ public class ReportGathererTests extends ESTestCase {
             "projectId",
             List.of(),
             List.of(),
+            new InMemorySampledMetricsTimeCursor(),
             x -> {},
             deterministicTaskQueue.getThreadPool(),
             deterministicTaskQueue.getThreadPool().generic(),
-            TimeValue.timeValueMinutes(1)
+            TimeValue.timeValueMinutes(1),
+            Clock.systemUTC()
         );
 
         reportGatherer.start();
@@ -272,5 +293,94 @@ public class ReportGathererTests extends ESTestCase {
                 transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
             )
         );
+    }
+
+    public void testGenerateSampleTimestamps() {
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            List.of(),
+            new InMemorySampledMetricsTimeCursor(),
+            x -> {},
+            null,
+            null,
+            TimeValue.timeValueMinutes(5),
+            mock(Clock.class)
+        );
+
+        var now = Instant.now();
+        List<Instant> timestamps = reportGatherer.generateSampleTimestamps(Instant.MIN, now);
+
+        assertThat(timestamps, hasSize(12));
+        assertThat(timestamps.get(0), equalTo(now));
+        assertThat(timestamps.get(11), equalTo(now.minus(Duration.ofMinutes(55))));
+
+        timestamps = reportGatherer.generateSampleTimestamps(now, now);
+
+        assertThat(timestamps, empty());
+
+        timestamps = reportGatherer.generateSampleTimestamps(now.minus(Duration.ofMinutes(5)), now);
+
+        assertThat(timestamps, hasSize(1));
+        assertThat(timestamps.get(0), equalTo(now));
+
+        timestamps = reportGatherer.generateSampleTimestamps(now.minus(Duration.ofMinutes(11)), now);
+
+        assertThat(timestamps, hasSize(3));
+        assertThat(timestamps.get(0), equalTo(now));
+        assertThat(timestamps.get(1), equalTo(now.minus(Duration.ofMinutes(5))));
+        assertThat(timestamps.get(2), equalTo(now.minus(Duration.ofMinutes(10))));
+    }
+
+    public void testFailingSampledCollectorDoesNotAdvanceTimestamp() {
+        var recorder = new RecordingMetricsCollector();
+        var reportPeriod = TimeValue.timeValueMinutes(5);
+        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
+
+        var initialTimestamp = Instant.EPOCH.minus(reportPeriodDuration);
+        var firstTimestamp = Instant.EPOCH;
+
+        var clock = Mockito.mock(Clock.class);
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+        var threadPool = deterministicTaskQueue.getThreadPool();
+
+        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+        var cursor = new InMemorySampledMetricsTimeCursor(initialTimestamp);
+
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            List.of(recorder),
+            cursor,
+            recorder::report,
+            threadPool,
+            threadPool.generic(),
+            reportPeriod,
+            clock
+        );
+
+        when(clock.instant()).thenAnswer(x -> now.get());
+        reportGatherer.start();
+
+        assertThat(cursor.getLatestCommitedTimestamp(), is(initialTimestamp));
+
+        deterministicTaskQueue.advanceTime();
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(recorder.invocations.get(), equalTo(1));
+        assertThat(cursor.getLatestCommitedTimestamp(), is(firstTimestamp));
+        deterministicTaskQueue.advanceTime();
+
+        recorder.invocations.set(0);
+        // mock collection failure
+        recorder.setFailCollecting(true);
+
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(recorder.invocations.get(), equalTo(1));
+        // We did not advance the cursor
+        assertThat(cursor.getLatestCommitedTimestamp(), is(firstTimestamp));
+
+        reportGatherer.cancel();
     }
 }

@@ -39,6 +39,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
@@ -94,7 +95,7 @@ class IndexSizeMetricsCollector implements SampledMetricsCollector {
     }
 
     @Override
-    public MetricValues getMetrics() {
+    public Optional<MetricValues> getMetrics() {
         // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
         Map<String, Object> settings = Map.of(SEARCH_POWER, this.searchPowerMinSetting);
 
@@ -142,6 +143,6 @@ class IndexSizeMetricsCollector implements SampledMetricsCollector {
                 metrics.add(new MetricValue(metricId, METRIC_TYPE, metadata, settings, size));
             }
         }
-        return SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics));
+        return Optional.of(SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics)));
     }
 }

@@ -36,6 +36,7 @@ import org.junit.After;
 import org.junit.Before;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -44,23 +45,30 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MeteringReportingServiceTests extends ESTestCase {
     private static final String PROJECT_ID = "projectId";
@@ -135,8 +143,10 @@ public class MeteringReportingServiceTests extends ESTestCase {
         }
 
         @Override
-        public MetricValues getMetrics() {
-            return SampledMetricsCollector.valuesFromCollection(List.of(new MetricValue(id, "test", metadata, settings, value)));
+        public Optional<MetricValues> getMetrics() {
+            return Optional.of(
+                SampledMetricsCollector.valuesFromCollection(List.of(new MetricValue(id, "test", metadata, settings, value)))
+            );
         }
     }
 
@@ -229,16 +239,23 @@ public class MeteringReportingServiceTests extends ESTestCase {
         var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 3));
         var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"), Map.of("setting", 4));
 
+        var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
+        var now = new AtomicReference<>(Instant.EPOCH);
+        var clock = mock(Clock.class);
+        when(clock.instant()).thenAnswer(x -> now.get());
+
         try (
             MeteringReportingService service = new MeteringReportingService(
                 NODE_ID,
                 PROJECT_ID,
                 List.of(counter1, counter2),
                 List.of(sampled1, sampled2),
+                new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
                 REPORT_PERIOD,
-                records::addAll,
+                r -> addRecordsAndUpdateClock(r, records, now, reportPeriodDuration),
                 threadPool,
-                threadPool.generic()
+                threadPool.generic(),
+                clock
             )
         ) {
 
@@ -269,6 +286,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 PROJECT_ID,
                 List.of(counter1, counter2),
                 List.of(),
+                new InMemorySampledMetricsTimeCursor(),
                 REPORT_PERIOD,
                 records::addAll,
                 threadPool,
@@ -304,16 +322,23 @@ public class MeteringReportingServiceTests extends ESTestCase {
         var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 1));
         var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"), Map.of("setting", 2));
 
+        var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
+        var now = new AtomicReference<>(Instant.EPOCH);
+        var clock = mock(Clock.class);
+        when(clock.instant()).thenAnswer(x -> now.get());
+
         try (
             MeteringReportingService service = new MeteringReportingService(
                 NODE_ID,
                 PROJECT_ID,
                 List.of(),
                 List.of(sampled1, sampled2),
+                new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
                 REPORT_PERIOD,
-                records::addAll,
+                r -> addRecordsAndUpdateClock(r, records, now, reportPeriodDuration),
                 threadPool,
-                threadPool.generic()
+                threadPool.generic(),
+                clock
             )
         ) {
             sampled1.set(50);
@@ -332,6 +357,143 @@ public class MeteringReportingServiceTests extends ESTestCase {
 
             reported = pollRecords(records, 2, TimeValue.timeValueSeconds(10));
             checkRecords(reported, Map.of(), Map.of("sampled1", 20L, "sampled2", 65L));
+
+            service.stop();
+        }
+    }
+
+    public void testMultipleRecordsSentUpToCommittedTimestamp() throws InterruptedException {
+        BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
+
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 3));
+
+        var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
+        var initialTime = Instant.EPOCH.minus(reportPeriodDuration.multipliedBy(2));
+        var firstSampleTimestamp = initialTime.plus(reportPeriodDuration);
+        var secondSampleTimestamp = firstSampleTimestamp.plus(reportPeriodDuration);
+        var now = new AtomicReference<>(secondSampleTimestamp);
+        var clock = mock(Clock.class);
+        when(clock.instant()).thenAnswer(x -> now.get());
+
+        var cursor = new InMemorySampledMetricsTimeCursor(initialTime);
+
+        try (
+            MeteringReportingService service = new MeteringReportingService(
+                NODE_ID,
+                PROJECT_ID,
+                List.of(counter1),
+                List.of(sampled1),
+                cursor,
+                REPORT_PERIOD,
+                r -> addRecordsAndUpdateClock(r, records, now, reportPeriodDuration),
+                threadPool,
+                threadPool.generic(),
+                clock
+            )
+        ) {
+
+            counter1.add(10);
+            counter1.add(5);
+            sampled1.set(50);
+
+            service.start();
+
+            List<UsageRecord> reported = pollRecords(records, 3, TimeValue.timeValueSeconds(10));
+
+            var counterMetrics = reported.stream().filter(x -> x.id().startsWith("counter1")).toList();
+            var sampledMetrics = reported.stream().filter(x -> x.id().startsWith("sampled1")).toList();
+            assertThat(counterMetrics, hasSize(1));
+            assertThat(sampledMetrics, hasSize(2));
+
+            assertThat(counterMetrics.get(0).usageTimestamp(), equalTo(secondSampleTimestamp));
+            assertThat(counterMetrics.get(0).usage().quantity(), equalTo(15L));
+
+            assertThat(
+                sampledMetrics.stream().map(UsageRecord::usageTimestamp).toList(),
+                containsInAnyOrder(firstSampleTimestamp, secondSampleTimestamp)
+            );
+
+            assertThat(sampledMetrics.stream().map(usageRecord -> usageRecord.usage().quantity()).toList(), everyItem(is(50L)));
+
+            assertThat(cursor.getLatestCommitedTimestamp(), equalTo(secondSampleTimestamp));
+
+            service.stop();
+        }
+    }
+
+    public void testRecordsNotSentAgainWhenTimestampCommitted() throws InterruptedException {
+        BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
+
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 3));
+
+        var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
+        final var cursorTimestamp = new AtomicReference<>(Instant.EPOCH.minus(reportPeriodDuration));
+        var firstSampleTimestamp = cursorTimestamp.get().plus(reportPeriodDuration);
+        var secondSampleTimestamp = firstSampleTimestamp.plus(reportPeriodDuration);
+        var now = new AtomicReference<>(firstSampleTimestamp);
+        var clock = mock(Clock.class);
+        when(clock.instant()).thenAnswer(x -> now.get());
+
+        var cursor = new SampledMetricsTimeCursor() {
+            @Override
+            public Instant getLatestCommitedTimestamp() {
+                return cursorTimestamp.get();
+            }
+
+            @Override
+            public void commitUpTo(Instant sampleTimestamp) {
+                cursorTimestamp.set(sampleTimestamp);
+            }
+        };
+
+        try (
+            MeteringReportingService service = new MeteringReportingService(
+                NODE_ID,
+                PROJECT_ID,
+                List.of(counter1),
+                List.of(sampled1),
+                cursor,
+                REPORT_PERIOD,
+                r -> addRecordsAndUpdateClock(r, records, now, reportPeriodDuration),
+                threadPool,
+                threadPool.generic(),
+                clock
+            )
+        ) {
+
+            counter1.add(10);
+            counter1.add(5);
+            sampled1.set(50);
+
+            service.start();
+
+            List<UsageRecord> reported = pollRecords(records, 2, TimeValue.timeValueSeconds(10));
+
+            var counterMetrics = reported.stream().filter(x -> x.id().startsWith("counter1")).toList();
+            var sampledMetrics = reported.stream().filter(x -> x.id().startsWith("sampled1")).toList();
+            assertThat(counterMetrics, hasSize(1));
+            assertThat(sampledMetrics, hasSize(1));
+
+            assertThat(counterMetrics.get(0).usageTimestamp(), equalTo(firstSampleTimestamp));
+            assertThat(counterMetrics.get(0).usage().quantity(), equalTo(15L));
+
+            assertThat(sampledMetrics.get(0).usageTimestamp(), equalTo(firstSampleTimestamp));
+            assertThat(sampledMetrics.get(0).usage().quantity(), equalTo(50L));
+
+            cursor.commitUpTo(firstSampleTimestamp.plus(reportPeriodDuration.multipliedBy(2)));
+
+            reported = pollRecords(records, 1, TimeValue.timeValueSeconds(10));
+
+            assertThat(records, empty());
+            counterMetrics = reported.stream().filter(x -> x.id().startsWith("counter1")).toList();
+            sampledMetrics = reported.stream().filter(x -> x.id().startsWith("sampled1")).toList();
+            assertThat(counterMetrics, hasSize(1));
+            assertThat(sampledMetrics, empty());
+
+            assertThat(counterMetrics.get(0).usageTimestamp(), equalTo(secondSampleTimestamp));
+            assertThat(counterMetrics.get(0).usage().quantity(), equalTo(0L));
 
             service.stop();
         }
@@ -360,6 +522,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 PROJECT_ID,
                 List.of(),
                 collectors,
+                new InMemorySampledMetricsTimeCursor(),
                 REPORT_PERIOD,
                 x -> {},
                 threadPool,
@@ -413,6 +576,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 PROJECT_ID,
                 Arrays.asList(counters),
                 List.of(),
+                new InMemorySampledMetricsTimeCursor(),
                 REPORT_PERIOD,
                 x -> {},
                 threadPool,
@@ -443,16 +607,23 @@ public class MeteringReportingServiceTests extends ESTestCase {
         var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
         var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 2));
 
+        var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
+        var now = new AtomicReference<>(Instant.EPOCH);
+        var clock = mock(Clock.class);
+        when(clock.instant()).thenAnswer(x -> now.get());
+
         try (
             MeteringReportingService service = new MeteringReportingService(
                 NODE_ID,
                 PROJECT_ID,
                 List.of(counter1),
                 List.of(sampled1),
+                new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
                 REPORT_PERIOD,
-                records::addAll,
+                r -> addRecordsAndUpdateClock(r, records, now, reportPeriodDuration),
                 threadPool,
-                threadPool.generic()
+                threadPool.generic(),
+                clock
             )
         ) {
             counter1.add(15);
@@ -460,7 +631,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
 
             service.start();
 
-            var reported = pollRecords(records, 2, TimeValue.timeValueSeconds(10));
+            var reported = pollRecords(records, 2, TimeValue.timeValueSeconds(100));
             checkRecords(reported, Map.of("counter1", 15L), Map.of("sampled1", 50L));
 
             service.stop();
@@ -521,6 +692,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                     PROJECT_ID,
                     builtInCounterMetrics,
                     builtInSampledMetrics,
+                    new InMemorySampledMetricsTimeCursor(),
                     REPORT_PERIOD,
                     records::addAll,
                     threadPool,
@@ -593,7 +765,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
     private static void addSampledResults(ConcurrentLinkedQueue<MetricValue> results, List<SampledMetricsCollector> collectors) {
         for (var collector : collectors) {
             var metrics = collector.getMetrics();
-            metrics.forEach(results::add);
+            assertThat(metrics, isPresent());
+            metrics.get().forEach(results::add);
         }
     }
 
@@ -603,5 +776,15 @@ public class MeteringReportingServiceTests extends ESTestCase {
             metrics.forEach(results::add);
             metrics.commit();
         }
+    }
+
+    private static void addRecordsAndUpdateClock(
+        List<UsageRecord> report,
+        BlockingQueue<UsageRecord> records,
+        AtomicReference<Instant> now,
+        Duration reportPeriodDuration
+    ) {
+        records.addAll(report);
+        now.updateAndGet(x -> x.plus(reportPeriodDuration));
     }
 }

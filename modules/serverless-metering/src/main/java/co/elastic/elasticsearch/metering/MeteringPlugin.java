@@ -206,6 +206,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             projectId,
             builtInCounterMetrics,
             builtInSampledMetrics,
+            new InMemorySampledMetricsTimeCursor(),
             reportPeriod,
             reporter != null ? reporter::sendRecords : records -> {},
             threadPool,
