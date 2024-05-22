@@ -161,6 +161,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .put(NATIVE_USERS_SETTING.getKey(), false)
             .put(NATIVE_ROLES_SETTING.getKey(), false)
             .put(CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), true) // the setting is false by default; this sets it to true
+            .put(NATIVE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), false) // the setting is true by default; this sets it to false
             .put(API_KEY_STRICT_REQUEST_VALIDATION.getKey(), true)
             .put(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION.getKey(), false)
             .build();
