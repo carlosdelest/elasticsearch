@@ -419,6 +419,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
         }
     }
 
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/2090")
     public void testRecordsNotSentAgainWhenTimestampCommitted() throws InterruptedException {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
