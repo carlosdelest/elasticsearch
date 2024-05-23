@@ -8,8 +8,10 @@ echo "--- Determining last succesful kibana e2e tests"
 KIBANA_BRANCH='main'
 INTAKE_PIPELINE_SLUG="kibana-elasticsearch-serverless-verify-and-promote"
 BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
-BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${KIBANA_BRANCH}&state=passed&per_page=100" | jq '. | map(. | select(.env.PUBLISH_DOCKER_TAG? == "true")) | .[0] | {commit: .commit, url: .web_url}')
+BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${KIBANA_BRANCH}&state=passed&per_page=100" | jq '. | map(. | select(.env.PUBLISH_DOCKER_TAG? == "true")) | .[0] | {id: .id, commit: .commit, url: .web_url}')
+KIBANA_BUILD_ID=$(echo ${BUILD_JSON} | jq -r '.id')
 KIBANA_COMMIT=$(echo ${BUILD_JSON} | jq -r '.commit')
+
 PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
 
 echo "Last succesful kibana e2e test build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --style "info" --context "e2e-test-base"
@@ -26,6 +28,7 @@ steps:
         branch: "${KIBANA_BRANCH}"
         env:
           ES_SERVERLESS_IMAGE: "${ES_SERVERLESS_IMAGE}"
+          KIBANA_BUILD_ID: "${KIBANA_BUILD_ID}"
           SKIP_CYPRESS: "1"
           FTR_EXTRA_ARGS: "--include-tag=esGate"
 EOF
