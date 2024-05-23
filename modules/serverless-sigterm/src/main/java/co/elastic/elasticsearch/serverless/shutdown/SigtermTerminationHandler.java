@@ -163,8 +163,7 @@ public class SigtermTerminationHandler implements TerminationHandler {
     }
 
     private void pollStatusAndLoop(int poll, CountDownLatch latch, AtomicReference<SingleNodeShutdownStatus> lastStatus) {
-        final var request = new GetShutdownStatusAction.Request(nodeId);
-        request.masterNodeTimeout(timeout);
+        final var request = new GetShutdownStatusAction.Request(timeout, nodeId);
         client.execute(GetShutdownStatusAction.INSTANCE, request, ActionListener.wrap(res -> {
             assert res.getShutdownStatuses().size() == 1 : "got more than this node's shutdown status";
             SingleNodeShutdownStatus status = res.getShutdownStatuses().get(0);
