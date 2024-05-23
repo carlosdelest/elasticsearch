@@ -149,6 +149,8 @@ public class SigtermTerminationHandler implements TerminationHandler {
 
     private PutShutdownNodeAction.Request shutdownRequest() {
         PutShutdownNodeAction.Request request = new PutShutdownNodeAction.Request(
+            timeout,
+            timeout,
             nodeId,
             SingleNodeShutdownMetadata.Type.SIGTERM,
             "node sigterm",
@@ -156,8 +158,6 @@ public class SigtermTerminationHandler implements TerminationHandler {
             null,
             timeout
         );
-        request.masterNodeTimeout(timeout);
-        request.ackTimeout(timeout);
         assert request.validate() == null;
         return request;
     }

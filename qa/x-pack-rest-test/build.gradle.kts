@@ -105,7 +105,10 @@ tasks {
             "ml/p_value_significant_term_score/Test p_value significant terms score",
 
             // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1777
-            "ml/inference_crud/Test force delete given model with alias referenced by pipeline"
+            "ml/inference_crud/Test force delete given model with alias referenced by pipeline",
+
+            // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/2092
+            "ml/sparse_vector_search/*"
         ).joinToString(","))
     }
 }
