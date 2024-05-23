@@ -112,4 +112,9 @@ public class ServerlessMachineLearningExtension implements MachineLearningExtens
         return new NodeFakeAvailabilityZoneMapper(settings, clusterSettings);
     }
 
+    @Override
+    public boolean disableInferenceProcessCache() {
+        return true;
+    }
+
 }
