@@ -29,7 +29,7 @@ import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
 import java.io.IOException;
 import java.util.List;
 
-final class ServerlessCustomRoleErrorLogger {
+public final class ServerlessCustomRoleErrorLogger {
     private static final Logger LOGGER = LogManager.getLogger(ServerlessCustomRoleErrorLogger.class);
 
     private ServerlessCustomRoleErrorLogger() {}
@@ -43,7 +43,7 @@ final class ServerlessCustomRoleErrorLogger {
         logCustomRoleErrors(payloadDescription, payload, payloadChecker, roleDescriptors, LOGGER);
     }
 
-    static void logException(String payloadDescription, Exception ex) {
+    public static void logException(String payloadDescription, Exception ex) {
         logException(LOGGER, payloadDescription, ex);
     }
 

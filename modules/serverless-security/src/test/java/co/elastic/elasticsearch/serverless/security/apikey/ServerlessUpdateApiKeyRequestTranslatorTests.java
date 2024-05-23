@@ -37,7 +37,12 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
 
     public void testValidPayload() throws IOException {
         var strictValidationEnabled = randomBoolean();
-        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> strictValidationEnabled);
+        var operatorStrictRoleValidationEnabled = randomBoolean();
+        var translator = new ServerlessUpdateApiKeyRequestTranslator(
+            new ServerlessRoleValidator(),
+            () -> strictValidationEnabled,
+            () -> operatorStrictRoleValidationEnabled
+        );
 
         final String json = "{ \"role_descriptors\": { \"role-a\": {\"cluster\":[\"all\"]} } }";
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(
@@ -53,7 +58,7 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
     }
 
     public void testStrictValidationDisabled() throws IOException {
-        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> false);
+        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> false, () -> false);
 
         final String json = "{ \"role_descriptors\": { \"role-a\": {\"cluster\":[\"manage_ilm\"]} } }";
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(
@@ -69,13 +74,13 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
     }
 
     public void testStrictValidationEnabled() {
-        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> true);
+        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> true, () -> true);
 
         final String json = "{ \"role_descriptors\": { \"role-a\": {\"cluster\":[\"manage_ilm\"]} } }";
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(
             new BytesArray(json),
             XContentType.JSON
-        ).withParams(Map.of("ids", "id", PATH_RESTRICTED, String.valueOf(true))).build();
+        ).withParams(Map.of("ids", "id", PATH_RESTRICTED, String.valueOf(randomBoolean()))).build();
         expectThrows(ActionRequestValidationException.class, () -> translator.translate(restRequest));
     }
 }

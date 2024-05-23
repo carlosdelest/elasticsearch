@@ -37,24 +37,34 @@ import java.util.function.Supplier;
 
 public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKeyRequestBuilderFactory {
     private final Supplier<Boolean> strictRequestValidationEnabled;
+    private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
 
     // Needed for java module
     public ServerlessCreateApiKeyRequestBuilderFactory() {
-        this(() -> false);
+        this(() -> false, () -> false);
     }
 
     // For SPI
     public ServerlessCreateApiKeyRequestBuilderFactory(ServerlessSecurityPlugin plugin) {
-        this(plugin::strictApiKeyRequestValidationEnabled);
+        this(plugin::strictApiKeyRequestValidationEnabled, plugin::isOperatorStrictRoleValidationEnabled);
     }
 
-    private ServerlessCreateApiKeyRequestBuilderFactory(Supplier<Boolean> strictRequestValidationEnabled) {
+    private ServerlessCreateApiKeyRequestBuilderFactory(
+        Supplier<Boolean> strictRequestValidationEnabled,
+        Supplier<Boolean> operatorStrictRoleValidationEnabled
+    ) {
         this.strictRequestValidationEnabled = strictRequestValidationEnabled;
+        this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
     }
 
     @Override
     public CreateApiKeyRequestBuilder create(Client client, boolean restrictRequest) {
-        return new ServerlessCreateApiKeyRequestBuilder(client, restrictRequest, strictRequestValidationEnabled);
+        return new ServerlessCreateApiKeyRequestBuilder(
+            client,
+            restrictRequest,
+            strictRequestValidationEnabled,
+            operatorStrictRoleValidationEnabled
+        );
     }
 
     static class ServerlessCreateApiKeyRequestBuilder extends CreateApiKeyRequestBuilder {
@@ -64,18 +74,25 @@ public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKey
         private final boolean restrictRequest;
         private final ServerlessRoleValidator serverlessRoleValidator;
         private final Supplier<Boolean> strictRequestValidationEnabled;
+        private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
 
-        ServerlessCreateApiKeyRequestBuilder(Client client, boolean restrictRequest, Supplier<Boolean> strictRequestValidationEnabled) {
+        ServerlessCreateApiKeyRequestBuilder(
+            Client client,
+            boolean restrictRequest,
+            Supplier<Boolean> strictRequestValidationEnabled,
+            Supplier<Boolean> operatorStrictRoleValidationEnabled
+        ) {
             super(client);
             this.restrictRequest = restrictRequest;
             this.serverlessRoleValidator = new ServerlessRoleValidator();
             this.strictRequestValidationEnabled = strictRequestValidationEnabled;
+            this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
         }
 
         @Override
         public CreateApiKeyRequest parse(BytesReference source, XContentType xContentType) throws IOException {
             final SourceWithXContentType sourceWithXContentType = new SourceWithXContentType(source, xContentType);
-            if (restrictRequest && strictRequestValidationEnabled.get()) {
+            if (shouldApplyStrictValidation()) {
                 try {
                     return parseWithValidation(sourceWithXContentType);
                 } catch (Exception ex) {
@@ -93,6 +110,14 @@ public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKey
             );
 
             return createApiKeyRequest;
+        }
+
+        private boolean shouldApplyStrictValidation() {
+            if (restrictRequest) {
+                return strictRequestValidationEnabled.get();
+            } else {
+                return operatorStrictRoleValidationEnabled.get();
+            }
         }
 
         record SourceWithXContentType(BytesReference source, XContentType xContentType) {}

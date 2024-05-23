@@ -36,23 +36,26 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
     );
     private final ServerlessRoleValidator serverlessRoleValidator;
     private final Supplier<Boolean> strictRequestValidationEnabled;
+    private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
 
     // Needed for java module
     public ServerlessUpdateApiKeyRequestTranslator() {
-        this(new ServerlessRoleValidator(), () -> false);
+        this(new ServerlessRoleValidator(), () -> false, () -> false);
     }
 
     // For SPI
     public ServerlessUpdateApiKeyRequestTranslator(ServerlessSecurityPlugin plugin) {
-        this(new ServerlessRoleValidator(), plugin::strictApiKeyRequestValidationEnabled);
+        this(new ServerlessRoleValidator(), plugin::strictApiKeyRequestValidationEnabled, plugin::isOperatorStrictRoleValidationEnabled);
     }
 
     ServerlessUpdateApiKeyRequestTranslator(
         ServerlessRoleValidator serverlessRoleValidator,
-        Supplier<Boolean> strictRequestValidationEnabled
+        Supplier<Boolean> strictRequestValidationEnabled,
+        Supplier<Boolean> operatorStrictRoleValidationEnabled
     ) {
         this.serverlessRoleValidator = serverlessRoleValidator;
         this.strictRequestValidationEnabled = strictRequestValidationEnabled;
+        this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
     }
 
     @Override
@@ -66,8 +69,7 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
         }
 
         final RequestWithApiKeyId requestWithApiKeyId = new RequestWithApiKeyId(apiKeyId, request);
-        final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
-        if (restrictRequest && strictRequestValidationEnabled.get()) {
+        if (shouldApplyStrictValidation(request)) {
             try {
                 return parseWithValidation(requestWithApiKeyId);
             } catch (Exception ex) {
@@ -88,6 +90,15 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
         );
 
         return updateRequest;
+    }
+
+    private boolean shouldApplyStrictValidation(RestRequest request) {
+        final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
+        if (restrictRequest) {
+            return strictRequestValidationEnabled.get();
+        } else {
+            return operatorStrictRoleValidationEnabled.get();
+        }
     }
 
     private UpdateApiKeyRequest parseWithValidation(RequestWithApiKeyId requestWithApiKeyId) throws IOException {

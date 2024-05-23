@@ -41,6 +41,8 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRolesRestTestCase {
 
+    private static boolean strictOperatorRoleValidationEnabled = false;
+
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("javaRestTest")
@@ -56,6 +58,21 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
 
     public void testApiKeys() throws IOException {
         enableStrictValidation();
+        disableOperatorStrictRoleValidation();
+        doTestValidApiKey();
+        doTestApiKeyWithWorkflowRestriction();
+        doTestApiKeyWithEmptyRoleDescriptors();
+        doTestApiKeyWithoutRoleDescriptors();
+
+        doTestApiKeyWithCustomRoleValidationError();
+        doTestApiKeyWithRoleParsingError();
+        doTestApiKeyWithMixedValidAndInvalidRoles();
+        doTestGrantApiKeyWithCustomRoleValidationError();
+    }
+
+    public void testApiKeysWithStrictOperatorRoleValidationEnabled() throws IOException {
+        enableStrictValidation();
+        enableOperatorStrictRoleValidation();
         doTestValidApiKey();
         doTestApiKeyWithWorkflowRestriction();
         doTestApiKeyWithEmptyRoleDescriptors();
@@ -69,6 +86,7 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
 
     public void testApiKeysStrictValidationDisabled() throws IOException {
         disableStrictValidation();
+        disableOperatorStrictRoleValidation();
         doTestValidApiKey();
         doTestApiKeyWithWorkflowRestriction();
         doTestApiKeyWithEmptyRoleDescriptors();
@@ -175,7 +193,15 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
             payload,
             "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode"
         );
-        executeApiKeyActionsAndAssertSuccess(TEST_OPERATOR_USER, payload);
+        if (strictOperatorRoleValidationEnabled) {
+            executeApiKeyActionsAndAssertFailure(
+                TEST_OPERATOR_USER,
+                payload,
+                "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode"
+            );
+        } else {
+            executeApiKeyActionsAndAssertSuccess(TEST_OPERATOR_USER, payload);
+        }
     }
 
     private void doTestApiKeyWithMixedValidAndInvalidRoles() {
@@ -199,11 +225,20 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
                 "cluster": ["all", "manage_ilm"]
               }
             }""";
-        grantApiKeyAndAssertSuccess(TEST_USER, payload);
+        if (strictOperatorRoleValidationEnabled) {
+            grantApiKeyAndAssertFailure(
+                TEST_USER,
+                payload,
+                "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode"
+            );
+        } else {
+            grantApiKeyAndAssertSuccess(TEST_USER, payload);
+        }
     }
 
     private void doTestApiKeyWithCustomRoleValidationErrorStrictValidationDisabled() throws IOException {
         disableStrictValidation();
+        disableOperatorStrictRoleValidation();
         final var payload = """
             {
               "role-0": {
@@ -227,15 +262,25 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
               }
             }""";
         executeApiKeyActionsAndAssertFailure(TEST_USER, payload, "field [remote_indices] is not supported when running in serverless mode");
-        executeApiKeyActionsAndAssertFailure(
-            TEST_OPERATOR_USER,
-            payload,
-            "failed to parse remote indices privileges for role [role-0]. missing required [clusters] field"
-        );
+        if (strictOperatorRoleValidationEnabled) {
+            executeApiKeyActionsAndAssertFailure(
+                TEST_OPERATOR_USER,
+                payload,
+                "failed to parse role [role-0]. field [remote_indices] is not supported when running in serverless mode"
+            );
+        } else {
+            executeApiKeyActionsAndAssertFailure(
+                TEST_OPERATOR_USER,
+                payload,
+                "failed to parse remote indices privileges for role [role-0]. missing required [clusters] field"
+
+            );
+        }
     }
 
     private void doTestApiKeyWithRoleParsingErrorStrictValidationDisabled() throws IOException {
         disableStrictValidation();
+        disableOperatorStrictRoleValidation();
         final var payload = """
             {
               "role-0": {
@@ -402,5 +447,46 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
         final ResponseException e = expectThrows(ResponseException.class, () -> executeAsUser(username, request));
         assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(400));
         assertThat(e.getMessage(), containsString(message));
+    }
+
+    private void grantApiKeyAndAssertFailure(String username, String roleDescriptorsPayload, String errorMessage) throws IOException {
+        final Request request = new Request("POST", "/_security/api_key/grant");
+        request.setOptions(
+            RequestOptions.DEFAULT.toBuilder()
+                .addHeader("Authorization", UsernamePasswordToken.basicAuthHeaderValue(TEST_OPERATOR_USER, new SecureString(TEST_PASSWORD)))
+        );
+        final String payload = Strings.format("""
+            {
+              "grant_type": "password",
+              "username": "%s",
+              "password": "%s",
+              "api_key": {
+                "name": "api-key-0",
+                "role_descriptors": %s
+              }
+            }
+            """, username, TEST_PASSWORD, roleDescriptorsPayload);
+        request.setJsonEntity(payload);
+
+        // Note: not a typo - the API is internal and *must* be executed by the operator user
+        final ResponseException e = expectThrows(ResponseException.class, () -> executeAsUser(TEST_OPERATOR_USER, request));
+        assertThat(e.getResponse().getStatusLine().getStatusCode(), equalTo(400));
+        assertThat(e.getMessage(), containsString(errorMessage));
+    }
+
+    private void enableOperatorStrictRoleValidation() throws IOException {
+        setOperatorStrictRoleValidation(true);
+    }
+
+    private void disableOperatorStrictRoleValidation() throws IOException {
+        setOperatorStrictRoleValidation(false);
+    }
+
+    private void setOperatorStrictRoleValidation(boolean value) throws IOException {
+        updateClusterSettings(
+            adminClient(),
+            Settings.builder().put("xpack.security.authz.operator.strict_role_validation.enabled", value).build()
+        );
+        strictOperatorRoleValidationEnabled = value;
     }
 }

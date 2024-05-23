@@ -35,29 +35,31 @@ public class ServerlessBulkUpdateApiKeyRequestTranslator extends BulkUpdateApiKe
     );
     private final ServerlessRoleValidator serverlessRoleValidator;
     private final Supplier<Boolean> strictRequestValidationEnabled;
+    private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
 
     // Needed for java module
     public ServerlessBulkUpdateApiKeyRequestTranslator() {
-        this(new ServerlessRoleValidator(), () -> false);
+        this(new ServerlessRoleValidator(), () -> false, () -> false);
     }
 
     // For SPI
     public ServerlessBulkUpdateApiKeyRequestTranslator(ServerlessSecurityPlugin plugin) {
-        this(new ServerlessRoleValidator(), plugin::strictApiKeyRequestValidationEnabled);
+        this(new ServerlessRoleValidator(), plugin::strictApiKeyRequestValidationEnabled, plugin::isOperatorStrictRoleValidationEnabled);
     }
 
     ServerlessBulkUpdateApiKeyRequestTranslator(
         ServerlessRoleValidator serverlessRoleValidator,
-        Supplier<Boolean> strictRequestValidationEnabled
+        Supplier<Boolean> strictRequestValidationEnabled,
+        Supplier<Boolean> operatorStrictRoleValidationEnabled
     ) {
         this.serverlessRoleValidator = serverlessRoleValidator;
         this.strictRequestValidationEnabled = strictRequestValidationEnabled;
+        this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
     }
 
     @Override
     public BulkUpdateApiKeyRequest translate(RestRequest request) throws IOException {
-        final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
-        if (restrictRequest && strictRequestValidationEnabled.get()) {
+        if (shouldApplyStrictValidation(request)) {
             try {
                 return parseWithValidation(request);
             } catch (Exception ex) {
@@ -75,6 +77,15 @@ public class ServerlessBulkUpdateApiKeyRequestTranslator extends BulkUpdateApiKe
         );
 
         return updateRequest;
+    }
+
+    private boolean shouldApplyStrictValidation(RestRequest request) {
+        final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
+        if (restrictRequest) {
+            return strictRequestValidationEnabled.get();
+        } else {
+            return operatorStrictRoleValidationEnabled.get();
+        }
     }
 
     private BulkUpdateApiKeyRequest parseWithValidation(RestRequest request) throws IOException {

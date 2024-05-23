@@ -111,9 +111,16 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
+    public static final Setting<Boolean> OPERATOR_STRICT_ROLE_VALIDATION = Setting.boolSetting(
+        "xpack.security.authz.operator.strict_role_validation.enabled",
+        false,
+        Setting.Property.OperatorDynamic,
+        Setting.Property.NodeScope
+    );
+
     private AtomicBoolean apiKeyStrictRequestValidation;
     private AtomicBoolean hasPrivilegesStrictRequestValidation;
-
+    private volatile boolean operatorStrictRoleValidation;
     private final AtomicReference<SecurityContext> securityContext = new AtomicReference<>();
 
     @Override
@@ -131,6 +138,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION,
             this::configureStrictHasPrivilegesRequestValidation
         );
+        clusterSettings.addSettingsUpdateConsumer(OPERATOR_STRICT_ROLE_VALIDATION, this::configureOperatorStrictRoleValidation);
 
         this.securityContext.set(new SecurityContext(services.environment().settings(), services.threadPool().getThreadContext()));
 
@@ -153,6 +161,10 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         }
     }
 
+    private void configureOperatorStrictRoleValidation(boolean enabled) {
+        this.operatorStrictRoleValidation = enabled;
+    }
+
     @Override
     public Settings additionalSettings() {
         return Settings.builder()
@@ -164,6 +176,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .put(NATIVE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), false) // the setting is true by default; this sets it to false
             .put(API_KEY_STRICT_REQUEST_VALIDATION.getKey(), true)
             .put(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION.getKey(), false)
+            .put(OPERATOR_STRICT_ROLE_VALIDATION.getKey(), false)
             .build();
     }
 
@@ -177,7 +190,8 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
             EXCLUDE_ROLES,
             API_KEY_STRICT_REQUEST_VALIDATION,
-            HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION
+            HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION,
+            OPERATOR_STRICT_ROLE_VALIDATION
         );
     }
 
@@ -195,6 +209,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
     ) {
         this.apiKeyStrictRequestValidation = new AtomicBoolean(clusterSettings.get(API_KEY_STRICT_REQUEST_VALIDATION));
         this.hasPrivilegesStrictRequestValidation = new AtomicBoolean(clusterSettings.get(HAS_PRIVILEGES_STRICT_REQUEST_VALIDATION));
+        this.operatorStrictRoleValidation = clusterSettings.get(OPERATOR_STRICT_ROLE_VALIDATION);
         restController.getApiProtections().setEnabled(true);
         return List.of();
     }
@@ -205,6 +220,10 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
     public boolean strictHasPrivilegesRequestValidationEnabled() {
         return hasPrivilegesStrictRequestValidation != null && hasPrivilegesStrictRequestValidation.get();
+    }
+
+    public boolean isOperatorStrictRoleValidationEnabled() {
+        return operatorStrictRoleValidation;
     }
 
     public SecurityContext getSecurityContext() {

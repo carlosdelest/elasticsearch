@@ -33,11 +33,13 @@ public class ServerlessCreateApiKeyRequestBuilderTests extends ESTestCase {
 
     public void testValidPayload() throws IOException {
         var strictValidationEnabled = randomBoolean();
+        var operatorStrictRoleValidationEnabled = randomBoolean();
 
         var builder = new ServerlessCreateApiKeyRequestBuilderFactory.ServerlessCreateApiKeyRequestBuilder(
             mock(Client.class),
             randomBoolean(),
-            () -> strictValidationEnabled
+            () -> strictValidationEnabled,
+            () -> operatorStrictRoleValidationEnabled
         );
 
         final String json = "{ \"name\": \"name\", \"role_descriptors\": { \"role-a\": {\"cluster\":[\"all\"]} } }";
@@ -53,6 +55,7 @@ public class ServerlessCreateApiKeyRequestBuilderTests extends ESTestCase {
         var builder = new ServerlessCreateApiKeyRequestBuilderFactory.ServerlessCreateApiKeyRequestBuilder(
             mock(Client.class),
             randomBoolean(),
+            () -> false,
             () -> false
         );
 
@@ -68,7 +71,8 @@ public class ServerlessCreateApiKeyRequestBuilderTests extends ESTestCase {
     public void testStrictValidationEnabled() {
         var builder = new ServerlessCreateApiKeyRequestBuilderFactory.ServerlessCreateApiKeyRequestBuilder(
             mock(Client.class),
-            true,
+            randomBoolean(),
+            () -> true,
             () -> true
         );
 

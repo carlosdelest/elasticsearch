@@ -57,6 +57,8 @@ import static org.hamcrest.Matchers.is;
 public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTestCase {
     private static final List<String> RESERVED_ROLES = List.of("superuser", "remote_monitoring_agent", "remote_monitoring_collector");
 
+    private static boolean strictOperatorRoleValidationEnabled = false;
+
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("javaRestTest")
@@ -93,11 +95,28 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
     }
 
     public void testPutValidCustomRole() throws IOException {
+        enableOperatorStrictRoleValidation();
         doTestValidCustomRole();
         doTestEmptyRunAsIsValid();
     }
 
     public void testPutInvalidCustomRole() throws IOException {
+        disableOperatorStrictRoleValidation();
+        doTestUnsupportedClusterPrivilege();
+        doTestUnsupportedIndexPrivileges();
+        doTestInvalidQueryFieldInIndexPrivilege();
+        doTestInvalidApplicationPrivilegeName();
+        doTestUnsupportedField();
+        doTestMalformedUnsupportedField();
+        doTestRunAsNotSupported();
+        doTestMalformedRunAs();
+        doTestRoleNameCannotMatchFileBasedRole();
+        doTestRoleNameCannotMatchReservedRole();
+        doTestWorkflowRestrictionsNotSupportedForRegularRole();
+    }
+
+    public void testPutInvalidCustomRoleWithOperatorStrictRoleValidationEnabled() throws IOException {
+        enableOperatorStrictRoleValidation();
         doTestUnsupportedClusterPrivilege();
         doTestUnsupportedIndexPrivileges();
         doTestInvalidQueryFieldInIndexPrivilege();
@@ -130,7 +149,18 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
                 + "one of the supported application names [apm,fleet,kibana-.kibana]",
             "action_request_validation_exception"
         );
-        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        if (strictOperatorRoleValidationEnabled) {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "invalid application name [kibana-.*]. name must be a wildcard [*] or "
+                    + "one of the supported application names [apm,fleet,kibana-.kibana]",
+                "action_request_validation_exception"
+            );
+        } else {
+            putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        }
     }
 
     private void doTestValidCustomRole() throws IOException {
@@ -201,8 +231,17 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode",
             "action_request_validation_exception"
         );
-        // Operator user still succeeds because we don't enforce custom role restrictions
-        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        if (strictOperatorRoleValidationEnabled) {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "cluster privilege [manage_ilm] exists but is not supported when running in serverless mode",
+                "action_request_validation_exception"
+            );
+        } else {
+            putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        }
     }
 
     private void doTestWorkflowRestrictionsNotSupportedForRegularRole() {
@@ -245,7 +284,17 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             "index privilege [read_cross_cluster] exists but is not supported when running in serverless mode",
             "action_request_validation_exception"
         );
-        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        if (strictOperatorRoleValidationEnabled) {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "index privilege [read_cross_cluster] exists but is not supported when running in serverless mode",
+                "action_request_validation_exception"
+            );
+        } else {
+            putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        }
     }
 
     private void doTestInvalidQueryFieldInIndexPrivilege() {
@@ -297,7 +346,17 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             "field [remote_indices] is not supported when running in serverless mode",
             "parse_exception"
         );
-        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        if (strictOperatorRoleValidationEnabled) {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "field [remote_indices] is not supported when running in serverless mode",
+                "parse_exception"
+            );
+        } else {
+            putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        }
     }
 
     private void doTestMalformedUnsupportedField() {
@@ -319,13 +378,23 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             "parse_exception"
         );
         // For an operator user we do validate the malformed request and fail
-        putRoleAndAssertValidationException(
-            TEST_OPERATOR_USER,
-            "custom_role",
-            rolePayload,
-            "failed to parse remote indices privileges for role [custom_role]. missing required [clusters] field",
-            "parse_exception"
-        );
+        if (strictOperatorRoleValidationEnabled) {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "field [remote_indices] is not supported when running in serverless mode",
+                "parse_exception"
+            );
+        } else {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "failed to parse remote indices privileges for role [custom_role]. missing required [clusters] field",
+                "parse_exception"
+            );
+        }
     }
 
     private void doTestMalformedRunAs() {
@@ -340,13 +409,24 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty.",
             "parse_exception"
         );
-        putRoleAndAssertValidationException(
-            TEST_OPERATOR_USER,
-            "custom_role",
-            rolePayload,
-            "could not parse [run_as] field.",
-            "parse_exception"
-        );
+        if (strictOperatorRoleValidationEnabled) {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty.",
+                "parse_exception"
+            );
+        } else {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "could not parse [run_as] field.",
+                "parse_exception"
+            );
+        }
+
     }
 
     private void doTestRunAsNotSupported() throws IOException {
@@ -361,7 +441,17 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty.",
             "parse_exception"
         );
-        putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        if (strictOperatorRoleValidationEnabled) {
+            putRoleAndAssertValidationException(
+                TEST_OPERATOR_USER,
+                "custom_role",
+                rolePayload,
+                "failed to parse role [custom_role]. In serverless mode run_as must be absent or empty.",
+                "parse_exception"
+            );
+        } else {
+            putRoleAndAssertSuccess(TEST_OPERATOR_USER, "custom_role", rolePayload);
+        }
     }
 
     private void doTestRoleNameCannotMatchFileBasedRole() {
@@ -569,5 +659,21 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
     private Set<String> getRoles(String username, String... roleNames) throws IOException {
         final var request = new Request("GET", "/_security/role/" + Strings.arrayToCommaDelimitedString(roleNames));
         return responseAsMap(executeAndAssertSuccess(username, request)).keySet();
+    }
+
+    private void enableOperatorStrictRoleValidation() throws IOException {
+        setOperatorStrictRoleValidation(true);
+    }
+
+    private void disableOperatorStrictRoleValidation() throws IOException {
+        setOperatorStrictRoleValidation(false);
+    }
+
+    private void setOperatorStrictRoleValidation(boolean value) throws IOException {
+        updateClusterSettings(
+            adminClient(),
+            Settings.builder().put("xpack.security.authz.operator.strict_role_validation.enabled", value).build()
+        );
+        strictOperatorRoleValidationEnabled = value;
     }
 }
