@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.reports.MeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
@@ -25,22 +26,27 @@ import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.util.concurrent.DeterministicTaskQueue;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.LambdaMatchers;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.junit.After;
 import org.junit.Before;
 import org.mockito.Mockito;
 
+import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.metering.ReportGatherer.MAX_JITTER_FACTOR;
 import static co.elastic.elasticsearch.metering.ReportGatherer.calculateSampleTimestamp;
@@ -48,12 +54,15 @@ import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThan;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -100,7 +109,7 @@ public class ReportGathererTests extends ESTestCase {
         expectThrows(AssertionError.class, () -> calculateSampleTimestamp(Instant.parse("2023-01-01T00:00:00Z"), Duration.ofHours(2)));
     }
 
-    private static class RecordingMetricsCollector implements SampledMetricsCollector {
+    private static class RecordingMetricsCollector implements SampledMetricsCollector, MeteringUsageRecordPublisher {
 
         private record RecordedMetric(long value, String id) {}
 
@@ -108,9 +117,15 @@ public class ReportGathererTests extends ESTestCase {
         AtomicInteger invocations = new AtomicInteger();
 
         private volatile boolean failCollecting;
+        private volatile boolean failReporting;
+        private Set<Instant> lastRecordTimestamps = Set.of();
 
         public void setFailCollecting(boolean b) {
             failCollecting = b;
+        }
+
+        public void setFailReporting(boolean b) {
+            failReporting = b;
         }
 
         @Override
@@ -133,7 +148,8 @@ public class ReportGathererTests extends ESTestCase {
             return new MetricValue(newRecord.id(), "type1", Map.of(), Map.of(), newRecord.value);
         }
 
-        void report(List<UsageRecord> records) {
+        @Override
+        public void sendRecords(List<UsageRecord> records) throws IOException {
             // read last metric and clear it
             var lastRecordedMetric = currentRecordedMetric.getAndSet(null);
             assertNotNull("There should be a pending recorded metric", lastRecordedMetric);
@@ -142,14 +158,23 @@ public class ReportGathererTests extends ESTestCase {
             assertThat(
                 "ReportGatherer UsageRecord should match the last recorded metric",
                 records,
-                contains(
+                hasItem(
                     allOf(
                         transformedMatch(UsageRecord::id, startsWith(lastRecordedMetric.id)),
-                        transformedMatch(x -> x.usage().quantity(), equalTo(lastRecordedMetric.value))
+                        LambdaMatchers.<UsageRecord, Long>transformedMatch(x -> x.usage().quantity(), equalTo(lastRecordedMetric.value))
                     )
                 )
             );
+
+            lastRecordTimestamps = records.stream().map(UsageRecord::usageTimestamp).collect(Collectors.toSet());
+
+            if (failReporting) {
+                throw new IOException("Report sending failure");
+            }
         }
+
+        @Override
+        public void close() {}
     }
 
     public void testReportGatheringAlwaysRunsOrderly() {
@@ -171,7 +196,7 @@ public class ReportGathererTests extends ESTestCase {
             List.of(),
             List.of(recorder),
             new InMemorySampledMetricsTimeCursor(lower.minus(reportPeriodDuration)),
-            recorder::report,
+            recorder,
             threadPool,
             threadPool.generic(),
             reportPeriod,
@@ -215,7 +240,7 @@ public class ReportGathererTests extends ESTestCase {
             List.of(),
             List.of(),
             new InMemorySampledMetricsTimeCursor(),
-            x -> {},
+            MeteringUsageRecordPublisher.NOOP_REPORTER,
             threadPool,
             threadPool.generic(),
             TimeValue.timeValueSeconds(1),
@@ -242,7 +267,7 @@ public class ReportGathererTests extends ESTestCase {
             List.of(),
             List.of(),
             new InMemorySampledMetricsTimeCursor(),
-            x -> {},
+            MeteringUsageRecordPublisher.NOOP_REPORTER,
             deterministicTaskQueue.getThreadPool(),
             deterministicTaskQueue.getThreadPool().generic(),
             TimeValue.timeValueMinutes(1),
@@ -302,7 +327,7 @@ public class ReportGathererTests extends ESTestCase {
             List.of(),
             List.of(),
             new InMemorySampledMetricsTimeCursor(),
-            x -> {},
+            MeteringUsageRecordPublisher.NOOP_REPORTER,
             null,
             null,
             TimeValue.timeValueMinutes(5),
@@ -354,7 +379,7 @@ public class ReportGathererTests extends ESTestCase {
             List.of(),
             List.of(recorder),
             cursor,
-            recorder::report,
+            recorder,
             threadPool,
             threadPool.generic(),
             reportPeriod,
@@ -380,6 +405,125 @@ public class ReportGathererTests extends ESTestCase {
         assertThat(recorder.invocations.get(), equalTo(1));
         // We did not advance the cursor
         assertThat(cursor.getLatestCommitedTimestamp(), is(firstTimestamp));
+
+        reportGatherer.cancel();
+    }
+
+    public void testTimeToNextRun() {
+        var reportPeriodDuration = Duration.ofMinutes(5);
+
+        var now = Instant.EPOCH;
+        var nextSampleTimestamp = Instant.EPOCH.plus(reportPeriodDuration);
+        var timeToNextRun = ReportGatherer.timeToNextRun(true, now, nextSampleTimestamp, reportPeriodDuration);
+
+        assertThat(
+            "During normal execution next run should be around next period (within jitter)",
+            timeToNextRun.getMillis(),
+            both(greaterThanOrEqualTo((long) (reportPeriodDuration.toMillis() * 0.7))).and(
+                lessThanOrEqualTo((long) (reportPeriodDuration.toMillis() * 1.3))
+            )
+        );
+
+        now = Instant.EPOCH.plus(reportPeriodDuration).plus(2, ChronoUnit.MINUTES);
+        nextSampleTimestamp = Instant.EPOCH.plus(reportPeriodDuration);
+        timeToNextRun = ReportGatherer.timeToNextRun(true, now, nextSampleTimestamp, reportPeriodDuration);
+
+        assertThat("When late, the next run should be scheduled immediately", timeToNextRun.getMillis(), equalTo(0L));
+
+        now = Instant.EPOCH.plus(2, ChronoUnit.MINUTES);
+        nextSampleTimestamp = Instant.EPOCH.plus(reportPeriodDuration);
+        timeToNextRun = ReportGatherer.timeToNextRun(false, now, nextSampleTimestamp, reportPeriodDuration);
+
+        assertThat(
+            "When retrying, next run should be around period / 10 (within jitter)",
+            timeToNextRun.getMillis(),
+            both(greaterThanOrEqualTo((long) (reportPeriodDuration.dividedBy(10).toMillis() * 0.7))).and(
+                lessThanOrEqualTo((long) (reportPeriodDuration.dividedBy(10).toMillis() * 1.3))
+            )
+        );
+
+        now = Instant.EPOCH.plusMillis(1000);
+        nextSampleTimestamp = Instant.EPOCH;
+        timeToNextRun = ReportGatherer.timeToNextRun(false, now, nextSampleTimestamp, reportPeriodDuration);
+
+        assertThat(
+            "When retrying, next run should be around period / 10 (within jitter) even when late",
+            timeToNextRun.getMillis(),
+            both(greaterThanOrEqualTo((long) (reportPeriodDuration.dividedBy(10).toMillis() * 0.7))).and(
+                lessThanOrEqualTo((long) (reportPeriodDuration.dividedBy(10).toMillis() * 1.3))
+            )
+        );
+    }
+
+    public void testRetryScheduledWhenReportSendingFails() {
+        var recorder = new RecordingMetricsCollector();
+        var reportPeriod = TimeValue.timeValueMinutes(5);
+        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
+        var firstTimestamp = Instant.EPOCH;
+        var secondTimestamp = firstTimestamp.plus(reportPeriodDuration);
+        var thirdTimestamp = secondTimestamp.plus(reportPeriodDuration);
+
+        var clock = Mockito.mock(Clock.class);
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+        var threadPool = deterministicTaskQueue.getThreadPool();
+
+        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            List.of(recorder),
+            new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
+            recorder,
+            threadPool,
+            threadPool.generic(),
+            reportPeriod,
+            clock
+        );
+
+        when(clock.instant()).thenAnswer(x -> now.get());
+        reportGatherer.start();
+
+        deterministicTaskQueue.advanceTime();
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(recorder.invocations.get(), equalTo(1));
+        assertThat(recorder.lastRecordTimestamps, contains(firstTimestamp));
+        deterministicTaskQueue.advanceTime();
+
+        recorder.invocations.set(0);
+        // mock transmission failure
+        recorder.setFailReporting(true);
+
+        // we expect a 2nd run to be scheduled within a shorter timeframe
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(recorder.invocations.get(), equalTo(1));
+        assertThat(recorder.lastRecordTimestamps, contains(secondTimestamp));
+
+        var firstAttemptTime = now.get();
+        deterministicTaskQueue.advanceTime();
+        var nextAttemptTime = now.get();
+
+        var expectedRetryInterval = reportPeriodDuration.dividedBy(10);
+        assertThat(
+            Duration.between(firstAttemptTime, nextAttemptTime).toMillis(),
+            both(greaterThanOrEqualTo((long) (expectedRetryInterval.toMillis() * 0.7))).and(
+                lessThanOrEqualTo((long) (expectedRetryInterval.toMillis() * 1.3))
+            )
+        );
+
+        // Advance to include the next timestamp, still failing
+        var lastAttemptTime = firstAttemptTime.plus(reportPeriodDuration).plus(2, ChronoUnit.MINUTES);
+        deterministicTaskQueue.runTasksUpToTimeInOrder(lastAttemptTime.toEpochMilli());
+        deterministicTaskQueue.advanceTime();
+        nextAttemptTime = now.get();
+        assertThat(
+            Duration.between(lastAttemptTime, nextAttemptTime).toMillis(),
+            lessThanOrEqualTo((long) (expectedRetryInterval.toMillis() * 1.3))
+        );
+
+        // We are now trying to transmit 2 time frames
+        assertThat(recorder.lastRecordTimestamps, containsInAnyOrder(secondTimestamp, thirdTimestamp));
 
         reportGatherer.cancel();
     }

@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.reports.MeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
 import co.elastic.elasticsearch.metrics.MetricValue;
@@ -271,7 +272,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 List.of(sampled1, sampled2),
                 new InMemorySampledMetricsTimeCursor(Instant.EPOCH.minus(reportPeriodDuration)),
                 REPORT_PERIOD,
-                records::addAll,
+                new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
                 clock
@@ -313,7 +314,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 List.of(),
                 new InMemorySampledMetricsTimeCursor(),
                 REPORT_PERIOD,
-                records::addAll,
+                new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
                 clock
@@ -363,7 +364,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 List.of(sampled1, sampled2),
                 new InMemorySampledMetricsTimeCursor(Instant.EPOCH.minus(reportPeriodDuration)),
                 REPORT_PERIOD,
-                records::addAll,
+                new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
                 clock
@@ -416,7 +417,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 List.of(sampled1),
                 cursor,
                 REPORT_PERIOD,
-                records::addAll,
+                new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
                 clock
@@ -483,7 +484,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 List.of(sampled1),
                 cursor,
                 REPORT_PERIOD,
-                records::addAll,
+                new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
                 clock
@@ -549,7 +550,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 collectors,
                 new InMemorySampledMetricsTimeCursor(),
                 REPORT_PERIOD,
-                x -> {},
+                MeteringUsageRecordPublisher.NOOP_REPORTER,
                 threadPool,
                 threadPool.generic()
             )
@@ -603,7 +604,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 List.of(),
                 new InMemorySampledMetricsTimeCursor(),
                 REPORT_PERIOD,
-                x -> {},
+                MeteringUsageRecordPublisher.NOOP_REPORTER,
                 threadPool,
                 threadPool.generic()
             )
@@ -647,7 +648,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 List.of(sampled1),
                 new InMemorySampledMetricsTimeCursor(Instant.EPOCH.minus(reportPeriodDuration)),
                 REPORT_PERIOD,
-                records::addAll,
+                new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
                 clock
@@ -724,7 +725,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
                     builtInSampledMetrics,
                     new InMemorySampledMetricsTimeCursor(),
                     REPORT_PERIOD,
-                    records::addAll,
+                    new TestMeteringUsageRecordPublisher(records),
                     threadPool,
                     threadPool.generic()
                 )
@@ -806,5 +807,21 @@ public class MeteringReportingServiceTests extends ESTestCase {
             metrics.forEach(results::add);
             metrics.commit();
         }
+    }
+
+    private static class TestMeteringUsageRecordPublisher implements MeteringUsageRecordPublisher {
+        private final Queue<UsageRecord> records;
+
+        TestMeteringUsageRecordPublisher(Queue<UsageRecord> records) {
+            this.records = records;
+        }
+
+        @Override
+        public void sendRecords(List<UsageRecord> records) {
+            this.records.addAll(records);
+        }
+
+        @Override
+        public void close() {}
     }
 }

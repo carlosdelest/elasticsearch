@@ -27,7 +27,8 @@ import co.elastic.elasticsearch.metering.action.TransportGetMeteringShardInfoAct
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForPrimaryUserAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSecondaryUserAction;
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
-import co.elastic.elasticsearch.metering.reports.MeteringReporter;
+import co.elastic.elasticsearch.metering.reports.HttpMeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.reports.MeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.stats.rest.RestGetMeteringStatsAction;
 import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
 import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
@@ -106,7 +107,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     private final boolean hasSearchRole;
     private List<SampledMetricsCollector> sampledMetricsCollectors;
     private List<CounterMetricsCollector> counterMetricsCollectors;
-    private MeteringReporter reporter;
+    private MeteringUsageRecordPublisher usageRecordPublisher;
     private MeteringReportingService reportingService;
 
     private volatile IngestMetricsCollector ingestMetricsCollector;
@@ -121,8 +122,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     public List<Setting<?>> getSettings() {
         return List.of(
             MeteringReportingService.REPORT_PERIOD,
-            MeteringReporter.METERING_URL,
-            MeteringReporter.BATCH_SIZE,
+            HttpMeteringUsageRecordPublisher.METERING_URL,
+            HttpMeteringUsageRecordPublisher.BATCH_SIZE,
             MeteringIndexInfoTaskExecutor.ENABLED_SETTING,
             MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING,
             NEW_IX_METRIC_SETTING
@@ -197,8 +198,9 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
         if (projectId.isEmpty()) {
             log.warn(PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
+            usageRecordPublisher = MeteringUsageRecordPublisher.NOOP_REPORTER;
         } else {
-            reporter = new MeteringReporter(environment.settings(), threadPool);
+            usageRecordPublisher = new HttpMeteringUsageRecordPublisher(environment.settings(), threadPool);
         }
 
         reportingService = new MeteringReportingService(
@@ -208,15 +210,13 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             builtInSampledMetrics,
             new InMemorySampledMetricsTimeCursor(),
             reportPeriod,
-            reporter != null ? reporter::sendRecords : records -> {},
+            usageRecordPublisher,
             threadPool,
             threadPool.executor(METERING_REPORTER_THREAD_POOL_NAME)
         );
 
         List<Object> cs = new ArrayList<>();
-        if (reporter != null) {
-            cs.add(reporter);
-        }
+        cs.add(usageRecordPublisher);
         cs.add(reportingService);
         cs.add(indexSizeService);
         cs.addAll(builtInCounterMetrics);
@@ -260,7 +260,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     @Override
     public void close() throws IOException {
-        IOUtils.close(reporter, reportingService);
+        IOUtils.close(usageRecordPublisher, reportingService);
     }
 
     IngestMetricsCollector getIngestMetricsCollector() {

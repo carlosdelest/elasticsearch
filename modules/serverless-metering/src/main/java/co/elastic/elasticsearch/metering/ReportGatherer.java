@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.reports.MeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.reports.UsageMetrics;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metering.reports.UsageSource;
@@ -41,7 +42,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.function.Consumer;
 
 class ReportGatherer {
     private static final Logger log = LogManager.getLogger(ReportGatherer.class);
@@ -50,7 +50,7 @@ class ReportGatherer {
     private final List<CounterMetricsCollector> counterMetricsCollectors;
     private final List<SampledMetricsCollector> sampledMetricsCollectors;
     private final SampledMetricsTimeCursor sampledMetricsTimeCursor;
-    private final Consumer<List<UsageRecord>> reporter;
+    private final MeteringUsageRecordPublisher usageRecordPublisher;
     private final ThreadPool threadPool;
     private final Executor executor;
     private final Clock clock;
@@ -69,7 +69,7 @@ class ReportGatherer {
         List<CounterMetricsCollector> counterMetricsCollectors,
         List<SampledMetricsCollector> sampledMetricsCollectors,
         SampledMetricsTimeCursor sampledMetricsTimeCursor,
-        Consumer<List<UsageRecord>> reporter,
+        MeteringUsageRecordPublisher usageRecordPublisher,
         ThreadPool threadPool,
         ExecutorService executor,
         TimeValue reportPeriod,
@@ -79,7 +79,7 @@ class ReportGatherer {
         this.counterMetricsCollectors = counterMetricsCollectors;
         this.sampledMetricsCollectors = sampledMetricsCollectors;
         this.sampledMetricsTimeCursor = sampledMetricsTimeCursor;
-        this.reporter = reporter;
+        this.usageRecordPublisher = usageRecordPublisher;
         this.threadPool = threadPool;
         this.executor = executor;
         this.reportPeriod = reportPeriod;
@@ -125,7 +125,6 @@ class ReportGatherer {
 
         Instant startedAt = Instant.now(clock);
 
-        // TODO: use this return value to make decisions about re-trying/re-schedule
         var reportsSent = collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
 
         Instant completedAt = Instant.now(clock);
@@ -134,9 +133,17 @@ class ReportGatherer {
         if (cancel == false) {
             try {
                 Instant nextSampleTimestamp = sampleTimestamp.plus(reportPeriodDuration);
-                var timeToNextRun = timeToNextRun(completedAt, nextSampleTimestamp);
+
+                final Instant sampleTimestampToCollect;
+                if (reportsSent || completedAt.isAfter(nextSampleTimestamp)) {
+                    sampleTimestampToCollect = nextSampleTimestamp;
+                } else {
+                    sampleTimestampToCollect = sampleTimestamp;
+                }
+
+                var timeToNextRun = timeToNextRun(reportsSent, completedAt, sampleTimestampToCollect, reportPeriodDuration);
                 // schedule the next run
-                nextRun = threadPool.schedule(() -> gatherAndSendReports(nextSampleTimestamp), timeToNextRun, executor);
+                nextRun = threadPool.schedule(() -> gatherAndSendReports(sampleTimestampToCollect), timeToNextRun, executor);
                 log.trace(
                     () -> Strings.format("scheduled next run in %s.%s seconds", timeToNextRun.getSeconds(), timeToNextRun.getMillis())
                 );
@@ -169,20 +176,30 @@ class ReportGatherer {
         }
     }
 
-    private TimeValue timeToNextRun(Instant now, Instant nextSampleTimestamp) {
-        // add up to 25% jitter
-        double jitterFactor = Randomness.get().nextDouble() * MAX_JITTER_FACTOR;
-        Duration jitter = Duration.ofNanos((long) (reportPeriodDuration.toNanos() * jitterFactor));
-        long nanosUntilNextRun = now.until(nextSampleTimestamp.plus(jitter), ChronoUnit.NANOS);
+    static TimeValue timeToNextRun(boolean reportsSent, Instant now, Instant nextSampleTimestamp, Duration reportPeriodDuration) {
+        final long nanosUntilNextRun;
+        if (reportsSent) {
+            // add up to 25% jitter
+            double jitterFactor = Randomness.get().nextDouble() * 0.25;
+            Duration jitter = Duration.ofNanos((long) (reportPeriodDuration.toNanos() * jitterFactor));
+            nanosUntilNextRun = now.until(nextSampleTimestamp.plus(jitter), ChronoUnit.NANOS);
+        } else {
+            // We want to retry "faster", but avoid doing that immediately, even if we are late for the next sample timestamp
+            // add or remove up to 25% jitter
+            double jitterFactor = (Randomness.get().nextDouble() * 0.5) - 0.25;
+            final long reducedPeriodNanos = reportPeriodDuration.toNanos() / 10;
+            final long jitterNanos = (long) (reducedPeriodNanos * jitterFactor);
+            nanosUntilNextRun = reducedPeriodNanos + jitterNanos;
+        }
         return nanosUntilNextRun > 0 ? TimeValue.timeValueNanos(nanosUntilNextRun) : TimeValue.ZERO;
     }
 
     private boolean sendReport(List<UsageRecord> report) {
         try {
-            reporter.accept(report);
+            usageRecordPublisher.sendRecords(report);
             return true;
         } catch (Exception e) {
-            log.error("Exception thrown reporting metrics", e);
+            log.warn("Exception thrown reporting metrics", e);
         }
         return false;
     }

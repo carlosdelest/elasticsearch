@@ -54,9 +54,9 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509ExtendedTrustManager;
 
-public class MeteringReporter extends AbstractLifecycleComponent {
+public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent implements MeteringUsageRecordPublisher {
 
-    private static final Logger log = LogManager.getLogger(MeteringReporter.class);
+    private static final Logger log = LogManager.getLogger(HttpMeteringUsageRecordPublisher.class);
 
     public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "https://usage-api.elastic-system/api/v1/usage", s -> {
         try {
@@ -98,7 +98,7 @@ public class MeteringReporter extends AbstractLifecycleComponent {
     private final Scheduler scheduler;
     private final HttpClient client;
 
-    public MeteringReporter(Settings settings, Scheduler scheduler) {
+    public HttpMeteringUsageRecordPublisher(Settings settings, Scheduler scheduler) {
         this.settings = settings;
         this.batchSize = BATCH_SIZE.get(settings);
         this.scheduler = scheduler;
@@ -124,7 +124,8 @@ public class MeteringReporter extends AbstractLifecycleComponent {
     @Override
     protected void doStop() {}
 
-    public void sendRecords(List<UsageRecord> records) {
+    @Override
+    public void sendRecords(List<UsageRecord> records) throws IOException, InterruptedException {
         log.trace(() -> Strings.format("Sending records: %s", records));
         if (records.isEmpty()) return;
 
@@ -137,8 +138,13 @@ public class MeteringReporter extends AbstractLifecycleComponent {
                     (PrivilegedExceptionAction<HttpResponse<String>>) () -> client.send(request, HttpResponse.BodyHandlers.ofString())
                 );
                 handleResponse(response, batch);
-            } catch (IOException | PrivilegedActionException e) {
-                // TODO: ES-6462 remove assert, log the record info, and retry
+            } catch (PrivilegedActionException e) {
+                if (e.getCause() instanceof IOException ex) {
+                    throw ex;
+                }
+                if (e.getCause() instanceof InterruptedException ex) {
+                    throw ex;
+                }
                 assert false : e;
                 log.error("Could not send {} records to billing service", batch.size(), e);
             }

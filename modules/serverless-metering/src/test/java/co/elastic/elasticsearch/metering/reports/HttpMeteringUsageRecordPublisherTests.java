@@ -22,7 +22,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import org.apache.http.HttpStatus;
-import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.test.ESTestCase;
@@ -52,11 +51,10 @@ import java.util.stream.IntStream;
 import static org.elasticsearch.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
 
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
 @ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
-public class MeteringReporterTests extends ESTestCase {
+public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
 
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
 
@@ -78,7 +76,7 @@ public class MeteringReporterTests extends ESTestCase {
 
         threadPool = new TestThreadPool("meteringReporterTests");
 
-        settings = Settings.builder().put(MeteringReporter.METERING_URL.getKey(), "http://localhost:" + port).build();
+        settings = Settings.builder().put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + port).build();
     }
 
     private void handle(HttpExchange exchange) throws IOException {
@@ -123,7 +121,7 @@ public class MeteringReporterTests extends ESTestCase {
             new UsageSource("es-id", "instanceId", null)
         );
 
-        try (MeteringReporter reporter = new MeteringReporter(settings, threadPool)) {
+        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, threadPool)) {
             reporter.start();
             reporter.sendRecords(List.of(record));
 
@@ -136,7 +134,7 @@ public class MeteringReporterTests extends ESTestCase {
     }
 
     public void testReporterSendsLotsOfData() throws Exception {
-        Settings testSettings = Settings.builder().put(settings).put(MeteringReporter.BATCH_SIZE.getKey(), 10).build();
+        Settings testSettings = Settings.builder().put(settings).put(HttpMeteringUsageRecordPublisher.BATCH_SIZE.getKey(), 10).build();
 
         List<UsageRecord> records = IntStream.range(0, 25)
             .mapToObj(
@@ -149,7 +147,7 @@ public class MeteringReporterTests extends ESTestCase {
             )
             .toList();
 
-        try (MeteringReporter reporter = new MeteringReporter(testSettings, threadPool)) {
+        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(testSettings, threadPool)) {
             reporter.start();
             reporter.sendRecords(records);
 
@@ -180,16 +178,14 @@ public class MeteringReporterTests extends ESTestCase {
             new UsageSource("es-id", "instanceId", null)
         );
 
-        try (MeteringReporter reporter = new MeteringReporter(settings, threadPool)) {
+        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, threadPool)) {
             reporter.start();
 
-            var e = expectThrows(AssertionError.class, () -> reporter.sendRecords(List.of(record)));
-
-            assertThat(ExceptionsHelper.unwrap(e, ConnectException.class), instanceOf(ConnectException.class));
+            expectThrows(ConnectException.class, () -> reporter.sendRecords(List.of(record)));
         }
     }
 
-    public void testServerFailure() {
+    public void testServerFailure() throws IOException, InterruptedException {
         nextRequestStatusCode = 500;    // server is wrong
 
         UsageRecord record = new UsageRecord(
@@ -199,7 +195,7 @@ public class MeteringReporterTests extends ESTestCase {
             new UsageSource("es-id", "instanceId", null)
         );
 
-        try (MeteringReporter reporter = new MeteringReporter(settings, threadPool)) {
+        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, threadPool)) {
             reporter.start();
 
             // TODO: just log for now, needs some retries
