@@ -106,9 +106,6 @@ tasks {
 
             // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1777
             "ml/inference_crud/Test force delete given model with alias referenced by pipeline",
-
-            // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/2092
-            "ml/sparse_vector_search/*"
         ).joinToString(","))
     }
 }
