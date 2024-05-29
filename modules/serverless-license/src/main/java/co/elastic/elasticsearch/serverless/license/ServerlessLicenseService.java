@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.serverless.license;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.license.License;
 import org.elasticsearch.license.PostStartBasicRequest;
 import org.elasticsearch.license.PostStartBasicResponse;
@@ -55,7 +56,7 @@ public class ServerlessLicenseService extends AbstractLifecycleComponent impleme
     }
 
     @Override
-    public void removeLicense(ActionListener<? extends AcknowledgedResponse> listener) {
+    public void removeLicense(TimeValue masterNodeTimeout, TimeValue ackTimeout, ActionListener<? extends AcknowledgedResponse> listener) {
         throw new UnsupportedOperationException("removing a license in serverless is not supported");
     }
 

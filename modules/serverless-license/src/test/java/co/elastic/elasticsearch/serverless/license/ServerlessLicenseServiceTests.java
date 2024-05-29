@@ -53,7 +53,10 @@ public class ServerlessLicenseServiceTests extends ESTestCase {
     }
 
     public void testRemoveLicense() {
-        expectThrows(UnsupportedOperationException.class, () -> serverlessLicenseService.removeLicense(null));
+        expectThrows(
+            UnsupportedOperationException.class,
+            () -> serverlessLicenseService.removeLicense(randomTimeValue(), randomTimeValue(), null)
+        );
     }
 
     public void testStartBasicLicense() {
