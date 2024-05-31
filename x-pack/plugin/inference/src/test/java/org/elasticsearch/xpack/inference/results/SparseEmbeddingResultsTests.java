@@ -53,9 +53,9 @@ public class SparseEmbeddingResultsTests extends AbstractWireSerializingTestCase
     }
 
     private static SparseEmbedding createRandomEmbedding(int numTokens) {
-        List<SparseEmbedding.WeightedToken> tokenList = new ArrayList<>(numTokens);
+        List<WeightedToken> tokenList = new ArrayList<>(numTokens);
         for (int i = 0; i < numTokens; i++) {
-            tokenList.add(new SparseEmbedding.WeightedToken(Integer.toString(i), (float) randomDoubleBetween(0.0, 5.0, false)));
+            tokenList.add(new WeightedToken(Integer.toString(i), (float) randomDoubleBetween(0.0, 5.0, false)));
         }
 
         return new SparseEmbedding(tokenList, randomBoolean());
@@ -86,7 +86,7 @@ public class SparseEmbeddingResultsTests extends AbstractWireSerializingTestCase
     }
 
     public void testToXContent_CreatesTheRightFormatForASingleEmbedding() throws IOException {
-        var entity = createSparseResult(List.of(createEmbedding(List.of(new SparseEmbedding.WeightedToken("token", 0.1F)), false)));
+        var entity = createSparseResult(List.of(createEmbedding(List.of(new WeightedToken("token", 0.1F)), false)));
         assertThat(entity.asMap(), is(buildExpectation(List.of(new EmbeddingExpectation(Map.of("token", 0.1F), false)))));
         String xContentResult = Strings.toString(entity, true, true);
         assertThat(xContentResult, is("""
@@ -105,14 +105,8 @@ public class SparseEmbeddingResultsTests extends AbstractWireSerializingTestCase
     public void testToXContent_CreatesTheRightFormatForMultipleEmbeddings() throws IOException {
         var entity = createSparseResult(
             List.of(
-                new SparseEmbedding(
-                    List.of(new SparseEmbedding.WeightedToken("token", 0.1F), new SparseEmbedding.WeightedToken("token2", 0.2F)),
-                    false
-                ),
-                new SparseEmbedding(
-                    List.of(new SparseEmbedding.WeightedToken("token3", 0.3F), new SparseEmbedding.WeightedToken("token4", 0.4F)),
-                    false
-                )
+                new SparseEmbedding(List.of(new WeightedToken("token", 0.1F), new WeightedToken("token2", 0.2F)), false),
+                new SparseEmbedding(List.of(new WeightedToken("token3", 0.3F), new WeightedToken("token4", 0.4F)), false)
             )
         );
         assertThat(
@@ -152,8 +146,8 @@ public class SparseEmbeddingResultsTests extends AbstractWireSerializingTestCase
     public void testTransformToCoordinationFormat() {
         var results = createSparseResult(
             List.of(
-                createEmbedding(List.of(new SparseEmbedding.WeightedToken("token", 0.1F)), false),
-                createEmbedding(List.of(new SparseEmbedding.WeightedToken("token2", 0.2F)), true)
+                createEmbedding(List.of(new WeightedToken("token", 0.1F)), false),
+                createEmbedding(List.of(new WeightedToken("token2", 0.2F)), true)
             )
         ).transformToCoordinationFormat();
 
@@ -183,7 +177,7 @@ public class SparseEmbeddingResultsTests extends AbstractWireSerializingTestCase
         return new SparseEmbeddingResults(embeddings);
     }
 
-    public static SparseEmbedding createEmbedding(List<SparseEmbedding.WeightedToken> tokensList, boolean isTruncated) {
+    public static SparseEmbedding createEmbedding(List<WeightedToken> tokensList, boolean isTruncated) {
         return new SparseEmbedding(tokensList, isTruncated);
     }
 }

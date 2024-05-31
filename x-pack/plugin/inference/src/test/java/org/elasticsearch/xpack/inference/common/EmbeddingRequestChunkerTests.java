@@ -20,6 +20,7 @@ import org.elasticsearch.xpack.core.inference.results.SparseEmbedding;
 import org.elasticsearch.xpack.core.inference.results.SparseEmbeddingResults;
 import org.elasticsearch.xpack.core.inference.results.TextEmbeddingByteResults;
 import org.elasticsearch.xpack.core.inference.results.TextEmbeddingResults;
+import org.elasticsearch.xpack.core.ml.search.WeightedToken;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -245,14 +246,14 @@ public class EmbeddingRequestChunkerTests extends ESTestCase {
         {
             var embeddings = new ArrayList<SparseEmbedding>();
             for (int i = 0; i < batchSize; i++) {
-                embeddings.add(new SparseEmbedding(List.of(new SparseEmbedding.WeightedToken("a", 1.0f)), false));
+                embeddings.add(new SparseEmbedding(List.of(new WeightedToken("a", 1.0f)), false));
             }
             batches.get(0).listener().onResponse(new SparseEmbeddingResults(embeddings));
         }
         {
             var embeddings = new ArrayList<SparseEmbedding>();
             for (int i = 0; i < 2; i++) { // 2 requests in the 2nd batch
-                embeddings.add(new SparseEmbedding(List.of(new SparseEmbedding.WeightedToken("b", 1.0f)), false));
+                embeddings.add(new SparseEmbedding(List.of(new WeightedToken("b", 1.0f)), false));
             }
             batches.get(1).listener().onResponse(new SparseEmbeddingResults(embeddings));
         }
