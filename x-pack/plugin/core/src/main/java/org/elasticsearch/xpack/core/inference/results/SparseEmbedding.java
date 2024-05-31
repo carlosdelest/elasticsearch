@@ -97,6 +97,10 @@ public class SparseEmbedding extends Embedding<SparseEmbedding.WeightedTokens> {
     public static class WeightedTokens implements Embedding.EmbeddingValues {
         private final List<WeightedToken> tokens;
 
+        public WeightedTokens(StreamInput in) throws IOException {
+            this.tokens = in.readCollectionAsImmutableList(WeightedToken::new);
+        }
+
         public WeightedTokens(List<WeightedToken> tokens) {
             this.tokens = tokens;
         }
@@ -119,6 +123,11 @@ public class SparseEmbedding extends Embedding<SparseEmbedding.WeightedTokens> {
             }
             builder.endObject();
             return builder;
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeCollection(tokens);
         }
 
         public List<WeightedToken> tokens() {

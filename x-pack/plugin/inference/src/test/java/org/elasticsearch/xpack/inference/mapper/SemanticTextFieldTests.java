@@ -24,6 +24,7 @@ import org.elasticsearch.xpack.core.inference.results.ChunkedTextEmbeddingByteRe
 import org.elasticsearch.xpack.core.inference.results.ChunkedTextEmbeddingFloatResults;
 import org.elasticsearch.xpack.core.inference.results.EmbeddingChunk;
 import org.elasticsearch.xpack.core.inference.results.FloatEmbedding;
+import org.elasticsearch.xpack.core.inference.results.SparseEmbedding;
 import org.elasticsearch.xpack.core.ml.inference.results.ChunkedTextExpansionResults;
 import org.elasticsearch.xpack.core.ml.search.WeightedToken;
 import org.elasticsearch.xpack.inference.model.TestModel;

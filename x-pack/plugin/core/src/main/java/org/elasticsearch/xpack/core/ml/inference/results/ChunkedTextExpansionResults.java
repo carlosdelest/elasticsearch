@@ -9,13 +9,12 @@ package org.elasticsearch.xpack.core.ml.inference.results;
 
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.io.stream.Writeable;
-import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
+import org.elasticsearch.xpack.core.inference.results.EmbeddingChunk;
+import org.elasticsearch.xpack.core.inference.results.SparseEmbedding;
 import org.elasticsearch.xpack.core.ml.search.WeightedToken;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -24,36 +23,13 @@ import java.util.stream.Collectors;
 public class ChunkedTextExpansionResults extends ChunkedNlpInferenceResults {
     public static final String NAME = "chunked_text_expansion_result";
 
-    public record ChunkedResult(String matchedText, List<WeightedToken> weightedTokens) implements Writeable, ToXContentObject {
+    public static class ChunkedResult extends EmbeddingChunk<SparseEmbedding.WeightedTokens> {
+        public ChunkedResult(String matchedText, List<WeightedToken> embeddings) {
+            super(matchedText, new SparseEmbedding(embeddings, false));
+        }
 
         public ChunkedResult(StreamInput in) throws IOException {
-            this(in.readString(), in.readCollectionAsList(WeightedToken::new));
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(matchedText);
-            out.writeCollection(weightedTokens);
-        }
-
-        @Override
-        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject();
-            builder.field(TEXT, matchedText);
-            builder.startObject(INFERENCE);
-            for (var weightedToken : weightedTokens) {
-                weightedToken.toXContent(builder, params);
-            }
-            builder.endObject();
-            builder.endObject();
-            return builder;
-        }
-
-        public Map<String, Object> asMap() {
-            var map = new HashMap<String, Object>();
-            map.put(TEXT, matchedText);
-            map.put(INFERENCE, weightedTokens.stream().collect(Collectors.toMap(WeightedToken::token, WeightedToken::weight)));
-            return map;
+            super(in.readString(), new SparseEmbedding(in));
         }
     }
 

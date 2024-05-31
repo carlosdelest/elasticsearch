@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.core.inference.results;
 
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.xcontent.ToXContentFragment;
 import org.elasticsearch.xcontent.ToXContentObject;
@@ -20,7 +21,7 @@ import java.util.Objects;
 public abstract class Embedding<T extends Embedding.EmbeddingValues> implements Writeable, ToXContentObject {
     public static final String EMBEDDING = "embedding";
 
-    public interface EmbeddingValues extends ToXContentFragment {
+    public interface EmbeddingValues extends ToXContentFragment, Writeable {
         int size();
 
         XContentBuilder valuesToXContent(String fieldName, XContentBuilder builder, Params params) throws IOException;
@@ -50,6 +51,11 @@ public abstract class Embedding<T extends Embedding.EmbeddingValues> implements 
         embedding.valuesToXContent(EMBEDDING, builder, params);
         builder.endObject();
         return builder;
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        embedding.writeTo(out);
     }
 
     @Override

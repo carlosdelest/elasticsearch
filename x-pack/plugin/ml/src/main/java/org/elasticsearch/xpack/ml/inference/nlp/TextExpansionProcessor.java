@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.ml.inference.nlp;
 
 import org.elasticsearch.inference.InferenceResults;
+import org.elasticsearch.xpack.core.inference.results.SparseEmbedding;
 import org.elasticsearch.xpack.core.ml.inference.results.ChunkedTextExpansionResults;
 import org.elasticsearch.xpack.core.ml.inference.results.TextExpansionResults;
 import org.elasticsearch.xpack.core.ml.inference.trainedmodel.NlpConfig;

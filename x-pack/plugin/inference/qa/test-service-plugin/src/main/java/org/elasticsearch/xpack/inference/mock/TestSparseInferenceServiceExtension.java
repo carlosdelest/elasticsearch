@@ -147,7 +147,9 @@ public class TestSparseInferenceServiceExtension implements InferenceServiceExte
                     tokens.add(new WeightedToken("feature_" + j, generateEmbedding(input.get(i), j)));
                 }
                 results.add(
-                    new ChunkedSparseEmbeddingResults(List.of(new ChunkedTextExpansionResults.ChunkedResult(input.get(i), tokens)))
+                    new ChunkedSparseEmbeddingResults(
+                        List.of(new ChunkedTextExpansionResults.ChunkedResult(input.get(i), tokens))
+                    )
                 );
             }
             return results;

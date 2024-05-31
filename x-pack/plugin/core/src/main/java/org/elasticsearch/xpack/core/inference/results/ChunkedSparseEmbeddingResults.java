@@ -146,7 +146,7 @@ public class ChunkedSparseEmbeddingResults implements ChunkedInferenceServiceRes
     @Override
     public Iterator<Chunk> chunksAsMatchedTextAndByteReference(XContent xcontent) {
         return chunkedResults.stream()
-            .map(chunk -> new Chunk(chunk.matchedText(), toBytesReference(xcontent, chunk.weightedTokens())))
+            .map(chunk -> new Chunk(chunk.matchedText(), toBytesReference(xcontent, chunk.embedding().embedding.tokens())))
             .iterator();
     }
 
