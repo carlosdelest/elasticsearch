@@ -1,4 +1,29 @@
 ---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: elasticsearch-serverless
+  description: Serverless distribution of Elasticsearch.
+
+  annotations:
+    backstage.io/source-location: url:https://github.com/elastic/elasticsearch-serverless/tree/main
+    github.com/project-slug: elastic/elasticsearch-serverless
+    github.com/team-slug: elastic/elasticsearch-team
+    buildkite.com/project-slug: elastic/elasticsearch-serverless
+
+  tags:
+    - elasticsearch
+    - serverless
+
+  links:
+    - title: Documentation
+      url: https://docs.elastic.co/serverless/elasticsearch/what-is-elasticsearch-serverless
+
+spec:
+  type: application
+  owner: group:elasticsearch-team
+  lifecycle: production
+---
 # yaml-language-server: $schema=https://gist.githubusercontent.com/elasticmachine/988b80dae436cafea07d9a4a460a011d/raw/e57ee3bed7a6f73077a3f55a38e76e40ec87a7cf/rre.schema.json
 apiVersion: backstage.io/v1alpha1
 kind: Resource
