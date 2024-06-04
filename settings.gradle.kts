@@ -4,6 +4,11 @@ import org.elasticsearch.gradle.internal.toolchain.OracleOpenJdkToolchainResolve
 
 pluginManagement {
     repositories {
+        // for the custom shadow plugin version we currently use for 8.8 compatibility
+        maven {
+            name = "jitpack"
+            url = uri("https://jitpack.io")
+        }
         mavenCentral()
         gradlePluginPortal()
     }
