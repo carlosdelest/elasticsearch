@@ -46,3 +46,6 @@ tests:
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2120"
   method: "test {yaml=logsdb/10_settings/create logs index}"
+- class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2137"
+  method: "testMulitpleDatastreamsRanking"
