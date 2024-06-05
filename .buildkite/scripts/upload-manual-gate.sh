@@ -3,7 +3,7 @@ set -e
 
 QUALITY_GATE_STEP="${QUALITY_GATE_STEP:-quality-gates}"
 
-if [ $(buildkite-agent step get "outcome" --step "${QUALITY_GATE_STEP}") != "passed" ]; then
+if [[ "$(buildkite-agent step get "outcome" --step "${QUALITY_GATE_STEP}")" != "passed" ]]; then
   echo "Quality gates failed. Adding manual quality gate override."
     cat <<- YAML | buildkite-agent pipeline upload
   - group: ":judge: Manual Verification"
