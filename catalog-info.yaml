@@ -10,6 +10,7 @@ metadata:
     github.com/project-slug: elastic/elasticsearch-serverless
     github.com/team-slug: elastic/elasticsearch-team
     buildkite.com/project-slug: elastic/elasticsearch-serverless
+    gitops.elastic.co/service-name: elasticsearch
 
   tags:
     - elasticsearch
