@@ -86,7 +86,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         return cluster.getHttpAddresses();
     }
 
-    public void testMeteringRecordsCanBeDeduplicated() throws Exception {
+    public void testMeteringRecordsIn1kBatch() throws Exception {
         // This test asserts the ingested doc metric for 1k documents sums up to consistent value
         // this test also asserts about an exact value of index-size metrics. To make sure, that assertion
         // is consistent a shard has to be merged to a 1 segment. Then a value from /_cat/segments
@@ -141,8 +141,8 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             // there might be records from multiple metering.report_period. We are interested in the latest
             // because the replication might take time and also some nodes might be reporting with a delay
 
-            // we are expecting 6 records in a full batch. 3 primaries per each replica.
-            var latestTimestampWithSixRecords = getLatestFullBatch(shardSizeRecords, 6);
+            // we are expecting 3 records in a full batch as the IX is running on one node.
+            var latestTimestampWithSixRecords = getLatestFullBatch(shardSizeRecords, 3);
             List<Map<?, ?>> latestRecords = latestTimestampWithSixRecords.getValue();
             logger.info(
                 debugInfoForShardSize(
@@ -158,29 +158,22 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             Map<String, Map<Integer, Integer>> nodeToShardToSize = getExpectedReplicaSizes();
 
             Map<String, List<Map<?, ?>>> groupByNode = groupByNodeName(latestRecords);
-            // there are 2 replicas, so records should be from 2 nodes only
-            assertThat(groupByNode.size(), equalTo(2));
-            assertThat(groupByNode.keySet(), equalTo(nodeToShardToSize.keySet()));
+            assertThat(groupByNode.size(), equalTo(1));
 
             Iterator<String> iterator = groupByNode.keySet().iterator();
             var searchNodeId1 = iterator.next();
-            var searchNodeId2 = iterator.next();
 
             // there are 3 primary shards, so should be 3 unique ids per each node
             assertThat(groupByNode.get(searchNodeId1).size(), equalTo(3));
-            assertThat(groupByNode.get(searchNodeId2).size(), equalTo(3));
 
             // all the quantities reported on a replicas should be the same as from _cat/segments api
-            assertThat(
-                groupByNode + " vs + " + nodeToShardToSize,
-                shardNumberToSize(groupByNode.get(searchNodeId1)),
-                equalTo(nodeToShardToSize.get(searchNodeId1))
-            );
-            assertThat(
-                groupByNode + " vs + " + nodeToShardToSize,
-                shardNumberToSize(groupByNode.get(searchNodeId2)),
-                equalTo(nodeToShardToSize.get(searchNodeId2))
-            );
+            for (Map<Integer, Integer> shardToSize : nodeToShardToSize.values()) {
+                assertThat(
+                    groupByNode + " vs + " + nodeToShardToSize,
+                    shardNumberToSize(groupByNode.get(searchNodeId1)),
+                    equalTo(shardToSize)
+                );
+            }
 
         }, 30, TimeUnit.SECONDS);
 

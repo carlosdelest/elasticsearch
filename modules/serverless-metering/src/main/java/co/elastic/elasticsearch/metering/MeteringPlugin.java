@@ -98,7 +98,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     public static final Setting<Boolean> NEW_IX_METRIC_SETTING = Setting.boolSetting(
         "metering.new-index-size.enabled",
-        false,
+        true,
         Setting.Property.NodeScope
     );
     private final ProjectType projectType;
