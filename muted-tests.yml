@@ -55,4 +55,3 @@ tests:
     \ in 8.13+] ASYNC}"
 - class: "co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2145"
-  method: "testGetVirtualBatchedCompoundCommitChunkDuringPrimaryRelocation"
