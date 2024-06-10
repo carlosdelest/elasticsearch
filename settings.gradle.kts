@@ -19,7 +19,7 @@ pluginManagement {
 }
 
 plugins {
-    id("com.gradle.enterprise") version ("3.16.2")
+    id("com.gradle.develocity") version ("3.17.4")
     id("elasticsearch.java-toolchain")
 }
 
