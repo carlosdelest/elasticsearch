@@ -71,6 +71,8 @@ tasks {
             "deprecation/*/*",
             // Downsample
             "security/authz/80_downsample/*",
+            // Uses data stream stats
+            "security/authz/50_data_streams/Test that data streams stats is limited to authorized namespace",
 
             // Things that incidentally depend on endpoints that aren't available
             // - Deprecated ML deployment inference endpoint
