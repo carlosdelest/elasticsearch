@@ -23,6 +23,12 @@ plugins {
     id("elasticsearch.java-toolchain")
 }
 
+develocity {
+    buildScan {
+        publishing.onlyIf { server.isPresent }
+    }
+}
+
 toolchainManagement {
     jvm {
         javaRepositories {
