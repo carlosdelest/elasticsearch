@@ -50,6 +50,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.stream.Collectors;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
@@ -137,9 +138,18 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     }
 
     protected UsageRecord pollReceivedRecordsAndGetFirst(String prefix) {
+        List<UsageRecord> usageRecordStream = pollReceivedRecords();
+        return filterByIdStartsWith(usageRecordStream, prefix);
+    }
+
+    protected UsageRecord filterByIdStartsWith(List<UsageRecord> usageRecordStream, String prefix) {
+        return usageRecordStream.stream().filter(m -> m.id().startsWith(prefix)).findFirst().get();
+    }
+
+    protected List<UsageRecord> pollReceivedRecords() {
         List<List<UsageRecord>> recordLists = new ArrayList<>();
         receivedMetrics().drainTo(recordLists);
 
-        return recordLists.stream().flatMap(List::stream).filter(m -> m.id().startsWith(prefix)).findFirst().get();
+        return recordLists.stream().flatMap(List::stream).collect(Collectors.toList());
     }
 }

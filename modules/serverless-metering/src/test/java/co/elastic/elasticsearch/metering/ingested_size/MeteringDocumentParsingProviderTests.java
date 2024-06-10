@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering.ingested_size;
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
+import org.elasticsearch.index.IndexMode;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
@@ -49,6 +50,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
         DocumentSizeReporter documentParsingReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(
             testSystemIndex,
+            IndexMode.STANDARD,
             DocumentSizeAccumulator.EMPTY_INSTANCE
         );
         assertThat(documentParsingReporter, sameInstance(DocumentSizeReporter.EMPTY_INSTANCE));
@@ -68,6 +70,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
         DocumentSizeReporter documentSizeReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(
             testUserIndex,
+            IndexMode.STANDARD,
             DocumentSizeAccumulator.EMPTY_INSTANCE
         );
         assertThat(documentSizeReporter, instanceOf(RAIngestMetricReporter.class));

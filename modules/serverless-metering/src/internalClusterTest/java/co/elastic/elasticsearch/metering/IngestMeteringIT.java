@@ -145,7 +145,6 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
         assertUsageRecord(indexName, usageRecord, expectedOverriddenAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
-
     }
 
     public void testIngestMetricsAreRecordedThroughIngestPipelines() throws InterruptedException, IOException {

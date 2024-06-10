@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator;
+
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.util.StringHelper;
@@ -121,6 +123,7 @@ class ShardReader {
                 } else {
                     // Cached information is outdated or missing: re-compute shard stats, include in response, and update cache entry
                     var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
+                    Long raStorage = raStorage(segmentInfos);
                     shardIds.put(
                         shardId,
                         new MeteringShardInfo(
@@ -128,7 +131,7 @@ class ShardReader {
                             shardSizeAndDocCount.docCount(),
                             primaryTerm,
                             generation,
-                            null // TODO
+                            raStorage
                         )
                     );
                     if (requestCacheToken != null) {
@@ -139,12 +142,20 @@ class ShardReader {
                             shardSizeAndDocCount.sizeInBytes(),
                             shardSizeAndDocCount.docCount(),
                             requestCacheToken,
-                            null // TODO
+                            raStorage
                         );
                     }
                 }
             }
         }
         return shardIds;
+    }
+
+    private static Long raStorage(SegmentInfos segmentInfos) {
+        String raStorage = segmentInfos.getUserData().get(RAStorageAccumulator.RA_STORAGE_KEY);
+        if (raStorage != null) {
+            return Long.parseLong(raStorage);
+        }
+        return null;
     }
 }

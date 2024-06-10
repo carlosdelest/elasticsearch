@@ -20,12 +20,14 @@ package co.elastic.elasticsearch.metering.ingested_size;
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
+import org.elasticsearch.index.IndexMode;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeObserver;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 public class MeteringDocumentParsingProvider implements DocumentParsingProvider {
@@ -54,16 +56,32 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
     }
 
     @Override
-    public DocumentSizeReporter newDocumentSizeReporter(String indexName, DocumentSizeAccumulator documentSizeAccumulator) {
-        if (canReport(indexName) == false) {
+    public DocumentSizeReporter newDocumentSizeReporter(
+        String indexName,
+        IndexMode indexMode,
+        DocumentSizeAccumulator documentSizeAccumulator
+    ) {
+        if (isSystemIndex(indexName)) {
             return DocumentSizeReporter.EMPTY_INSTANCE;
         }
-
+        if (projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY) {
+            DocumentSizeReporter raStorageReporter = new RAStorageReporter(documentSizeAccumulator, indexMode);
+            DocumentSizeReporter raIngestReporter = new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
+            return new CompositeDocumentSizeReporter(List.of(raStorageReporter, raIngestReporter));
+        }
         return new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
     }
 
-    private boolean canReport(String indexName) {
+    private boolean isSystemIndex(String indexName) {
         assert systemIndicesSupplier.get() != null;
-        return systemIndicesSupplier.get().isSystemName(indexName) == false;
+        return systemIndicesSupplier.get().isSystemName(indexName);
+    }
+
+    @Override
+    public DocumentSizeAccumulator createDocumentSizeAccumulator() {
+        if (projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY) {
+            return new RAStorageAccumulator();
+        }
+        return DocumentSizeAccumulator.EMPTY_INSTANCE;
     }
 }
