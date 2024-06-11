@@ -23,6 +23,7 @@ steps:
       image: "docker.elastic.co/ci-agent-images/quality-gate-seedling:0.0.4"
 
   - label: ":question: Maybe add manual gate"
+    if: build.env("ENVIRONMENT") != "production-noncanary"
     depends_on: quality-gates
     command: ".buildkite/scripts/upload-manual-gate.sh"
 
