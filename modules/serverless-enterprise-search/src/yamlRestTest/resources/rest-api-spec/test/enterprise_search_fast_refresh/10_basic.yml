@@ -58,7 +58,7 @@
 
   - match: { \.search-app-1.settings.index.fast_refresh: "true" }
   - match: { \.search-1.settings.index.fast_refresh: null }
-  - match: { \.query-rules-1.settings.index.fast_refresh: "true" }
+  - match: { \.query-rules-2.settings.index.fast_refresh: "true" }
   - match: { \.query-1.settings.index.fast_refresh: null }
 
 
