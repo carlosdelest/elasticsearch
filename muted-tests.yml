@@ -60,7 +60,9 @@ tests:
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2174"
   method: "testAutoExpandReplicasSettingsAreIgnored"
 - class: "co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2016"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2176"
   methods:
   - "testGetVirtualBatchedCompoundCommitChunkFileError"
   - "testSearchKeepsRunningWhenSearchShardRelocates"
+  - "testGetVirtualBatchedCompoundCommitChunkFailureWhenIndexCloses"
+  - "testGetVirtualBatchedCompoundCommitChunkFailureWithDifferentPrimaryTerm"
