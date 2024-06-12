@@ -53,8 +53,6 @@ tests:
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2138"
   method: "test {stats.DocsStatsSumNestedExpression#[skip:-8.12.99,reason:supported\
     \ in 8.13+] ASYNC}"
-- class: "co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2145"
 - class: "co.elastic.elasticsearch.metering.stats.rest.MeteringStatsRestTestIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2172"
   method: "testGetMeteringStats"
