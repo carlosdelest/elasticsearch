@@ -56,3 +56,6 @@ tests:
 - class: "co.elastic.elasticsearch.metering.stats.rest.MeteringStatsRestTestIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2172"
   method: "testGetMeteringStats"
+- class: "co.elastic.elasticsearch.stateless.StatelessIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2174"
+  method: "testAutoExpandReplicasSettingsAreIgnored"
