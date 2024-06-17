@@ -22,10 +22,13 @@ import co.elastic.elasticsearch.metering.action.GetMeteringShardInfoAction;
 import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
 import co.elastic.elasticsearch.metering.action.LocalNodeMeteringShardInfoCache;
 import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
+import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metering.action.TransportCollectMeteringShardInfoAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringShardInfoAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForPrimaryUserAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSecondaryUserAction;
+import co.elastic.elasticsearch.metering.action.TransportUpdateSampledMetricsMetadataAction;
+import co.elastic.elasticsearch.metering.action.UpdateSampledMetricsMetadataAction;
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
 import co.elastic.elasticsearch.metering.reports.HttpMeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.reports.MeteringUsageRecordPublisher;
@@ -37,6 +40,8 @@ import co.elastic.elasticsearch.serverless.constants.ProjectType;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.client.internal.Client;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.NamedDiff;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
@@ -94,7 +99,9 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
 
     private static final String METERING_REPORTER_THREAD_POOL_NAME = "metering_reporter";
+
     static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
+    static final NodeFeature SAMPLED_METRICS_METADATA = new NodeFeature("metering.sampled-metrics-metadata");
 
     public static final Setting<Boolean> NEW_IX_METRIC_SETTING = Setting.boolSetting(
         "metering.new-index-size.enabled",
@@ -208,7 +215,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             projectId,
             builtInCounterMetrics,
             builtInSampledMetrics,
-            new InMemorySampledMetricsTimeCursor(),
+            new ClusterStateSampledMetricsTimeCursor(clusterService, services.featureService(), services.client()),
             reportPeriod,
             usageRecordPublisher,
             threadPool,
@@ -311,7 +318,9 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
                 PersistentTaskParams.class,
                 MeteringIndexInfoTask.TASK_NAME,
                 reader -> MeteringIndexInfoTaskParams.INSTANCE
-            )
+            ),
+            new NamedWriteableRegistry.Entry(ClusterState.Custom.class, SampledMetricsMetadata.TYPE, SampledMetricsMetadata::new),
+            new NamedWriteableRegistry.Entry(NamedDiff.class, SampledMetricsMetadata.TYPE, SampledMetricsMetadata::readDiffFrom)
         );
     }
 
@@ -329,14 +338,29 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             GetMeteringStatsAction.FOR_PRIMARY_USER_INSTANCE,
             TransportGetMeteringStatsForPrimaryUserAction.class
         );
+        var updateSampledMetricsMetadata = new ActionPlugin.ActionHandler<>(
+            UpdateSampledMetricsMetadataAction.INSTANCE,
+            TransportUpdateSampledMetricsMetadataAction.class
+        );
         if (hasSearchRole) {
             var getMeteringShardInfo = new ActionPlugin.ActionHandler<>(
                 GetMeteringShardInfoAction.INSTANCE,
                 TransportGetMeteringShardInfoAction.class
             );
-            return List.of(getMeteringShardInfo, getMeteringStatsSecondaryUser, getMeteringStatsPrimaryUser, collectMeteringShardInfo);
+            return List.of(
+                getMeteringShardInfo,
+                getMeteringStatsSecondaryUser,
+                getMeteringStatsPrimaryUser,
+                collectMeteringShardInfo,
+                updateSampledMetricsMetadata
+            );
         } else {
-            return List.of(getMeteringStatsSecondaryUser, getMeteringStatsPrimaryUser, collectMeteringShardInfo);
+            return List.of(
+                getMeteringStatsSecondaryUser,
+                getMeteringStatsPrimaryUser,
+                collectMeteringShardInfo,
+                updateSampledMetricsMetadata
+            );
         }
     }
 }

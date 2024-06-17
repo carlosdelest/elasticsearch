@@ -152,4 +152,11 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
 
         return recordLists.stream().flatMap(List::stream).collect(Collectors.toList());
     }
+
+    protected List<UsageRecord> pollReceivedRecords(String prefix) {
+        List<List<UsageRecord>> recordLists = new ArrayList<>();
+        receivedMetrics().drainTo(recordLists);
+
+        return recordLists.stream().flatMap(List::stream).filter(m -> m.id().startsWith(prefix)).toList();
+    }
 }

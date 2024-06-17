@@ -25,6 +25,6 @@ import java.util.Set;
 public class MeteringFeatures implements FeatureSpecification {
     @Override
     public Set<NodeFeature> getFeatures() {
-        return Set.of(MeteringPlugin.INDEX_INFO_SUPPORTED);
+        return Set.of(MeteringPlugin.INDEX_INFO_SUPPORTED, MeteringPlugin.SAMPLED_METRICS_METADATA);
     }
 }

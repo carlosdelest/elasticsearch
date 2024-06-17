@@ -56,7 +56,7 @@ class ReportGatherer {
     private final Clock clock;
     private final TimeValue reportPeriod;
     private final Duration reportPeriodDuration;
-    private final long maxPeriodsLookback;
+    private final int maxPeriodsLookback;
     private final String sourceId;
     private final String projectId;
 
@@ -90,7 +90,7 @@ class ReportGatherer {
         if (reportPeriodDuration.multipliedBy(Duration.ofHours(1).dividedBy(reportPeriodDuration)).equals(Duration.ofHours(1)) == false) {
             throw new IllegalArgumentException(Strings.format("Report period [%s] needs to fit evenly into 1 hour", reportPeriod));
         }
-        this.maxPeriodsLookback = Duration.ofHours(1).dividedBy(reportPeriodDuration);
+        this.maxPeriodsLookback = (int) Duration.ofHours(1).dividedBy(reportPeriodDuration);
         this.sourceId = "es-" + nodeId;
     }
 
@@ -132,18 +132,14 @@ class ReportGatherer {
 
         if (cancel == false) {
             try {
-                Instant nextSampleTimestamp = sampleTimestamp.plus(reportPeriodDuration);
+                final Instant nextSampleTimestamp = sampleTimestamp.plus(reportPeriodDuration);
+                final Instant nextSampleTimestampToGather = (reportsSent || completedAt.isAfter(nextSampleTimestamp))
+                    ? nextSampleTimestamp
+                    : sampleTimestamp;
 
-                final Instant sampleTimestampToCollect;
-                if (reportsSent || completedAt.isAfter(nextSampleTimestamp)) {
-                    sampleTimestampToCollect = nextSampleTimestamp;
-                } else {
-                    sampleTimestampToCollect = sampleTimestamp;
-                }
-
-                var timeToNextRun = timeToNextRun(reportsSent, completedAt, sampleTimestampToCollect, reportPeriodDuration);
+                var timeToNextRun = timeToNextRun(reportsSent, completedAt, nextSampleTimestampToGather, reportPeriodDuration);
                 // schedule the next run
-                nextRun = threadPool.schedule(() -> gatherAndSendReports(sampleTimestampToCollect), timeToNextRun, executor);
+                nextRun = threadPool.schedule(() -> gatherAndSendReports(nextSampleTimestampToGather), timeToNextRun, executor);
                 log.trace(
                     () -> Strings.format("scheduled next run in %s.%s seconds", timeToNextRun.getSeconds(), timeToNextRun.getMillis())
                 );
@@ -217,52 +213,47 @@ class ReportGatherer {
             }
         });
 
-        var latestCommitedTimestamp = sampledMetricsTimeCursor.getLatestCommitedTimestamp();
-        var timestampsToSend = generateSampleTimestamps(latestCommitedTimestamp, sampleTimestamp);
-        boolean sampledMetricsCollectionSuccessful = true;
+        var timestampsToSend = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod, maxPeriodsLookback);
+        boolean canAdvanceSampledMetricsTimeCursor = false;
         for (SampledMetricsCollector sampledMetricsCollector : sampledMetricsCollectors) {
             try {
                 var sampledMetricValues = sampledMetricsCollector.getMetrics();
                 if (sampledMetricValues.isEmpty()) {
-                    sampledMetricsCollectionSuccessful = false;
+                    log.info("[{}] is not ready for collect yet", sampledMetricsCollector.getClass().getName());
                     break;
                 } else {
                     for (var v : sampledMetricValues.get()) {
                         for (var timestamp : timestampsToSend) {
                             records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), timestamp));
+                            // we will only receive samples on the node hosting the MeteringIndexInfoTask
+                            // if MetricValues is empty (or if there's no timestamps to send) we must not advance the committed timestamp
+                            canAdvanceSampledMetricsTimeCursor = true;
                         }
                     }
                 }
             } catch (Exception e) {
-                log.error("Exception thrown collecting sampled metrics", e);
-                sampledMetricsCollectionSuccessful = false;
+                log.error(
+                    Strings.format("Exception thrown collecting sampled metrics from %s", sampledMetricsCollector.getClass().getName()),
+                    e
+                );
+                canAdvanceSampledMetricsTimeCursor = false;
             }
         }
 
-        if (records.isEmpty() || sendReport(records)) {
+        if (records.isEmpty()) {
+            log.info("No usage record generated during this metrics collection");
+            return true;
+        }
+        if (sendReport(records)) {
             for (var metricValues : counterMetricValuesList) {
                 metricValues.commit();
             }
-            if (sampledMetricsCollectionSuccessful) {
-                sampledMetricsTimeCursor.commitUpTo(sampleTimestamp);
+            if (canAdvanceSampledMetricsTimeCursor) {
+                return sampledMetricsTimeCursor.commitUpTo(sampleTimestamp);
             }
             return true;
         }
         return false;
-    }
-
-    /**
-     * Generates N timestamps between latestCommitedTimestamp and sampleTimestamp, increment by steps of reportPeriod
-     */
-    List<Instant> generateSampleTimestamps(Instant from, Instant to) {
-        var timestamps = new ArrayList<Instant>();
-        Instant current = to;
-        var periodInNanos = reportPeriod.getNanos();
-        for (int i = 0; i < maxPeriodsLookback && from.isBefore(current); ++i) {
-            timestamps.add(current);
-            current = current.minusNanos(periodInNanos);
-        }
-        return timestamps;
     }
 
     private static String generateId(String key, Instant time) {

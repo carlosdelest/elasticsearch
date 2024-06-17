@@ -19,14 +19,35 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 
+import org.elasticsearch.core.TimeValue;
+
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Optional;
 
 /**
  * An object that keeps track of the latest timestamp for which sampled metrics from {@link SampledMetricsCollector}s have been
  * successfully transmitted.
  */
 public interface SampledMetricsTimeCursor {
-    Instant getLatestCommitedTimestamp();
+    Optional<Instant> getLatestCommittedTimestamp();
 
-    void commitUpTo(Instant sampleTimestamp);
+    Collection<Instant> generateSampleTimestamps(Instant current, TimeValue decrement, int limit);
+
+    boolean commitUpTo(Instant sampleTimestamp);
+
+    /**
+     * Generate decreasing timestamps [current, until) in steps of the given {@code decrement}.
+     * At most {@code limit} timestamps are returned starting from {@code current}.
+     */
+    static Collection<Instant> generateSampleTimestamps(Instant current, Instant until, TimeValue decrement, int limit) {
+        var timestamps = new ArrayList<Instant>();
+        var decrementInNanos = decrement.getNanos();
+        for (int i = 0; i < limit && until.isBefore(current); ++i) {
+            timestamps.add(current);
+            current = current.minusNanos(decrementInNanos);
+        }
+        return timestamps;
+    }
 }

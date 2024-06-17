@@ -17,7 +17,12 @@
 
 package co.elastic.elasticsearch.metering;
 
+import org.elasticsearch.core.TimeValue;
+
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * A simple in-memory implementation of SampledMetricsTimeCursor. Not resilient to node restarts/MeteringIndexInfo PersistentTask migration
@@ -25,10 +30,10 @@ import java.time.Instant;
  */
 class InMemorySampledMetricsTimeCursor implements SampledMetricsTimeCursor {
 
-    private volatile Instant latestCommitedTimestamp;
+    private volatile Instant latestCommittedTimestamp = null;
 
     InMemorySampledMetricsTimeCursor(Instant initialTime) {
-        this.latestCommitedTimestamp = initialTime;
+        this.latestCommittedTimestamp = initialTime;
     }
 
     InMemorySampledMetricsTimeCursor() {
@@ -36,12 +41,21 @@ class InMemorySampledMetricsTimeCursor implements SampledMetricsTimeCursor {
     }
 
     @Override
-    public Instant getLatestCommitedTimestamp() {
-        return latestCommitedTimestamp;
+    public Optional<Instant> getLatestCommittedTimestamp() {
+        return Optional.ofNullable(latestCommittedTimestamp);
     }
 
     @Override
-    public void commitUpTo(Instant sampleTimestamp) {
-        latestCommitedTimestamp = sampleTimestamp;
+    public Collection<Instant> generateSampleTimestamps(Instant current, TimeValue decrement, int limit) {
+        Instant timestamp = latestCommittedTimestamp;
+        return timestamp != null
+            ? SampledMetricsTimeCursor.generateSampleTimestamps(current, timestamp, decrement, limit)
+            : List.of(current);
+    }
+
+    @Override
+    public boolean commitUpTo(Instant sampleTimestamp) {
+        latestCommittedTimestamp = sampleTimestamp;
+        return true;
     }
 }

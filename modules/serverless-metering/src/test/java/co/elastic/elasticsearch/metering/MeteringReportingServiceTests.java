@@ -54,7 +54,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -456,25 +455,15 @@ public class MeteringReportingServiceTests extends ESTestCase {
         var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 3));
 
         var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
-        final var cursorTimestamp = new AtomicReference<>(Instant.EPOCH.minus(reportPeriodDuration));
-        var firstSampleTimestamp = cursorTimestamp.get().plus(reportPeriodDuration);
+        final var initialTimestamp = Instant.EPOCH.minus(reportPeriodDuration);
+        var firstSampleTimestamp = initialTimestamp.plus(reportPeriodDuration);
 
         var deterministicTaskQueue = new DeterministicTaskQueue();
         var threadPool = deterministicTaskQueue.getThreadPool();
         var clock = mock(Clock.class);
         when(clock.instant()).thenAnswer(x -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis()));
 
-        var cursor = new SampledMetricsTimeCursor() {
-            @Override
-            public Instant getLatestCommitedTimestamp() {
-                return cursorTimestamp.get();
-            }
-
-            @Override
-            public void commitUpTo(Instant sampleTimestamp) {
-                cursorTimestamp.set(sampleTimestamp);
-            }
-        };
+        var cursor = new InMemorySampledMetricsTimeCursor(initialTimestamp);
 
         try (
             MeteringReportingService service = new MeteringReportingService(
@@ -627,7 +616,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
         assertThat(valueSum, equalTo(expectedSum));
     }
 
-    public void testStopStops() throws InterruptedException {
+    public void testStopStops() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
         var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));

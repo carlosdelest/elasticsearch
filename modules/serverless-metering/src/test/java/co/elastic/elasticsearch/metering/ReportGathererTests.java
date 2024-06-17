@@ -51,20 +51,18 @@ import java.util.stream.Collectors;
 import static co.elastic.elasticsearch.metering.ReportGatherer.MAX_JITTER_FACTOR;
 import static co.elastic.elasticsearch.metering.ReportGatherer.calculateSampleTimestamp;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.startsWith;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class ReportGathererTests extends ESTestCase {
@@ -320,44 +318,6 @@ public class ReportGathererTests extends ESTestCase {
         );
     }
 
-    public void testGenerateSampleTimestamps() {
-        var reportGatherer = new ReportGatherer(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(),
-            new InMemorySampledMetricsTimeCursor(),
-            MeteringUsageRecordPublisher.NOOP_REPORTER,
-            null,
-            null,
-            TimeValue.timeValueMinutes(5),
-            mock(Clock.class)
-        );
-
-        var now = Instant.now();
-        List<Instant> timestamps = reportGatherer.generateSampleTimestamps(Instant.MIN, now);
-
-        assertThat(timestamps, hasSize(12));
-        assertThat(timestamps.get(0), equalTo(now));
-        assertThat(timestamps.get(11), equalTo(now.minus(Duration.ofMinutes(55))));
-
-        timestamps = reportGatherer.generateSampleTimestamps(now, now);
-
-        assertThat(timestamps, empty());
-
-        timestamps = reportGatherer.generateSampleTimestamps(now.minus(Duration.ofMinutes(5)), now);
-
-        assertThat(timestamps, hasSize(1));
-        assertThat(timestamps.get(0), equalTo(now));
-
-        timestamps = reportGatherer.generateSampleTimestamps(now.minus(Duration.ofMinutes(11)), now);
-
-        assertThat(timestamps, hasSize(3));
-        assertThat(timestamps.get(0), equalTo(now));
-        assertThat(timestamps.get(1), equalTo(now.minus(Duration.ofMinutes(5))));
-        assertThat(timestamps.get(2), equalTo(now.minus(Duration.ofMinutes(10))));
-    }
-
     public void testFailingSampledCollectorDoesNotAdvanceTimestamp() {
         var recorder = new RecordingMetricsCollector();
         var reportPeriod = TimeValue.timeValueMinutes(5);
@@ -389,12 +349,12 @@ public class ReportGathererTests extends ESTestCase {
         when(clock.instant()).thenAnswer(x -> now.get());
         reportGatherer.start();
 
-        assertThat(cursor.getLatestCommitedTimestamp(), is(initialTimestamp));
+        assertThat(cursor.getLatestCommittedTimestamp(), isPresentWith(initialTimestamp));
 
         deterministicTaskQueue.advanceTime();
         deterministicTaskQueue.runAllRunnableTasks();
         assertThat(recorder.invocations.get(), equalTo(1));
-        assertThat(cursor.getLatestCommitedTimestamp(), is(firstTimestamp));
+        assertThat(cursor.getLatestCommittedTimestamp(), isPresentWith(firstTimestamp));
         deterministicTaskQueue.advanceTime();
 
         recorder.invocations.set(0);
@@ -404,7 +364,7 @@ public class ReportGathererTests extends ESTestCase {
         deterministicTaskQueue.runAllRunnableTasks();
         assertThat(recorder.invocations.get(), equalTo(1));
         // We did not advance the cursor
-        assertThat(cursor.getLatestCommitedTimestamp(), is(firstTimestamp));
+        assertThat(cursor.getLatestCommittedTimestamp(), isPresentWith(firstTimestamp));
 
         reportGatherer.cancel();
     }
