@@ -22,7 +22,7 @@ import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.test.ESIntegTestCase;
-import org.elasticsearch.transport.TransportRequest;
+import org.elasticsearch.transport.EmptyRequest;
 import org.elasticsearch.transport.TransportService;
 
 import java.util.Collection;
@@ -44,7 +44,7 @@ public class TaskResponseFilterIT extends ESIntegTestCase {
     public void testGetTaskApiForNonOperator() throws Exception {
         final var transportService = internalCluster().getInstance(TransportService.class, internalCluster().getRandomNodeName());
         final var taskManager = transportService.getTaskManager();
-        final var task = taskManager.register("test", "action", TransportRequest.Empty.INSTANCE);
+        final var task = taskManager.register("test", "action", new EmptyRequest());
         try {
             assertEquals(
                 "serverless",
