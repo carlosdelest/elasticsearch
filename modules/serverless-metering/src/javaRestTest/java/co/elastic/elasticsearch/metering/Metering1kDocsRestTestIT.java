@@ -131,11 +131,15 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             logger.info(sum);
         });
         assertBusy(() -> {
-            var allUsageRecords = usageApiTestServer.getAllUsageRecords();
+            var allUsageRecords = usageApiTestServer.drainAllUsageRecords();
             var ingestedDocsRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "ingested-doc");
             // once we asserted total size numDocs*96 there will be no more records
             assertThat(ingestedDocsRecords, empty());
+        });
 
+        List<Map<?, ?>> latestRecords = new ArrayList<>();
+        assertBusy(() -> {
+            var allUsageRecords = usageApiTestServer.getAllUsageRecords();
             var shardSizeRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "shard-size");
 
             // there might be records from multiple metering.report_period. We are interested in the latest
@@ -143,7 +147,8 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
 
             // we are expecting 3 records in a full batch as the IX is running on one node.
             var latestTimestampWithSixRecords = getLatestFullBatch(shardSizeRecords, 3);
-            List<Map<?, ?>> latestRecords = latestTimestampWithSixRecords.getValue();
+            latestRecords.clear();
+            latestRecords.addAll(latestTimestampWithSixRecords.getValue());
             logger.info(
                 debugInfoForShardSize(
                     indexName,
@@ -152,31 +157,25 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
                     shardSizeRecords
                 )
             );
-
-            // those are the expected values taken from the /_cat/segments api
-            // we are asserting that there will be only 1 segment per shard and taking its sizeInBytes
-            Map<String, Map<Integer, Integer>> nodeToShardToSize = getExpectedReplicaSizes();
-
-            Map<String, List<Map<?, ?>>> groupByNode = groupByNodeName(latestRecords);
-            assertThat(groupByNode.size(), equalTo(1));
-
-            Iterator<String> iterator = groupByNode.keySet().iterator();
-            var searchNodeId1 = iterator.next();
-
-            // there are 3 primary shards, so should be 3 unique ids per each node
-            assertThat(groupByNode.get(searchNodeId1).size(), equalTo(3));
-
-            // all the quantities reported on a replicas should be the same as from _cat/segments api
-            for (Map<Integer, Integer> shardToSize : nodeToShardToSize.values()) {
-                assertThat(
-                    groupByNode + " vs + " + nodeToShardToSize,
-                    shardNumberToSize(groupByNode.get(searchNodeId1)),
-                    equalTo(shardToSize)
-                );
-            }
-
         }, 30, TimeUnit.SECONDS);
 
+        // those are the expected values taken from the /_cat/segments api
+        // we are asserting that there will be only 1 segment per shard and taking its sizeInBytes
+        Map<String, Map<Integer, Integer>> nodeToShardToSize = getExpectedReplicaSizes();
+
+        Map<String, List<Map<?, ?>>> groupByNode = groupByNodeName(latestRecords);
+        assertThat(groupByNode.size(), equalTo(1));
+
+        Iterator<String> iterator = groupByNode.keySet().iterator();
+        var searchNodeId1 = iterator.next();
+
+        // there are 3 primary shards, so should be 3 unique ids per each node
+        assertThat(groupByNode.get(searchNodeId1).size(), equalTo(3));
+
+        // all the quantities reported on a replicas should be the same as from _cat/segments api
+        for (Map<Integer, Integer> shardToSize : nodeToShardToSize.values()) {
+            assertThat(groupByNode + " vs + " + nodeToShardToSize, shardNumberToSize(groupByNode.get(searchNodeId1)), equalTo(shardToSize));
+        }
     }
 
     private void forceMerge() throws IOException {

@@ -80,7 +80,7 @@ public class UsageApiTestServer extends ExternalResource {
     }
 
     public List<Map<?, ?>> getUsageRecords(String prefix) {
-        List<List<Map<?, ?>>> recordLists = getAllUsageRecords();
+        List<List<Map<?, ?>>> recordLists = drainAllUsageRecords();
         logger.info(recordLists);
         return filterUsageRecords(recordLists, prefix);
     }
@@ -92,10 +92,14 @@ public class UsageApiTestServer extends ExternalResource {
             .collect(Collectors.toList());
     }
 
-    public List<List<Map<?, ?>>> getAllUsageRecords() {
+    public List<List<Map<?, ?>>> drainAllUsageRecords() {
         List<List<Map<?, ?>>> recordLists = new ArrayList<>();
         getReceivedRecords().drainTo(recordLists);
         return recordLists;
+    }
+
+    public List<List<Map<?, ?>>> getAllUsageRecords() {
+        return new ArrayList<>(getReceivedRecords());
     }
 
     public InetSocketAddress getAddress() {
