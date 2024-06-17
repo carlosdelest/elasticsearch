@@ -43,7 +43,7 @@ public class ServerlessHasPrivilegesRequestBuilderFactory implements HasPrivileg
     public ServerlessHasPrivilegesRequestBuilderFactory() {}
 
     @Override
-    public HasPrivilegesRequestBuilder create(Client client, boolean restrictRequest) {
+    public HasPrivilegesRequestBuilder create(Client client) {
         return new ServerlessHasPrivilegesRequestBuilder(client);
     }
 

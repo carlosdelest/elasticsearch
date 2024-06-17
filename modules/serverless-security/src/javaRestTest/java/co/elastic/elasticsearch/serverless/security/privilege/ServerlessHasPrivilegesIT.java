@@ -22,7 +22,6 @@ import co.elastic.elasticsearch.serverless.security.AbstractServerlessCustomRole
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
@@ -53,11 +52,6 @@ public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRest
     }
 
     public void testValidHasPrivilegesChecks() throws IOException {
-        if (randomBoolean()) {
-            enableStrictValidation();
-        } else {
-            disableStrictValidation();
-        }
         final var payload = """
             {
               "cluster": [ "monitor", "manage", "cluster:foo/bar" ],
@@ -111,11 +105,6 @@ public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRest
     }
 
     public void testInvalidHasPrivilegesChecks() throws IOException {
-        if (randomBoolean()) {
-            enableStrictValidation();
-        } else {
-            disableStrictValidation();
-        }
         {
             final var payload = """
                 {
@@ -195,20 +184,5 @@ public class ServerlessHasPrivilegesIT extends AbstractServerlessCustomRolesRest
             RequestOptions.DEFAULT.toBuilder().setWarningsHandler(warnings -> warnings.equals(List.of(message)) == false).build()
         );
         executeAndAssertSuccess(username, hasPrivilegesRequest);
-    }
-
-    private void enableStrictValidation() throws IOException {
-        setStrictValidation(true);
-    }
-
-    private void disableStrictValidation() throws IOException {
-        setStrictValidation(false);
-    }
-
-    private void setStrictValidation(boolean value) throws IOException {
-        updateClusterSettings(
-            adminClient(),
-            Settings.builder().put("xpack.security.authz.has_privileges.strict_request_validation.enabled", value).build()
-        );
     }
 }
