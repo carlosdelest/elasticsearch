@@ -23,7 +23,12 @@ if [ -z "${PROMOTED_COMMIT}" ]; then
   echo "Promoted build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --style "info" --context "promoted-build-url"
 fi
 
-echo "Promoting commit '${PROMOTED_COMMIT}'"
+if [ -z "${PREVIOUS_PROMOTED_COMMIT}" ]; then
+  echo "--- Determining current prod version"
+  SERVICE_VERSION_YAML=$(curl -H "Authorization: Bearer ${GITHUB_TOKEN}" https://raw.githubusercontent.com/elastic/serverless-gitops/main/services/elasticsearch/versions.yaml)
+  PREVIOUS_PROMOTED_COMMIT=$(echo "${SERVICE_VERSION_YAML}" | yq e '.services.elasticsearch.versions.production-noncanary' -)
+fi
+echo "Promoting from commit '$PREVIOUS_PROMOTED_COMMIT' to commit '${PROMOTED_COMMIT}'"
 
 echo "--- Trigger release build"
 cat <<EOF | buildkite-agent pipeline upload
@@ -36,4 +41,18 @@ steps:
       env:
         GPCTL_CONFIG: ${GPCTL_CONFIG}
         GITOPS_ENV: qa
+  - label: ":github: Generate Report"
+    command: |
+          .buildkite/scripts/run-gradle.sh generatePromotionReport --previousGitHash=${PREVIOUS_PROMOTED_COMMIT} -Dcurrent.promoted.version=${PROMOTED_COMMIT}
+          buildkite-agent artifact upload "build/reports/serverless-promotion-report.html"
+          cat << EOF | buildkite-agent annotate --style "info" --context "promotion-report"
+            ### Promotion Report for ${PROMOTED_COMMIT}
+            <a href="artifact://build/reports/serverless-promotion-report.html">serverless-promotion-report.html</a>
+          EOF
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
 EOF

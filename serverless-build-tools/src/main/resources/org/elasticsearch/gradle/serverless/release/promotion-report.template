@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elasticsearch serverless Promotion Report</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f7fa;
+            color: #343a40;
+        }
+        header {
+            background-color: #006BB4;
+            color: white;
+            text-align: center;
+            padding: 1em 0;
+        }
+        header h1 {
+            font-size: 2em;
+            margin: 0.2em 0;
+        }
+        header p {
+            font-size: 1em;
+            margin: 0.2em 0;
+        }
+        main {
+            padding: 20px;
+            max-width: 1600px;
+            margin: auto;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        section {
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            border-bottom: 2px solid #006BB4;
+            padding-bottom: 5px;
+            font-size: 1.5em;
+            color: #006BB4;
+        }
+
+        table.fixed-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .fixed-table th, .fixed-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .fixed-table th {
+            background-color: #f4f4f4;
+            font-weight: bold;
+        }
+
+        /* Set fixed width for each column */
+        .fixed-table .col-1 {
+            width: 200px;
+        }
+
+        .fixed-table .col-2 {
+            width: 300px;
+        }
+
+        .fixed-table .col-3 {
+            width: 350px;
+        }
+
+        .fixed-table .col-4 {
+            width: 300px;
+        }
+
+        .container div {
+            display: inline-block; /* Makes each div align inline */
+            margin-right: 10px; /* Optional: adds space between the divs */
+        }
+        footer {
+            background-color: #006BB4;
+            color: white;
+            text-align: center;
+            padding: 10px 0;
+            font-size: 1em;
+            margin-top: 20px;
+        }
+        .label-value {
+            display: flex; /* Use flexbox to align items in a row */
+            align-items: center; /* Align items vertically */
+            margin-bottom: 10px; /* Adds some space below each label-value pair */
+        }
+        .label {
+            font-weight: bold; /* Makes the label text bold */
+            margin-right: 10px; /* Adds space between the label and the value */
+            width: 220px; /* Fixed width for all labels */
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1><b>[INTERNAL]</b> Elasticsearch Serverless promotion report</h1>
+        <p>${timestamp}</p>
+    </header>
+    <main>
+        <section>
+            <h2>Summary</h2>
+          <div class="label-value">
+            <div class="label">Promoted Version:</div>
+            <div><a href="https://github.com/elastic/elasticsearch-serverless/commit/${promotionHash}">${promotionHash}</a></div>
+          </div>
+          <div class="label-value">
+              <div class="label">Previous Promoted Version:</div>
+              <div><a class="form-data" id="previousHash" href="https://github.com/elastic/elasticsearch-serverless/commit/${previousPromotionHash}">${previousPromotionHash}</a></div>
+          </div>
+        </section>
+        <section>
+            <h2 id="serverless-elasticsearch-prs">Merged Elasticsearch Serverless Pull Requests</h2>
+            <table class="fixed-table">
+                <thead>
+                    <tr>
+                        <th class="col-1">Date</th>
+                        <th class="col-2">Summary</th>
+                        <th class="col-3">Link</th>
+                        <th class="col-4">Labels</th>
+                    </tr>
+                </thead>
+                    ${esServerlessPullRequestTableRows}
+            </table>
+        </section>
+        <section>
+            <h2 id="elasticsearch-prs">Merged Elasticsearch Pull Requests</h2>
+            <table class="fixed-table">
+                <thead>
+                    <tr>
+                    <th class="col-1">Date</th>
+                    <th class="col-2">Summary</th>
+                    <th class="col-3">Link</th>
+                    <th>Labels</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${esPullRequestTableRows}
+                </tbody>
+            </table>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2024 Elastic.</p>
+    </footer>
+</body>
+</html>

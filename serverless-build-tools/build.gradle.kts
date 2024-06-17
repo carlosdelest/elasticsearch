@@ -17,6 +17,7 @@ dependencies {
     api("org.elasticsearch:build-conventions")
     api("org.elasticsearch.gradle:build-tools")
     api("org.elasticsearch.gradle:build-tools-internal")
+    implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlin:kotlin-script-runtime")
 }
 
@@ -26,6 +27,10 @@ gradlePlugin {
         val serverlessDistributionDownload by creating {
             id = "elasticsearch.serverless-distribution-download"
             implementationClass = "org.elasticsearch.gradle.serverless.ServerlessDistributionDownloadPlugin"
+        }
+        val serverlessPromotionReport by creating {
+            id = "elasticsearch.serverless-promotion-report"
+            implementationClass = "org.elasticsearch.gradle.serverless.release.ServerlessPromotionReportPlugin"
         }
     }
 }

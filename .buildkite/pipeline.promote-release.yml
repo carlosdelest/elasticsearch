@@ -1,8 +1,10 @@
 steps:
   - label: ":git: Promote release build"
     command: ".buildkite/scripts/promote-release.sh"
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
     agents:
-      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.7"
       memory: "4G"
 
 notify:
