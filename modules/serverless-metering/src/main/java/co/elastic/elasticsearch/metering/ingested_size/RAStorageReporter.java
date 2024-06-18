@@ -17,18 +17,18 @@
 
 package co.elastic.elasticsearch.metering.ingested_size;
 
-import org.elasticsearch.index.IndexMode;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
 public class RAStorageReporter implements DocumentSizeReporter {
     private final DocumentSizeAccumulator documentSizeAccumulator;
-    private final IndexMode indexMode;
+    private final MapperService mapperService;
 
-    public RAStorageReporter(DocumentSizeAccumulator documentSizeAccumulator, IndexMode indexMode) {
+    public RAStorageReporter(DocumentSizeAccumulator documentSizeAccumulator, MapperService mapperService) {
         this.documentSizeAccumulator = documentSizeAccumulator;
-        this.indexMode = indexMode;
+        this.mapperService = mapperService;
     }
 
     @Override
@@ -48,7 +48,10 @@ public class RAStorageReporter implements DocumentSizeReporter {
     }
 
     private boolean isTimeSeries() {
-        return indexMode == IndexMode.TIME_SERIES;
+        if (mapperService != null) {
+            return mapperService.mappingLookup().isDataStreamTimestampFieldEnabled();
+        }
+        return false;
     }
 
 }

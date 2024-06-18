@@ -20,7 +20,7 @@ package co.elastic.elasticsearch.metering.ingested_size;
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
-import org.elasticsearch.index.IndexMode;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
@@ -58,14 +58,14 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
     @Override
     public DocumentSizeReporter newDocumentSizeReporter(
         String indexName,
-        IndexMode indexMode,
+        MapperService mapperService,
         DocumentSizeAccumulator documentSizeAccumulator
     ) {
         if (isSystemIndex(indexName)) {
             return DocumentSizeReporter.EMPTY_INSTANCE;
         }
         if (projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY) {
-            DocumentSizeReporter raStorageReporter = new RAStorageReporter(documentSizeAccumulator, indexMode);
+            DocumentSizeReporter raStorageReporter = new RAStorageReporter(documentSizeAccumulator, mapperService);
             DocumentSizeReporter raIngestReporter = new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
             return new CompositeDocumentSizeReporter(List.of(raStorageReporter, raIngestReporter));
         }

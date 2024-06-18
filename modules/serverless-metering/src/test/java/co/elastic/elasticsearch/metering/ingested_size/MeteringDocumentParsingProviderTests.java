@@ -20,7 +20,7 @@ package co.elastic.elasticsearch.metering.ingested_size;
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
-import org.elasticsearch.index.IndexMode;
+import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
@@ -38,6 +38,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
     public void testSystemIndicesAreNotReported() {
         SystemIndices mockSystemIndices = Mockito.mock(SystemIndices.class);
+        MapperService mapperService = Mockito.mock(MapperService.class);
         String testSystemIndex = ".test_system_index";
         Mockito.when(mockSystemIndices.isSystemName(testSystemIndex)).thenReturn(true);
 
@@ -50,7 +51,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
         DocumentSizeReporter documentParsingReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(
             testSystemIndex,
-            IndexMode.STANDARD,
+            mapperService,
             DocumentSizeAccumulator.EMPTY_INSTANCE
         );
         assertThat(documentParsingReporter, sameInstance(DocumentSizeReporter.EMPTY_INSTANCE));
@@ -60,6 +61,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
         SystemIndices mockSystemIndices = Mockito.mock(SystemIndices.class);
         String testUserIndex = "testIndex";
         Mockito.when(mockSystemIndices.isSystemName(testUserIndex)).thenReturn(false);
+        MapperService mapperService = Mockito.mock(MapperService.class);
 
         Supplier<SystemIndices> systemIndicesSupplier = () -> mockSystemIndices;
         MeteringDocumentParsingProvider meteringDocumentParsingProvider = new MeteringDocumentParsingProvider(
@@ -70,7 +72,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
         DocumentSizeReporter documentSizeReporter = meteringDocumentParsingProvider.newDocumentSizeReporter(
             testUserIndex,
-            IndexMode.STANDARD,
+            mapperService,
             DocumentSizeAccumulator.EMPTY_INSTANCE
         );
         assertThat(documentSizeReporter, instanceOf(RAIngestMetricReporter.class));
