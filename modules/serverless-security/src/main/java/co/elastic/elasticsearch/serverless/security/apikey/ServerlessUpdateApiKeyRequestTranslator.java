@@ -35,26 +35,23 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
         ServerlessCustomRoleParser::parseApiKeyRoleDescriptor
     );
     private final ServerlessRoleValidator serverlessRoleValidator;
-    private final Supplier<Boolean> strictRequestValidationEnabled;
     private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
 
     // Needed for java module
     public ServerlessUpdateApiKeyRequestTranslator() {
-        this(new ServerlessRoleValidator(), () -> false, () -> false);
+        this(new ServerlessRoleValidator(), () -> false);
     }
 
     // For SPI
     public ServerlessUpdateApiKeyRequestTranslator(ServerlessSecurityPlugin plugin) {
-        this(new ServerlessRoleValidator(), plugin::strictApiKeyRequestValidationEnabled, plugin::isOperatorStrictRoleValidationEnabled);
+        this(new ServerlessRoleValidator(), plugin::isOperatorStrictRoleValidationEnabled);
     }
 
     ServerlessUpdateApiKeyRequestTranslator(
         ServerlessRoleValidator serverlessRoleValidator,
-        Supplier<Boolean> strictRequestValidationEnabled,
         Supplier<Boolean> operatorStrictRoleValidationEnabled
     ) {
         this.serverlessRoleValidator = serverlessRoleValidator;
-        this.strictRequestValidationEnabled = strictRequestValidationEnabled;
         this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
     }
 
@@ -95,7 +92,7 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
     private boolean shouldApplyStrictValidation(RestRequest request) {
         final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
         if (restrictRequest) {
-            return strictRequestValidationEnabled.get();
+            return true;
         } else {
             return operatorStrictRoleValidationEnabled.get();
         }

@@ -32,13 +32,11 @@ import static org.mockito.Mockito.mock;
 public class ServerlessCreateApiKeyRequestBuilderTests extends ESTestCase {
 
     public void testValidPayload() throws IOException {
-        var strictValidationEnabled = randomBoolean();
         var operatorStrictRoleValidationEnabled = randomBoolean();
 
         var builder = new ServerlessCreateApiKeyRequestBuilderFactory.ServerlessCreateApiKeyRequestBuilder(
             mock(Client.class),
             randomBoolean(),
-            () -> strictValidationEnabled,
             () -> operatorStrictRoleValidationEnabled
         );
 
@@ -51,11 +49,10 @@ public class ServerlessCreateApiKeyRequestBuilderTests extends ESTestCase {
         );
     }
 
-    public void testStrictValidationDisabled() throws IOException {
+    public void testStrictOperatorRoleValidationDisabled() throws IOException {
         var builder = new ServerlessCreateApiKeyRequestBuilderFactory.ServerlessCreateApiKeyRequestBuilder(
             mock(Client.class),
-            randomBoolean(),
-            () -> false,
+            false,
             () -> false
         );
 
@@ -72,7 +69,6 @@ public class ServerlessCreateApiKeyRequestBuilderTests extends ESTestCase {
         var builder = new ServerlessCreateApiKeyRequestBuilderFactory.ServerlessCreateApiKeyRequestBuilder(
             mock(Client.class),
             randomBoolean(),
-            () -> true,
             () -> true
         );
 

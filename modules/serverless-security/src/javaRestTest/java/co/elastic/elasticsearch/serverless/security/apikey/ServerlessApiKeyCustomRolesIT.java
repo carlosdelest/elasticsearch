@@ -57,21 +57,6 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
     }
 
     public void testApiKeys() throws IOException {
-        enableStrictValidation();
-        disableOperatorStrictRoleValidation();
-        doTestValidApiKey();
-        doTestApiKeyWithWorkflowRestriction();
-        doTestApiKeyWithEmptyRoleDescriptors();
-        doTestApiKeyWithoutRoleDescriptors();
-
-        doTestApiKeyWithCustomRoleValidationError();
-        doTestApiKeyWithRoleParsingError();
-        doTestApiKeyWithMixedValidAndInvalidRoles();
-        doTestGrantApiKeyWithCustomRoleValidationError();
-    }
-
-    public void testApiKeysWithStrictOperatorRoleValidationEnabled() throws IOException {
-        enableStrictValidation();
         enableOperatorStrictRoleValidation();
         doTestValidApiKey();
         doTestApiKeyWithWorkflowRestriction();
@@ -84,17 +69,17 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
         doTestGrantApiKeyWithCustomRoleValidationError();
     }
 
-    public void testApiKeysStrictValidationDisabled() throws IOException {
-        disableStrictValidation();
+    public void testApiKeysStrictOperatorRoleValidationDisabled() throws IOException {
         disableOperatorStrictRoleValidation();
         doTestValidApiKey();
         doTestApiKeyWithWorkflowRestriction();
         doTestApiKeyWithEmptyRoleDescriptors();
         doTestApiKeyWithoutRoleDescriptors();
 
-        doTestApiKeyWithCustomRoleValidationErrorStrictValidationDisabled();
-        doTestApiKeyWithRoleParsingErrorStrictValidationDisabled();
+        doTestApiKeyWithCustomRoleValidationError();
+        doTestApiKeyWithRoleParsingError();
         doTestApiKeyWithMixedValidAndInvalidRoles();
+        doTestGrantApiKeyWithCustomRoleValidationError();
     }
 
     private void doTestValidApiKey() throws IOException {
@@ -236,19 +221,6 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
         }
     }
 
-    private void doTestApiKeyWithCustomRoleValidationErrorStrictValidationDisabled() throws IOException {
-        disableStrictValidation();
-        disableOperatorStrictRoleValidation();
-        final var payload = """
-            {
-              "role-0": {
-                "cluster": ["all", "manage_ilm"]
-              }
-            }""";
-        executeApiKeyActionsAndAssertSuccess(TEST_USER, payload);
-        executeApiKeyActionsAndAssertSuccess(TEST_OPERATOR_USER, payload);
-    }
-
     private void doTestApiKeyWithRoleParsingError() {
         final var payload = """
             {
@@ -276,47 +248,6 @@ public class ServerlessApiKeyCustomRolesIT extends AbstractServerlessCustomRoles
 
             );
         }
-    }
-
-    private void doTestApiKeyWithRoleParsingErrorStrictValidationDisabled() throws IOException {
-        disableStrictValidation();
-        disableOperatorStrictRoleValidation();
-        final var payload = """
-            {
-              "role-0": {
-                "remote_indices": [
-                  {
-                    "names": ["*"],
-                    "privileges": ["read"]
-                  }
-                ]
-              }
-            }""";
-        executeApiKeyActionsAndAssertFailure(
-            TEST_USER,
-            payload,
-            "failed to parse remote indices privileges for role [role-0]. missing required [clusters] field"
-        );
-        executeApiKeyActionsAndAssertFailure(
-            TEST_OPERATOR_USER,
-            payload,
-            "failed to parse remote indices privileges for role [role-0]. missing required [clusters] field"
-        );
-    }
-
-    private void enableStrictValidation() throws IOException {
-        setStrictValidation(true);
-    }
-
-    private void disableStrictValidation() throws IOException {
-        setStrictValidation(false);
-    }
-
-    private void setStrictValidation(boolean value) throws IOException {
-        updateClusterSettings(
-            adminClient(),
-            Settings.builder().put("xpack.security.authc.api_key.strict_request_validation.enabled", value).build()
-        );
     }
 
     private void executeApiKeyActionsAndAssertSuccess(String username, String roleDescriptorsPayload) throws IOException {

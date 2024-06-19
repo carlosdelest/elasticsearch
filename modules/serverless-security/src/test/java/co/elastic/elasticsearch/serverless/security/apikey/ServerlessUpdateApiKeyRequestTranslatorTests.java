@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator
 
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.rest.FakeRestRequest;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
@@ -36,11 +37,9 @@ import static org.hamcrest.core.IsEqual.equalTo;
 public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
 
     public void testValidPayload() throws IOException {
-        var strictValidationEnabled = randomBoolean();
         var operatorStrictRoleValidationEnabled = randomBoolean();
         var translator = new ServerlessUpdateApiKeyRequestTranslator(
             new ServerlessRoleValidator(),
-            () -> strictValidationEnabled,
             () -> operatorStrictRoleValidationEnabled
         );
 
@@ -48,7 +47,7 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(
             new BytesArray(json),
             XContentType.JSON
-        ).withParams(Map.of("ids", "id", PATH_RESTRICTED, String.valueOf(randomBoolean()))).build();
+        ).withParams(withRandomlyIncludedServerlessNonOperatorRequestParam(Map.of("ids", "id"))).build();
         var actual = translator.translate(restRequest);
         assertThat(actual.getRoleDescriptors().size(), equalTo(1));
         assertThat(
@@ -57,14 +56,14 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
         );
     }
 
-    public void testStrictValidationDisabled() throws IOException {
-        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> false, () -> false);
+    public void testStrictOperatorRoleValidationDisabled() throws IOException {
+        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> false);
 
         final String json = "{ \"role_descriptors\": { \"role-a\": {\"cluster\":[\"manage_ilm\"]} } }";
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(
             new BytesArray(json),
             XContentType.JSON
-        ).withParams(Map.of("ids", "id", PATH_RESTRICTED, String.valueOf(randomBoolean()))).build();
+        ).withParams(Map.of("ids", "id")).build();
         var actual = translator.translate(restRequest);
         assertThat(actual.getRoleDescriptors().size(), equalTo(1));
         assertThat(
@@ -73,14 +72,19 @@ public class ServerlessUpdateApiKeyRequestTranslatorTests extends ESTestCase {
         );
     }
 
-    public void testStrictValidationEnabled() {
-        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> true, () -> true);
+    public void testStrictOperatorRoleValidationEnabled() {
+        var translator = new ServerlessUpdateApiKeyRequestTranslator(new ServerlessRoleValidator(), () -> true);
 
         final String json = "{ \"role_descriptors\": { \"role-a\": {\"cluster\":[\"manage_ilm\"]} } }";
         final FakeRestRequest restRequest = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withContent(
             new BytesArray(json),
             XContentType.JSON
-        ).withParams(Map.of("ids", "id", PATH_RESTRICTED, String.valueOf(randomBoolean()))).build();
+        ).withParams(withRandomlyIncludedServerlessNonOperatorRequestParam(Map.of("ids", "id"))).build();
         expectThrows(ActionRequestValidationException.class, () -> translator.translate(restRequest));
     }
+
+    static Map<String, String> withRandomlyIncludedServerlessNonOperatorRequestParam(Map<String, String> otherParams) {
+        return randomBoolean() ? otherParams : Maps.copyMapWithAddedEntry(otherParams, PATH_RESTRICTED, "serverless");
+    }
+
 }

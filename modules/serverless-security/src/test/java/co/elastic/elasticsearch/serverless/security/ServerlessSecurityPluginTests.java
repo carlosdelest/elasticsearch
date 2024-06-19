@@ -20,7 +20,6 @@ package co.elastic.elasticsearch.serverless.security;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings;
 
-import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.API_KEY_STRICT_REQUEST_VALIDATION;
 import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.OPERATOR_STRICT_ROLE_VALIDATION;
 import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDED_RESERVED_ROLES_SETTING;
 import static org.hamcrest.Matchers.contains;
@@ -50,14 +49,6 @@ public class ServerlessSecurityPluginTests extends ESTestCase {
 
     public void testExcludeRolesSettingIsRegistered() {
         assertThat(plugin.getSettings(), hasItem(SamlRealmSettings.EXCLUDE_ROLES));
-    }
-
-    public void testApiKeyStrictValidationSettingIsRegistered() {
-        assertThat(plugin.getSettings(), hasItem(API_KEY_STRICT_REQUEST_VALIDATION));
-    }
-
-    public void testDefaultValueApiKeyStrictValidationSetting() {
-        assertThat(API_KEY_STRICT_REQUEST_VALIDATION.get(plugin.additionalSettings()), equalTo(true));
     }
 
     public void testOperatorStrictRoleValidationSettingIsRegistered() {
