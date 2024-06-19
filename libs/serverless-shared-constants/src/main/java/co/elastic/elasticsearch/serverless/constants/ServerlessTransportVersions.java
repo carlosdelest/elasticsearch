@@ -36,6 +36,7 @@ public class ServerlessTransportVersions {
     public static final TransportVersion NEW_COMMIT_NOTIFICATION_WITH_CLUSTER_STATE_VERSION_AND_NODE_ID = def(8_661_01_0);
     public static final TransportVersion ADD_INGESTED_SIZE_STORAGE_FIELD = def(8_661_02_0);
     public static final TransportVersion ADD_SAMPLED_METRICS_METADATA = def(8_665_01_0);
+    public static final TransportVersion PUBLISH_NODE_SEARCH_LOAD_QUALITY = def(8_688_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
