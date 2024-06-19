@@ -62,3 +62,5 @@ tests:
 - class: "org.elasticsearch.datastreams.DataStreamUpgradeRestIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2192"
   method: "testConflictingMappingUpgrade"
+- class: "co.elastic.elasticsearch.stateless.engine.RefreshThrottlingServiceTests"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2216"
