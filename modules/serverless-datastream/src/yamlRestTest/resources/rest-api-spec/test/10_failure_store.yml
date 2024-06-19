@@ -23,6 +23,11 @@
       headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
       cluster.health:
         wait_for_status: green
+  # Initialize failure store
+  - do:
+      indices.rollover:
+        alias: failure-data-stream
+        target_failure_store: true
   - do:
       indices.get_data_stream:
         name: failure-data-stream
