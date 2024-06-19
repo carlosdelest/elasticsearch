@@ -62,8 +62,3 @@ tests:
 - class: "org.elasticsearch.datastreams.DataStreamUpgradeRestIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2192"
   method: "testConflictingMappingUpgrade"
-- class: "co.elastic.elasticsearch.stateless.engine.RefreshThrottlingServiceTests"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2216"
-- class: "co.elastic.elasticsearch.stateless.cluster.coordination.StatelessCoordinationTests"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2217"
-  method: "testShutdownLogMessageDuringElectionAttempt"
