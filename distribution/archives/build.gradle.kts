@@ -82,7 +82,9 @@ distribution_archives {
                 from(upstreamDistro) {
                     eachFile {
                         if (relativePath.segments.reversed()[1] == "bin" || relativePath.segments.reversed()[1] == "MacOS" || relativePath.segments.last() == "jspawnhelper") {
-                            mode = 0b111_101_101
+                            permissions {
+                                unix(0b111_101_101)
+                            }
                         }
                         // Strip the version from the file path of the upstream distribution
                         path = "elasticsearch/${Path.of(path).run { subpath(1, count())}}"
@@ -115,10 +117,14 @@ distribution_archives {
                     from((project.extensions["pluginsDir"] as File).parent)
                     into("bin") {
                         from(if (name.contains("windows")) "src/bin/elasticsearch.bat" else "src/bin/elasticsearch") {
-                            fileMode = 0b111_101_101
+                            filePermissions {
+                                unix(0b111_101_101)
+                            }
                         }
                         from("src/bin/elasticsearch-wipe-data") {
-                            fileMode = 0b111_101_101
+                            filePermissions {
+                                unix(0b111_101_101)
+                            }
                         }
                     }
                     into("config") {
