@@ -21,6 +21,7 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-32"
       image: family/elasticsearch-ubuntu-2022
+      diskSizeGb: 250
     notify:
       - github_commit_status:
           context: "elasticsearch-serverless/functional tests"
@@ -35,6 +36,7 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+      diskSizeGb: 250
     notify:
       - github_commit_status:
           context: "elasticsearch-serverless/third party tests"
@@ -48,6 +50,7 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+      diskSizeGb: 250
 
   - label: ":rocket: Run E2E tests to check the component update"
     if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//)
@@ -93,3 +96,4 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-4"
       image: family/elasticsearch-ubuntu-2022
+      diskSizeGb: 250

@@ -5,12 +5,14 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+      diskSizeGb: 250
   - label: ":s3: Run AWS S3 third party tests"
     command: ".buildkite/scripts/run-s3-third-party-tests.sh"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+      diskSizeGb: 250
   - wait
 
   - label: ":git: Update elasticsearch submodule commit"
@@ -22,3 +24,4 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+      diskSizeGb: 250
