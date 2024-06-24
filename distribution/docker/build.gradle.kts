@@ -1,6 +1,7 @@
 import org.elasticsearch.gradle.Architecture
 import org.elasticsearch.gradle.VersionProperties
 import org.elasticsearch.gradle.internal.DockerBase
+import org.elasticsearch.gradle.internal.conventions.info.GitInfo
 import org.elasticsearch.gradle.internal.docker.DockerBuildTask
 import org.elasticsearch.gradle.internal.docker.DockerSupportPlugin
 import org.elasticsearch.gradle.internal.docker.DockerSupportService
@@ -61,8 +62,23 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
             exclude("elasticsearch-*/**")
             eachFile {
                 if (name == "Dockerfile") {
+                    val serverlessRevision = GitInfo.gitInfo(rootDir).revision;
+
                     filter { contents ->
                         return@filter contents.replace("COPY elasticsearch-${VersionProperties.getElasticsearch()} .", "COPY elasticsearch .")
+                    }
+                    filter { contents ->
+                        val revisionRegex = Regex("org\\.label-schema\\.vcs-ref=\"[a-f0-9]+\"")
+                        val newValue = "org.label-schema.vcs-ref=\"$serverlessRevision\""
+                        return@filter revisionRegex.replace(contents, newValue)
+                    }
+                    filter { contents ->
+                        val revisionRegex = Regex("org\\.opencontainers\\.image\\.revision=\"[a-f0-9]+\"")
+                        val newValue = "org.opencontainers.image.revision=\"$serverlessRevision\""
+                        return@filter revisionRegex.replace(contents, newValue)
+                    }
+                    filter { contents ->
+                        return@filter contents.replace("https://github.com/elastic/elasticsearch", "https://github.com/elastic/elasticsearch-serverless")
                     }
                 }
             }
