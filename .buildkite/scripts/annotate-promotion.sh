@@ -1,6 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
+# The script retrieves promotion timestamp from Engineering Productivity
+# "serverless-deployment-events" ESS cluster and writes into
+# "elasticsearch-annotations" indices in O11y overview clusters (QA, Staging or
+# Production).
+#
+# This is considered a temporary solution until
+# https://elasticco.atlassian.net/browse/PF-58 is in. Once PF-58 is in,
+# promotion annotations should be modified to read from local events data,
+# instead of a custom "elasticsearch-annotations" index.
+#
+# Reference: https://elastic.slack.com/archives/C01DJ3DC0AX/p1718102951219139.
+
 scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 source $scripts_dir/utils/misc.sh
 
@@ -68,7 +80,7 @@ echo "--- Retrieve current timestamp"
 CURRENT_TIMESTAMP=$(date --iso-8601=second)
 echo "Current timestamp: $CURRENT_TIMESTAMP"
 
-echo "--- Determine O11y cluster and Vault secret"
+echo "--- Determine O11y cluster and Vault path"
 # keep in sync with https://github.com/elastic/elasticsearch-serverless-support/blob/main/esanno-pyproject/src/esanno/conf.py
 case $ENVIRONMENT in
     "qa")
@@ -92,6 +104,8 @@ case $ENVIRONMENT in
         exit 1
         ;;
 esac
+echo "ES endpoint: $O11_ES_ENDPOINT"
+echo "Vault path: $VAULT_PREFIX/$O11_VAULT_PATH"
 
 echo "--- Annotate"
 data="$(vault_with_retries read -field=data -format=json $VAULT_PREFIX/$O11_VAULT_PATH)"

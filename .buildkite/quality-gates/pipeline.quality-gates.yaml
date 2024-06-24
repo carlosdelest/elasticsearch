@@ -41,7 +41,6 @@ steps:
   - label: ":elasticsearch: Annotate promotion in O11y dashboards"
     command: ".buildkite/scripts/annotate-promotion.sh"
 
-
 notify:
   - slack: "${TEAM_CHANNEL?}"
     if: (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"
