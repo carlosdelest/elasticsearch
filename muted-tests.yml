@@ -76,3 +76,6 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.CorruptionIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2258"
   method: "testConcurrentOperations"
+- class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2263"
+  method: "test {spatial.AirportCityLocationPointDistance ASYNC}"
