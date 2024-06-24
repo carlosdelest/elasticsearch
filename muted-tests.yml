@@ -68,9 +68,6 @@ tests:
 - class: "org.elasticsearch.datastreams.logsdb.LogsIndexModeEnabledRestTestIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2251"
   method: "testCreateDataStream"
-- class: "co.elastic.elasticsearch.stateless.objectstore.S3ObjectStoreTests"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2079"
-  method: "testShouldRetryMoreThanMaxRetriesForIndicesData"
 - class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2255"
   methods:
