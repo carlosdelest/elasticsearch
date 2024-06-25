@@ -79,3 +79,6 @@ tests:
 - class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2263"
   method: "test {spatial.AirportCityLocationPointDistance ASYNC}"
+- class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2255"
+  method: "test {spatial.AirportCityLocationPointDistance SYNC}"
