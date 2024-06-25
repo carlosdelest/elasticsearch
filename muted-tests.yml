@@ -86,3 +86,6 @@ tests:
   - "test {spatial.AirportCityLocationPointDistance ASYNC}"
 - class: "org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2266"
+- class: "co.elastic.elasticsearch.stateless.recovery.RecoveryMetricsIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2268"
+  method: "testRecoveryMetricPublicationBytesReadToCache"
