@@ -20,8 +20,6 @@ package co.elastic.elasticsearch.metering;
 import org.elasticsearch.core.TimeValue;
 
 import java.time.Instant;
-import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -46,11 +44,11 @@ class InMemorySampledMetricsTimeCursor implements SampledMetricsTimeCursor {
     }
 
     @Override
-    public Collection<Instant> generateSampleTimestamps(Instant current, TimeValue decrement, int limit) {
+    public Timestamps generateSampleTimestamps(Instant current, TimeValue decrement) {
         Instant timestamp = latestCommittedTimestamp;
         return timestamp != null
-            ? SampledMetricsTimeCursor.generateSampleTimestamps(current, timestamp, decrement, limit)
-            : List.of(current);
+            ? SampledMetricsTimeCursor.generateSampleTimestamps(current, timestamp, decrement)
+            : Timestamps.single(current);
     }
 
     @Override

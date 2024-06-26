@@ -25,36 +25,41 @@ import java.time.Instant;
 import java.util.List;
 
 import static co.elastic.elasticsearch.metering.SampledMetricsTimeCursor.generateSampleTimestamps;
-import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
 
 public class SampledMetricsTimeCursorTests extends ESTestCase {
 
     public void testGenerateSampleTimestamps() {
         var now = Instant.now();
         TimeValue period = TimeValue.timeValueMinutes(5);
-        List<Instant> timestamps = generateSampleTimestamps(now, Instant.MIN, period, 12).stream().toList();
+        var timestamps = generateSampleTimestamps(now, Instant.MIN, period);
+        List<Instant> timestampList = Iterators.toList(Iterators.limit(timestamps, 12));
 
-        assertThat(timestamps, hasSize(12));
-        assertThat(timestamps.get(0), equalTo(now));
-        assertThat(timestamps.get(11), equalTo(now.minus(Duration.ofMinutes(55))));
+        assertThat(timestampList, hasSize(12));
+        assertThat(timestampList.get(0), equalTo(now));
+        assertThat(timestampList.get(11), equalTo(now.minus(Duration.ofMinutes(55))));
+        assertThat(timestamps.last(), equalTo(Instant.MIN));
 
-        timestamps = generateSampleTimestamps(now, now, period, 12).stream().toList();
+        timestamps = generateSampleTimestamps(now, now, period);
 
-        assertThat(timestamps, empty());
+        assertThat(timestamps.hasNext(), is(false));
 
-        timestamps = generateSampleTimestamps(now, now.minus(Duration.ofMinutes(5)), period, 12).stream().toList();
+        timestamps = generateSampleTimestamps(now, now.minus(Duration.ofMinutes(5)), period);
+        timestampList = Iterators.toList(Iterators.limit(timestamps, 12));
 
-        assertThat(timestamps, hasSize(1));
-        assertThat(timestamps.get(0), equalTo(now));
+        assertThat(timestampList, hasSize(1));
+        assertThat(timestampList.get(0), equalTo(now));
+        assertThat(timestamps.last(), equalTo(now.minus(Duration.ofMinutes(5))));
 
-        timestamps = generateSampleTimestamps(now, now.minus(Duration.ofMinutes(11)), period, 12).stream().toList();
+        timestamps = generateSampleTimestamps(now, now.minus(Duration.ofMinutes(11)), period);
+        timestampList = Iterators.toList(Iterators.limit(timestamps, 12));
 
-        assertThat(timestamps, hasSize(3));
-        assertThat(timestamps.get(0), equalTo(now));
-        assertThat(timestamps.get(1), equalTo(now.minus(Duration.ofMinutes(5))));
-        assertThat(timestamps.get(2), equalTo(now.minus(Duration.ofMinutes(10))));
+        assertThat(timestampList, hasSize(3));
+        assertThat(timestampList.get(0), equalTo(now));
+        assertThat(timestampList.get(1), equalTo(now.minus(Duration.ofMinutes(5))));
+        assertThat(timestampList.get(2), equalTo(now.minus(Duration.ofMinutes(10))));
+        assertThat(timestamps.last(), equalTo(now.minus(Duration.ofMinutes(11))));
     }
-
 }

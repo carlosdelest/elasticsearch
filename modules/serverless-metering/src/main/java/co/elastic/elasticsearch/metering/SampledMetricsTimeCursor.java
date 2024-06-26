@@ -22,8 +22,8 @@ import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 import org.elasticsearch.core.TimeValue;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 /**
@@ -31,9 +31,57 @@ import java.util.Optional;
  * successfully transmitted.
  */
 public interface SampledMetricsTimeCursor {
+
+    interface Timestamps extends Iterator<Instant> {
+        Timestamps EMPTY = new Timestamps() {
+            @Override
+            public Instant last() {
+                throw new NoSuchElementException();
+            }
+
+            @Override
+            public boolean hasNext() {
+                return false;
+            }
+
+            @Override
+            public Instant next() {
+                throw new NoSuchElementException();
+            }
+        };
+
+        static Timestamps single(Instant instant) {
+            return new Timestamps() {
+                @Override
+                public Instant last() {
+                    return instant;
+                }
+
+                private Instant value = instant;
+
+                @Override
+                public boolean hasNext() {
+                    return value != null;
+                }
+
+                @Override
+                public Instant next() {
+                    if (value == null) {
+                        throw new NoSuchElementException();
+                    }
+                    final var res = value;
+                    value = null;
+                    return res;
+                }
+            };
+        }
+
+        Instant last();
+    }
+
     Optional<Instant> getLatestCommittedTimestamp();
 
-    Collection<Instant> generateSampleTimestamps(Instant current, TimeValue decrement, int limit);
+    Timestamps generateSampleTimestamps(Instant current, TimeValue decrement);
 
     boolean commitUpTo(Instant sampleTimestamp);
 
@@ -41,13 +89,30 @@ public interface SampledMetricsTimeCursor {
      * Generate decreasing timestamps [current, until) in steps of the given {@code decrement}.
      * At most {@code limit} timestamps are returned starting from {@code current}.
      */
-    static Collection<Instant> generateSampleTimestamps(Instant current, Instant until, TimeValue decrement, int limit) {
-        var timestamps = new ArrayList<Instant>();
-        var decrementInNanos = decrement.getNanos();
-        for (int i = 0; i < limit && until.isBefore(current); ++i) {
-            timestamps.add(current);
-            current = current.minusNanos(decrementInNanos);
-        }
-        return timestamps;
+    static Timestamps generateSampleTimestamps(Instant from, Instant until, TimeValue decrement) {
+        final var decrementInNanos = decrement.getNanos();
+        return new Timestamps() {
+            Instant current = from;
+
+            @Override
+            public Instant last() {
+                return until;
+            }
+
+            @Override
+            public boolean hasNext() {
+                return until.isBefore(current);
+            }
+
+            @Override
+            public Instant next() {
+                if (until.isBefore(current) == false) {
+                    throw new NoSuchElementException();
+                }
+                final var now = current;
+                current = current.minusNanos(decrementInNanos);
+                return now;
+            }
+        };
     }
 }

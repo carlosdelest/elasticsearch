@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.metering.reports.UsageMetrics;
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metering.reports.UsageSource;
 import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
+import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 
 import org.elasticsearch.common.Randomness;
@@ -42,10 +43,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import static co.elastic.elasticsearch.metering.SampleTimestampUtils.calculateSampleTimestamp;
+import static co.elastic.elasticsearch.metering.SampleTimestampUtils.interpolateValueForTimestamp;
 
 class ReportGatherer {
     private static final Logger log = LogManager.getLogger(ReportGatherer.class);
     static final double MAX_JITTER_FACTOR = 0.25;
+    private static final Duration MAX_BACKFILL_LOOKBACK = Duration.ofHours(24);
 
     private final List<CounterMetricsCollector> counterMetricsCollectors;
     private final List<SampledMetricsCollector> sampledMetricsCollectors;
@@ -56,12 +63,13 @@ class ReportGatherer {
     private final Clock clock;
     private final TimeValue reportPeriod;
     private final Duration reportPeriodDuration;
-    private final int maxPeriodsLookback;
+    final int maxPeriodsLookback;
     private final String sourceId;
     private final String projectId;
 
     private volatile boolean cancel;
     private volatile Scheduler.Cancellable nextRun;
+    private volatile Map<String, MetricValue> lastSampledMetricValues;
 
     ReportGatherer(
         String nodeId,
@@ -90,7 +98,7 @@ class ReportGatherer {
         if (reportPeriodDuration.multipliedBy(Duration.ofHours(1).dividedBy(reportPeriodDuration)).equals(Duration.ofHours(1)) == false) {
             throw new IllegalArgumentException(Strings.format("Report period [%s] needs to fit evenly into 1 hour", reportPeriod));
         }
-        this.maxPeriodsLookback = (int) Duration.ofHours(1).dividedBy(reportPeriodDuration);
+        this.maxPeriodsLookback = (int) MAX_BACKFILL_LOOKBACK.dividedBy(reportPeriodDuration);
         this.sourceId = "es-" + nodeId;
     }
 
@@ -213,30 +221,73 @@ class ReportGatherer {
             }
         });
 
-        var timestampsToSend = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod, maxPeriodsLookback);
-        boolean canAdvanceSampledMetricsTimeCursor = false;
-        for (SampledMetricsCollector sampledMetricsCollector : sampledMetricsCollectors) {
-            try {
-                var sampledMetricValues = sampledMetricsCollector.getMetrics();
-                if (sampledMetricValues.isEmpty()) {
-                    log.info("[{}] is not ready for collect yet", sampledMetricsCollector.getClass().getName());
-                    break;
+        var timestamps = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod);
+        var timestampsToSend = Iterators.toList(Iterators.limit(timestamps, maxPeriodsLookback));
+
+        if (timestampsToSend.size() > 1) {
+            var backfillDuration = Duration.between(timestamps.last(), sampleTimestamp);
+            var periodsToSend = backfillDuration.dividedBy(reportPeriodDuration);
+            assert periodsToSend > 0;
+            if (lastSampledMetricValues == null) {
+                log.warn(
+                    "Skip backfilling [{}-{}] -- missing the necessary state to calculate backfill samples. We will drop [{}] sample(s).",
+                    timestampsToSend.get(timestampsToSend.size() - 1),
+                    timestampsToSend.get(0),
+                    periodsToSend
+                );
+            } else {
+                if (periodsToSend > maxPeriodsLookback) {
+                    log.warn(
+                        "Partially backfilling [{}-{}] -- the backfill window [{}-{}] is grater than the maximum lookback [{}]. "
+                            + "We will drop [{}] sample(s).",
+                        timestampsToSend.get(timestampsToSend.size() - 1),
+                        timestampsToSend.get(0),
+                        timestamps.last(),
+                        sampleTimestamp,
+                        MAX_BACKFILL_LOOKBACK,
+                        periodsToSend - maxPeriodsLookback
+                    );
                 } else {
-                    for (var v : sampledMetricValues.get()) {
-                        for (var timestamp : timestampsToSend) {
-                            records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), timestamp));
+                    log.info(
+                        "Backfilling [{}-{}] with [{}] sample(s)",
+                        timestampsToSend.get(timestampsToSend.size() - 1),
+                        timestampsToSend.get(0),
+                        periodsToSend
+                    );
+                }
+            }
+        }
+
+        boolean canAdvanceSampledMetricsTimeCursor = false;
+        List<MetricValue> currentSampledMetricValues = new ArrayList<>();
+        if (timestampsToSend.isEmpty() == false) {
+            for (SampledMetricsCollector sampledMetricsCollector : sampledMetricsCollectors) {
+                try {
+                    var sampledMetricValues = sampledMetricsCollector.getMetrics();
+                    if (sampledMetricValues.isEmpty()) {
+                        log.info("[{}] is not ready for collect yet", sampledMetricsCollector.getClass().getName());
+                        break;
+                    } else {
+                        for (var v : sampledMetricValues.get()) {
+                            currentSampledMetricValues.add(v);
                             // we will only receive samples on the node hosting the MeteringIndexInfoTask
                             // if MetricValues is empty (or if there's no timestamps to send) we must not advance the committed timestamp
                             canAdvanceSampledMetricsTimeCursor = true;
                         }
                     }
+                } catch (Exception e) {
+                    log.error(
+                        Strings.format("Exception thrown collecting sampled metrics from %s", sampledMetricsCollector.getClass().getName()),
+                        e
+                    );
+                    canAdvanceSampledMetricsTimeCursor = false;
                 }
-            } catch (Exception e) {
-                log.error(
-                    Strings.format("Exception thrown collecting sampled metrics from %s", sampledMetricsCollector.getClass().getName()),
-                    e
-                );
-                canAdvanceSampledMetricsTimeCursor = false;
+            }
+
+            if (timestampsToSend.size() <= 1 || lastSampledMetricValues == null) {
+                buildRecordsWithoutBackfill(sampleTimestamp, currentSampledMetricValues, records);
+            } else {
+                buildRecordsWithBackfill(sampleTimestamp, timestampsToSend, currentSampledMetricValues, timestamps.last(), records);
             }
         }
 
@@ -249,32 +300,70 @@ class ReportGatherer {
                 metricValues.commit();
             }
             if (canAdvanceSampledMetricsTimeCursor) {
-                return sampledMetricsTimeCursor.commitUpTo(sampleTimestamp);
+                var committed = sampledMetricsTimeCursor.commitUpTo(sampleTimestamp);
+                if (committed) {
+                    lastSampledMetricValues = currentSampledMetricValues.stream()
+                        .collect(Collectors.toUnmodifiableMap(MetricValue::id, Function.identity()));
+                }
+                return committed;
             }
             return true;
         }
         return false;
     }
 
-    private static String generateId(String key, Instant time) {
-        return key + "-" + time.truncatedTo(ChronoUnit.SECONDS);
+    private void buildRecordsWithoutBackfill(
+        Instant sampleTimestamp,
+        List<MetricValue> currentSampledMetricValues,
+        List<UsageRecord> records
+    ) {
+        for (var v : currentSampledMetricValues) {
+            records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp));
+        }
     }
 
-    static Instant calculateSampleTimestamp(Instant now, Duration reportPeriod) {
-        // this essentially calculates 'now' mod the reportPeriod, relative to hour timeslots
-        // this gets us a consistent rounded report period, regardless of where in that period
-        // the record is actually being calculated
-        assert reportPeriod.compareTo(Duration.ofHours(1)) <= 0;
-        assert reportPeriod.compareTo(Duration.ofSeconds(1)) >= 0;
+    private void buildRecordsWithBackfill(
+        Instant sampleTimestamp,
+        List<Instant> timestampsToSend,
+        List<MetricValue> currentSampledMetricValues,
+        Instant latestCommittedTimestamp,
+        List<UsageRecord> records
+    ) {
+        for (var v : currentSampledMetricValues) {
+            var previousMetricValue = lastSampledMetricValues.get(v.id());
+            if (previousMetricValue == null) {
+                log.info("Metric [{}] of type [{}] does not have a previous value, not backfilling", v.id(), v.type());
+                records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp));
+            } else {
+                for (var timestamp : timestampsToSend) {
+                    var previousValue = previousMetricValue.value();
+                    long value = interpolateValueForTimestamp(
+                        sampleTimestamp,
+                        v.value(),
+                        latestCommittedTimestamp,
+                        previousValue,
+                        timestamp
+                    );
+                    log.info(
+                        "Backfilling metric [{}] of type [{}] with value [{}] (prev: [{}], current [{}]) "
+                            + "for time [{}] (prev: [{}], current: [{}])",
+                        v.id(),
+                        v.type(),
+                        value,
+                        previousValue,
+                        v.value(),
+                        timestamp,
+                        latestCommittedTimestamp,
+                        sampleTimestamp
+                    );
+                    records.add(getRecordForSample(v.id(), v.type(), value, v.metadata(), v.settings(), timestamp));
+                }
+            }
+        }
+    }
 
-        // round to the hour as a baseline
-        Instant hour = now.truncatedTo(ChronoUnit.HOURS);
-        // get the time into the hour we are
-        Duration intoHour = Duration.between(hour, now);
-        // get how many times reportPeriod divides into the duration
-        long times = intoHour.dividedBy(reportPeriod);
-        // get our floor'd timestamp
-        return hour.plus(reportPeriod.multipliedBy(times));
+    private static String generateId(String key, Instant time) {
+        return key + "-" + time.truncatedTo(ChronoUnit.SECONDS);
     }
 
     private UsageRecord getRecordForCount(

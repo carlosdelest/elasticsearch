@@ -32,9 +32,6 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
 import java.time.Instant;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 
 import static co.elastic.elasticsearch.metering.MeteringPlugin.SAMPLED_METRICS_METADATA;
@@ -84,14 +81,13 @@ public class ClusterStateSampledMetricsTimeCursor implements SampledMetricsTimeC
     }
 
     @Override
-    public Collection<Instant> generateSampleTimestamps(Instant current, TimeValue period, int limit) {
+    public Timestamps generateSampleTimestamps(Instant current, TimeValue period) {
         if (isInitialized()) {
-            Instant timestamp = getLatestCommittedTimestamp().orElse(null);
-            return timestamp != null
-                ? SampledMetricsTimeCursor.generateSampleTimestamps(current, timestamp, period, limit)
-                : List.of(current);
+            return getLatestCommittedTimestamp().map(x -> SampledMetricsTimeCursor.generateSampleTimestamps(current, x, period))
+                .orElseGet(() -> Timestamps.single(current));
+
         }
-        return Collections.emptyList();
+        return Timestamps.EMPTY;
     }
 
     @Override

@@ -45,7 +45,6 @@ import static org.elasticsearch.cluster.ClusterState.EMPTY_STATE;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
 
 public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
@@ -92,28 +91,26 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
     }
 
     public void testGenerateSampleTimestampsIfUninitialized() {
-        assertThat(timeCursor.generateSampleTimestamps(Instant.now(), TimeValue.ONE_MINUTE, 10), is(empty()));
+        assertThat(timeCursor.generateSampleTimestamps(Instant.now(), TimeValue.ONE_MINUTE).hasNext(), is(false));
     }
 
     public void testGenerateSampleTimestamps() {
         initCursor();
 
         Instant now = Instant.now().truncatedTo(MINUTES);
-        assertThat(timeCursor.generateSampleTimestamps(now, TimeValue.ONE_MINUTE, 10), contains(now));
+        assertThat(Iterators.toList(timeCursor.generateSampleTimestamps(now, TimeValue.ONE_MINUTE)), contains(now));
 
         Instant committedTimestamp = now.minus(3, MINUTES);
         SampledMetricsMetadata metadata = new SampledMetricsMetadata(committedTimestamp);
         Mockito.when(clusterService.state())
             .thenReturn(ClusterState.builder(new ClusterName("test")).putCustom(SampledMetricsMetadata.TYPE, metadata).build());
 
-        assertThat(timeCursor.generateSampleTimestamps(committedTimestamp, TimeValue.ONE_MINUTE, 10), is(empty()));
+        assertThat(timeCursor.generateSampleTimestamps(committedTimestamp, TimeValue.ONE_MINUTE).hasNext(), is(false));
 
         assertThat(
-            timeCursor.generateSampleTimestamps(now, TimeValue.ONE_MINUTE, 10),
+            Iterators.toList(timeCursor.generateSampleTimestamps(now, TimeValue.ONE_MINUTE)),
             contains(now, now.minus(1, MINUTES), now.minus(2, MINUTES))
         );
-
-        assertThat(timeCursor.generateSampleTimestamps(now, TimeValue.ONE_MINUTE, 2), contains(now, now.minus(1, MINUTES)));
     }
 
     public void testCommitUpToIfUnavailable() {

@@ -49,7 +49,6 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.metering.ReportGatherer.MAX_JITTER_FACTOR;
-import static co.elastic.elasticsearch.metering.ReportGatherer.calculateSampleTimestamp;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.allOf;
@@ -59,6 +58,7 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
@@ -82,41 +82,33 @@ public class ReportGathererTests extends ESTestCase {
         super.tearDown();
     }
 
-    public void testCalculateSampleTimestamp() {
-        assertThat(
-            calculateSampleTimestamp(Instant.parse("2023-01-01T12:00:00Z"), Duration.ofHours(1)),
-            equalTo(Instant.parse("2023-01-01T12:00:00Z"))
-        );
-        assertThat(
-            calculateSampleTimestamp(Instant.parse("2023-01-01T12:20:46Z"), Duration.ofMinutes(2)),
-            equalTo(Instant.parse("2023-01-01T12:20:00Z"))
-        );
-        assertThat(
-            calculateSampleTimestamp(Instant.parse("2023-01-01T12:22:00Z"), Duration.ofMinutes(2)),
-            equalTo(Instant.parse("2023-01-01T12:22:00Z"))
-        );
-        assertThat(
-            calculateSampleTimestamp(Instant.parse("2023-01-01T01:04:59Z"), Duration.ofMinutes(5)),
-            equalTo(Instant.parse("2023-01-01T01:00:00Z"))
-        );
-        assertThat(
-            calculateSampleTimestamp(Instant.parse("2023-01-01T01:04:59Z"), Duration.ofSeconds(15)),
-            equalTo(Instant.parse("2023-01-01T01:04:45Z"))
-        );
+    private static class TestRecordingMetricsCollector implements SampledMetricsCollector, MeteringUsageRecordPublisher {
 
-        expectThrows(AssertionError.class, () -> calculateSampleTimestamp(Instant.parse("2023-01-01T00:00:00Z"), Duration.ofHours(2)));
-    }
+        private final Supplier<String> metricIdProvider;
 
-    private static class RecordingMetricsCollector implements SampledMetricsCollector, MeteringUsageRecordPublisher {
+        private record TestRecordedMetric(long value, String id) {}
 
-        private record RecordedMetric(long value, String id) {}
-
-        AtomicReference<RecordedMetric> currentRecordedMetric = new AtomicReference<>();
+        AtomicReference<TestRecordedMetric> currentRecordedMetric = new AtomicReference<>();
         AtomicInteger invocations = new AtomicInteger();
 
         private volatile boolean failCollecting;
         private volatile boolean failReporting;
         private Set<Instant> lastRecordTimestamps = Set.of();
+
+        TestRecordingMetricsCollector(Supplier<String> metricIdProvider) {
+            this.metricIdProvider = metricIdProvider;
+        }
+
+        TestRecordingMetricsCollector() {
+            this(new Supplier<>() {
+                private final String metricId = UUIDs.randomBase64UUID();
+
+                @Override
+                public String get() {
+                    return metricId;
+                }
+            });
+        }
 
         public void setFailCollecting(boolean b) {
             failCollecting = b;
@@ -136,7 +128,7 @@ public class ReportGathererTests extends ESTestCase {
         }
 
         private MetricValue generateAndRecordSingleMetric() {
-            var newRecord = new RecordedMetric(randomLong(), UUIDs.randomBase64UUID());
+            var newRecord = new TestRecordedMetric(randomLong(), metricIdProvider.get());
 
             // assert last metrics where taken by `report`
             var lastRecord = currentRecordedMetric.getAndSet(newRecord);
@@ -177,7 +169,7 @@ public class ReportGathererTests extends ESTestCase {
 
     public void testReportGatheringAlwaysRunsOrderly() {
 
-        var recorder = new RecordingMetricsCollector();
+        var recorder = new TestRecordingMetricsCollector();
         var reportPeriod = TimeValue.timeValueMinutes(5);
         var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
 
@@ -319,7 +311,7 @@ public class ReportGathererTests extends ESTestCase {
     }
 
     public void testFailingSampledCollectorDoesNotAdvanceTimestamp() {
-        var recorder = new RecordingMetricsCollector();
+        var recorder = new TestRecordingMetricsCollector();
         var reportPeriod = TimeValue.timeValueMinutes(5);
         var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
 
@@ -416,7 +408,7 @@ public class ReportGathererTests extends ESTestCase {
     }
 
     public void testRetryScheduledWhenReportSendingFails() {
-        var recorder = new RecordingMetricsCollector();
+        var recorder = new TestRecordingMetricsCollector();
         var reportPeriod = TimeValue.timeValueMinutes(5);
         var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
         var firstTimestamp = Instant.EPOCH;
@@ -484,6 +476,113 @@ public class ReportGathererTests extends ESTestCase {
 
         // We are now trying to transmit 2 time frames
         assertThat(recorder.lastRecordTimestamps, containsInAnyOrder(secondTimestamp, thirdTimestamp));
+
+        reportGatherer.cancel();
+    }
+
+    public void testNoBackfillingWhenNoLocalStatus() {
+        var recorder = new TestRecordingMetricsCollector(UUIDs::randomBase64UUID);
+        var reportPeriod = TimeValue.timeValueMinutes(5);
+        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
+        var firstTimestamp = Instant.EPOCH;
+        var secondTimestamp = firstTimestamp.plus(reportPeriodDuration);
+        var thirdTimestamp = secondTimestamp.plus(reportPeriodDuration);
+
+        var clock = Mockito.mock(Clock.class);
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+        var threadPool = deterministicTaskQueue.getThreadPool();
+
+        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            List.of(recorder),
+            new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
+            recorder,
+            threadPool,
+            threadPool.generic(),
+            reportPeriod,
+            clock
+        );
+
+        when(clock.instant()).thenAnswer(x -> now.get());
+        reportGatherer.start();
+
+        deterministicTaskQueue.advanceTime();
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(recorder.invocations.get(), equalTo(1));
+        assertThat(recorder.lastRecordTimestamps, contains(firstTimestamp));
+        deterministicTaskQueue.advanceTime();
+
+        recorder.invocations.set(0);
+        // mock transmission failure to "pack up" more timeframes to re-send
+        recorder.setFailReporting(true);
+
+        // we expect a 2nd run to be scheduled within a shorter timeframe
+        deterministicTaskQueue.runAllRunnableTasks();
+        var firstAttemptTime = now.get();
+        deterministicTaskQueue.advanceTime();
+
+        // Advance to include the next timestamp, still failing
+        var lastAttemptTime = firstAttemptTime.plus(reportPeriodDuration).plus(2, ChronoUnit.MINUTES);
+        deterministicTaskQueue.runTasksUpToTimeInOrder(lastAttemptTime.toEpochMilli());
+        deterministicTaskQueue.advanceTime();
+
+        // But since we are changing ids, we try to transmit only the last timeframe
+        assertThat(recorder.lastRecordTimestamps, contains(thirdTimestamp));
+
+        reportGatherer.cancel();
+    }
+
+    public void testBackfillingLimited() {
+        var recorder = new TestRecordingMetricsCollector();
+        var reportPeriod = TimeValue.timeValueMinutes(5);
+        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
+        var firstTimestamp = Instant.EPOCH;
+
+        var clock = Mockito.mock(Clock.class);
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+        var threadPool = deterministicTaskQueue.getThreadPool();
+
+        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            List.of(recorder),
+            new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
+            recorder,
+            threadPool,
+            threadPool.generic(),
+            reportPeriod,
+            clock
+        );
+
+        when(clock.instant()).thenAnswer(x -> now.get());
+        reportGatherer.start();
+
+        deterministicTaskQueue.advanceTime();
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(recorder.invocations.get(), equalTo(1));
+        assertThat(recorder.lastRecordTimestamps, contains(firstTimestamp));
+        deterministicTaskQueue.advanceTime();
+
+        recorder.invocations.set(0);
+        // mock transmission failure to "pack up" more timeframes to re-send
+        recorder.setFailReporting(true);
+
+        // Advance to collect N + 1 frames
+        var runUpTo = firstTimestamp.plus(reportPeriodDuration.multipliedBy(reportGatherer.maxPeriodsLookback + 2)).toEpochMilli();
+        while (deterministicTaskQueue.getCurrentTimeMillis() < runUpTo) {
+            deterministicTaskQueue.runAllRunnableTasks();
+            deterministicTaskQueue.advanceTime();
+        }
+
+        // Check we actually try to transmit only N frames
+        assertThat(recorder.lastRecordTimestamps, hasSize(reportGatherer.maxPeriodsLookback));
 
         reportGatherer.cancel();
     }
