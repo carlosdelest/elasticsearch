@@ -23,7 +23,7 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.interceptor.RestServerActionPlugin;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestInterceptor;
-import org.elasticsearch.telemetry.tracing.Tracer;
+import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.usage.UsageService;
 
 public class ServerlessRestControllerPlugin extends Plugin implements RestServerActionPlugin {
@@ -34,9 +34,9 @@ public class ServerlessRestControllerPlugin extends Plugin implements RestServer
         NodeClient client,
         CircuitBreakerService circuitBreakerService,
         UsageService usageService,
-        Tracer tracer
+        TelemetryProvider telemetryProvider
     ) {
-        return new ServerlessRestController(interceptor, client, circuitBreakerService, usageService, tracer);
+        return new ServerlessRestController(interceptor, client, circuitBreakerService, usageService, telemetryProvider);
     }
 
     @Override

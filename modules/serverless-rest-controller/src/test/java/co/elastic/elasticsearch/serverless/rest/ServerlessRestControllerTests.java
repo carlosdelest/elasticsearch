@@ -27,7 +27,7 @@ import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.rest.action.document.RestGetAction;
-import org.elasticsearch.telemetry.tracing.Tracer;
+import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.client.NoOpNodeClient;
 import org.elasticsearch.test.rest.FakeRestRequest;
@@ -81,7 +81,7 @@ public class ServerlessRestControllerTests extends ESTestCase {
             client,
             mock(CircuitBreakerService.class),
             mock(UsageService.class),
-            mock(Tracer.class),
+            TelemetryProvider.NOOP,
             false
         );
         this.restHandler = new DummyRestHandler(randomAlphaOfLength(3) + "_" + randomAlphaOfLength(5));

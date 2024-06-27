@@ -31,7 +31,7 @@ import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestInterceptor;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
-import org.elasticsearch.telemetry.tracing.Tracer;
+import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.usage.UsageService;
 import org.elasticsearch.xcontent.MediaType;
 
@@ -59,10 +59,10 @@ public class ServerlessRestController extends RestController {
         NodeClient client,
         CircuitBreakerService circuitBreakerService,
         UsageService usageService,
-        Tracer tracer
+        TelemetryProvider telemetryProvider
 
     ) {
-        this(restInterceptor, client, circuitBreakerService, usageService, tracer, false);
+        this(restInterceptor, client, circuitBreakerService, usageService, telemetryProvider, false);
     }
 
     protected ServerlessRestController(
@@ -70,10 +70,10 @@ public class ServerlessRestController extends RestController {
         NodeClient client,
         CircuitBreakerService circuitBreakerService,
         UsageService usageService,
-        Tracer tracer,
+        TelemetryProvider telemetryProvider,
         boolean logValidationErrorsAsWarnings
     ) {
-        super(restInterceptor, client, circuitBreakerService, usageService, tracer);
+        super(restInterceptor, client, circuitBreakerService, usageService, telemetryProvider);
         this.logValidationErrorsAsWarnings = logValidationErrorsAsWarnings;
     }
 
