@@ -144,11 +144,9 @@ includeStatefulTests(":modules:data-streams", includeYamlTests = true, includeJa
 includeStatefulTests(":modules:ingest-common", includeYamlTests = true, includeJavaTests = false)
 includeStatefulTests(":test:external-modules:test-esql-heap-attack", includeYamlTests = false, includeJavaTests = true)
 includeStatefulTests(":x-pack:plugin:eql:qa:rest", includeYamlTests = true, includeJavaTests = true)
-includeStatefulTests(":x-pack:plugin:esql:qa:security", includeYamlTests = false, includeJavaTests = true)
 includeStatefulTests(":x-pack:plugin:esql:qa:server:single-node", includeYamlTests = true, includeJavaTests = true)
 includeStatefulTests(":x-pack:plugin:esql:qa:server:multi-node", includeYamlTests = true, includeJavaTests = true)
-// TODO: Uncomment the following line once we have our first serverless release with ES|QL
-// includeStatefulTests(":x-pack:plugin:esql:qa:server:mixed-cluster", includeYamlTests = true, includeJavaTests = true)
+includeStatefulTests(":x-pack:plugin:esql:qa:server:mixed-cluster", includeYamlTests = true, includeJavaTests = true)
 includeStatefulTests(":x-pack:plugin:sql:qa:server:single-node", includeYamlTests = false, includeJavaTests = true)
 includeStatefulTests(":x-pack:plugin:downsample:qa:rest", includeYamlTests = true, includeJavaTests = false)
 
