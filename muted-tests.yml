@@ -102,3 +102,6 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2137"
   method: "testMultipleDatastreamsRanking"
+- class: "co.elastic.elasticsearch.metering.SampledMetricsMetadataServiceIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2282"
+  method: "testRecordsSentFromLatestCommitedTimestampWhenPersistentTaskNodeRestarts"
