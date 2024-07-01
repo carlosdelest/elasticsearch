@@ -68,6 +68,7 @@ tests:
   - "test {spatial.AirportCityLocationPointDistance ASYNC}"
   - "test {spatial.AirportCityLocationPointDistance SYNC}"
   - "test {k8s-metrics.TwoRatesWithBucket ASYNC}"
+  - "test {k8s-metrics.TwoRatesWithBucket SYNC}"
 - class: "co.elastic.elasticsearch.stateless.CorruptionIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2258"
   method: "testConcurrentOperations"
