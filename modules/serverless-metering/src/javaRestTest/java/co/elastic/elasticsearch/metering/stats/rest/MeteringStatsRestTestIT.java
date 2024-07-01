@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering.stats.rest;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
+import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.Strings;
@@ -86,7 +87,7 @@ public class MeteringStatsRestTestIT extends ESRestTestCase {
             /*
              * First we load some indices and data streams into the cluster, and make sure we get the expected stats back
              */
-            final int numIndices = randomIntBetween(0, 10);
+            final int numIndices = randomIntBetween(1, 10);
             AtomicInteger totalDocs = new AtomicInteger(0);
             Map<String, Integer> indexNameToNumDocsMap = new HashMap<>();
             for (int i = 0; i < numIndices; i++) {
@@ -176,6 +177,29 @@ public class MeteringStatsRestTestIT extends ESRestTestCase {
                 assertThat(((List<Object>) responseMap.get("datastreams")).size(), equalTo(0));
             });
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testGetMeteringStatsNoIndexMatch() throws Exception {
+
+        RequestOptions.Builder requestOptionsBuilder = RequestOptions.DEFAULT.toBuilder()
+            .addHeader(
+                "es-secondary-authorization",
+                basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()))
+            );
+
+        /*
+         * Make sure our cluster is clean
+         */
+        wipeAllIndices();
+        wipeDataStreams();
+
+        assertBusy(() -> {
+            Request getMeteringStatsRequest = new Request("GET", "/_metering/stats");
+            getMeteringStatsRequest.setOptions(requestOptionsBuilder);
+            var ex = expectThrows(ResponseException.class, () -> client().performRequest(getMeteringStatsRequest));
+            assertThat(ex.getResponse().getStatusLine().getStatusCode(), equalTo(404));
+        });
     }
 
     static int createAndLoadIndex(String indexName, Settings settings) throws IOException {

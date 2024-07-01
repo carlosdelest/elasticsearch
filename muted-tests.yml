@@ -47,9 +47,6 @@ tests:
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2138"
   method: "test {stats.DocsStatsSumNestedExpression#[skip:-8.12.99,reason:supported\
     \ in 8.13+] ASYNC}"
-- class: "co.elastic.elasticsearch.metering.stats.rest.MeteringStatsRestTestIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2172"
-  method: "testGetMeteringStats"
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2190"
   method: "test {yaml=health/10_basic/cluster health basic test}"
