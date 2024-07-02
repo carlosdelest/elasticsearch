@@ -31,6 +31,7 @@ import org.junit.Before;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -174,16 +175,23 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
     public void testRecordsSentFromLatestCommitedTimestampWhenPersistentTaskNodeRestarts() throws Exception {
         // Wait for metric records to be transmitted
         final AtomicReference<Instant> currentCursor = new AtomicReference<>();
+        final AtomicReference<String> currentPersistentTaskNode = new AtomicReference<>();
+        final AtomicBoolean samePersistentTaskNode = new AtomicBoolean();
         assertBusy(() -> assertTrue(hasReceivedRecords("shard-size")));
         List<UsageRecord> metrics = pollReceivedRecords("shard-size");
         var lastUsageTimestamp = metrics.stream().map(UsageRecord::usageTimestamp).max(Instant::compareTo).get();
 
         // Compare them with cursor, remember it
         assertBusy(() -> {
-            var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(internalCluster().clusterService().state());
+            var clusterState = clusterService().state();
+            var task = MeteringIndexInfoTask.findTask(clusterState);
+            assertNotNull(task);
+            assertTrue(task.isAssigned());
+            var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(clusterState);
             assertThat(sampledMetricsMetadata, is(notNullValue()));
             assertThat(sampledMetricsMetadata.getCommittedTimestamp(), greaterThanOrEqualTo(lastUsageTimestamp));
             currentCursor.set(sampledMetricsMetadata.getCommittedTimestamp());
+            currentPersistentTaskNode.set(task.getExecutorNode());
         });
 
         // Switch off the persistent task executor, so we can check that metadata is preserved and picked up
@@ -212,6 +220,8 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             var task = MeteringIndexInfoTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
+            var previousPersistentTaskNode = currentPersistentTaskNode.get();
+            samePersistentTaskNode.set(previousPersistentTaskNode.equals(task.getExecutorNode()));
         });
 
         // Wait for new sampled metrics records
@@ -220,7 +230,9 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
 
         // Check we are sending records for the period we missed too
         var timestamps = newMetrics.stream().map(UsageRecord::usageTimestamp).toList();
-        assertThat(timestamps, hasSize(greaterThanOrEqualTo(2)));
+        // If the new node is different and does not have previous information for interpolating, we will transmit just one sample
+        var minimumSize = samePersistentTaskNode.get() ? 2 : 1;
+        assertThat(timestamps, hasSize(greaterThanOrEqualTo(minimumSize)));
         var newLastUsageTimestamp = timestamps.stream().max(Instant::compareTo).get();
 
         assertBusy(() -> {
