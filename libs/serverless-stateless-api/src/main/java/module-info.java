@@ -15,22 +15,8 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-import co.elastic.elasticsearch.metering.MeteringFeatures;
-
-module org.elasticsearch.metering {
-    requires org.apache.logging.log4j;
-
-    requires org.elasticsearch.base;
-    requires org.elasticsearch.logging;
+module org.elasticsearch.stateless.api {
     requires org.elasticsearch.server;
-    requires org.elasticsearch.xcontent;
-    requires org.elasticsearch.metrics;
-    requires java.net.http;
-    requires org.apache.lucene.core;
-    requires org.elasticsearch.serverless.constants;
-    requires org.elasticsearch.stateless.api;
 
-    provides org.elasticsearch.features.FeatureSpecification with MeteringFeatures;
-
-    exports co.elastic.elasticsearch.metering.action to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.stateless.api;
 }

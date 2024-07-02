@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.stateless.api.CompoundCommitService;
+
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfo;
@@ -52,8 +54,9 @@ public class ShardReaderTests extends ESTestCase {
     public void testEmptySetWhenNoIndices() throws IOException {
 
         var indicesService = mock(IndicesService.class);
+        var commitService = mock(CompoundCommitService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
-        var shardReader = new ShardReader(indicesService);
+        var shardReader = new ShardReader(indicesService, commitService);
 
         when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
 
@@ -68,8 +71,9 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
+        var commitService = mock(CompoundCommitService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
-        var shardReader = new ShardReader(indicesService);
+        var shardReader = new ShardReader(indicesService, commitService);
 
         var index1 = mock(IndexService.class);
         var index2 = mock(IndexService.class);
@@ -107,12 +111,13 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
+        var commitService = mock(CompoundCommitService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
         when(shardInfoCache.getCachedShardInfo(eq(shardId3), anyLong(), anyLong())).thenReturn(
             Optional.of(new LocalNodeMeteringShardInfoCache.CacheEntry(1L, 1L, 10L, 100L, "TEST-NODE", null))
         );
 
-        var shardReader = new ShardReader(indicesService);
+        var shardReader = new ShardReader(indicesService, commitService);
 
         var index1 = mock(IndexService.class);
         var index2 = mock(IndexService.class);

@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.stateless.api.CompoundCommitService;
+
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
@@ -38,7 +40,8 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
         IndicesService indicesService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache
+        LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache,
+        CompoundCommitService commitService
     ) {
         super(
             GetMeteringShardInfoAction.NAME,
@@ -48,7 +51,7 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
             GetMeteringShardInfoAction.Request::new,
             threadPool.executor(ThreadPool.Names.MANAGEMENT)
         );
-        this.shardReader = new ShardReader(indicesService);
+        this.shardReader = new ShardReader(indicesService, commitService);
         this.localNodeMeteringShardInfoCache = localNodeMeteringShardInfoCache;
     }
 

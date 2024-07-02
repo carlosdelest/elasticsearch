@@ -99,6 +99,7 @@ include(":modules:serverless-no-wait-for-active-shards")
 include(":libs:serverless-build-info")
 include(":libs:serverless-metrics")
 include(":libs:serverless-shared-constants")
+include(":libs:serverless-stateless-api")
 include(":libs:serverless-xpack-template-resources")
 
 /*

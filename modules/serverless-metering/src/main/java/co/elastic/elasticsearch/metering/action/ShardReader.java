@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.action;
 
 import co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator;
+import co.elastic.elasticsearch.stateless.api.CompoundCommitService;
 
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
@@ -37,9 +38,11 @@ import java.util.Map;
 class ShardReader {
     private static final Logger logger = LogManager.getLogger(ShardReader.class);
     private final IndicesService indicesService;
+    private final CompoundCommitService commitService;
 
-    ShardReader(IndicesService indicesService) {
+    ShardReader(IndicesService indicesService, CompoundCommitService commitService) {
         this.indicesService = indicesService;
+        this.commitService = commitService;
     }
 
     private record ShardSizeAndDocCount(long sizeInBytes, long docCount) {}
