@@ -105,6 +105,9 @@ tasks {
 
             // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1777
             "ml/inference_crud/Test force delete given model with alias referenced by pipeline",
+
+            // Bulk roles is not available in serverless
+            "roles/60_bulk_roles/*",
         ).joinToString(","))
     }
 }
