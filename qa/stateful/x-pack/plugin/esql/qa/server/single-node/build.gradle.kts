@@ -19,6 +19,8 @@ tasks {
     javaRestTest {
         // Tests use a shared cluster
         maxParallelForks = 1
+        // Needed for ArrowFormatIT
+        jvmArgs("--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED")
     }
     yamlRestTest {
         systemProperty(
