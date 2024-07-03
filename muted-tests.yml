@@ -104,3 +104,6 @@ tests:
   method: "test {yaml=roles/10_basic/Test put role api}"
 - class: "org.elasticsearch.xpack.esql.qa.single_node.ArrowFormatIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2296"
+- class: "org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT"
+  issue: "https://github.com/elastic/elasticsearch/issues/110434"
+  method: "test {p0=esql/170_no_replicas/Test From 5}"
