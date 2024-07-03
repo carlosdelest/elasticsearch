@@ -55,7 +55,9 @@ tests:
   method: "testConflictingMappingUpgrade"
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2223"
-  method: "testShardReadLoadCausesMinimumAndZeroSearchLoad"
+  methods:
+  - "testShardReadLoadCausesMinimumAndZeroSearchLoad"
+  - "testSearchMetricsArePublishedEventually"
 - class: "co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2245"
   method: "testActiveTranslogFilesArePrunedCaseWithMultipleShards"
