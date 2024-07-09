@@ -83,6 +83,7 @@ public class GetTrainedModelsStatsResponseFilter extends ApiFilteringActionFilte
                 stats.getModelId(),
                 stats.getThreadsPerAllocation(),
                 stats.getNumberOfAllocations(),
+                stats.getAdaptiveAllocationsSettings(),
                 stats.getQueueCapacity(),
                 stats.getCacheSize(),
                 stats.getStartTime(),
