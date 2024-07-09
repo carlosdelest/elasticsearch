@@ -54,7 +54,7 @@ Changes not staged for commit:
 ```
 
 At which point the typical `git add`, `git commit` and `git push` workflow would be used to push these changes to a
-remote branch. Similarly, you can revert uncommitted changes by simply doing `git checkout elasticsearch`.
+remote branch. Similarly, you can revert uncommitted changes by simply doing `git checkout elasticsearch`. To `git checkout a-specific-branch` in the `elasticsearch` submodule, you can `cd elasticsearch` into the submodule folder.
 
 ### Working on submodule code
 
@@ -108,8 +108,11 @@ If you need to make further customizations, the cluster definition for this task
 
 ### Deploy snapshot into in QA environment
 
+
 To deploy a branch snapshot into QA
 
+1. If you've made changes in the elasticsearch repo, pull those changes into a branch in elasticsearch-serverless by following the instructions above in Updating submodules.
+   
 1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa
    This deploys a snapshot from the selected branch into our QA environment (see https://docs.elastic.dev/serverless/qa)
    by publishing a docker snapshot into our internal docker registry and then using the serverless project api to deploy that snapshot to our serverless platform QA environment.
@@ -130,13 +133,13 @@ To deploy a branch snapshot into QA
    export ESS_ROOT_PASSWORD_ENCRYPTED="<ENCRYPTED_PASSWORD_FROM_BUILD_INFO_BOX>"
    ```
 
-2. to decrypt the elastic userpassword you need to resolve the encryption key from vault and then decrypt the password
+1. to decrypt the elastic userpassword you need to resolve the encryption key from vault and then decrypt the password
    ```
    > vault read -field private-key secret/elasticsearch-team/delivery-encryption > key.pem;
 
    export ESS_ROOT_PASSWORD=$(echo "$ESS_ROOT_PASSWORD_ENCRYPTED" | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem)
    ```
-4. Now you should be able to access the ess instance via curl
+1. Now you should be able to access the ess instance via curl
    ```
 
    curl -k -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD $ESS_PUBLIC_URL
