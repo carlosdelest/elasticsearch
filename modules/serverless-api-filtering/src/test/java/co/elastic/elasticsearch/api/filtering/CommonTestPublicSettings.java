@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.api.filtering;
 
+import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -56,6 +57,12 @@ public class CommonTestPublicSettings {
 
     public static IndexScopedSettings MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS = new IndexScopedSettings(
         Settings.EMPTY,
-        Set.of(PUBLIC_SETTING, NON_PUBLIC_SETTING, AFFIX_PRIVATE_SETTING, AFFIX_PUBLIC_SETTING)
+        Set.of(
+            PUBLIC_SETTING,
+            NON_PUBLIC_SETTING,
+            AFFIX_PRIVATE_SETTING,
+            AFFIX_PUBLIC_SETTING,
+            IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING
+        )
     );
 }

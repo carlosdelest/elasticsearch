@@ -82,15 +82,16 @@ public abstract class PublicSettingsValidator<RequestType extends ActionRequest>
                 .filter(settingName -> indexScopedSettings.get(settingName).isServerlessPublic() == false)
                 .toList();
             if (false == list.isEmpty()) {
-                throw new IllegalArgumentException(
-                    "Settings ["
-                        + Strings.collectionToDelimitedString(list, ",")
-                        + "]"
-                        + " are not available when running in serverless mode"
-                );
+                throwValidationError(list);
             }
         }
 
+    }
+
+    protected static void throwValidationError(List<String> list) {
+        throw new IllegalArgumentException(
+            "Settings [" + Strings.collectionToDelimitedString(list, ",") + "]" + " are not available when running in serverless mode"
+        );
     }
 
     private static Settings normaliseSettings(Settings settings) {
