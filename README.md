@@ -111,7 +111,7 @@ If you need to make further customizations, the cluster definition for this task
 
 To deploy a branch snapshot into QA
 
-1. If you've made changes in the elasticsearch repo, pull those changes into a branch in elasticsearch-serverless by following the instructions above in Updating submodules.
+1. If you've made changes in the elasticsearch repo, pull those changes into a branch in elasticsearch-serverless by following the instructions above in [Updating submodules](#updating-submodules).
    
 1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa
    This deploys a snapshot from the selected branch into our QA environment (see https://docs.elastic.dev/serverless/qa)
