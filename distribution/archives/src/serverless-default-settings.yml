@@ -52,6 +52,11 @@ indices.recovery.use_snapshots: false
 cluster.fault_detection.follower_check.timeout: 20m
 cluster.follower_lag.timeout: 1h
 
+# In serverless, only index nodes can be the master, but the search nodes could
+# happen to boot first, in which case it is expected and normal that the cluster
+# would spend some time without a master until at least one index node arrives.
+discovery.initial_state_timeout: 10m
+
 # Lots of threads read from the blob store in parallel, and we don't want any
 # of them to fail just because the connection pool is exhausted. See comments
 # on ES-8103 for the current (at time of writing) threadpool sizes for
