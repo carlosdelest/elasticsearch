@@ -19,6 +19,14 @@ plugins {
     id("elasticsearch.serverless-promotion-report")
 }
 
+repositories {
+    // we add mavenCentral() to es serverless root project to fix
+    // an issue with source download in the IDE when trying to resolve thirdparty
+    // dependency sources declared by a git submodule (e.g. in this case elasticsearch)
+    // where the source jar is resolved against the root project context and not by the subproject context.
+    mavenCentral()
+}
+
 allprojects {
     repositories {
         maven {
