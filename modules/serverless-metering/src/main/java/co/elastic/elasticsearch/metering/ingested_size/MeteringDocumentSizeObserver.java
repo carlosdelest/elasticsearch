@@ -24,13 +24,11 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class MeteringDocumentSizeObserver implements DocumentSizeObserver {
     private final AtomicLong counter;
+    private final boolean isUpdateByScript;
 
-    public MeteringDocumentSizeObserver() {
-        this(0L);
-    }
-
-    protected MeteringDocumentSizeObserver(long initValue) {
-        this.counter = new AtomicLong(initValue);
+    public MeteringDocumentSizeObserver(boolean isUpdateByScript) {
+        this.counter = new AtomicLong(0);
+        this.isUpdateByScript = isUpdateByScript;
     }
 
     @Override
@@ -41,6 +39,11 @@ public class MeteringDocumentSizeObserver implements DocumentSizeObserver {
     @Override
     public long normalisedBytesParsed() {
         return counter.get();
+    }
+
+    @Override
+    public boolean isUpdateByScript() {
+        return isUpdateByScript;
     }
 
 }

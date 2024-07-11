@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering.ingested_size;
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 
 import org.elasticsearch.index.mapper.ParsedDocument;
+import org.elasticsearch.plugins.internal.DocumentSizeObserver;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
 public class RAIngestMetricReporter implements DocumentSizeReporter {
@@ -38,9 +39,11 @@ public class RAIngestMetricReporter implements DocumentSizeReporter {
 
     @Override
     public void onIndexingCompleted(ParsedDocument parsedDocument) {
-        var normalizedBytesParsed = parsedDocument.getDocumentSizeObserver().normalisedBytesParsed();
-        if (normalizedBytesParsed > 0) {
+        DocumentSizeObserver documentSizeObserver = parsedDocument.getDocumentSizeObserver();
+        var normalizedBytesParsed = documentSizeObserver.normalisedBytesParsed();
+        if (documentSizeObserver.isUpdateByScript() == false && normalizedBytesParsed > 0) {
             this.ingestMetricsCollector.addIngestedDocValue(indexName, normalizedBytesParsed);
         }
     }
+
 }

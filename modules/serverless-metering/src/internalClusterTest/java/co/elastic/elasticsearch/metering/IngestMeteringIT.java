@@ -32,7 +32,6 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.MockScriptEngine;
-import org.elasticsearch.script.MockScriptPlugin;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.test.InternalSettingsPlugin;
@@ -44,9 +43,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Function;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
@@ -91,7 +88,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         list.addAll(super.nodePlugins());
         list.add(InternalSettingsPlugin.class);
         list.add(IngestCommonPlugin.class);
-        list.add(CustomScriptPlugin.class);
+        list.add(TestScriptPlugin.class);
         return list;
     }
 
@@ -232,7 +229,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         // update via inlined script
         String scriptCode = "ctx._source.b = 'xx'";
-        final Script script = new Script(ScriptType.INLINE, CustomScriptPlugin.NAME, scriptCode, Collections.emptyMap());
+        final Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, scriptCode, Collections.emptyMap());
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).get();
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
@@ -297,25 +294,4 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
             """);
         clusterAdmin().putPipeline(new PutPipelineRequest("new_field_pipeline", pipelineBody, XContentType.JSON)).actionGet();
     }
-
-    public static class CustomScriptPlugin extends MockScriptPlugin {
-
-        @Override
-        @SuppressWarnings("unchecked")
-        protected Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
-            Map<String, Function<Map<String, Object>, Object>> scripts = new HashMap<>();
-            scripts.put("ctx._source.b = 'xx'", vars -> srcScript(vars, source -> { return source.replace("b", "xx"); }));
-            return scripts;
-        }
-
-        @SuppressWarnings("unchecked")
-        static Object srcScript(Map<String, Object> vars, Function<Map<String, Object>, Object> f) {
-            Map<?, ?> ctx = (Map<?, ?>) vars.get("ctx");
-
-            Map<String, Object> source = (Map<String, Object>) ctx.get("_source");
-            return f.apply(source);
-        }
-
-    }
-
 }

@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
+import org.apache.logging.log4j.Level;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
@@ -29,12 +30,18 @@ import org.elasticsearch.action.datastreams.CreateDataStreamAction;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
 import org.elasticsearch.cluster.metadata.Template;
+import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.datastreams.DataStreamsPlugin;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.script.MockScriptEngine;
+import org.elasticsearch.script.Script;
+import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.test.InternalSettingsPlugin;
+import org.elasticsearch.test.MockLog;
 import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.xcontent.XContentType;
 import org.junit.After;
@@ -52,7 +59,10 @@ import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcke
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.startsWith;
 
-@TestLogging(reason = "development", value = "co.elastic.elasticsearch.metering:TRACE")
+@TestLogging(
+    reason = "development",
+    value = "co.elastic.elasticsearch.metering:TRACE,co.elastic.elasticsearch.metering.ingested_size.RAStorageReporter:TRACE"
+)
 public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
     protected static final int DEFAULT_SEARCH_POWER = 100;
@@ -74,6 +84,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         list.addAll(super.nodePlugins());
         list.add(InternalSettingsPlugin.class);
         list.add(DataStreamsPlugin.class);
+        list.add(TestScriptPlugin.class);
         return list;
     }
 
@@ -129,10 +140,10 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + indexName));
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWith(usageRecordStream, "raw-stored-index-size:" + indexName);
+        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + indexName);
         assertUsageRecord(indexName, usageRecord, "raw-stored-index-size:" + indexName, "es_raw_stored_data", 0);
 
-        usageRecord = filterByIdStartsWith(usageRecordStream, "ingested-doc:" + indexName);
+        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + indexName);
         assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", EXPECTED_SIZE);
     }
 
@@ -148,15 +159,17 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + indexName));
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWith(usageRecordStream, "raw-stored-index-size:" + indexName);
+        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + indexName);
         assertUsageRecord(indexName, usageRecord, "raw-stored-index-size:" + indexName, "es_raw_stored_data", EXPECTED_SIZE);
 
-        usageRecord = filterByIdStartsWith(usageRecordStream, "ingested-doc:" + indexName);
+        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + indexName);
         assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", EXPECTED_SIZE);
     }
 
     public void testDataStreamNoMapping() throws InterruptedException, ExecutionException, IOException {
         String indexName = "idx1";
+        String dsName = ".ds-" + indexName;
+
         String mapping = emptyMapping();
         createDataStreamAndTemplate(indexName, mapping);
 
@@ -167,18 +180,19 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + indexName));
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
+        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + dsName));
+        waitUntil(() -> hasReceivedRecords("ingested-doc:" + dsName));
         List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWith(usageRecordStream, "raw-stored-index-size:.ds-" + indexName);
-        assertUsageRecord(".ds-" + indexName, usageRecord, "raw-stored-index-size:.ds-" + indexName, "es_raw_stored_data", EXPECTED_SIZE);
+        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + dsName);
+        assertUsageRecord(dsName, usageRecord, "raw-stored-index-size:" + dsName, "es_raw_stored_data", EXPECTED_SIZE);
 
-        usageRecord = filterByIdStartsWith(usageRecordStream, "ingested-doc:.ds-" + indexName);
-        assertUsageRecord(".ds-" + indexName, usageRecord, "ingested-doc:.ds-" + indexName, "es_raw_data", EXPECTED_SIZE);
+        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + dsName);
+        assertUsageRecord(dsName, usageRecord, "ingested-doc:" + dsName, "es_raw_data", EXPECTED_SIZE);
     }
 
     public void testRaStorageIsReportedAfterCommit() throws InterruptedException, ExecutionException, IOException {
         String indexName = "idx1";
+        String dsName = ".ds-" + indexName;
         createDataStream(indexName);
 
         client().index(
@@ -188,14 +202,71 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + indexName));
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
+        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + dsName));
+        waitUntil(() -> hasReceivedRecords("ingested-doc:" + dsName));
         List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWith(usageRecordStream, "raw-stored-index-size:.ds-" + indexName);
-        assertUsageRecord(".ds-" + indexName, usageRecord, "raw-stored-index-size:.ds-" + indexName, "es_raw_stored_data", EXPECTED_SIZE);
+        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + dsName);
+        assertUsageRecord(dsName, usageRecord, "raw-stored-index-size:" + dsName, "es_raw_stored_data", EXPECTED_SIZE);
 
-        usageRecord = filterByIdStartsWith(usageRecordStream, "ingested-doc:.ds-" + indexName);
-        assertUsageRecord(".ds-" + indexName, usageRecord, "ingested-doc:.ds-" + indexName, "es_raw_data", EXPECTED_SIZE);
+        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + dsName);
+        assertUsageRecord(dsName, usageRecord, "ingested-doc:" + dsName, "es_raw_data", EXPECTED_SIZE);
+    }
+
+    // this test is confirming that for nontimeseries index we will meter ra-s updates by script in solution's cluster
+    // if we didn't the ra-s would decrease after an update by script (because of a delete being followed by a not metered index op)
+    public void testUpdatesViaScriptAreMeteredForSolutions() throws InterruptedException, IOException {
+        // TODO remove this logging based assertion in favour of real assertions on metrics once they are emitted
+        String loggerName = "co.elastic.elasticsearch.metering.ingested_size.RAStorageReporter";
+        try (var mockLogAppender = MockLog.capture(loggerName)) {
+            mockLogAppender.addExpectation(
+                new MockLog.SeenEventExpectation(
+                    "An RAStorageReported onParsingCompleted has been invoked",
+                    loggerName,
+                    Level.TRACE,
+                    "parsing completed for non time series index"
+                )
+            );
+
+            doTestUpdatesViaScriptAreMeteredForSolutions();
+
+            mockLogAppender.assertAllExpectationsMatched();
+        }
+    }
+
+    private void doTestUpdatesViaScriptAreMeteredForSolutions() throws InterruptedException {
+        startMasterIndexAndIngestNode();
+        startSearchNode();
+        String indexName = "index1";
+
+        createIndex(indexName);
+
+        String scriptId = "script1";
+        clusterAdmin().preparePutStoredScript().setId(scriptId).setContent(new BytesArray(Strings.format("""
+            {"script": {"lang": "%s", "source": "ctx._source.b = 'xx'"} }""", MockScriptEngine.NAME)), XContentType.JSON).get();
+
+        // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
+        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
+
+        // update via stored script
+        final Script storedScript = new Script(ScriptType.STORED, null, scriptId, Collections.emptyMap());
+        client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).get();
+
+        // update via inlined script
+        String scriptCode = "ctx._source.b = 'xx'";
+        final Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, scriptCode, Collections.emptyMap());
+        client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).get();
+
+        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+
+        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
+        List<UsageRecord> usageRecords = pollReceivedRecords("ingested-doc:" + indexName);
+        // we don't expect RA-I records for updates, hence only 1 record from the newDoc request
+        assertThat(usageRecords.size(), equalTo(1));
+        UsageRecord usageRecord = usageRecords.get(0);
+        assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", 3 * ASCII_SIZE + NUMBER_SIZE);
+
+        // TODO assertions about RA-S for non timeseries
+        receivedMetrics().clear();
     }
 
     private void createDataStream(String indexName) throws IOException {
@@ -254,10 +325,10 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + indexName));
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWith(usageRecordStream, "raw-stored-index-size:" + indexName);
+        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + indexName);
         assertUsageRecord(indexName, usageRecord, "raw-stored-index-size:" + indexName, "es_raw_stored_data", 2 * EXPECTED_SIZE);
 
-        usageRecord = filterByIdStartsWith(usageRecordStream, "ingested-doc:" + indexName);
+        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + indexName);
         assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", 2 * EXPECTED_SIZE);
     }
 

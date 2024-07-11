@@ -51,6 +51,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
@@ -138,25 +139,26 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     }
 
     protected UsageRecord pollReceivedRecordsAndGetFirst(String prefix) {
-        List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        return filterByIdStartsWith(usageRecordStream, prefix);
+        List<UsageRecord> usageRecords = pollReceivedRecords();
+        return filterByIdStartsWithAndGetFirst(usageRecords, prefix);
     }
 
-    protected UsageRecord filterByIdStartsWith(List<UsageRecord> usageRecordStream, String prefix) {
-        return usageRecordStream.stream().filter(m -> m.id().startsWith(prefix)).findFirst().get();
+    protected Stream<UsageRecord> filterByIdStartsWith(Stream<UsageRecord> usageRecordStream, String prefix) {
+        return usageRecordStream.filter(m -> m.id().startsWith(prefix));
+    }
+
+    protected UsageRecord filterByIdStartsWithAndGetFirst(List<UsageRecord> usageRecordStream, String prefix) {
+        return filterByIdStartsWith(usageRecordStream.stream(), prefix).findFirst().get();
     }
 
     protected List<UsageRecord> pollReceivedRecords() {
         List<List<UsageRecord>> recordLists = new ArrayList<>();
         receivedMetrics().drainTo(recordLists);
-
         return recordLists.stream().flatMap(List::stream).collect(Collectors.toList());
     }
 
     protected List<UsageRecord> pollReceivedRecords(String prefix) {
-        List<List<UsageRecord>> recordLists = new ArrayList<>();
-        receivedMetrics().drainTo(recordLists);
-
-        return recordLists.stream().flatMap(List::stream).filter(m -> m.id().startsWith(prefix)).toList();
+        List<UsageRecord> usageRecord = pollReceivedRecords();
+        return filterByIdStartsWith(usageRecord.stream(), prefix).collect(Collectors.toList());
     }
 }

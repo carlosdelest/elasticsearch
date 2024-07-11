@@ -222,7 +222,7 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
     private long meterDocument() {
         try {
             BytesReference bytesReference = XContentTestUtils.convertToXContent(documentSource(), XContentType.JSON);
-            MeteringDocumentSizeObserver meteringDocumentSizeObserver = new MeteringDocumentSizeObserver();
+            MeteringDocumentSizeObserver meteringDocumentSizeObserver = new MeteringDocumentSizeObserver(false);
 
             XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, meteringDocumentSizeObserver).v2();
 

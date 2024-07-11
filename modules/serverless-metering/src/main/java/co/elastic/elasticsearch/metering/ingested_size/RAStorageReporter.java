@@ -19,10 +19,13 @@ package co.elastic.elasticsearch.metering.ingested_size;
 
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ParsedDocument;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
 public class RAStorageReporter implements DocumentSizeReporter {
+    private static final Logger logger = LogManager.getLogger(RAStorageReporter.class);
     private final DocumentSizeAccumulator documentSizeAccumulator;
     private final MapperService mapperService;
 
@@ -33,17 +36,16 @@ public class RAStorageReporter implements DocumentSizeReporter {
 
     @Override
     public void onIndexingCompleted(ParsedDocument parsedDocument) {
-        var documentSizeObserver = parsedDocument.getDocumentSizeObserver();
         if (isTimeSeries()) {
             // per index storage
-            documentSizeAccumulator.add(documentSizeObserver.normalisedBytesParsed());
+            documentSizeAccumulator.add(parsedDocument.getDocumentSizeObserver().normalisedBytesParsed());
         }
     }
 
     @Override
     public void onParsingCompleted(ParsedDocument parsedDocument) {
         if (isTimeSeries() == false) {
-            // todo per doc storage
+            logger.trace("parsing completed for non time series index");
         }
     }
 

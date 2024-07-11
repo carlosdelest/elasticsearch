@@ -20,6 +20,9 @@ package co.elastic.elasticsearch.metering.ingested_size;
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
@@ -46,13 +49,36 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
     }
 
     @Override
-    public DocumentSizeObserver newDocumentSizeObserver() {
-        return new MeteringDocumentSizeObserver();
+    public <T> DocumentSizeObserver newDocumentSizeObserver(DocWriteRequest<T> request) {
+        if (request instanceof IndexRequest indexRequest) {
+            return newDocumentSizeObserver(indexRequest);
+        } else if (request instanceof UpdateRequest updateRequest) {
+            return newDocumentSizeObserver(updateRequest);
+        }
+        return DocumentSizeObserver.EMPTY_INSTANCE;
     }
 
-    @Override
-    public DocumentSizeObserver newFixedSizeDocumentObserver(long normalisedBytesParsed) {
-        return new FixedDocumentSizeObserver(normalisedBytesParsed);
+    private DocumentSizeObserver newDocumentSizeObserver(IndexRequest indexRequest) {
+        if (indexRequest.getNormalisedBytesParsed() >= 0) {
+            return new FixedDocumentSizeObserver(indexRequest.getNormalisedBytesParsed());
+        } else if (indexRequest.originatesFromUpdateByScript() && isObservabilityOrSecurity() == false) {
+            return DocumentSizeObserver.EMPTY_INSTANCE; // no metering necessary
+        }
+        // request.getNormalisedBytesParsed() -1, meaning normalisedBytesParsed isn't set as parsing wasn't done yet
+        return new MeteringDocumentSizeObserver(indexRequest.originatesFromUpdateByScript());
+    }
+
+    private DocumentSizeObserver newDocumentSizeObserver(UpdateRequest updateRequest) {
+        if (isUpdateByDoc(updateRequest)) {
+            // meter the partial doc
+            return new MeteringDocumentSizeObserver(false);
+        }
+        // update by script are metered on the IndexRequest resulting from execution of the script
+        return DocumentSizeObserver.EMPTY_INSTANCE;
+    }
+
+    private static boolean isUpdateByDoc(UpdateRequest updateRequest) {
+        return updateRequest.script() == null && updateRequest.doc() != null;
     }
 
     @Override
@@ -64,12 +90,16 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
         if (isSystemIndex(indexName)) {
             return DocumentSizeReporter.EMPTY_INSTANCE;
         }
-        if (projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY) {
+        if (isObservabilityOrSecurity()) {
             DocumentSizeReporter raStorageReporter = new RAStorageReporter(documentSizeAccumulator, mapperService);
             DocumentSizeReporter raIngestReporter = new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
             return new CompositeDocumentSizeReporter(List.of(raStorageReporter, raIngestReporter));
         }
         return new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
+    }
+
+    private boolean isObservabilityOrSecurity() {
+        return projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY;
     }
 
     private boolean isSystemIndex(String indexName) {
@@ -79,7 +109,7 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
 
     @Override
     public DocumentSizeAccumulator createDocumentSizeAccumulator() {
-        if (projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY) {
+        if (isObservabilityOrSecurity()) {
             return new RAStorageAccumulator();
         }
         return DocumentSizeAccumulator.EMPTY_INSTANCE;

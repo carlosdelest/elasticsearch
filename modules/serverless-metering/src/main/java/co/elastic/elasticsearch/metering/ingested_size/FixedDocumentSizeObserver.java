@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.ingested_size;
 
+import org.elasticsearch.plugins.internal.DocumentSizeObserver;
 import org.elasticsearch.xcontent.XContentParser;
 
 /**
@@ -24,10 +25,12 @@ import org.elasticsearch.xcontent.XContentParser;
  * it will not increase this value when used in further parsing.
  * Used when a parsing already was measured in IngestService
  */
-public class FixedDocumentSizeObserver extends MeteringDocumentSizeObserver {
+public class FixedDocumentSizeObserver implements DocumentSizeObserver {
+
+    private final long normalisedBytesParsed;
 
     public FixedDocumentSizeObserver(long normalisedBytesParsed) {
-        super(normalisedBytesParsed);
+        this.normalisedBytesParsed = normalisedBytesParsed;
     }
 
     @Override
@@ -35,4 +38,13 @@ public class FixedDocumentSizeObserver extends MeteringDocumentSizeObserver {
         return xContentParser;
     }
 
+    @Override
+    public long normalisedBytesParsed() {
+        return normalisedBytesParsed;
+    }
+
+    @Override
+    public boolean isUpdateByScript() {
+        return false;
+    }
 }
