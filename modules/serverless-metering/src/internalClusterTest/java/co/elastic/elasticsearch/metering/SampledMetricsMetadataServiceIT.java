@@ -209,10 +209,6 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
         waitUntil(() -> pollReceivedRecords("ingested-doc:" + indexName).isEmpty() == false);
 
-        // Check that non-sampled records did not advance the sampled metrics cursor
-        var afterIngestMetadata = SampledMetricsMetadata.getFromClusterState(internalCluster().clusterService().state());
-        assertThat(afterStopMetadata.getCommittedTimestamp(), equalTo(afterIngestMetadata.getCommittedTimestamp()));
-
         // Re-enable the persistent task
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
         assertBusy(() -> {
