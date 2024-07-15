@@ -8,12 +8,9 @@
 
 package co.elastic.elasticsearch.qa.sso;
 
-import org.apache.http.util.EntityUtils;
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.client.Request;
-import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
-import org.elasticsearch.client.WarningsHandler;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.SecureString;
@@ -116,8 +113,6 @@ public final class ServerlessSsoIT extends ESRestTestCase {
         .configFile("metadata.xml", Resource.fromClasspath("saml/metadata.xml"))
         .configFile("operator/settings.json", Resource.fromClasspath("operator/role-mappings.json"))
         .configFile("roles.yml", Resource.fromClasspath("roles.yml"))
-        // Logging enabled to debug https://github.com/elastic/elasticsearch-serverless/issues/898
-        .setting("logger.org.elasticsearch.xpack.security.authc.support.mapper", "TRACE")
         .build();
 
     private SamlFactory samlFactory;
@@ -169,10 +164,8 @@ public final class ServerlessSsoIT extends ESRestTestCase {
 
     private record UserInfo(String principal, String name, String email, String[] groups) {}
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/898")
     public void testSamlAuthenticationAndAccess() throws Exception {
-        waitForSearchableSecurityIndex();
-        waitForRoleMapping("elastic-cloud-sso-kibana-do-not-change"); // from role-mappings.json
+        waitForRoleMappings();
 
         final UserInfo user = randomSamlUser();
         final Map<String, Object> responseBody = samlAuthenticate(user);
@@ -197,41 +190,19 @@ public final class ServerlessSsoIT extends ESRestTestCase {
         verifyAccessTokenInvalidated(token);
     }
 
-    private void waitForSearchableSecurityIndex() throws Exception {
-        assertBusy(() -> {
-            ensureHealth(adminClient(), ".security", req -> {
-                ignoreWarnings(req);
-                req.addParameter("wait_for_status", "yellow");
-                req.addParameter("wait_for_no_initializing_shards", "true");
-            });
-
-            try {
-                final Request request = new Request("GET", "/.security/_count");
-                ignoreWarnings(request);
-                adminClient().performRequest(request);
-            } catch (ResponseException e) {
-                logger.info("Failed to count docs in security index ({})", e.toString());
-                final Response response = adminClient().performRequest(new Request("GET", "/_cat/shards"));
-                logger.info("GET /_cat/shards:\n{}", EntityUtils.toString(response.getEntity()));
-                fail("Failed to count docs in security index");
-            }
-        }, 45, TimeUnit.SECONDS);
-    }
-
-    private void waitForRoleMapping(String name) throws Exception {
+    private void waitForRoleMappings() throws Exception {
         assertBusy(() -> {
             try {
-                final Request request = new Request("GET", "/_security/role_mapping/" + name);
-                adminClient().performRequest(request);
+                final Request request = new Request("GET", "_cluster/state/metadata");
+                request.addParameter("filter_path", "metadata.role_mappings");
+                var response = new ObjectPath(entityAsMap(adminClient().performRequest(request)));
+                List<?> mappings = response.evaluate("metadata.role_mappings.role_mappings");
+                assertThat(mappings, not(empty()));
             } catch (ResponseException e) {
-                logger.info("Failed to find role mapping [{}] - {}", name, e.toString());
-                fail("Failed to find role mapping " + name);
+                logger.info("Failed to retrieve role mappings from cluster state - {}", e.toString());
+                fail("Failed to retrieve role mappings");
             }
-        }, 20, TimeUnit.SECONDS);
-    }
-
-    private static void ignoreWarnings(Request req) {
-        req.setOptions(req.getOptions().toBuilder().setWarningsHandler(WarningsHandler.PERMISSIVE));
+        }, 90, TimeUnit.SECONDS);
     }
 
     private Map<String, Object> samlAuthenticate(UserInfo user) throws Exception {
