@@ -54,7 +54,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.TASK_ALLOCATION_ID;
-import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.awaitForkedTasks;
 import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterState;
 import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterStateWithPersistentTask;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
@@ -131,7 +130,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
-        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
+        flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
 
         final Set<DiscoveryNode> searchNodes = clusterService.state()
@@ -186,7 +185,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
-        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
+        flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
 
         Set<ShardId> seenShards = new HashSet<>();
@@ -252,7 +251,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
-        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
+        flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
 
         for (Map.Entry<String, List<CapturingTransport.CapturedRequest>> entry : capturedRequests.entrySet()) {
@@ -283,7 +282,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
-        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
+        flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
 
         var exception = expectThrows(ExecutionException.class, listener::get);
         assertThat(exception.getCause(), instanceOf(PersistentTaskNodeNotAssignedException.class));
@@ -305,7 +304,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
-        awaitForkedTasks(THREAD_POOL.executor(TEST_THREAD_POOL_NAME));
+        flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
 
         var exception = expectThrows(ExecutionException.class, listener::get);
         assertThat(exception.getCause(), instanceOf(NotPersistentTaskNodeException.class));

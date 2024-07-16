@@ -19,8 +19,6 @@ package co.elastic.elasticsearch.metering.action;
 
 import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
 
-import org.elasticsearch.action.ActionRunnable;
-import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.Metadata;
@@ -35,8 +33,6 @@ import org.elasticsearch.test.ESTestCase;
 
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static java.util.Collections.emptySet;
@@ -132,9 +128,5 @@ class TestTransportActionUtils {
     static MeteringShardInfo createMeteringShardInfo(ShardId shardId) {
         var size = ESTestCase.randomLongBetween(0, 10000);
         return new MeteringShardInfo(size, ESTestCase.randomLongBetween(0, 10000), 0, 0, size);
-    }
-
-    static void awaitForkedTasks(ExecutorService executor) {
-        PlainActionFuture.get(listener -> executor.execute(ActionRunnable.run(listener, () -> {})), 10, TimeUnit.SECONDS);
     }
 }
