@@ -13,6 +13,12 @@ steps:
     agents:
       image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
       memory: "4G"
+  
+  - label: ":git: Submodule info"
+    command: ".buildkite/scripts/show-submodule-info.sh"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
 
   - label: ":java: Run serverless Elasticsearch functional tests"
     if: build.env('GITOPS_ENV') == 'dev'
