@@ -29,14 +29,18 @@ import org.elasticsearch.xcontent.XContentType;
 import org.junit.After;
 import org.junit.Before;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
@@ -47,6 +51,7 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
 
     private static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
     private static final int DEFAULT_SEARCH_POWER = 200;
+    private static final TimeValue INTERVAL = TimeValue.timeValueSeconds(5);
 
     private static final String indexName = "idx1";
 
@@ -93,7 +98,7 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), DEFAULT_SEARCH_POWER)
             .put(MeteringPlugin.NEW_IX_METRIC_SETTING.getKey(), true)
             .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
-            .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
+            .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), INTERVAL)
             .build();
     }
 
@@ -220,22 +225,42 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             samePersistentTaskNode.set(previousPersistentTaskNode.equals(task.getExecutorNode()));
         });
 
-        // Wait for new sampled metrics records
-        assertBusy(() -> assertTrue(hasReceivedRecords("shard-size")));
-        List<UsageRecord> newMetrics = pollReceivedRecords("shard-size");
-
-        // Check we are sending records for the period we missed too
-        var timestamps = newMetrics.stream().map(UsageRecord::usageTimestamp).toList();
         // If the new node is different and does not have previous information for interpolating, we will transmit just one sample
         var minimumSize = samePersistentTaskNode.get() ? 2 : 1;
-        assertThat(timestamps, hasSize(greaterThanOrEqualTo(minimumSize)));
-        var newLastUsageTimestamp = timestamps.stream().max(Instant::compareTo).get();
 
+        // Wait for new sampled metrics records
+        var timestamps = new TreeSet<>(Instant::compareTo);
+        assertBusy(() -> {
+            assertTrue(hasReceivedRecords("shard-size"));
+            var newMetrics = pollReceivedRecords("shard-size");
+            var newTimestamps = newMetrics.stream().map(UsageRecord::usageTimestamp).collect(Collectors.toSet());
+            timestamps.addAll(newTimestamps);
+            // Check we are sending records for the period we missed too
+            assertThat(timestamps, hasSize(greaterThanOrEqualTo(minimumSize)));
+        });
+
+        // No holes
+        Instant prevTimestamp = null;
+        for (var timestamp : timestamps) {
+            if (prevTimestamp != null) {
+                var difference = Duration.between(prevTimestamp, timestamp);
+                assertThat(difference.toMillis(), is(INTERVAL.getMillis()));
+            }
+            prevTimestamp = timestamp;
+        }
+
+        if (samePersistentTaskNode.get()) {
+            // No missing timestamp
+            assertThat(timestamps, hasItem(afterStopMetadata.getCommittedTimestamp().plusMillis(INTERVAL.getMillis())));
+        }
+
+        // Cursor advanced
         assertBusy(() -> {
             var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(internalCluster().clusterService().state());
             assertThat(sampledMetricsMetadata, is(notNullValue()));
-            assertThat(sampledMetricsMetadata.getCommittedTimestamp(), greaterThanOrEqualTo(newLastUsageTimestamp));
-            assertThat(sampledMetricsMetadata.getCommittedTimestamp(), greaterThan(currentCursor.get()));
+            var committedTimestamp = sampledMetricsMetadata.getCommittedTimestamp();
+            assertThat(committedTimestamp, greaterThanOrEqualTo(timestamps.last()));
+            assertThat(committedTimestamp, greaterThan(currentCursor.get()));
         });
     }
 }
