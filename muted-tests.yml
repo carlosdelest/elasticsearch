@@ -85,3 +85,5 @@ tests:
 - class: "co.elastic.elasticsearch.serverless.datastream.ServerlessDataStreamLifecycleIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2391"
   method: "testILMPolicesAreNotInstalled"
+- class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2403"
