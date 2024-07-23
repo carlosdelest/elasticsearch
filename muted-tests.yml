@@ -87,3 +87,5 @@ tests:
   method: "testILMPolicesAreNotInstalled"
 - class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2403"
+- class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2403"
