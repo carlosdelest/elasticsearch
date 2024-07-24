@@ -97,3 +97,6 @@ tests:
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/pull/2411"
   method: "test {yaml=nodes.stats/11_indices_metrics/Lucene segment level fields stats}"
+- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2413"
+  method: "test {yaml=logsdb/20_source_mapping/disabled _source is not supported #2}"
