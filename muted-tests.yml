@@ -84,6 +84,7 @@ tests:
   methods:
   - "test {yaml=logsdb/20_mapping/disabled _source is not supported}"
   - "test {yaml=logsdb/20_source_mapping/disabled _source is not supported #2}"
+  - "test {yaml=logsdb/20_source_mapping/disabled _source is not supported}"
 - class: "co.elastic.elasticsearch.serverless.datastream.ServerlessDataStreamLifecycleIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2391"
   method: "testILMPolicesAreNotInstalled"
