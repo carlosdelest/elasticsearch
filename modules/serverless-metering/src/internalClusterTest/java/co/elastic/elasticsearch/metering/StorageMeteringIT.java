@@ -96,7 +96,6 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
             .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), DEFAULT_SEARCH_POWER)
             .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), DEFAULT_SEARCH_POWER)
             .put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), ProjectType.OBSERVABILITY)
-            .put(MeteringPlugin.NEW_IX_METRIC_SETTING.getKey(), "true")
             .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
             .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
             .build();

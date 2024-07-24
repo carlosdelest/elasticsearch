@@ -96,7 +96,6 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
             .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), DEFAULT_SEARCH_POWER)
-            .put(MeteringPlugin.NEW_IX_METRIC_SETTING.getKey(), true)
             .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
             .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), INTERVAL)
             .build();

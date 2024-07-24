@@ -22,11 +22,8 @@ import co.elastic.elasticsearch.metering.reports.UsageRecord;
 import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
-import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.common.collect.Iterators;
-import org.elasticsearch.common.settings.ClusterSettings;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.DeterministicTaskQueue;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
@@ -36,7 +33,6 @@ import org.hamcrest.Matcher;
 import org.junit.After;
 import org.junit.Before;
 
-import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,13 +44,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -65,7 +59,6 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
-import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
@@ -79,8 +72,6 @@ public class MeteringReportingServiceTests extends ESTestCase {
     private static final TimeValue REPORT_PERIOD = TimeValue.timeValueSeconds(5);
 
     private TestThreadPool threadPool;
-    private Settings settings;
-    private ClusterSettings clusterSettings;
 
     private static class TestCounter implements CounterMetricsCollector {
         private final String id;
@@ -155,21 +146,6 @@ public class MeteringReportingServiceTests extends ESTestCase {
     @Before
     public void setup() {
         threadPool = new TestThreadPool("meteringServiceTests");
-        settings = Settings.builder()
-            .put(ServerlessSharedSettings.PROJECT_ID.getKey(), PROJECT_ID)
-            .put(MeteringReportingService.REPORT_PERIOD.getKey(), REPORT_PERIOD)
-            .build();
-        clusterSettings = new ClusterSettings(
-            settings,
-            Set.of(
-                ServerlessSharedSettings.PROJECT_ID,
-                MeteringReportingService.REPORT_PERIOD,
-                ServerlessSharedSettings.BOOST_WINDOW_SETTING,
-                ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING,
-                ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING,
-                ServerlessSharedSettings.SEARCH_POWER_SETTING
-            )
-        );
     }
 
     private static List<UsageRecord> pollRecords(
@@ -738,119 +714,6 @@ public class MeteringReportingServiceTests extends ESTestCase {
         }
     }
 
-    public void testServiceWithRealCollectors() throws IOException {
-        ConcurrentLinkedQueue<UsageRecord> records = new ConcurrentLinkedQueue<>();
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-
-        final int writerTasksCount = randomIntBetween(2, 6);
-        final int writeOpsPerTask = randomIntBetween(50, 500);
-        final int maxWriteIntervalInMillis = 1000;
-        deterministicTaskQueue.setExecutionDelayVariabilityMillis(maxWriteIntervalInMillis);
-
-        final int numberOfIndexes = 1;
-        final int numberOfShards = 5;
-        final int docSize = 1;
-
-        final long expectedIngestedDocumentSizeTotal = (long) writeOpsPerTask * writerTasksCount * docSize;
-        final int estimatedMaxTimeInMillis = writeOpsPerTask * maxWriteIntervalInMillis;
-
-        // Run for at least 2 REPORT_PERIOD to ensure metrics are collected for reporting at least once
-        final long runningTimeInMillis = Math.max(REPORT_PERIOD.getMillis() * randomIntBetween(2, 6), estimatedMaxTimeInMillis);
-
-        try (
-            IndexSizeMetricsCollectorTests.TestIndex testIndex = IndexSizeMetricsCollectorTests.setUpIndicesService(
-                "myIndex",
-                numberOfIndexes,
-                numberOfShards,
-                2,
-                3
-            )
-        ) {
-
-            List<CounterMetricsCollector> builtInCounterMetrics = new ArrayList<>();
-            List<SampledMetricsCollector> builtInSampledMetrics = new ArrayList<>();
-
-            builtInSampledMetrics.add(new IndexSizeMetricsCollector(testIndex.indicesService(), clusterSettings, settings));
-            var ingestMetricsCollector = new IngestMetricsCollector(NODE_ID, clusterSettings, settings);
-            builtInCounterMetrics.add(ingestMetricsCollector);
-
-            Consumer<Integer> writerAction = t -> {
-                var indexId = t % numberOfIndexes;
-                ingestMetricsCollector.addIngestedDocValue("myIndex" + indexId, docSize);
-            };
-
-            var threadPool = deterministicTaskQueue.getThreadPool();
-            try (
-                var service = new MeteringReportingService(
-                    NODE_ID,
-                    PROJECT_ID,
-                    builtInCounterMetrics,
-                    builtInSampledMetrics,
-                    new InMemorySampledMetricsTimeCursor(),
-                    REPORT_PERIOD,
-                    new TestMeteringUsageRecordPublisher(records),
-                    threadPool,
-                    threadPool.generic()
-                )
-            ) {
-                service.start();
-
-                // Start a series of writer tasks
-                for (int t = 0; t < writerTasksCount; t++) {
-                    var threadId = t;
-                    threadPool.generic().execute(new Runnable() {
-                        private int opsCount = 0;
-
-                        @Override
-                        public void run() {
-                            // To add additional randomness, let's perform operations in "batches", where multiple write operations
-                            // happen without waiting.
-                            final var candidateChunkSize = randomIntBetween(1, writeOpsPerTask / 10);
-                            final var chunkSize = Math.min(candidateChunkSize, writeOpsPerTask - opsCount);
-
-                            for (int i = 0; i < chunkSize; ++i) {
-                                writerAction.accept(threadId);
-                            }
-                            opsCount += chunkSize;
-
-                            var proceed = opsCount != writeOpsPerTask;
-                            if (proceed == false) {
-                                logger.info("writer [{}] finished", threadId);
-                            } else {
-                                threadPool.generic().execute(this);
-                            }
-                        }
-                    });
-                }
-
-                // "Run" the tasks in the queue for the given amount of time
-                while (deterministicTaskQueue.getCurrentTimeMillis() <= runningTimeInMillis) {
-                    deterministicTaskQueue.runAllRunnableTasks();
-                    deterministicTaskQueue.advanceTime();
-                }
-
-                service.stop();
-            }
-        }
-
-        // The total size of ingested documents should be the same regardless of the order of execution/number of concurrent writes/number
-        // of gatherings (number of usage records)
-        assertThat(
-            "Total size of ingested docs is correct",
-            records.stream()
-                .filter(usageRecord -> usageRecord.usage().type().equals("es_raw_data"))
-                .mapToLong(x -> x.usage().quantity())
-                .sum(),
-            equalTo(expectedIngestedDocumentSizeTotal)
-        );
-        // We collected at least one index size record
-        assertThat(
-            "At least one index size record was collected",
-            records.stream().filter(usageRecord -> usageRecord.usage().type().equals("es_indexed_data")).count(),
-            is(greaterThan(0L))
-        );
-    }
-
     @After
     public void stopThreadPool() {
         ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
@@ -872,12 +735,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
         }
     }
 
-    private static class TestMeteringUsageRecordPublisher implements MeteringUsageRecordPublisher {
-        private final Queue<UsageRecord> records;
-
-        TestMeteringUsageRecordPublisher(Queue<UsageRecord> records) {
-            this.records = records;
-        }
+    private record TestMeteringUsageRecordPublisher(Queue<UsageRecord> records) implements MeteringUsageRecordPublisher {
 
         @Override
         public void sendRecords(List<UsageRecord> records) {

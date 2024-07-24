@@ -103,11 +103,6 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
     static final NodeFeature SAMPLED_METRICS_METADATA = new NodeFeature("metering.sampled-metrics-metadata");
 
-    public static final Setting<Boolean> NEW_IX_METRIC_SETTING = Setting.boolSetting(
-        "metering.new-index-size.enabled",
-        true,
-        Setting.Property.NodeScope
-    );
     private final ProjectType projectType;
 
     private MeteringIndexInfoTaskExecutor meteringIndexInfoTaskExecutor;
@@ -132,8 +127,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             HttpMeteringUsageRecordPublisher.METERING_URL,
             HttpMeteringUsageRecordPublisher.BATCH_SIZE,
             MeteringIndexInfoTaskExecutor.ENABLED_SETTING,
-            MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING,
-            NEW_IX_METRIC_SETTING
+            MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING
         );
     }
 
@@ -168,9 +162,6 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         String projectId = PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
-        boolean useNewIndexSizeMetric = NEW_IX_METRIC_SETTING.get(environment.settings());
-        log.info("Using new IX metric: [{}]", useNewIndexSizeMetric);
-
         ingestMetricsCollector = new IngestMetricsCollector(
             nodeEnvironment.nodeId(),
             clusterService.getClusterSettings(),
@@ -189,18 +180,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
         TimeValue reportPeriod = MeteringReportingService.REPORT_PERIOD.get(environment.settings());
 
-        // TODO[ES-7639]: remove this choice when migration to IX in ES is completed
-        if (useNewIndexSizeMetric) {
-            builtInSampledMetrics.add(indexSizeService.createIndexSizeMetricsCollector(clusterService, environment.settings()));
-        } else {
-            if (discoveryNodeRoles.contains(DiscoveryNodeRole.SEARCH_ROLE)) {
-                builtInSampledMetrics.add(
-                    new IndexSizeMetricsCollector(services.indicesService(), clusterService.getClusterSettings(), environment.settings())
-                );
-            }
-        }
-
         builtInCounterMetrics.addAll(counterMetricsCollectors);
+        builtInSampledMetrics.add(indexSizeService.createIndexSizeMetricsCollector(clusterService, environment.settings()));
         builtInSampledMetrics.addAll(sampledMetricsCollectors);
 
         if (projectId.isEmpty()) {
