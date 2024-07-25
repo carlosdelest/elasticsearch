@@ -101,3 +101,6 @@ tests:
 - class: "co.elastic.elasticsearch.qa.sso.ServerlessSsoIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2420"
   method: "testSamlAuthenticationAndAccess"
+- class: "org.elasticsearch.datastreams.logsdb.qa.StandardVersusLogsIndexModeChallengeRestIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2423"
+  method: "testHistogramAggregation"
