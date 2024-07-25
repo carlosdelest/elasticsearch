@@ -58,24 +58,39 @@ public class MachineLearningTierMetrics extends AbstractBaseTierMetrics implemen
     @Override
     protected XContentBuilder toInnerXContent(XContentBuilder builder, Params params) throws IOException {
         builder.object("metrics", (objectBuilder) -> {
-            serializeMetric(builder, "nodes", autoscalingResources.nodes(), MetricQuality.EXACT);
-            serializeMetric(builder, "node_memory_in_bytes", autoscalingResources.perNodeMemoryInBytes(), MetricQuality.EXACT);
-            serializeMetric(builder, "model_memory_in_bytes", autoscalingResources.modelMemoryInBytesSum(), MetricQuality.EXACT);
-            serializeMetric(builder, "min_nodes", autoscalingResources.minNodes(), MetricQuality.EXACT);
+            serializeMetric(builder, "nodes", autoscalingResources.currentTotalNodes(), MetricQuality.EXACT);
+            serializeMetric(builder, "node_memory_in_bytes", autoscalingResources.currentPerNodeMemoryBytes(), MetricQuality.EXACT);
+            serializeMetric(builder, "model_memory_in_bytes", autoscalingResources.currentTotalModelMemoryBytes(), MetricQuality.EXACT);
+            serializeMetric(builder, "min_nodes", autoscalingResources.wantedMinNodes(), MetricQuality.EXACT);
             serializeMetric(
                 builder,
                 "extra_single_node_model_memory_in_bytes",
-                autoscalingResources.extraSingleNodeModelMemoryInBytes(),
+                autoscalingResources.wantedExtraPerNodeMemoryBytes(),
                 MetricQuality.EXACT
             );
-            serializeMetric(builder, "extra_single_node_processors", autoscalingResources.extraSingleNodeProcessors(), MetricQuality.EXACT);
-            serializeMetric(builder, "extra_model_memory_in_bytes", autoscalingResources.extraModelMemoryInBytes(), MetricQuality.EXACT);
-            serializeMetric(builder, "extra_processors", autoscalingResources.extraProcessors(), MetricQuality.EXACT);
-            serializeMetric(builder, "remove_node_memory_in_bytes", autoscalingResources.removeNodeMemoryInBytes(), MetricQuality.EXACT);
+            serializeMetric(
+                builder,
+                "extra_single_node_processors",
+                autoscalingResources.wantedExtraPerNodeNodeProcessors(),
+                MetricQuality.EXACT
+            );
+            serializeMetric(
+                builder,
+                "extra_model_memory_in_bytes",
+                autoscalingResources.wantedExtraModelMemoryBytes(),
+                MetricQuality.EXACT
+            );
+            serializeMetric(builder, "extra_processors", autoscalingResources.wantedExtraProcessors(), MetricQuality.EXACT);
+            serializeMetric(
+                builder,
+                "remove_node_memory_in_bytes",
+                autoscalingResources.unwantedNodeMemoryBytesToRemove(),
+                MetricQuality.EXACT
+            );
             serializeMetric(
                 builder,
                 "per_node_memory_overhead_in_bytes",
-                autoscalingResources.perNodeMemoryOverheadInBytes(),
+                autoscalingResources.currentPerNodeMemoryOverheadBytes(),
                 MetricQuality.EXACT
             );
         });
