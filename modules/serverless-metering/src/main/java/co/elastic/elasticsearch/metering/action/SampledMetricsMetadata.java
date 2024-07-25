@@ -17,9 +17,8 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
-
 import org.elasticsearch.TransportVersion;
+import org.elasticsearch.TransportVersions;
 import org.elasticsearch.cluster.AbstractNamedDiffable;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.NamedDiff;
@@ -57,7 +56,7 @@ public final class SampledMetricsMetadata extends AbstractNamedDiffable<ClusterS
 
     @Override
     public TransportVersion getMinimalSupportedVersion() {
-        return ServerlessTransportVersions.ADD_SAMPLED_METRICS_METADATA;
+        return TransportVersions.V_8_14_0;
     }
 
     @Override

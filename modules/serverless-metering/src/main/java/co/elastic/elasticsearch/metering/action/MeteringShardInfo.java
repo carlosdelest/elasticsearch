@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
-
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -40,10 +38,7 @@ public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTer
         long docCount = in.readVLong();
         var primaryTerm = in.readVLong();
         var generation = in.readVLong();
-        Long ingestedSizeInBytes = null;
-        if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.ADD_INGESTED_SIZE_STORAGE_FIELD)) {
-            ingestedSizeInBytes = in.readOptionalVLong();
-        }
+        Long ingestedSizeInBytes = in.readOptionalVLong();
         return new MeteringShardInfo(sizeInBytes, docCount, primaryTerm, generation, ingestedSizeInBytes);
     }
 
@@ -53,8 +48,6 @@ public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTer
         out.writeVLong(docCount);
         out.writeVLong(primaryTerm);
         out.writeVLong(generation);
-        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.ADD_INGESTED_SIZE_STORAGE_FIELD)) {
-            out.writeOptionalVLong(storedIngestSizeInBytes);
-        }
+        out.writeOptionalVLong(storedIngestSizeInBytes);
     }
 }
