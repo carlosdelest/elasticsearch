@@ -36,6 +36,7 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.search.sort.SortOrder;
@@ -91,7 +92,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
     @Inject
     public TransportRestoreProjectAction(TransportService transportService, ActionFilters actionFilters, Client client) {
-        super(TYPE.name(), actionFilters, transportService.getTaskManager());
+        // TODO: use restoreExecutor instead, and do not fork in doExecute
+        super(TYPE.name(), actionFilters, transportService.getTaskManager(), EsExecutors.DIRECT_EXECUTOR_SERVICE);
         this.client = client;
         final var threadPool = transportService.getThreadPool();
         this.restoreExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
