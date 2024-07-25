@@ -98,3 +98,6 @@ tests:
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2413"
   method: "test {yaml=logsdb/20_source_mapping/disabled _source is not supported #2}"
+- class: "co.elastic.elasticsearch.qa.sso.ServerlessSsoIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2420"
+  method: "testSamlAuthenticationAndAccess"
