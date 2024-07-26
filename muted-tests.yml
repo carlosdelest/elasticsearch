@@ -79,12 +79,6 @@ tests:
   methods:
   - "test {p0=esql/170_no_replicas/Test From 5}"
   - "test {p0=esql/170_no_replicas/Test From 1}"
-- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2360"
-  methods:
-  - "test {yaml=logsdb/20_mapping/disabled _source is not supported}"
-  - "test {yaml=logsdb/20_source_mapping/disabled _source is not supported #2}"
-  - "test {yaml=logsdb/20_source_mapping/disabled _source is not supported}"
 - class: "co.elastic.elasticsearch.serverless.datastream.ServerlessDataStreamLifecycleIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2391"
   method: "testILMPolicesAreNotInstalled"

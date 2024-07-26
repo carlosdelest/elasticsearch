@@ -211,11 +211,12 @@ tasks {
                 "search/330_fetch_fields/Test disable source",
                 "tsdb/20_mapping/disabled source",
                 "tsdb/20_mapping/source include/exclude",
+                "logsdb/20_source_mapping/disabled _source is not supported",
 
                 //Tests rely on updating replicas which is not supported in Serverless
                 "indices.put_settings/10_basic/*",
                 "indices.put_settings/20_update_non_dynamic_settings/*"
-                
+
             ).joinToString(",")
         )
     }
