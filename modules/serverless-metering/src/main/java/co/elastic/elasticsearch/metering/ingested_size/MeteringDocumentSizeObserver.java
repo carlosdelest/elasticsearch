@@ -20,30 +20,30 @@ package co.elastic.elasticsearch.metering.ingested_size;
 import org.elasticsearch.plugins.internal.DocumentSizeObserver;
 import org.elasticsearch.xcontent.XContentParser;
 
-import java.util.concurrent.atomic.AtomicLong;
-
-public class MeteringDocumentSizeObserver implements DocumentSizeObserver {
-    private final AtomicLong counter;
+class MeteringDocumentSizeObserver implements DocumentSizeObserver, MeteringParser.NormalisedBytesParsedConsumer {
     private final boolean isUpdateByScript;
+    private long normalisedBytesParsed = 0;
 
-    public MeteringDocumentSizeObserver(boolean isUpdateByScript) {
-        this.counter = new AtomicLong(0);
+    MeteringDocumentSizeObserver(boolean isUpdateByScript) {
         this.isUpdateByScript = isUpdateByScript;
     }
 
     @Override
     public XContentParser wrapParser(XContentParser xContentParser) {
-        return new MeteringParser(xContentParser, counter);
+        return new MeteringParser(xContentParser, this);
     }
 
     @Override
     public long normalisedBytesParsed() {
-        return counter.get();
+        return normalisedBytesParsed;
+    }
+
+    public void normalisedBytesParsed(long value) {
+        normalisedBytesParsed = value;
     }
 
     @Override
     public boolean isUpdateByScript() {
         return isUpdateByScript;
     }
-
 }

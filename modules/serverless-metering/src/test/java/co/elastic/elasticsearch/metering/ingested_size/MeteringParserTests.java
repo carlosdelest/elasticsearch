@@ -593,7 +593,7 @@ public class MeteringParserTests extends ESTestCase {
         try (
             XContentParser parser = new MeteringParser(
                 XContentHelper.createParser(XContentParserConfiguration.EMPTY, bytesArray, xContentType),
-                counter
+                counter::set
             )
         ) {
             parserConsumer.accept(parser);

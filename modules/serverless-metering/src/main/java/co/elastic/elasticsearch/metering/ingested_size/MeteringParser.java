@@ -28,7 +28,6 @@ import org.elasticsearch.xcontent.support.AbstractXContentParser;
 import java.io.IOException;
 import java.nio.CharBuffer;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This is an XContentParser that is performing metering.
@@ -39,9 +38,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * field names and text are metered with the number of bytes when encoded in utf-8
  * (1byte for ascii, 2 bytes for bmf chars, 3 and 4bytes for supplementary character set)
  */
-public class MeteringParser extends AbstractXContentParser {
+class MeteringParser extends AbstractXContentParser {
     private final XContentParser delegate;
-    private final AtomicLong counter;
+    private final NormalisedBytesParsedConsumer normalisedBytesParsedConsumer;
+    private long normalisedBytesParsed;
 
     /**
      * A function to accumulate total size of the document
@@ -50,7 +50,7 @@ public class MeteringParser extends AbstractXContentParser {
      */
     private void charge(Token token) throws IOException {
         if (token != null) {
-            var sizeInBytes = switch (token) {
+            normalisedBytesParsed += switch (token) {
                 case FIELD_NAME -> calculateTextLength(CharBuffer.wrap(currentName()));
                 case VALUE_STRING -> calculateTextLength(CharBuffer.wrap(textCharacters(), textOffset(), textLength()));
                 case VALUE_EMBEDDED_OBJECT -> calculateBase64Length(binaryValue().length);
@@ -58,14 +58,14 @@ public class MeteringParser extends AbstractXContentParser {
                 case VALUE_BOOLEAN -> 1;
                 default -> 0;
             };
-            counter.addAndGet(sizeInBytes);
         }
     }
 
     private int calculateTextLength(CharBuffer charBuffer) throws IOException {
         int byteLength = 0;
 
-        for (int i = 0; i < charBuffer.length(); i++) {
+        int chars = charBuffer.length();
+        for (int i = 0; i < chars; i++) {
             char c = charBuffer.get(i);
             if (c <= 127) {
                 byteLength += 1;
@@ -83,12 +83,16 @@ public class MeteringParser extends AbstractXContentParser {
         return byteLength;
     }
 
-    public MeteringParser(XContentParser xContentParser, AtomicLong counter) {
+    interface NormalisedBytesParsedConsumer {
+        void normalisedBytesParsed(long size);
+    }
+
+    MeteringParser(XContentParser xContentParser, NormalisedBytesParsedConsumer normalisedBytesParsedConsumer) {
         super(xContentParser.getXContentRegistry(), xContentParser.getDeprecationHandler(), xContentParser.getRestApiVersion());
         Objects.requireNonNull(xContentParser);
-        Objects.requireNonNull(counter);
+        Objects.requireNonNull(normalisedBytesParsedConsumer);
         this.delegate = xContentParser;
-        this.counter = counter;
+        this.normalisedBytesParsedConsumer = normalisedBytesParsedConsumer;
     }
 
     protected XContentParser delegate() {
@@ -310,6 +314,7 @@ public class MeteringParser extends AbstractXContentParser {
 
     @Override
     public void close() throws IOException {
+        normalisedBytesParsedConsumer.normalisedBytesParsed(normalisedBytesParsed);
         delegate.close();
     }
 

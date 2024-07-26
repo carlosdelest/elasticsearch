@@ -24,7 +24,8 @@
  */
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentSizeObserver;
+import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
+import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -39,10 +40,12 @@ import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.plugins.internal.DocumentSizeObserver;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.XContentTestUtils;
 import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.xcontent.XContentType;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -54,6 +57,7 @@ import java.util.Map;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 
 @TestLogging(
     value = "co.elastic.elasticsearch.metering:TRACE",
@@ -222,11 +226,17 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
     private long meterDocument() {
         try {
             BytesReference bytesReference = XContentTestUtils.convertToXContent(documentSource(), XContentType.JSON);
-            MeteringDocumentSizeObserver meteringDocumentSizeObserver = new MeteringDocumentSizeObserver(false);
+            MeteringDocumentParsingProvider provider = new MeteringDocumentParsingProvider(
+                ProjectType.ELASTICSEARCH_SEARCH,
+                Mockito::mock,
+                Mockito::mock
+            );
+            DocumentSizeObserver documentSizeObserver = provider.newDocumentSizeObserver(new IndexRequest());
 
-            XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, meteringDocumentSizeObserver).v2();
+            XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, documentSizeObserver).v2();
 
-            return meteringDocumentSizeObserver.normalisedBytesParsed();
+            assertThat(documentSizeObserver.normalisedBytesParsed(), greaterThan(0L));
+            return documentSizeObserver.normalisedBytesParsed();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
