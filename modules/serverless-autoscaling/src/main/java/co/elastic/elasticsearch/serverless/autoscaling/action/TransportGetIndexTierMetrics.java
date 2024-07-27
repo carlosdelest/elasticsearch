@@ -67,7 +67,10 @@ public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetI
         ClusterState state,
         ActionListener<GetIndexTierMetrics.Response> listener
     ) {
-        ActionListener.completeWith(listener, () -> new GetIndexTierMetrics.Response(ingestMetricsService.getIndexTierMetrics()));
+        ActionListener.completeWith(
+            listener,
+            () -> new GetIndexTierMetrics.Response(ingestMetricsService.getIndexTierMetrics(clusterService.state()))
+        );
     }
 
     @Override

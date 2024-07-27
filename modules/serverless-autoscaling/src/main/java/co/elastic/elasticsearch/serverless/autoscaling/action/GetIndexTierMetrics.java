@@ -36,7 +36,7 @@ public class GetIndexTierMetrics {
     private GetIndexTierMetrics() {/* no instances */}
 
     public static class Request extends AbstractTierMetricsRequest<Request> {
-        Request(TimeValue masterNodeTimeout, TimeValue requestTimeout) {
+        public Request(TimeValue masterNodeTimeout, TimeValue requestTimeout) {
             super(TIER_NAME, masterNodeTimeout, requestTimeout);
         }
 
