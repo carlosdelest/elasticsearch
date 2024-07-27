@@ -107,4 +107,4 @@ tests:
   method: "testHistogramAggregation"
 - class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2432"
-  method: "test {p0=esql/180_match_operator/match within eval}"
+  method: "test {p0=esql/180_match_operator/*}"
