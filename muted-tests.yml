@@ -111,6 +111,3 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2434"
   method: "testIngestLoadsMetricsWithShutdownMetadata"
-- class: "co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2436"
-  method: "testIngestLoadsMetricsWithShutdownMetadata"
