@@ -51,9 +51,6 @@ tests:
   method: "testPreferredNodeIdsAreUsedDuringRelocation"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2276"
-- class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2137"
-  method: "testMultipleDatastreamsRanking"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2299"
   methods:
