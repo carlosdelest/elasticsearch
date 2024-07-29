@@ -114,7 +114,7 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
         client.admin()
             .cluster()
-            .prepareGetSnapshots()
+            .prepareGetSnapshots(request.masterNodeTimeout())
             .setRepositories(repository)
             .setSort(SnapshotSortKey.START_TIME)
             .setOrder(SortOrder.DESC)
@@ -152,7 +152,7 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
         client.admin()
             .cluster()
-            .prepareGetSnapshots()
+            .prepareGetSnapshots(request.masterNodeTimeout())
             .setRepositories(repository)
             .setSnapshots(Strings.splitStringByCommaToArray(snapshot)) // n.b. handle a list of snapshots, providing a more precise error
             .setVerbose(false)
