@@ -31,6 +31,7 @@ import org.junit.Before;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,6 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
@@ -113,16 +115,10 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
     }
 
     public void testLatestCommitedTimestampAdvancedWhenMetricRecordsSent() throws Exception {
-        assertBusy(() -> assertTrue(hasReceivedRecords("shard-size")));
+        List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertIXRecords(usageRecords, indexName);
 
-        List<UsageRecord> metrics = pollReceivedRecords("shard-size");
-        var metric = metrics.get(0);
-
-        String idPRefix = "shard-size:" + indexName;
-        assertThat(metric.id(), startsWith(idPRefix));
-        assertThat(metric.usage().type(), equalTo("es_indexed_data"));
-
-        var lastUsageTimestamp = metrics.stream().map(UsageRecord::usageTimestamp).max(Instant::compareTo).get();
+        var lastUsageTimestamp = getLastIXUsageTimestamp(usageRecords);
 
         assertBusy(() -> {
             var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(internalCluster().clusterService().state());
@@ -133,10 +129,10 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
 
     public void testLatestCommitedTimestampPreservedWhenPersistentTaskNodeChange() throws Exception {
         final AtomicReference<Instant> currentCursor = new AtomicReference<>();
-        assertBusy(() -> assertTrue(hasReceivedRecords("shard-size")));
 
-        List<UsageRecord> metrics = pollReceivedRecords("shard-size");
-        var lastUsageTimestamp = metrics.stream().map(UsageRecord::usageTimestamp).max(Instant::compareTo).get();
+        List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertIXRecords(usageRecords, indexName);
+        var lastUsageTimestamp = getLastIXUsageTimestamp(usageRecords);
 
         assertBusy(() -> {
             var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(internalCluster().clusterService().state());
@@ -164,9 +160,9 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             assertTrue(task.isAssigned());
         });
 
-        assertBusy(() -> assertTrue(hasReceivedRecords("shard-size")));
-        List<UsageRecord> newMetrics = pollReceivedRecords("shard-size");
-        var newLastUsageTimestamp = newMetrics.stream().map(UsageRecord::usageTimestamp).max(Instant::compareTo).get();
+        List<UsageRecord> newMetrics = new ArrayList<>();
+        waitAndAssertIXRecords(newMetrics, indexName);
+        var newLastUsageTimestamp = getLastIXUsageTimestamp(newMetrics);
 
         assertBusy(() -> {
             var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(internalCluster().clusterService().state());
@@ -181,9 +177,10 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         final AtomicReference<Instant> currentCursor = new AtomicReference<>();
         final AtomicReference<String> currentPersistentTaskNode = new AtomicReference<>();
         final AtomicBoolean samePersistentTaskNode = new AtomicBoolean();
-        assertBusy(() -> assertTrue(hasReceivedRecords("shard-size")));
-        List<UsageRecord> metrics = pollReceivedRecords("shard-size");
-        var lastUsageTimestamp = metrics.stream().map(UsageRecord::usageTimestamp).max(Instant::compareTo).get();
+
+        List<UsageRecord> metrics = new ArrayList<>();
+        waitAndAssertIXRecords(metrics, indexName);
+        var lastUsageTimestamp = getLastIXUsageTimestamp(metrics);
 
         // Compare them with cursor, remember it
         assertBusy(() -> {
@@ -192,9 +189,11 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             assertNotNull(task);
             assertTrue(task.isAssigned());
             var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(clusterState);
+            var committedTimestamp = sampledMetricsMetadata.getCommittedTimestamp();
             assertThat(sampledMetricsMetadata, is(notNullValue()));
-            assertThat(sampledMetricsMetadata.getCommittedTimestamp(), greaterThanOrEqualTo(lastUsageTimestamp));
-            currentCursor.set(sampledMetricsMetadata.getCommittedTimestamp());
+            assertThat(committedTimestamp, greaterThanOrEqualTo(lastUsageTimestamp));
+            logger.info("Before restart committedTimestamp: [{}]", committedTimestamp);
+            currentCursor.set(committedTimestamp);
             currentPersistentTaskNode.set(task.getExecutorNode());
         });
 
@@ -208,10 +207,12 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
 
         var afterStopMetadata = SampledMetricsMetadata.getFromClusterState(internalCluster().clusterService().state());
         assertThat(afterStopMetadata.getCommittedTimestamp(), greaterThanOrEqualTo(currentCursor.get()));
+        logger.info("After stop committedTimestamp: [{}]", afterStopMetadata.getCommittedTimestamp());
 
         // Provoke usage records to be generated
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
-        waitUntil(() -> pollReceivedRecords("ingested-doc:" + indexName).isEmpty() == false);
+        List<UsageRecord> newMetrics = new ArrayList<>();
+        waitAndAssertRAIngestRecords(newMetrics, indexName);
 
         // Re-enable the persistent task
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
@@ -231,8 +232,11 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         var timestamps = new TreeSet<>(Instant::compareTo);
         assertBusy(() -> {
             assertTrue(hasReceivedRecords("shard-size"));
-            var newMetrics = pollReceivedRecords("shard-size");
-            var newTimestamps = newMetrics.stream().map(UsageRecord::usageTimestamp).collect(Collectors.toSet());
+            waitAndAssertIXRecords(newMetrics, indexName);
+            var newTimestamps = newMetrics.stream()
+                .filter(m -> m.id().startsWith("shard-size"))
+                .map(UsageRecord::usageTimestamp)
+                .collect(Collectors.toSet());
             timestamps.addAll(newTimestamps);
             // Check we are sending records for the period we missed too
             assertThat(timestamps, hasSize(greaterThanOrEqualTo(minimumSize)));
@@ -243,7 +247,7 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         for (var timestamp : timestamps) {
             if (prevTimestamp != null) {
                 var difference = Duration.between(prevTimestamp, timestamp);
-                assertThat(difference.toMillis(), is(INTERVAL.getMillis()));
+                assertThat(difference.toMillis(), equalTo(INTERVAL.getMillis()));
             }
             prevTimestamp = timestamp;
         }
@@ -261,5 +265,36 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             assertThat(committedTimestamp, greaterThanOrEqualTo(timestamps.last()));
             assertThat(committedTimestamp, greaterThan(currentCursor.get()));
         });
+    }
+
+    private void waitAndAssertIXRecords(List<UsageRecord> usageRecords, String indexName) throws Exception {
+        assertBusy(() -> {
+            usageRecords.addAll(pollReceivedRecords());
+            var ixRecords = usageRecords.stream().filter(m -> m.id().startsWith("shard-size")).toList();
+            assertFalse(ixRecords.isEmpty());
+
+            assertThat(ixRecords.stream().map(UsageRecord::id).toList(), everyItem(startsWith("shard-size:" + indexName)));
+            assertThat(ixRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_indexed_data")));
+            assertThat(ixRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexName)));
+        });
+    }
+
+    private void waitAndAssertRAIngestRecords(List<UsageRecord> usageRecords, String indexName) throws Exception {
+        assertBusy(() -> {
+            usageRecords.addAll(pollReceivedRecords());
+            var ingestRecords = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).toList();
+            assertFalse(ingestRecords.isEmpty());
+
+            assertThat(ingestRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_raw_data")));
+            assertThat(ingestRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexName)));
+        });
+    }
+
+    private static Instant getLastIXUsageTimestamp(List<UsageRecord> usageRecords) {
+        return usageRecords.stream()
+            .filter(m -> m.id().startsWith("shard-size"))
+            .map(UsageRecord::usageTimestamp)
+            .max(Instant::compareTo)
+            .orElseThrow(() -> new AssertionError("No IX usage records found"));
     }
 }

@@ -57,6 +57,7 @@ import java.util.concurrent.ExecutionException;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.startsWith;
 
 @TestLogging(
@@ -213,7 +214,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     // this test is confirming that for nontimeseries index we will meter ra-s updates by script in solution's cluster
     // if we didn't the ra-s would decrease after an update by script (because of a delete being followed by a not metered index op)
-    public void testUpdatesViaScriptAreMeteredForSolutions() throws InterruptedException, IOException {
+    public void testUpdatesViaScriptAreMeteredForSolutions() throws Exception {
         // TODO remove this logging based assertion in favour of real assertions on metrics once they are emitted
         String loggerName = "co.elastic.elasticsearch.metering.ingested_size.RAStorageReporter";
         try (var mockLogAppender = MockLog.capture(loggerName)) {
@@ -232,7 +233,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         }
     }
 
-    private void doTestUpdatesViaScriptAreMeteredForSolutions() throws InterruptedException {
+    private void doTestUpdatesViaScriptAreMeteredForSolutions() throws Exception {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName = "index1";
@@ -245,6 +246,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
+        long raIngestedSize = 3 * ASCII_SIZE + NUMBER_SIZE;
 
         // update via stored script
         final Script storedScript = new Script(ScriptType.STORED, null, scriptId, Collections.emptyMap());
@@ -257,12 +259,12 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        List<UsageRecord> usageRecords = pollReceivedRecords("ingested-doc:" + indexName);
+        List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, indexName, raIngestedSize);
+
         // we don't expect RA-I records for updates, hence only 1 record from the newDoc request
-        assertThat(usageRecords.size(), equalTo(1));
-        UsageRecord usageRecord = usageRecords.get(0);
-        assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", 3 * ASCII_SIZE + NUMBER_SIZE);
+        long ingestRecordCount = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc")).count();
+        assertThat(ingestRecordCount, equalTo(1L));
 
         // TODO assertions about RA-S for non timeseries
         receivedMetrics().clear();
@@ -355,4 +357,17 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         assertThat(metric.source().metadata().get("index"), startsWith(indexName));
     }
 
+    private void waitAndAssertRAIngestRecords(List<UsageRecord> usageRecords, String indexName, long raIngestedSize) throws Exception {
+        assertBusy(() -> {
+            usageRecords.addAll(pollReceivedRecords());
+            var ingestRecords = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).toList();
+            assertFalse(ingestRecords.isEmpty());
+
+            assertThat(ingestRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_raw_data")));
+            assertThat(ingestRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexName)));
+
+            var totalQuantity = ingestRecords.stream().mapToLong(x -> x.usage().quantity()).sum();
+            assertThat(totalQuantity, equalTo(raIngestedSize));
+        });
+    }
 }

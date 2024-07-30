@@ -305,6 +305,7 @@ class ReportGatherer {
                     lastSampledMetricValues = currentSampledMetricValues.stream()
                         .collect(Collectors.toUnmodifiableMap(MetricValue::id, Function.identity()));
                 }
+                log.info("Updating committed timestamp to [{}], success: [{}]", sampleTimestamp, committed);
                 return committed;
             }
             return true;
