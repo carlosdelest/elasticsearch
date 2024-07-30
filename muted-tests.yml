@@ -108,3 +108,6 @@ tests:
 - class: "org.elasticsearch.datastreams.logsdb.qa.StandardVersusLogsIndexModeChallengeRestIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2447"
   method: "testTermsAggregation"
+- class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2448"
+  method: "testSearchShardGenerationFilesRetention"
