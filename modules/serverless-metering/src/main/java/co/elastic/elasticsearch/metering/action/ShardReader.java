@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.metering.action;
 
 import co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator;
-import co.elastic.elasticsearch.stateless.api.CompoundCommitService;
 
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
@@ -38,24 +37,61 @@ import java.util.Map;
 class ShardReader {
     private static final Logger logger = LogManager.getLogger(ShardReader.class);
     private final IndicesService indicesService;
-    private final CompoundCommitService commitService;
 
-    ShardReader(IndicesService indicesService, CompoundCommitService commitService) {
+    ShardReader(IndicesService indicesService) {
         this.indicesService = indicesService;
-        this.commitService = commitService;
     }
 
-    private record ShardSizeAndDocCount(long sizeInBytes, long docCount) {}
+    record ShardSizeAndDocCount(long sizeInBytes, long liveDocCount, Long raSizeInBytes) {}
 
-    private ShardSizeAndDocCount computeShardStats(ShardId shardId, SegmentInfos segmentInfos) throws IOException {
+    private static Long computeApproximatedRAStorage(long avgRASizePerDoc, long liveDocCount, long totalDocCount) {
+        var raStorage = avgRASizePerDoc * liveDocCount;
+        if (liveDocCount == totalDocCount) {
+            logger.trace("using exact _rastorage [{}] (avg: [{}], live docs: [{}])", raStorage, avgRASizePerDoc, liveDocCount);
+        } else {
+            logger.trace(
+                "using approximated _rastorage [{}] (avg: [{}], live docs: [{}], total docs: [{}])",
+                raStorage,
+                avgRASizePerDoc,
+                liveDocCount,
+                totalDocCount
+            );
+        }
+        return raStorage;
+    }
+
+    private static Long getRAStorageFromUserData(SegmentInfos segmentInfos) {
+        var raStorageString = segmentInfos.getUserData().get(RAStorageAccumulator.RA_STORAGE_KEY);
+        if (raStorageString != null) {
+            logger.trace("using UserData [{}]", raStorageString);
+            return Long.parseLong(raStorageString);
+        }
+        return null;
+    }
+
+    static ShardSizeAndDocCount computeShardStats(ShardId shardId, SegmentInfos segmentInfos) throws IOException {
         long sizeInBytes = 0;
-        long docCount = 0;
+        long liveDocCount = 0;
+
+        Long totalRAValue = null;
         for (SegmentCommitInfo si : segmentInfos) {
             try {
                 long commitSize = si.sizeInBytes();
-                long commitDocCount = si.info.maxDoc() - si.getDelCount() - si.getSoftDelCount();
+                long commitTotalDocCount = si.info.maxDoc();
+                long commitLiveDocCount = commitTotalDocCount - si.getDelCount() - si.getSoftDelCount();
                 sizeInBytes += commitSize;
-                docCount += commitDocCount;
+                liveDocCount += commitLiveDocCount;
+
+                var avgRASizePerDocAttribute = si.info.getAttribute(RAStorageAccumulator.RA_STORAGE_AVG_KEY);
+                if (avgRASizePerDocAttribute != null) {
+                    var avgRASizePerDoc = Long.parseLong(avgRASizePerDocAttribute);
+                    if (totalRAValue == null) {
+                        totalRAValue = computeApproximatedRAStorage(avgRASizePerDoc, commitLiveDocCount, commitTotalDocCount);
+                    } else {
+                        totalRAValue += computeApproximatedRAStorage(avgRASizePerDoc, commitLiveDocCount, commitTotalDocCount);
+                    }
+                }
+
             } catch (IOException err) {
                 logger.warn(
                     "Failed to read file size for shard: [{}], commitId: [{}], err: [{}]",
@@ -66,7 +102,16 @@ class ShardReader {
                 throw err;
             }
         }
-        return new ShardSizeAndDocCount(sizeInBytes, docCount);
+
+        if (totalRAValue == null) {
+            // Try to use the per shard RA value (timeseries indices)
+            totalRAValue = getRAStorageFromUserData(segmentInfos);
+        }
+        if (totalRAValue == null) {
+            logger.trace("No _rastorage available");
+        }
+
+        return new ShardSizeAndDocCount(sizeInBytes, liveDocCount, totalRAValue);
     }
 
     Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap(
@@ -126,15 +171,14 @@ class ShardReader {
                 } else {
                     // Cached information is outdated or missing: re-compute shard stats, include in response, and update cache entry
                     var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
-                    Long raStorage = raStorage(segmentInfos);
                     shardIds.put(
                         shardId,
                         new MeteringShardInfo(
                             shardSizeAndDocCount.sizeInBytes(),
-                            shardSizeAndDocCount.docCount(),
+                            shardSizeAndDocCount.liveDocCount(),
                             primaryTerm,
                             generation,
-                            raStorage
+                            shardSizeAndDocCount.raSizeInBytes()
                         )
                     );
                     if (requestCacheToken != null) {
@@ -143,9 +187,9 @@ class ShardReader {
                             primaryTerm,
                             generation,
                             shardSizeAndDocCount.sizeInBytes(),
-                            shardSizeAndDocCount.docCount(),
+                            shardSizeAndDocCount.liveDocCount(),
                             requestCacheToken,
-                            raStorage
+                            shardSizeAndDocCount.raSizeInBytes()
                         );
                     }
                 }
@@ -154,11 +198,4 @@ class ShardReader {
         return shardIds;
     }
 
-    private static Long raStorage(SegmentInfos segmentInfos) {
-        String raStorage = segmentInfos.getUserData().get(RAStorageAccumulator.RA_STORAGE_KEY);
-        if (raStorage != null) {
-            return Long.parseLong(raStorage);
-        }
-        return null;
-    }
 }

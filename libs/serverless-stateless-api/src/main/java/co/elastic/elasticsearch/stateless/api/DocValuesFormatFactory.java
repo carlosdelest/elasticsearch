@@ -15,9 +15,10 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-module org.elasticsearch.stateless.api {
-    requires org.elasticsearch.server;
-    requires org.apache.lucene.core;
+package co.elastic.elasticsearch.stateless.api;
 
-    exports co.elastic.elasticsearch.stateless.api;
+import org.apache.lucene.codecs.DocValuesFormat;
+
+public interface DocValuesFormatFactory {
+    DocValuesFormat createDocValueFormat(DocValuesFormat parentCodecDocValuesFormat);
 }

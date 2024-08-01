@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class RAStorageAccumulator implements DocumentSizeAccumulator {
     private static final Logger logger = LogManager.getLogger(RAStorageAccumulator.class);
     public static final String RA_STORAGE_KEY = "_rastorage";
+    public static final String RA_STORAGE_AVG_KEY = "_rastorage_avg";
     private final AtomicLong counter = new AtomicLong();
 
     @Override
@@ -41,10 +42,16 @@ public class RAStorageAccumulator implements DocumentSizeAccumulator {
         Map<String, String> prevUserDataMap = segmentInfos.getUserData();
         long aggregatedSize = counter.getAndSet(0);
         String previousValue = prevUserDataMap.get(RA_STORAGE_KEY);
-        Long prevAggregatedSize = previousValue != null ? Long.parseLong(previousValue) : 0;
+        long prevAggregatedSize = previousValue != null ? Long.parseLong(previousValue) : 0;
 
         long total = prevAggregatedSize + aggregatedSize;
-        logger.trace("committing size" + total);
+        logger.trace(
+            "CommitUserData new size [{}] (previous [{}], new [{}]), generation [{}]",
+            total,
+            previousValue,
+            aggregatedSize,
+            segmentInfos.getGeneration()
+        );
         return Map.of(RA_STORAGE_KEY, String.valueOf(total));
     }
 }

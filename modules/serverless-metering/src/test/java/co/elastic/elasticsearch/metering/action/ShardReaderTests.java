@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.stateless.api.CompoundCommitService;
-
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfo;
@@ -39,8 +37,12 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 
+import static co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
+import static co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator.RA_STORAGE_KEY;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -54,9 +56,8 @@ public class ShardReaderTests extends ESTestCase {
     public void testEmptySetWhenNoIndices() throws IOException {
 
         var indicesService = mock(IndicesService.class);
-        var commitService = mock(CompoundCommitService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
-        var shardReader = new ShardReader(indicesService, commitService);
+        var shardReader = new ShardReader(indicesService);
 
         when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
 
@@ -71,9 +72,8 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
-        var commitService = mock(CompoundCommitService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
-        var shardReader = new ShardReader(indicesService, commitService);
+        var shardReader = new ShardReader(indicesService);
 
         var index1 = mock(IndexService.class);
         var index2 = mock(IndexService.class);
@@ -111,13 +111,12 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
-        var commitService = mock(CompoundCommitService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
         when(shardInfoCache.getCachedShardInfo(eq(shardId3), anyLong(), anyLong())).thenReturn(
             Optional.of(new LocalNodeMeteringShardInfoCache.CacheEntry(1L, 1L, 10L, 100L, "TEST-NODE", null))
         );
 
-        var shardReader = new ShardReader(indicesService, commitService);
+        var shardReader = new ShardReader(indicesService);
 
         var index1 = mock(IndexService.class);
         var index2 = mock(IndexService.class);
@@ -150,28 +149,103 @@ public class ShardReaderTests extends ESTestCase {
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2));
     }
 
+    public void testComputeShardStatsWithoutRA() throws IOException {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = new SegmentInfos(Version.LATEST.major);
+        segmentInfos.add(new TestSegmentCommitInfo(10L, 100, 0, 0, null));
+        segmentInfos.add(new TestSegmentCommitInfo(20L, 50, 10, 20, null));
+
+        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+
+        assertThat(shardStats.liveDocCount(), equalTo(120L));
+        assertThat(shardStats.sizeInBytes(), equalTo(30L));
+        assertThat(shardStats.raSizeInBytes(), nullValue());
+    }
+
+    public void testComputeShardStatsWithFullRAMultipleSegments() throws IOException {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = new SegmentInfos(Version.LATEST.major);
+        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, 8L));
+        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
+
+        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+
+        assertThat(shardStats.liveDocCount(), equalTo(30L));
+        assertThat(shardStats.sizeInBytes(), equalTo(300L));
+        assertThat(shardStats.raSizeInBytes(), equalTo(80L + 120L));
+    }
+
+    public void testComputeShardStatsWithPartialRAMultipleSegments() throws IOException {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = new SegmentInfos(Version.LATEST.major);
+        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, 8L));
+        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, null));
+        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 0, 0, 11L));
+        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
+
+        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+
+        assertThat(shardStats.liveDocCount(), equalTo(90L));
+        assertThat(shardStats.sizeInBytes(), equalTo(600L));
+        assertThat(shardStats.raSizeInBytes(), equalTo(80L + 550L + 120L));
+    }
+
+    public void testComputeShardStatsWithTimeseriesRAMultipleSegments() throws IOException {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = new SegmentInfos(Version.LATEST.major);
+        segmentInfos.add(new TestSegmentCommitInfo(10L, 100, 0, 0, null));
+        segmentInfos.add(new TestSegmentCommitInfo(20L, 50, 10, 20, null));
+        segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
+
+        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+
+        assertThat(shardStats.liveDocCount(), equalTo(120L));
+        assertThat(shardStats.sizeInBytes(), equalTo(30L));
+        assertThat(shardStats.raSizeInBytes(), equalTo(234L));
+    }
+
+    public void testComputeShardStatsPerSegmentRAHasPrecedenceOverPerShardRA() throws IOException {
+
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = new SegmentInfos(Version.LATEST.major);
+        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, null));
+        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
+        segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
+
+        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+
+        assertThat(shardStats.liveDocCount(), equalTo(30L));
+        assertThat(shardStats.sizeInBytes(), equalTo(300L));
+        assertThat(shardStats.raSizeInBytes(), equalTo(120L));
+    }
+
     private static class TestSegmentCommitInfo extends SegmentCommitInfo {
 
         private final long size;
 
-        TestSegmentCommitInfo(long size) {
+        TestSegmentCommitInfo(long size, int maxDoc, int delCount, int softDelCount, Long segmentRASize) {
             super(
                 new SegmentInfo(
                     mock(Directory.class),
                     Version.LATEST,
                     Version.LATEST,
                     "",
-                    100,
+                    maxDoc,
                     false,
                     false,
                     mock(Codec.class),
                     Map.of(),
                     new byte[16],
-                    Map.of(),
+                    segmentRASize != null ? Map.of(RA_STORAGE_AVG_KEY, Long.toString(segmentRASize)) : Map.of(),
                     Sort.INDEXORDER
                 ),
-                0,
-                0,
+                delCount,
+                softDelCount,
                 0,
                 0,
                 0,
@@ -188,7 +262,7 @@ public class ShardReaderTests extends ESTestCase {
 
     private static SegmentInfos createMockSegmentInfos(long size) {
         var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        var segmentInfo = new TestSegmentCommitInfo(size);
+        var segmentInfo = new TestSegmentCommitInfo(size, 100, 0, 0, null);
         segmentInfos.add(segmentInfo);
         return segmentInfos;
     }

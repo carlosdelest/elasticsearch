@@ -17,15 +17,15 @@
 
 package co.elastic.elasticsearch.metering.ingested_size;
 
+import org.apache.lucene.document.NumericDocValuesField;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ParsedDocument;
-import org.elasticsearch.logging.LogManager;
-import org.elasticsearch.logging.Logger;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
+import static co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator.RA_STORAGE_KEY;
+
 public class RAStorageReporter implements DocumentSizeReporter {
-    private static final Logger logger = LogManager.getLogger(RAStorageReporter.class);
     private final DocumentSizeAccumulator documentSizeAccumulator;
     private final MapperService mapperService;
 
@@ -45,7 +45,9 @@ public class RAStorageReporter implements DocumentSizeReporter {
     @Override
     public void onParsingCompleted(ParsedDocument parsedDocument) {
         if (isTimeSeries() == false) {
-            logger.trace("parsing completed for non time series index");
+            // Store the result in a new, "hidden" field
+            long ingestBytes = parsedDocument.getDocumentSizeObserver().normalisedBytesParsed();
+            parsedDocument.rootDoc().add(new NumericDocValuesField(RA_STORAGE_KEY, ingestBytes));
         }
     }
 
@@ -55,5 +57,4 @@ public class RAStorageReporter implements DocumentSizeReporter {
         }
         return false;
     }
-
 }
