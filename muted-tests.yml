@@ -116,3 +116,6 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2460"
   method: "testSearchShardGenerationFilesRetention"
+- class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2462"
+  method: "test {mv_pseries_weighted_sum.MultivalueAggregation SYNC}"
