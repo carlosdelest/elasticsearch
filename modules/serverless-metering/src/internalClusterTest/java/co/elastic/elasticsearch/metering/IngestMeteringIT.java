@@ -45,6 +45,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 
+import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.equalTo;
@@ -217,8 +218,8 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         createIndex(indexName);
 
         String scriptId = "script1";
-        clusterAdmin().preparePutStoredScript().setId(scriptId).setContent(new BytesArray(Strings.format("""
-            {"script": {"lang": "%s", "source": "ctx._source.b = 'xx'"} }""", MockScriptEngine.NAME)), XContentType.JSON).get();
+        putJsonStoredScript(scriptId, Strings.format("""
+            {"script": {"lang": "%s", "source": "ctx._source.b = 'xx'"} }""", MockScriptEngine.NAME));
 
         // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
