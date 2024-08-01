@@ -290,12 +290,13 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
 
         var shardIds = StreamSupport.stream(clusterState.routingTable().allShards(indicesNames).spliterator(), false)
             .map(ShardRouting::shardId)
+            .map(MeteringIndexInfoService.ShardInfoKey::fromShardId)
             .collect(Collectors.toSet());
 
         for (var shardId : shardIds) {
-            var shardInfo = shardsInfo.getMeteringShardInfoMap(shardId);
+            var shardInfo = shardsInfo.getShardInfo(shardId);
 
-            String indexName = shardId.getIndexName();
+            String indexName = shardId.indexName();
             IndexAbstraction indexAbstraction = metadata.getIndicesLookup().get(indexName);
 
             long currentCount = shardInfo.docCount();

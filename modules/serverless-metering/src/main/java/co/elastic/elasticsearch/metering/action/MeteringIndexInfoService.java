@@ -45,7 +45,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static co.elastic.elasticsearch.metering.action.utils.PersistentTaskUtils.findPersistentTaskNodeId;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
@@ -61,8 +60,30 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         STALE
     }
 
+    record ShardInfoKey(String indexName, int shardId) {
+        @Override
+        public String toString() {
+            return indexName + ":" + shardId;
+        }
+
+        public static ShardInfoKey fromShardId(ShardId shardId) {
+            return new ShardInfoKey(shardId.getIndexName(), shardId.id());
+        }
+    }
+
+    record ShardInfoValue(
+        long sizeInBytes,
+        long docCount,
+        Long storedIngestSizeInBytes,
+        String indexUUID,
+        long primaryTerm,
+        long generation
+    ) implements ShardEra {
+        public static final ShardInfoValue EMPTY = new ShardInfoValue(0, 0, null, null, 0, 0);
+    }
+
     record CollectedMeteringShardInfo(
-        Map<ShardId, MeteringShardInfo> meteringShardInfoMap,
+        Map<ShardInfoKey, ShardInfoValue> meteringShardInfoMap,
         Set<CollectedMeteringShardInfoFlag> meteringShardInfoStatus
     ) {
         static final CollectedMeteringShardInfo EMPTY = new CollectedMeteringShardInfo(
@@ -70,9 +91,9 @@ public class MeteringIndexInfoService implements ClusterStateListener {
             Set.of(CollectedMeteringShardInfoFlag.STALE)
         );
 
-        public MeteringShardInfo getMeteringShardInfoMap(ShardId shardId) {
-            var shardInfo = meteringShardInfoMap.get(shardId);
-            return Objects.requireNonNullElse(shardInfo, MeteringShardInfo.EMPTY);
+        ShardInfoValue getShardInfo(ShardInfoKey shardInfoKey) {
+            var shardInfo = meteringShardInfoMap.get(shardInfoKey);
+            return Objects.requireNonNullElse(shardInfo, ShardInfoValue.EMPTY);
         }
     }
 
@@ -208,10 +229,10 @@ public class MeteringIndexInfoService implements ClusterStateListener {
             boolean partial = currentInfo.meteringShardInfoStatus().contains(CollectedMeteringShardInfoFlag.PARTIAL);
             List<MetricValue> metrics = new ArrayList<>();
             for (final var shardEntry : currentInfo.meteringShardInfoMap.entrySet()) {
-                int shardId = shardEntry.getKey().id();
+                int shardId = shardEntry.getKey().shardId();
                 long size = shardEntry.getValue().sizeInBytes();
 
-                var indexName = shardEntry.getKey().getIndexName();
+                var indexName = shardEntry.getKey().indexName();
 
                 Map<String, String> metadata = new HashMap<>();
                 metadata.put(INDEX, indexName);
@@ -221,7 +242,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
                 }
 
                 metrics.add(
-                    new MetricValue(format("%s:%s:%s", IX_METRIC_ID_PREFIX, indexName, shardId), IX_METRIC_TYPE, metadata, settings, size)
+                    new MetricValue(format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()), IX_METRIC_TYPE, metadata, settings, size)
                 );
             }
 
@@ -229,7 +250,7 @@ public class MeteringIndexInfoService implements ClusterStateListener {
                 .stream()
                 .collect(
                     Collectors.groupingBy(
-                        e -> e.getKey().getIndexName(),
+                        e -> e.getKey().indexName(),
                         Collectors.filtering(
                             e -> e.getValue().storedIngestSizeInBytes() != null,
                             Collectors.mapping(e -> e.getValue().storedIngestSizeInBytes(), Collectors.reducing(Long::sum))
@@ -265,14 +286,50 @@ public class MeteringIndexInfoService implements ClusterStateListener {
         return new StorageInfoMetricsCollector(clusterService.getClusterSettings(), settings);
     }
 
-    static CollectedMeteringShardInfo mergeShardInfo(
-        Map<ShardId, MeteringShardInfo> current,
+    private static CollectedMeteringShardInfo mergeShardInfo(
+        Map<ShardInfoKey, ShardInfoValue> current,
         Map<ShardId, MeteringShardInfo> updated,
         Set<CollectedMeteringShardInfoFlag> status
     ) {
-        var merged = Stream.concat(current.entrySet().stream(), updated.entrySet().stream())
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, TransportCollectMeteringShardInfoAction::mostRecent));
-        return new CollectedMeteringShardInfo(merged, status);
+        HashMap<ShardInfoKey, ShardInfoValue> map = new HashMap<>(current);
+        for (var newEntry : updated.entrySet()) {
+            var info = newEntry.getValue();
+            var shardKey = ShardInfoKey.fromShardId(newEntry.getKey());
+            var shardValue = new ShardInfoValue(
+                info.sizeInBytes(),
+                info.docCount(),
+                info.storedIngestSizeInBytes(),
+                newEntry.getKey().getIndex().getUUID(),
+                info.primaryTerm(),
+                info.generation()
+            );
+            map.merge(shardKey, shardValue, (oldValue, newValue) -> {
+                // In case there is a conflict, we need the index UUID from the original map value to decide what to do
+                var originalMapValue = current.get(shardKey);
+                if (originalMapValue == null) {
+                    // We have no entry from the current map; entries in the "updated" map cannot have the same UUID (this has been already
+                    // taken care of at Transport level), so we'll choose one "at random" (and eventually we'll get this correct at the
+                    // next round)
+                    return newValue;
+                } else {
+                    // oldValue is either the original value, or a value from the "updated" map we used to replace the original value
+
+                    // Same UUID -> compare mostRecent
+                    if (oldValue.indexUUID().equals(newValue.indexUUID())) {
+                        return ShardEra.mostRecent(oldValue, newValue);
+                    }
+
+                    // oldValue and newValue have different UUIDs
+                    // "Do not go back" if newValue has the same UUID as the original
+                    if (newValue.indexUUID().equals(originalMapValue.indexUUID())) {
+                        return oldValue;
+                    }
+                    // We assume that a change in UUID means that the value is more recent than the one we already have.
+                    return newValue;
+                }
+            });
+        }
+        return new CollectedMeteringShardInfo(map, status);
     }
 
     CollectedMeteringShardInfo getMeteringShardInfo() {

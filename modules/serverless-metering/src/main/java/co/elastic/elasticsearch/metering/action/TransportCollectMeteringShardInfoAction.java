@@ -181,20 +181,13 @@ public class TransportCollectMeteringShardInfoAction extends HandledTransportAct
             .filter(SingleNodeResponse::isValid)
             .map(SingleNodeResponse::getResponse)
             .flatMap(m -> m.entrySet().stream())
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, TransportCollectMeteringShardInfoAction::mostRecent));
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, ShardEra::mostRecent));
 
         var failures = Arrays.stream(responses)
             .filter(Predicate.not(SingleNodeResponse::isValid))
             .map(SingleNodeResponse::getFailure)
             .toList();
         return new CollectMeteringShardInfoAction.Response(normalizedShards, failures);
-    }
-
-    static MeteringShardInfo mostRecent(MeteringShardInfo v1, MeteringShardInfo v2) {
-        if ((v1.primaryTerm() > v2.primaryTerm()) || (v1.primaryTerm() == v2.primaryTerm() && v1.generation() > v2.generation())) {
-            return v1;
-        }
-        return v2;
     }
 
     private void sendRequest(

@@ -25,7 +25,8 @@ import java.io.IOException;
 
 public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTerm, long generation, Long storedIngestSizeInBytes)
     implements
-        Writeable {
+        Writeable,
+        ShardEra {
 
     public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0, null);
 
