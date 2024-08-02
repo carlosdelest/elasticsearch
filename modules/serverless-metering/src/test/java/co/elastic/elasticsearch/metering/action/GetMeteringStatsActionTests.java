@@ -47,7 +47,8 @@ public class GetMeteringStatsActionTests extends ESTestCase {
         assertEquals(XContentHelper.stripWhitespace("""
             {
                "_total": {
-                  "num_docs": 0
+                  "num_docs": 0,
+                  "size_in_bytes": 0
                },
                "indices": [],
                "datastreams": []
@@ -69,12 +70,14 @@ public class GetMeteringStatsActionTests extends ESTestCase {
         assertEquals(XContentHelper.stripWhitespace("""
             {
                "_total": {
-                  "num_docs": 20
+                  "num_docs": 20,
+                  "size_in_bytes": 200
                },
                "indices": [
                   {
                      "name": "index1",
-                     "num_docs": 10
+                     "num_docs": 10,
+                     "size_in_bytes": 100
                   }
                ],
                "datastreams": []

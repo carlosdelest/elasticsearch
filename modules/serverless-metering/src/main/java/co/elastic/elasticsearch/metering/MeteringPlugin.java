@@ -255,7 +255,7 @@ public class MeteringPlugin extends Plugin
         return List.of(new RestGetMeteringStatsAction());
     }
 
-    private boolean isRaStorageMeteringEnabled() {
+    public static boolean isRaStorageMeteringEnabled(ProjectType projectType) {
         return projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY;
     }
 
@@ -285,7 +285,11 @@ public class MeteringPlugin extends Plugin
      */
     @Override
     public DocumentParsingProvider getDocumentParsingProvider() {
-        return new MeteringDocumentParsingProvider(isRaStorageMeteringEnabled(), this::getIngestMetricsCollector, this::getSystemIndices);
+        return new MeteringDocumentParsingProvider(
+            isRaStorageMeteringEnabled(projectType),
+            this::getIngestMetricsCollector,
+            this::getSystemIndices
+        );
     }
 
     @Override

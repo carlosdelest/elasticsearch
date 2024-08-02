@@ -101,7 +101,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     private MeteringIndexInfoService meteringIndexInfoService;
 
     private class TestTransportGetMeteringStatsAction extends TransportGetMeteringStatsAction {
-        TestTransportGetMeteringStatsAction(TimeValue meteringShardInfoUpdatePeriod) {
+        TestTransportGetMeteringStatsAction(TimeValue meteringShardInfoUpdatePeriod, boolean projectUsesRaStorageMetric) {
             super(
                 GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
                 transportService,
@@ -110,7 +110,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 indexNameExpressionResolver,
                 meteringIndexInfoService,
                 transportService.getThreadPool().executor(TEST_THREAD_POOL_NAME),
-                meteringShardInfoUpdatePeriod
+                meteringShardInfoUpdatePeriod,
+                projectUsesRaStorageMetric
             );
         }
     }
@@ -157,7 +158,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
     private TestTransportGetMeteringStatsAction createActionAndInitTransport(
         CapturingTransport transport,
-        TimeValue meteringShardInfoUpdatePeriod
+        TimeValue meteringShardInfoUpdatePeriod,
+        boolean projectUsesRaStorageMetric
     ) {
         transportService = transport.createTransportService(
             clusterService.getSettings(),
@@ -169,7 +171,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         );
         transportService.start();
         transportService.acceptIncomingRequests();
-        return new TestTransportGetMeteringStatsAction(meteringShardInfoUpdatePeriod);
+        return new TestTransportGetMeteringStatsAction(meteringShardInfoUpdatePeriod, projectUsesRaStorageMetric);
     }
 
     @After
@@ -186,7 +188,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNoPersistentTaskNodeRetries() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(20));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(20), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
@@ -212,7 +214,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNoPersistentTaskNodeEventuallyFails() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5), true);
         createMockClusterState(clusterService);
 
         var request = new GetMeteringStatsAction.Request();
@@ -230,7 +232,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
     public void testRequestExecutedOnPersistentTaskNode() throws InterruptedException, TimeoutException {
         var transport = new CapturingTransport();
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         createMockClusterStateWithPersistentTask(clusterService);
 
@@ -259,7 +261,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 }
             }
         };
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         setState(clusterService, createMockClusterStateWithPersistentTask("node_1"));
 
@@ -297,7 +299,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 }
             }
         };
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
@@ -351,7 +353,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 }
             }
         };
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
@@ -394,7 +396,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 handleResponse(requestId, node1Response);
             }
         };
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
@@ -429,16 +431,21 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
     public void testCreateResponseNoShards() {
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(Map.of(), Set.of());
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         createMockClusterState(clusterService, 3, 2, b -> {});
 
-        var response = TransportGetMeteringStatsAction.createResponse(mockShardsInfo, clusterService.state(), new String[0]);
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[0]);
 
         assertThat(response.totalDocCount, is(0L));
         assertThat(response.totalSizeInBytes, is(0L));
     }
 
     public void testCreateResponseTwoIndices() {
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), false);
+
         var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
@@ -468,11 +475,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(
-            mockShardsInfo,
-            clusterService.state(),
-            new String[] { "index1", "index2" }
-        );
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
         assertThat(response.totalDocCount, is(300L));
         assertThat(response.totalSizeInBytes, is(30L));
@@ -483,7 +486,10 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(20L));
     }
 
-    public void testCreateResponseTwoIndicesOneDatastream() {
+    public void testCreateResponseTwoIndicesRAStorageProject() {
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
+
         var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
@@ -494,11 +500,55 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Map.ofEntries(
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 10L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
-                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 20L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                )
+            ),
+            Set.of()
+        );
+
+        createMockClusterState(clusterService, 3, 2, b -> {
+            b.routingTable(
+                RoutingTable.builder()
+                    .add(addLocalOnlyIndexRouting(index1, shardId1))
+                    .add(addLocalOnlyIndexRouting(index2, shardId2))
+                    .build()
+            );
+        });
+
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
+
+        assertThat(response.totalDocCount, is(300L));
+        assertThat(response.totalSizeInBytes, is(33L));
+        assertThat(response.indexToStatsMap, aMapWithSize(2));
+        assertThat(response.indexToStatsMap.get(index1.getName()).docCount(), is(100L));
+        assertThat(response.indexToStatsMap.get(index2.getName()).docCount(), is(200L));
+        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(11L));
+        assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(22L));
+    }
+
+    public void testCreateResponseTwoIndicesOneDatastream() {
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
+
+        var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var shardId1 = new ShardId(index1, 0);
+
+        var index2 = new Index("index2", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var shardId2 = new ShardId(index2, 0);
+
+        var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
+            Map.ofEntries(
+                Map.entry(
+                    MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                ),
+                Map.entry(
+                    MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
                 )
             ),
             Set.of()
@@ -527,27 +577,23 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(
-            mockShardsInfo,
-            clusterService.state(),
-            new String[] { "index1", "index2" }
-        );
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
         assertThat(response.totalDocCount, is(300L));
-        assertThat(response.totalSizeInBytes, is(30L));
+        assertThat(response.totalSizeInBytes, is(33L));
         assertThat(response.indexToStatsMap, aMapWithSize(2));
         assertThat(response.datastreamToStatsMap, aMapWithSize(1));
         assertThat(response.indexToStatsMap.get(index1.getName()).docCount(), is(100L));
-        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(10L));
+        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(11L));
         assertThat(response.indexToStatsMap.get(index2.getName()).docCount(), is(200L));
         assertThat(response.datastreamToStatsMap.get("dataStream1").docCount(), is(200L));
-        assertThat(response.datastreamToStatsMap.get("dataStream1").sizeInBytes(), is(20L));
+        assertThat(response.datastreamToStatsMap.get("dataStream1").sizeInBytes(), is(22L));
         assertThat(response.indexToDatastreamMap, aMapWithSize(1));
         assertThat(response.indexToDatastreamMap.get(index2.getName()), equalTo("dataStream1"));
     }
 
     public void testNameFiltering() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5), true);
 
         var index1 = new Index("foo1", IndexMetadata.INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
@@ -629,7 +675,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNameFilteringIncludesDatastreams() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5), true);
 
         var index1 = new Index("foo1", IndexMetadata.INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
@@ -728,6 +774,9 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testCreateResponseMultipleShards() {
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
+
         var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
@@ -738,11 +787,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Map.ofEntries(
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 10L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
-                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 20L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
                 )
             ),
             Set.of()
@@ -805,22 +854,21 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(
-            mockShardsInfo,
-            clusterService.state(),
-            new String[] { "index1", "index2" }
-        );
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
         assertThat(response.totalDocCount, is(300L));
-        assertThat(response.totalSizeInBytes, is(30L));
+        assertThat(response.totalSizeInBytes, is(33L));
         assertThat(response.indexToStatsMap, aMapWithSize(2));
         assertThat(response.indexToStatsMap.get(index1.getName()).docCount(), is(100L));
         assertThat(response.indexToStatsMap.get(index2.getName()).docCount(), is(200L));
-        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(10L));
-        assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(20L));
+        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(11L));
+        assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(22L));
     }
 
     public void testCreateResponseShardsWithoutInfo() {
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), false);
+
         var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
@@ -844,18 +892,14 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(
-            mockShardsInfo,
-            clusterService.state(),
-            new String[] { "index1", "index2" }
-        );
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
         assertThat(response.totalDocCount, is(100L));
         assertThat(response.totalSizeInBytes, is(10L));
     }
 
     public void testPersistentTaskNodeTransportActionTimeout() {
-        var action = createActionAndInitTransport(new CapturingTransport(), MINIMUM_METERING_INFO_UPDATE_PERIOD);
+        var action = createActionAndInitTransport(new CapturingTransport(), MINIMUM_METERING_INFO_UPDATE_PERIOD, true);
 
         var timeout1 = action.getPersistentTaskNodeTransportActionTimeout();
         action.setMeteringShardInfoUpdatePeriod(TimeValue.ZERO);
@@ -869,7 +913,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testInitialRetryBackoffPeriod() {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5), true);
 
         var period1 = action.getInitialRetryBackoffPeriod(TimeValue.ZERO);
         var period2 = action.getInitialRetryBackoffPeriod(TimeValue.timeValueSeconds(20));

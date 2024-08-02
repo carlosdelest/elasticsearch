@@ -44,26 +44,33 @@ class ShardReader {
 
     record ShardSizeAndDocCount(long sizeInBytes, long liveDocCount, Long raSizeInBytes) {}
 
-    private static Long computeApproximatedRAStorage(long avgRASizePerDoc, long liveDocCount, long totalDocCount) {
+    private static Long computeApproximatedRAStorage(long avgRASizePerDoc, long liveDocCount, long totalDocCount, ShardId shardId) {
         var raStorage = avgRASizePerDoc * liveDocCount;
         if (liveDocCount == totalDocCount) {
-            logger.trace("using exact _rastorage [{}] (avg: [{}], live docs: [{}])", raStorage, avgRASizePerDoc, liveDocCount);
-        } else {
             logger.trace(
-                "using approximated _rastorage [{}] (avg: [{}], live docs: [{}], total docs: [{}])",
+                "using exact _rastorage [{}] (avg: [{}], live docs: [{}]) for {}",
                 raStorage,
                 avgRASizePerDoc,
                 liveDocCount,
-                totalDocCount
+                shardId
+            );
+        } else {
+            logger.trace(
+                "using approximated _rastorage [{}] (avg: [{}], live docs: [{}], total docs: [{}]) for {}",
+                raStorage,
+                avgRASizePerDoc,
+                liveDocCount,
+                totalDocCount,
+                shardId
             );
         }
         return raStorage;
     }
 
-    private static Long getRAStorageFromUserData(SegmentInfos segmentInfos) {
+    private static Long getRAStorageFromUserData(SegmentInfos segmentInfos, ShardId shardId) {
         var raStorageString = segmentInfos.getUserData().get(RAStorageAccumulator.RA_STORAGE_KEY);
         if (raStorageString != null) {
-            logger.trace("using UserData [{}]", raStorageString);
+            logger.trace("using _rastorage from UserData [{}] for {}", raStorageString, shardId);
             return Long.parseLong(raStorageString);
         }
         return null;
@@ -86,9 +93,9 @@ class ShardReader {
                 if (avgRASizePerDocAttribute != null) {
                     var avgRASizePerDoc = Long.parseLong(avgRASizePerDocAttribute);
                     if (totalRAValue == null) {
-                        totalRAValue = computeApproximatedRAStorage(avgRASizePerDoc, commitLiveDocCount, commitTotalDocCount);
+                        totalRAValue = computeApproximatedRAStorage(avgRASizePerDoc, commitLiveDocCount, commitTotalDocCount, shardId);
                     } else {
-                        totalRAValue += computeApproximatedRAStorage(avgRASizePerDoc, commitLiveDocCount, commitTotalDocCount);
+                        totalRAValue += computeApproximatedRAStorage(avgRASizePerDoc, commitLiveDocCount, commitTotalDocCount, shardId);
                     }
                 }
 
@@ -105,10 +112,10 @@ class ShardReader {
 
         if (totalRAValue == null) {
             // Try to use the per shard RA value (timeseries indices)
-            totalRAValue = getRAStorageFromUserData(segmentInfos);
+            totalRAValue = getRAStorageFromUserData(segmentInfos, shardId);
         }
         if (totalRAValue == null) {
-            logger.trace("No _rastorage available");
+            logger.trace("No _rastorage available for {}", shardId);
         }
 
         return new ShardSizeAndDocCount(sizeInBytes, liveDocCount, totalRAValue);

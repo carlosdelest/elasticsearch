@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.action;
 
 import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
+import co.elastic.elasticsearch.metering.MeteringPlugin;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -60,6 +61,7 @@ import java.util.stream.StreamSupport;
 import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
 import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING;
 import static co.elastic.elasticsearch.metering.action.utils.PersistentTaskUtils.findPersistentTaskNode;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_TYPE;
 
 abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
     GetMeteringStatsAction.Request,
@@ -74,6 +76,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private final MeteringIndexInfoService meteringIndexInfoService;
     private final ExecutorService executor;
+    private final boolean meterRaStorage;
     private final TransportService transportService;
     private final String persistentTaskName;
 
@@ -95,7 +98,8 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
             indexNameExpressionResolver,
             meteringIndexInfoService,
             transportService.getThreadPool().executor(ThreadPool.Names.MANAGEMENT),
-            POLL_INTERVAL_SETTING.get(clusterService.getSettings())
+            POLL_INTERVAL_SETTING.get(clusterService.getSettings()),
+            MeteringPlugin.isRaStorageMeteringEnabled(PROJECT_TYPE.get(clusterService.getSettings()))
         );
 
         clusterService.getClusterSettings().addSettingsUpdateConsumer(POLL_INTERVAL_SETTING, this::setMeteringShardInfoUpdatePeriod);
@@ -109,7 +113,8 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         IndexNameExpressionResolver indexNameExpressionResolver,
         MeteringIndexInfoService meteringIndexInfoService,
         ExecutorService executor,
-        TimeValue meteringShardInfoUpdatePeriod
+        TimeValue meteringShardInfoUpdatePeriod,
+        boolean meterRaStorage
     ) {
         super(actionName, transportService, actionFilters, GetMeteringStatsAction.Request::new, executor);
         this.transportService = transportService;
@@ -117,6 +122,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         this.meteringIndexInfoService = meteringIndexInfoService;
         this.executor = executor;
+        this.meterRaStorage = meterRaStorage;
         this.persistentTaskName = MeteringIndexInfoTask.TASK_NAME;
         this.meteringShardInfoUpdatePeriod = meteringShardInfoUpdatePeriod;
     }
@@ -275,7 +281,37 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         }
     }
 
-    static GetMeteringStatsAction.Response createResponse(
+    /**
+     * Returns the size used for billing purposes.
+     * This API is meant for returning metering stats. It was meant to provide a snapshot of the state of metering, without any
+     * interpretation.
+     * We provisionally add an extra "size" field, which is chosen internally from IX/RA-S based on the project type, to be consumed by
+     * the UI. This method is immediately deprecated, as it is meant as a stopgap measure until we add a new user facing API.
+     *
+     * @param shardId
+     * @param shardInfo containing IX/RA-S sizes
+     * @return the size to display, based on the project type
+     */
+    @Deprecated
+    long getSizeToDisplay(MeteringIndexInfoService.ShardInfoKey shardId, MeteringIndexInfoService.ShardInfoValue shardInfo) {
+        if (meterRaStorage) {
+            if (shardInfo.storedIngestSizeInBytes() == null) {
+                logger.warn("display _rastorage NULL for [{}:{}]", shardId.indexName(), shardId.shardId());
+                return 0L;
+            }
+            logger.trace(
+                "display _rastorage [{}] for [{}:{}]",
+                shardInfo.storedIngestSizeInBytes(),
+                shardId.indexName(),
+                shardId.shardId()
+            );
+            return shardInfo.storedIngestSizeInBytes();
+        }
+        logger.trace("display IX [{}] for [{}:{}]", shardInfo.sizeInBytes(), shardId.indexName(), shardId.shardId());
+        return shardInfo.sizeInBytes();
+    }
+
+    GetMeteringStatsAction.Response createResponse(
         MeteringIndexInfoService.CollectedMeteringShardInfo shardsInfo,
         ClusterState clusterState,
         String[] indicesNames
@@ -300,7 +336,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
             IndexAbstraction indexAbstraction = metadata.getIndicesLookup().get(indexName);
 
             long currentCount = shardInfo.docCount();
-            long currentSize = shardInfo.sizeInBytes();
+            long currentSize = getSizeToDisplay(shardId, shardInfo);
             workingTotalDocCount += currentCount;
             workingTotalSizeInBytes += currentSize;
 

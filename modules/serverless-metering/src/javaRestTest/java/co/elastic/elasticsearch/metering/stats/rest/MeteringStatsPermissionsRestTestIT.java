@@ -28,7 +28,6 @@ import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.distribution.DistributionType;
 import org.elasticsearch.test.cluster.util.resource.Resource;
-import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
 
 import java.util.HashMap;
@@ -41,7 +40,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.startsWith;
 
-public class MeteringStatsPermissionsRestTestIT extends ESRestTestCase {
+public class MeteringStatsPermissionsRestTestIT extends MeteringStatsRestTestCase {
     private static final String PASSWORD = "secret-test-password";
 
     @ClassRule
@@ -95,10 +94,10 @@ public class MeteringStatsPermissionsRestTestIT extends ESRestTestCase {
 
     @SuppressWarnings("unchecked")
     public void testGetMeteringStatsPrivileges() throws Exception {
-        MeteringStatsRestTestIT.createAndLoadIndex("foo-test-1", Settings.EMPTY);
-        MeteringStatsRestTestIT.createAndLoadIndex("bar-test-1", Settings.EMPTY);
-        MeteringStatsRestTestIT.createAndLoadDatastreamWithRollover("foo-datastream-1", new HashMap<>(), new HashMap<>());
-        MeteringStatsRestTestIT.createAndLoadDatastreamWithRollover("bar-datastream-1", new HashMap<>(), new HashMap<>());
+        createAndLoadIndex("foo-test-1", Settings.EMPTY);
+        createAndLoadIndex("bar-test-1", Settings.EMPTY);
+        createAndLoadDatastreamWithRollover("foo-datastream-1", new HashMap<>(), new HashMap<>());
+        createAndLoadDatastreamWithRollover("bar-datastream-1", new HashMap<>(), new HashMap<>());
 
         try (var client = buildClient(restAdminSettings(), getClusterHosts().toArray(new HttpHost[0]))) {
             Request meteringStatsRequest = new Request("GET", "/_metering/stats");

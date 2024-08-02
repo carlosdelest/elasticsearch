@@ -162,6 +162,7 @@ public class GetMeteringStatsAction {
                 builder.startObject();
                 builder.startObject("_total");
                 builder.field("num_docs", totalDocCount);
+                builder.field("size_in_bytes", totalSizeInBytes);
                 builder.endObject();
                 builder.startArray("indices");
                 return builder;
@@ -174,6 +175,7 @@ public class GetMeteringStatsAction {
                     builder.field("datastream", datastream);
                 }
                 builder.field("num_docs", indexStats.getValue().docCount());
+                builder.field("size_in_bytes", indexStats.getValue().sizeInBytes());
                 builder.endObject();
                 return builder;
             })), ChunkedToXContentHelper.singleChunk((builder, p) -> {

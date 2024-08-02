@@ -92,7 +92,6 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
     @Inject
     public TransportRestoreProjectAction(TransportService transportService, ActionFilters actionFilters, Client client) {
-        // TODO: use restoreExecutor instead, and do not fork in doExecute
         super(TYPE.name(), actionFilters, transportService.getTaskManager(), EsExecutors.DIRECT_EXECUTOR_SERVICE);
         this.client = client;
         final var threadPool = transportService.getThreadPool();
