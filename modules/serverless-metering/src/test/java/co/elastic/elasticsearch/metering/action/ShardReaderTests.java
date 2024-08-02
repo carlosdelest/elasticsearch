@@ -37,8 +37,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 
-import static co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
-import static co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator.RA_STORAGE_KEY;
+import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
+import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;

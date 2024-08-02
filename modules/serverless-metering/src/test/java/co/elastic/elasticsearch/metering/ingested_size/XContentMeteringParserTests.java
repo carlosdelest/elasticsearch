@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 
-public class MeteringParserTests extends ESTestCase {
+public class XContentMeteringParserTests extends ESTestCase {
     private final XContentType xContentType;
     private static final int ASCII_SIZE = 1;// in bytes
     private static final int NUMBER_SIZE = Long.BYTES;
@@ -51,7 +51,7 @@ public class MeteringParserTests extends ESTestCase {
         return Arrays.stream(XContentType.values()).map(xct -> new Object[] { xct }).toList();
     }
 
-    public MeteringParserTests(XContentType xContentType) {
+    public XContentMeteringParserTests(XContentType xContentType) {
         this.xContentType = xContentType;
     }
 
@@ -591,7 +591,7 @@ public class MeteringParserTests extends ESTestCase {
         CheckedConsumer<XContentParser, IOException> parserConsumer
     ) throws IOException {
         try (
-            XContentParser parser = new MeteringParser(
+            XContentParser parser = new XContentMeteringParser(
                 XContentHelper.createParser(XContentParserConfiguration.EMPTY, bytesArray, xContentType),
                 counter::set
             )

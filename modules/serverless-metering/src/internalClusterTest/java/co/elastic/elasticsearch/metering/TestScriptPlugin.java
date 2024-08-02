@@ -29,7 +29,8 @@ public class TestScriptPlugin extends MockScriptPlugin {
     @SuppressWarnings("unchecked")
     protected Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
         Map<String, Function<Map<String, Object>, Object>> scripts = new HashMap<>();
-        scripts.put("ctx._source.b = 'xx'", vars -> srcScript(vars, source -> { return source.replace("b", "xx"); }));
+        scripts.put("ctx._source.b = 'xx'", vars -> srcScript(vars, source -> source.replace("b", "xx")));
+        scripts.put("ctx._source.b = 'xxx'", vars -> srcScript(vars, source -> source.replace("b", "xxx")));
         return scripts;
     }
 

@@ -40,7 +40,7 @@ import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
-import org.elasticsearch.plugins.internal.DocumentSizeObserver;
+import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.XContentTestUtils;
 import org.elasticsearch.test.junit.annotations.TestLogging;
@@ -231,12 +231,12 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
                 Mockito::mock,
                 Mockito::mock
             );
-            DocumentSizeObserver documentSizeObserver = provider.newDocumentSizeObserver(new IndexRequest());
+            XContentMeteringParserDecorator meteringParserDecorator = provider.newMeteringParserDecorator(new IndexRequest());
 
-            XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, documentSizeObserver).v2();
+            XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, meteringParserDecorator).v2();
 
-            assertThat(documentSizeObserver.normalisedBytesParsed(), greaterThan(0L));
-            return documentSizeObserver.normalisedBytesParsed();
+            assertThat(meteringParserDecorator.meteredDocumentSize().ingestedBytes(), greaterThan(0L));
+            return meteringParserDecorator.meteredDocumentSize().ingestedBytes();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.ingested_size;
+package co.elastic.elasticsearch.metering.ingested_size.reporter;
 
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;

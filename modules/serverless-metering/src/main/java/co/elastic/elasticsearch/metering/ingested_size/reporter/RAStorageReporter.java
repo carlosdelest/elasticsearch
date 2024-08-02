@@ -15,15 +15,16 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.ingested_size;
+package co.elastic.elasticsearch.metering.ingested_size.reporter;
 
 import org.apache.lucene.document.NumericDocValuesField;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ParsedDocument;
+import org.elasticsearch.index.mapper.ParsedDocument.DocumentSize;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
-import static co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator.RA_STORAGE_KEY;
+import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
 
 public class RAStorageReporter implements DocumentSizeReporter {
     private final DocumentSizeAccumulator documentSizeAccumulator;
@@ -37,8 +38,9 @@ public class RAStorageReporter implements DocumentSizeReporter {
     @Override
     public void onIndexingCompleted(ParsedDocument parsedDocument) {
         if (isTimeSeries()) {
+            DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
             // per index storage
-            documentSizeAccumulator.add(parsedDocument.getDocumentSizeObserver().normalisedBytesParsed());
+            documentSizeAccumulator.add(bytesToReport.storedBytes());
         }
     }
 
@@ -46,8 +48,8 @@ public class RAStorageReporter implements DocumentSizeReporter {
     public void onParsingCompleted(ParsedDocument parsedDocument) {
         if (isTimeSeries() == false) {
             // Store the result in a new, "hidden" field
-            long ingestBytes = parsedDocument.getDocumentSizeObserver().normalisedBytesParsed();
-            parsedDocument.rootDoc().add(new NumericDocValuesField(RA_STORAGE_KEY, ingestBytes));
+            DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
+            parsedDocument.rootDoc().add(new NumericDocValuesField(RA_STORAGE_KEY, bytesToReport.storedBytes()));
         }
     }
 

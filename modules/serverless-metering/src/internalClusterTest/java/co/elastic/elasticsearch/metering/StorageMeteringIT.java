@@ -83,6 +83,7 @@ import java.util.function.Function;
 import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
 import static org.elasticsearch.index.IndexSettings.INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
@@ -92,7 +93,7 @@ import static org.hamcrest.Matchers.startsWith;
 
 @TestLogging(
     reason = "development",
-    value = "co.elastic.elasticsearch.metering:TRACE,co.elastic.elasticsearch.metering.ingested_size.RAStorageReporter:TRACE"
+    value = "co.elastic.elasticsearch.metering:TRACE,co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageReporter:TRACE"
 )
 public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
@@ -384,7 +385,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).get();
 
         // update via inlined script
-        String scriptCode = "ctx._source.b = 'xx'";
+        String scriptCode = "ctx._source.b = 'xxx'";
         final Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, scriptCode, Collections.emptyMap());
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).get();
 
@@ -405,6 +406,37 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         });
 
         waitAndAssertRAStorageRecords(usageRecords, indexName, raSize, 1);
+        receivedMetrics().clear();
+    }
+
+    // this test is confirming that for nontimeseries index we will meter ra-s updates by script in solution's cluster
+    // if we didn't the ra-s would decrease after an update by script (because of a delete being followed by a not metered index op)
+    public void testUpdatesViaDocAreMeteredForSolutions() throws Exception {
+        startMasterIndexAndIngestNode();
+        startSearchNode();
+        String indexName = "index1";
+
+        createIndex(indexName);
+
+        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+
+        long raSize = 3 * ASCII_SIZE + NUMBER_SIZE;
+        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
+        client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
+
+        List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, indexName, raSize);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, raSize, 1);
+
+        usageRecords.clear();
+        receivedMetrics().clear();
+
+        long raUpdateSize = ASCII_SIZE + NUMBER_SIZE;
+        client().prepareUpdate().setIndex(indexName).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
+
+        waitAndAssertRAIngestRecords(usageRecords, indexName, raUpdateSize);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, raSize + raUpdateSize, 1);
+
         receivedMetrics().clear();
     }
 

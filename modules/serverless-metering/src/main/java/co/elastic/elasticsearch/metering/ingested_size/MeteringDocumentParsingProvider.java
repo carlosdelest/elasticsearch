@@ -18,6 +18,10 @@
 package co.elastic.elasticsearch.metering.ingested_size;
 
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
+import co.elastic.elasticsearch.metering.ingested_size.reporter.CompositeDocumentSizeReporter;
+import co.elastic.elasticsearch.metering.ingested_size.reporter.RAIngestMetricReporter;
+import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator;
+import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageReporter;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.action.DocWriteRequest;
@@ -27,8 +31,8 @@ import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
-import org.elasticsearch.plugins.internal.DocumentSizeObserver;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
+import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -49,36 +53,37 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
     }
 
     @Override
-    public <T> DocumentSizeObserver newDocumentSizeObserver(DocWriteRequest<T> request) {
+    public <T> XContentMeteringParserDecorator newMeteringParserDecorator(DocWriteRequest<T> request) {
         if (request instanceof IndexRequest indexRequest) {
-            return newDocumentSizeObserver(indexRequest);
+            return newDocumentSizeObserver(indexRequest, isObservabilityOrSecurity());
         } else if (request instanceof UpdateRequest updateRequest) {
             return newDocumentSizeObserver(updateRequest);
         }
-        return DocumentSizeObserver.EMPTY_INSTANCE;
+        return XContentMeteringParserDecorator.NOOP;
     }
 
-    private DocumentSizeObserver newDocumentSizeObserver(IndexRequest indexRequest) {
-        if (indexRequest.getNormalisedBytesParsed() >= 0) {
-            return new FixedDocumentSizeObserver(indexRequest.getNormalisedBytesParsed());
-        } else if (indexRequest.originatesFromUpdateByScript() && isObservabilityOrSecurity() == false) {
-            return DocumentSizeObserver.EMPTY_INSTANCE; // no metering necessary
+    private XContentMeteringParserDecorator newDocumentSizeObserver(IndexRequest indexRequest, boolean reportStoredSize) {
+        if (indexRequest.originatesFromUpdateByScript()) {
+            // if required, meter stored size based on parsing of final document, but don't report ingest size
+            return reportStoredSize ? new XContentMeteringParserDecorators.FixedIngestSize(0) : XContentMeteringParserDecorator.NOOP;
+        } else if (indexRequest.originatesFromUpdateByDoc() && reportStoredSize) {
+            // meter stored size based on parsing of final document, but report ingest size as metered previously
+            return new XContentMeteringParserDecorators.FixedIngestSize(indexRequest.getNormalisedBytesParsed());
+        } else if (indexRequest.getNormalisedBytesParsed() >= 0) {
+            // report previously metered size both as ingest and stored size
+            return new XContentMeteringParserDecorators.FixedSize(indexRequest.getNormalisedBytesParsed());
         }
-        // request.getNormalisedBytesParsed() -1, meaning normalisedBytesParsed isn't set as parsing wasn't done yet
-        return new MeteringDocumentSizeObserver(indexRequest.originatesFromUpdateByScript());
+        // no metering / parsing was previously done, use the default metering size observer
+        return new XContentMeteringParserDecorators.DefaultMetering();
     }
 
-    private DocumentSizeObserver newDocumentSizeObserver(UpdateRequest updateRequest) {
-        if (isUpdateByDoc(updateRequest)) {
-            // meter the partial doc
-            return new MeteringDocumentSizeObserver(false);
+    protected XContentMeteringParserDecorator newDocumentSizeObserver(UpdateRequest updateRequest) {
+        if (updateRequest.doc() != null) {
+            // meter the partial document for updates by document
+            return new XContentMeteringParserDecorators.DefaultMetering();
         }
-        // update by script are metered on the IndexRequest resulting from execution of the script
-        return DocumentSizeObserver.EMPTY_INSTANCE;
-    }
-
-    private static boolean isUpdateByDoc(UpdateRequest updateRequest) {
-        return updateRequest.script() == null && updateRequest.doc() != null;
+        // in case of updates by script, metering will be done on the resulting IndexRequest (if required)
+        return XContentMeteringParserDecorator.NOOP;
     }
 
     @Override

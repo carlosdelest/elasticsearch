@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metering.ingested_size.RAStorageAccumulator;
+import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator;
 
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;

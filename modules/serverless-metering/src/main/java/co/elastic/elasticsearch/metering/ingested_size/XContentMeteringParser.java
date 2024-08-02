@@ -28,6 +28,7 @@ import org.elasticsearch.xcontent.support.AbstractXContentParser;
 import java.io.IOException;
 import java.nio.CharBuffer;
 import java.util.Objects;
+import java.util.function.LongConsumer;
 
 /**
  * This is an XContentParser that is performing metering.
@@ -38,9 +39,9 @@ import java.util.Objects;
  * field names and text are metered with the number of bytes when encoded in utf-8
  * (1byte for ascii, 2 bytes for bmf chars, 3 and 4bytes for supplementary character set)
  */
-class MeteringParser extends AbstractXContentParser {
+class XContentMeteringParser extends AbstractXContentParser {
     private final XContentParser delegate;
-    private final NormalisedBytesParsedConsumer normalisedBytesParsedConsumer;
+    private final LongConsumer normalisedBytesParsedConsumer;
     private long normalisedBytesParsed;
 
     /**
@@ -83,11 +84,7 @@ class MeteringParser extends AbstractXContentParser {
         return byteLength;
     }
 
-    interface NormalisedBytesParsedConsumer {
-        void normalisedBytesParsed(long size);
-    }
-
-    MeteringParser(XContentParser xContentParser, NormalisedBytesParsedConsumer normalisedBytesParsedConsumer) {
+    XContentMeteringParser(XContentParser xContentParser, LongConsumer normalisedBytesParsedConsumer) {
         super(xContentParser.getXContentRegistry(), xContentParser.getDeprecationHandler(), xContentParser.getRestApiVersion());
         Objects.requireNonNull(xContentParser);
         Objects.requireNonNull(normalisedBytesParsedConsumer);
@@ -314,7 +311,7 @@ class MeteringParser extends AbstractXContentParser {
 
     @Override
     public void close() throws IOException {
-        normalisedBytesParsedConsumer.normalisedBytesParsed(normalisedBytesParsed);
+        normalisedBytesParsedConsumer.accept(normalisedBytesParsed);
         delegate.close();
     }
 

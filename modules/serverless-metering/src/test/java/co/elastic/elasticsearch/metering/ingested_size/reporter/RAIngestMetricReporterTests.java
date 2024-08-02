@@ -15,12 +15,13 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.ingested_size;
+package co.elastic.elasticsearch.metering.ingested_size.reporter;
 
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 
 import org.elasticsearch.index.mapper.ParsedDocument;
-import org.elasticsearch.plugins.internal.DocumentSizeObserver;
+import org.elasticsearch.index.mapper.ParsedDocument.DocumentSize;
+import org.elasticsearch.plugins.internal.XContentParserDecorator;
 import org.elasticsearch.test.ESTestCase;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -35,19 +36,18 @@ public class RAIngestMetricReporterTests extends ESTestCase {
     String indexName = "indexName";
     RAIngestMetricReporter raIngestMetricReporter = new RAIngestMetricReporter(indexName, ingestMetricsCollector);
     ParsedDocument parsedDocument = mock(ParsedDocument.class);
-    DocumentSizeObserver documentSizeObserver = mock(DocumentSizeObserver.class);
+    XContentParserDecorator parserDecorator = mock(XContentParserDecorator.class);
 
     public void testZeroMeteredIsNotReported() {
         //empty instance returns 0
-        when(parsedDocument.getDocumentSizeObserver()).thenReturn(DocumentSizeObserver.EMPTY_INSTANCE);
+        when(parsedDocument.getNormalizedSize()).thenReturn(DocumentSize.UNKNOWN);
         raIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
         verify(ingestMetricsCollector, times(0)).addIngestedDocValue(any(String.class), any(Long.class));
     }
 
     public void testMeteredValueIsReported() {
-        when(parsedDocument.getDocumentSizeObserver()).thenReturn(documentSizeObserver);
-        when(documentSizeObserver.normalisedBytesParsed()).thenReturn(123L);
+        when(parsedDocument.getNormalizedSize()).thenReturn(new DocumentSize(123,123));
         raIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
         verify(ingestMetricsCollector).addIngestedDocValue(eq(indexName), eq(123L));

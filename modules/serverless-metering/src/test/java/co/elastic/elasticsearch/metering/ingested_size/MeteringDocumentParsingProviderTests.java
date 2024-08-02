@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.ingested_size;
 
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
+import co.elastic.elasticsearch.metering.ingested_size.reporter.RAIngestMetricReporter;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.index.mapper.MapperService;
