@@ -60,6 +60,7 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.features.NodeFeature;
+import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -69,6 +70,7 @@ import org.elasticsearch.persistent.PersistentTasksExecutor;
 import org.elasticsearch.persistent.PersistentTasksService;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.ExtensiblePlugin;
+import org.elasticsearch.plugins.MapperPlugin;
 import org.elasticsearch.plugins.PersistentTaskPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
@@ -85,6 +87,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -94,7 +97,13 @@ import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSett
 /**
  * Plugin responsible for starting up all serverless metering classes.
  */
-public class MeteringPlugin extends Plugin implements ExtensiblePlugin, DocumentParsingProviderPlugin, PersistentTaskPlugin, ActionPlugin {
+public class MeteringPlugin extends Plugin
+    implements
+        ExtensiblePlugin,
+        DocumentParsingProviderPlugin,
+        PersistentTaskPlugin,
+        ActionPlugin,
+        MapperPlugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
 
@@ -246,6 +255,15 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         return List.of(new RestGetMeteringStatsAction());
     }
 
+    private boolean isRaStorageMeteringEnabled() {
+        return projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY;
+    }
+
+    @Override
+    public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
+        return Map.of(RaStorageMetadataFieldMapper.FIELD_NAME, RaStorageMetadataFieldMapper.PARSER);
+    }
+
     @Override
     public void close() throws IOException {
         IOUtils.close(usageRecordPublisher, reportingService);
@@ -267,7 +285,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
      */
     @Override
     public DocumentParsingProvider getDocumentParsingProvider() {
-        return new MeteringDocumentParsingProvider(projectType, this::getIngestMetricsCollector, this::getSystemIndices);
+        return new MeteringDocumentParsingProvider(isRaStorageMeteringEnabled(), this::getIngestMetricsCollector, this::getSystemIndices);
     }
 
     @Override

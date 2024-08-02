@@ -25,7 +25,6 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
-import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -226,11 +225,7 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
     private long meterDocument() {
         try {
             BytesReference bytesReference = XContentTestUtils.convertToXContent(documentSource(), XContentType.JSON);
-            MeteringDocumentParsingProvider provider = new MeteringDocumentParsingProvider(
-                ProjectType.ELASTICSEARCH_SEARCH,
-                Mockito::mock,
-                Mockito::mock
-            );
+            MeteringDocumentParsingProvider provider = new MeteringDocumentParsingProvider(false, Mockito::mock, Mockito::mock);
             XContentMeteringParserDecorator meteringParserDecorator = provider.newMeteringParserDecorator(new IndexRequest());
 
             XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, meteringParserDecorator).v2();

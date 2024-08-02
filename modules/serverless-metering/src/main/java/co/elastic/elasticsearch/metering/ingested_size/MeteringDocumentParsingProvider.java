@@ -22,7 +22,6 @@ import co.elastic.elasticsearch.metering.ingested_size.reporter.CompositeDocumen
 import co.elastic.elasticsearch.metering.ingested_size.reporter.RAIngestMetricReporter;
 import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator;
 import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageReporter;
-import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.index.IndexRequest;
@@ -40,14 +39,14 @@ import java.util.function.Supplier;
 public class MeteringDocumentParsingProvider implements DocumentParsingProvider {
     private final Supplier<IngestMetricsCollector> ingestMetricsCollectorSupplier;
     private final Supplier<SystemIndices> systemIndicesSupplier;
-    private final ProjectType projectType;
+    private final boolean meterRaStorage;
 
     public MeteringDocumentParsingProvider(
-        ProjectType projectType,
+        boolean meterRaStorage,
         Supplier<IngestMetricsCollector> ingestMetricsCollectorSupplier,
         Supplier<SystemIndices> systemIndicesSupplier
     ) {
-        this.projectType = projectType;
+        this.meterRaStorage = meterRaStorage;
         this.ingestMetricsCollectorSupplier = ingestMetricsCollectorSupplier;
         this.systemIndicesSupplier = systemIndicesSupplier;
     }
@@ -55,18 +54,18 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
     @Override
     public <T> XContentMeteringParserDecorator newMeteringParserDecorator(DocWriteRequest<T> request) {
         if (request instanceof IndexRequest indexRequest) {
-            return newDocumentSizeObserver(indexRequest, isObservabilityOrSecurity());
+            return newDocumentSizeObserver(indexRequest);
         } else if (request instanceof UpdateRequest updateRequest) {
             return newDocumentSizeObserver(updateRequest);
         }
         return XContentMeteringParserDecorator.NOOP;
     }
 
-    private XContentMeteringParserDecorator newDocumentSizeObserver(IndexRequest indexRequest, boolean reportStoredSize) {
+    private XContentMeteringParserDecorator newDocumentSizeObserver(IndexRequest indexRequest) {
         if (indexRequest.originatesFromUpdateByScript()) {
             // if required, meter stored size based on parsing of final document, but don't report ingest size
-            return reportStoredSize ? new XContentMeteringParserDecorators.FixedIngestSize(0) : XContentMeteringParserDecorator.NOOP;
-        } else if (indexRequest.originatesFromUpdateByDoc() && reportStoredSize) {
+            return meterRaStorage ? new XContentMeteringParserDecorators.FixedIngestSize(0) : XContentMeteringParserDecorator.NOOP;
+        } else if (indexRequest.originatesFromUpdateByDoc() && meterRaStorage) {
             // meter stored size based on parsing of final document, but report ingest size as metered previously
             return new XContentMeteringParserDecorators.FixedIngestSize(indexRequest.getNormalisedBytesParsed());
         } else if (indexRequest.getNormalisedBytesParsed() >= 0) {
@@ -95,16 +94,12 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
         if (isSystemIndex(indexName)) {
             return DocumentSizeReporter.EMPTY_INSTANCE;
         }
-        if (isObservabilityOrSecurity()) {
+        if (meterRaStorage) {
             DocumentSizeReporter raStorageReporter = new RAStorageReporter(documentSizeAccumulator, mapperService);
             DocumentSizeReporter raIngestReporter = new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
             return new CompositeDocumentSizeReporter(List.of(raStorageReporter, raIngestReporter));
         }
         return new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
-    }
-
-    private boolean isObservabilityOrSecurity() {
-        return projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY;
     }
 
     private boolean isSystemIndex(String indexName) {
@@ -114,7 +109,7 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
 
     @Override
     public DocumentSizeAccumulator createDocumentSizeAccumulator() {
-        if (isObservabilityOrSecurity()) {
+        if (meterRaStorage) {
             return new RAStorageAccumulator();
         }
         return DocumentSizeAccumulator.EMPTY_INSTANCE;

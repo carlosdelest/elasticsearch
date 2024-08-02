@@ -17,14 +17,14 @@
 
 package co.elastic.elasticsearch.metering.ingested_size.reporter;
 
+import co.elastic.elasticsearch.metering.RaStorageMetadataFieldMapper;
+
 import org.apache.lucene.document.NumericDocValuesField;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.mapper.ParsedDocument.DocumentSize;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
-
-import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
 
 public class RAStorageReporter implements DocumentSizeReporter {
     private final DocumentSizeAccumulator documentSizeAccumulator;
@@ -49,7 +49,7 @@ public class RAStorageReporter implements DocumentSizeReporter {
         if (isTimeSeries() == false) {
             // Store the result in a new, "hidden" field
             DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
-            parsedDocument.rootDoc().add(new NumericDocValuesField(RA_STORAGE_KEY, bytesToReport.storedBytes()));
+            parsedDocument.rootDoc().add(new NumericDocValuesField(RaStorageMetadataFieldMapper.FIELD_NAME, bytesToReport.storedBytes()));
         }
     }
 

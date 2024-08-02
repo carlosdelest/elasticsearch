@@ -40,6 +40,7 @@ import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.index.TieredMergePolicy;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.IOSupplier;
+import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeRequest;
@@ -48,7 +49,9 @@ import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.datastreams.CreateDataStreamAction;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.WriteRequest;
+import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
 import org.elasticsearch.cluster.metadata.Template;
 import org.elasticsearch.common.blobstore.BlobContainer;
@@ -58,11 +61,15 @@ import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.datastreams.DataStreamsPlugin;
 import org.elasticsearch.index.engine.EngineConfig;
+import org.elasticsearch.index.query.ExistsQueryBuilder;
+import org.elasticsearch.index.query.MatchAllQueryBuilder;
+import org.elasticsearch.index.query.TermQueryBuilder;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.script.MockScriptEngine;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptType;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.xcontent.XContentType;
@@ -84,7 +91,9 @@ import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptI
 import static org.elasticsearch.index.IndexSettings.INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
+import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.both;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -277,6 +286,64 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     protected int numberOfShards() {
         return 1;
+    }
+
+    public void testRaStorageFieldInaccessible() {
+        String indexName = "idx1";
+        createIndex(indexName);
+        String id = client().index(new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar"))
+            .actionGet()
+            .getId();
+        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+
+        List<SearchSourceBuilder> searchBuilders = List.of(
+            new SearchSourceBuilder().fetchField(RaStorageMetadataFieldMapper.FIELD_NAME).query(new MatchAllQueryBuilder()),
+            new SearchSourceBuilder().query(new ExistsQueryBuilder(RaStorageMetadataFieldMapper.FIELD_NAME)),
+            new SearchSourceBuilder().query(new TermQueryBuilder(RaStorageMetadataFieldMapper.FIELD_NAME, 0))
+        );
+
+        // can't query for it
+        for (var source : searchBuilders) {
+            Exception e = expectThrows(Exception.class, () -> client().search(new SearchRequest(indexName).source(source)).actionGet());
+            assertThat(
+                ElasticsearchException.guessRootCauses(e)[0].getMessage(),
+                anyOf(
+                    containsString("Cannot fetch values for internal field [_rastorage]"),
+                    containsString("Cannot run exists query on [_rastorage]"),
+                    containsString("The [_rastorage] field may not be queried directly")
+                )
+            );
+        }
+
+        // can't set it
+        Exception e = expectThrows(
+            Exception.class,
+            () -> client().index(
+                new IndexRequest(indexName).source(
+                    XContentType.JSON,
+                    "value1",
+                    "foo",
+                    "value2",
+                    "bar",
+                    RaStorageMetadataFieldMapper.FIELD_NAME,
+                    100L
+                )
+            ).actionGet()
+        );
+        assertThat(
+            ElasticsearchException.guessRootCauses(e)[0].getMessage(),
+            containsString("Field [_rastorage] is a metadata field and cannot be added inside a document.")
+        );
+
+        // can't update it
+        e = expectThrows(
+            Exception.class,
+            () -> client().update(new UpdateRequest(indexName, id).doc(RaStorageMetadataFieldMapper.FIELD_NAME, 100L)).actionGet()
+        );
+        assertThat(
+            ElasticsearchException.guessRootCauses(e)[0].getMessage(),
+            containsString("Field [_rastorage] is a metadata field and cannot be added inside a document.")
+        );
     }
 
     public void testNonDataStreamWithTimestamp() throws InterruptedException {

@@ -19,7 +19,6 @@ package co.elastic.elasticsearch.metering.ingested_size;
 
 import co.elastic.elasticsearch.metering.IngestMetricsCollector;
 import co.elastic.elasticsearch.metering.ingested_size.reporter.RAIngestMetricReporter;
-import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.indices.SystemIndices;
@@ -45,7 +44,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
         Supplier<SystemIndices> systemIndicesSupplier = () -> mockSystemIndices;
         MeteringDocumentParsingProvider meteringDocumentParsingProvider = new MeteringDocumentParsingProvider(
-            ProjectType.ELASTICSEARCH_SEARCH,
+            false,
             () -> ingestMetricsCollector,
             systemIndicesSupplier
         );
@@ -66,7 +65,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
 
         Supplier<SystemIndices> systemIndicesSupplier = () -> mockSystemIndices;
         MeteringDocumentParsingProvider meteringDocumentParsingProvider = new MeteringDocumentParsingProvider(
-            ProjectType.ELASTICSEARCH_SEARCH,
+            false,
             () -> ingestMetricsCollector,
             systemIndicesSupplier
         );
