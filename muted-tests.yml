@@ -115,7 +115,3 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2460"
   method: "testSearchShardGenerationFilesRetention"
-- class: "org.elasticsearch.xpack.esql.qa.multi_node.FieldExtractorIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2470"
-- class: "org.elasticsearch.xpack.esql.qa.multi_node.RestEsqlIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2471"

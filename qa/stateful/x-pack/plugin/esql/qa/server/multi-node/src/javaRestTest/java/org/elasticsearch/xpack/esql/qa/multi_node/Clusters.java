@@ -8,10 +8,16 @@
 package org.elasticsearch.xpack.esql.qa.multi_node;
 
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
+import org.elasticsearch.test.cluster.local.LocalClusterConfigProvider;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 
 public class Clusters {
+
     public static ElasticsearchCluster testCluster() {
+        return testCluster(s -> {});
+    }
+
+    public static ElasticsearchCluster testCluster(LocalClusterConfigProvider configProvider) {
         return ServerlessElasticsearchCluster.local()
             .withNode(
                 n -> n.name("index-2")
@@ -29,6 +35,8 @@ public class Clusters {
                 System.getProperty("tests.rest.cluster.username", "stateful_rest_test_admin"),
                 System.getProperty("tests.rest.cluster.password", "x-pack-test-password")
             )
+            .apply(configProvider)
             .build();
     }
+
 }
