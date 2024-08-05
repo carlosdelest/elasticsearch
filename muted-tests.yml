@@ -123,4 +123,6 @@ tests:
   method: "testSearchShardRelocationWhenHostingNodeTerminates"
 - class: "co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2484"
-  method: "testUnreferencedCommitsAreReleasedAfterRecovery"
+  methods:
+  - "testUnreferencedCommitsAreReleasedAfterRecovery"
+  - "testCommitsAreSuccessfullyInitializedAfterRecovery"
