@@ -126,3 +126,4 @@ tests:
   methods:
   - "testUnreferencedCommitsAreReleasedAfterRecovery"
   - "testCommitsAreSuccessfullyInitializedAfterRecovery"
+  - "testRecoveredCommitIsNotUploadedAgain"
