@@ -121,12 +121,6 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.recovery.SearchShardRelocationIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2479"
   method: "testSearchShardRelocationWhenHostingNodeTerminates"
-- class: "co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2484"
-  methods:
-  - "testUnreferencedCommitsAreReleasedAfterRecovery"
-  - "testCommitsAreSuccessfullyInitializedAfterRecovery"
-  - "testRecoveredCommitIsNotUploadedAgain"
 - class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
   method: testRelocateIndexingShardWithActionFailures
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2486
