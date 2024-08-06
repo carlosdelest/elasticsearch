@@ -124,3 +124,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2327
+- class: org.elasticsearch.datastreams.logsdb.qa.StandardVersusLogsIndexModeChallengeRestIT
+  method: testMatchAllQuery
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2493
