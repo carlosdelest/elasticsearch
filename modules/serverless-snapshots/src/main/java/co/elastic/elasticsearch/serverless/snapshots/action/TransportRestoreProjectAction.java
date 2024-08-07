@@ -367,7 +367,10 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
                     // delete all data streams
                     .<Void>andThen(restoreExecutor, threadContext, (l, ignored) -> {
                         logger.info("deleting data streams!");
-                        DeleteDataStreamAction.Request deleteDataStreamRequest = new DeleteDataStreamAction.Request("*");
+                        DeleteDataStreamAction.Request deleteDataStreamRequest = new DeleteDataStreamAction.Request(
+                            request.masterNodeTimeout(),
+                            "*"
+                        );
                         deleteDataStreamRequest.indicesOptions(IndicesOptions.LENIENT_EXPAND_OPEN_CLOSED_HIDDEN);
                         deleteDataStreamRequest.masterNodeTimeout(TimeValue.MAX_VALUE);
                         client.execute(DeleteDataStreamAction.INSTANCE, deleteDataStreamRequest, ignoreResult(l));
