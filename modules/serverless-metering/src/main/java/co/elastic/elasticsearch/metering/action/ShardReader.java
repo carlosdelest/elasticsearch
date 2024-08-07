@@ -32,7 +32,9 @@ import org.elasticsearch.logging.Logger;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 class ShardReader {
     private static final Logger logger = LogManager.getLogger(ShardReader.class);
@@ -125,18 +127,18 @@ class ShardReader {
         LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache,
         String requestCacheToken
     ) throws IOException {
-        Map<ShardId, MeteringShardInfo> shardIds = new HashMap<>();
+        Map<ShardId, MeteringShardInfo> shardsWithNewInfo = new HashMap<>();
+        Set<ShardId> activeShards = new HashSet<>();
         for (final IndexService indexService : indicesService) {
             for (final IndexShard shard : indexService) {
-
                 Engine engine = shard.getEngineOrNull();
                 if (engine == null || shard.isSystem()) {
                     continue;
                 }
+                ShardId shardId = shard.shardId();
+                activeShards.add(shardId);
 
                 SegmentInfos segmentInfos = engine.getLastCommittedSegmentInfos();
-
-                ShardId shardId = shard.shardId();
                 long primaryTerm = shard.getOperationPrimaryTerm();
                 long generation = segmentInfos.getGeneration();
 
@@ -155,7 +157,7 @@ class ShardReader {
                     // If requester changed from the last time, include this shard info in the response and update the cache entry with
                     // the new request token
                     if (cachedShardInfo.get().token().equals(requestCacheToken) == false) {
-                        shardIds.put(
+                        shardsWithNewInfo.put(
                             shardId,
                             new MeteringShardInfo(
                                 cachedShardInfo.get().sizeInBytes(),
@@ -178,7 +180,7 @@ class ShardReader {
                 } else {
                     // Cached information is outdated or missing: re-compute shard stats, include in response, and update cache entry
                     var shardSizeAndDocCount = computeShardStats(shardId, segmentInfos);
-                    shardIds.put(
+                    shardsWithNewInfo.put(
                         shardId,
                         new MeteringShardInfo(
                             shardSizeAndDocCount.sizeInBytes(),
@@ -202,7 +204,7 @@ class ShardReader {
                 }
             }
         }
-        return shardIds;
+        localNodeMeteringShardInfoCache.retainActive(activeShards);
+        return shardsWithNewInfo;
     }
-
 }

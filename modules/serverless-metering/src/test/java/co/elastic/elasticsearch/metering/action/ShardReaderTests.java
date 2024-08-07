@@ -39,6 +39,7 @@ import java.util.Optional;
 
 import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
 import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
@@ -103,6 +104,49 @@ public class ShardReaderTests extends ESTestCase {
         verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"), any());
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
+    }
+
+    public void testCacheUpdatedWhenIndexDeleted() throws IOException {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+        ShardId shardId2 = new ShardId("index1", "index1UUID", 2);
+        ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
+
+        var indicesService = mock(IndicesService.class);
+        var shardInfoCache = new LocalNodeMeteringShardInfoCache();
+        var shardReader = new ShardReader(indicesService);
+
+        var index1 = mock(IndexService.class);
+        var index2 = mock(IndexService.class);
+
+        var shard1 = mock(IndexShard.class);
+        var shard2 = mock(IndexShard.class);
+        var shard3 = mock(IndexShard.class);
+
+        when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
+        when(index1.iterator()).thenReturn(Iterators.concat(Iterators.single(shard1), Iterators.single(shard2)));
+        when(index2.iterator()).thenReturn(Iterators.single(shard3));
+
+        var engine = mock(Engine.class);
+        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
+
+        when(shard1.getEngineOrNull()).thenReturn(engine);
+        when(shard2.getEngineOrNull()).thenReturn(engine);
+        when(shard3.getEngineOrNull()).thenReturn(engine);
+
+        when(shard1.shardId()).thenReturn(shardId1);
+        when(shard2.shardId()).thenReturn(shardId2);
+        when(shard3.shardId()).thenReturn(shardId3);
+
+        var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
+        assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
+        assertThat(shardInfoCache.shardSizeCache.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
+
+        when(indicesService.iterator()).thenReturn(Iterators.single(index2));
+        when(index2.iterator()).thenReturn(Iterators.single(shard3));
+
+        shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
+        assertThat(shardInfoMap.keySet(), empty());
+        assertThat(shardInfoCache.shardSizeCache.keySet(), contains(shardId3));
     }
 
     public void testNotReturningUnchangedDataInDiff() throws IOException {

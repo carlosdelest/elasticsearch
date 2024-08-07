@@ -22,12 +22,15 @@ import org.elasticsearch.index.shard.ShardId;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent {
+
     record CacheEntry(long primaryTerm, long generation, long sizeInBytes, long docCount, String token, Long storedIngestSizeInBytes) {}
 
-    private Map<ShardId, CacheEntry> shardSizeCache = new ConcurrentHashMap<>();
+    // package private for testing
+    Map<ShardId, CacheEntry> shardSizeCache = new ConcurrentHashMap<>();
 
     @Override
     protected void doStart() {
@@ -62,5 +65,9 @@ public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent 
         assert shardId != null;
         assert token != null;
         shardSizeCache.put(shardId, new CacheEntry(primaryTerm, generation, sizeInBytes, docCount, token, storedIngestSizeInBytes));
+    }
+
+    void retainActive(Set<ShardId> activeShards) {
+        shardSizeCache.keySet().retainAll(activeShards);
     }
 }

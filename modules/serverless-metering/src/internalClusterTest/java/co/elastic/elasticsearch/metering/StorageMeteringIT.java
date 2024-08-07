@@ -42,6 +42,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.IOSupplier;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeRequest;
 import org.elasticsearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
@@ -84,6 +85,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -97,6 +99,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.startsWith;
 
@@ -368,6 +371,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     public void testRAStorageWithTimeSeries() throws InterruptedException {
         String indexName = "idx1";
         createTimeSeriesIndex(indexName);
+        ensureGreen(indexName);
 
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "@timestamp", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
@@ -382,6 +386,58 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + indexName);
         assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", equalTo(EXPECTED_SIZE));
+    }
+
+    public void testRAStorageWithTimeSeriesDeleteIndex() throws Exception {
+        String indexName = "idx1";
+        createTimeSeriesIndex(indexName);
+        ensureGreen(indexName);
+
+        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        assertBusy(() -> {
+            var clusterState = clusterService().state();
+            var task = MeteringIndexInfoTask.findTask(clusterState);
+            assertNotNull(task);
+            assertTrue(task.isAssigned());
+        });
+
+        client().index(new IndexRequest(indexName).source(XContentType.JSON, "@timestamp", 123, "key", "abc")).actionGet();
+        client().index(new IndexRequest(indexName).source(XContentType.JSON, "@timestamp", 456, "key", "abc")).actionGet();
+        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+
+        final List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
+
+        admin().indices().delete(new DeleteIndexRequest(indexName));
+
+        String newIndexName = "idx2";
+        createTimeSeriesIndex(newIndexName);
+        ensureGreen(newIndexName);
+        client().index(new IndexRequest(newIndexName).source(XContentType.JSON, "@timestamp", 123, "key", "abc")).actionGet();
+        admin().indices().flush(new FlushRequest(newIndexName).force(true)).actionGet();
+
+        // Wait until we have raw-stored-index-size record(s) for the new index (which means the collector run)
+        assertBusy(() -> {
+            usageRecords.clear();
+            usageRecords.addAll(pollReceivedRecords());
+            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
+            assertFalse(rawStorageRecords.isEmpty());
+        });
+
+        // Ensure we no longer receive records for the old, deleted index (eventually)
+        assertBusy(() -> {
+            usageRecords.addAll(pollReceivedRecords());
+            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
+            var allNewRecords = rawStorageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName));
+            if (allNewRecords == false) {
+                usageRecords.clear();
+                fail();
+            }
+
+            // We received at least 3 'new' record with no 'old' index in between
+            assertThat(rawStorageRecords, hasSize(greaterThanOrEqualTo(3)));
+        }, 1, TimeUnit.MINUTES);
     }
 
     public void testDataStreamNoMapping() throws InterruptedException, IOException {
@@ -649,6 +705,61 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
         waitAndAssertRAStorageRecords(usageRecords, indexName, 0, 0);
+    }
+
+    public void testRAStorageWithNonTimeSeriesDeleteIndex() throws Exception {
+        CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(CustomMergePolicyStatelessPlugin.simpleMergePolicy);
+
+        String indexName = "idx1";
+        createIndex(indexName, indexSettings(1, 1).put(INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING.getKey(), TimeValue.ZERO).build());
+        ensureGreen(indexName);
+
+        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        assertBusy(() -> {
+            var clusterState = clusterService().state();
+            var task = MeteringIndexInfoTask.findTask(clusterState);
+            assertNotNull(task);
+            assertTrue(task.isAssigned());
+        });
+
+        client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
+        client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
+        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+
+        final List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
+        usageRecords.clear();
+
+        admin().indices().delete(new DeleteIndexRequest(indexName));
+
+        String newIndexName = "idx2";
+        createIndex(newIndexName, indexSettings(1, 1).build());
+        ensureGreen(newIndexName);
+        client().index(new IndexRequest(newIndexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
+        admin().indices().flush(new FlushRequest(newIndexName).force(true)).actionGet();
+
+        // Wait until we have raw-stored-index-size record(s) for the new index (which means the collector run)
+        assertBusy(() -> {
+            usageRecords.clear();
+            usageRecords.addAll(pollReceivedRecords());
+            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
+            assertFalse(rawStorageRecords.isEmpty());
+        });
+
+        // Ensure we no longer receive records for the old, deleted index (eventually)
+        assertBusy(() -> {
+            usageRecords.addAll(pollReceivedRecords());
+            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
+            var allNewRecords = rawStorageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName));
+            if (allNewRecords == false) {
+                usageRecords.clear();
+                fail();
+            }
+
+            // We received at least 3 'new' record with no 'old' index in between
+            assertThat(rawStorageRecords, hasSize(greaterThanOrEqualTo(3)));
+        }, 1, TimeUnit.MINUTES);
     }
 
     private void createDataStream(String indexName) throws IOException {

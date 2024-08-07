@@ -177,8 +177,7 @@ public class MeteringPlugin extends Plugin
             environment.settings()
         );
 
-        var indexSizeService = new MeteringIndexInfoService();
-        clusterService.addListener(indexSizeService);
+        var indexSizeService = new MeteringIndexInfoService(clusterService);
 
         List<CounterMetricsCollector> builtInCounterMetrics = new ArrayList<>();
         List<SampledMetricsCollector> builtInSampledMetrics = new ArrayList<>();

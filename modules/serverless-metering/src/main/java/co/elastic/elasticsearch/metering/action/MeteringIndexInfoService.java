@@ -25,7 +25,6 @@ import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
-import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -52,8 +51,14 @@ import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSett
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static org.elasticsearch.core.Strings.format;
 
-public class MeteringIndexInfoService implements ClusterStateListener {
+public class MeteringIndexInfoService {
     private static final Logger logger = LogManager.getLogger(MeteringIndexInfoService.class);
+    private final ClusterService clusterService;
+
+    public MeteringIndexInfoService(ClusterService clusterService) {
+        this.clusterService = clusterService;
+        clusterService.addListener(this::clusterChanged);
+    }
 
     enum CollectedMeteringShardInfoFlag {
         PARTIAL,
@@ -109,9 +114,9 @@ public class MeteringIndexInfoService implements ClusterStateListener {
     /**
      * Monitors cluster state changes to see if we are not the persistent task node anymore.
      * If we are not the persistent task node anymore, reset our cached collected shard info.
+     * Package-private for testing.
      */
-    @Override
-    public void clusterChanged(ClusterChangedEvent event) {
+    void clusterChanged(ClusterChangedEvent event) {
         var currentPersistentTaskNode = findPersistentTaskNodeId(event.state(), MeteringIndexInfoTask.TASK_NAME);
         var localNode = event.state().nodes().getLocalNodeId();
 
@@ -146,7 +151,9 @@ public class MeteringIndexInfoService implements ClusterStateListener {
                 }
 
                 // Create a new MeteringShardInfo from diffs.
-                collectedShardInfo.getAndUpdate(current -> mergeShardInfo(current.meteringShardInfoMap(), response.getShardInfo(), status));
+                collectedShardInfo.getAndUpdate(
+                    current -> mergeShardInfo(removeStaleEntries(current.meteringShardInfoMap()), response.getShardInfo(), status)
+                );
                 logger.debug(
                     () -> Strings.format(
                         "collected new metering shard info for shards [%s]",
@@ -164,6 +171,19 @@ public class MeteringIndexInfoService implements ClusterStateListener {
                 logger.error("failed to collect metering shard info", e);
             }
         });
+    }
+
+    private Map<ShardInfoKey, ShardInfoValue> removeStaleEntries(Map<ShardInfoKey, ShardInfoValue> shardInfoKeyShardInfoValueMap) {
+        Set<ShardInfoKey> activeShards = clusterService.state()
+            .routingTable()
+            .allShards()
+            .map(x -> ShardInfoKey.fromShardId(x.shardId()))
+            .collect(Collectors.toUnmodifiableSet());
+
+        return shardInfoKeyShardInfoValueMap.entrySet()
+            .stream()
+            .filter(e -> activeShards.contains(e.getKey()))
+            .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     class StorageInfoMetricsCollector implements SampledMetricsCollector {

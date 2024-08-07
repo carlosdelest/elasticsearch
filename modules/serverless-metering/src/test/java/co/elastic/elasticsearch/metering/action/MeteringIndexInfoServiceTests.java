@@ -20,6 +20,11 @@ package co.elastic.elasticsearch.metering.action;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
+import org.elasticsearch.cluster.routing.TestShardRouting;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.FeatureMatcher;
@@ -29,7 +34,10 @@ import org.mockito.stubbing.Answer;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import static java.util.Map.entry;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -45,10 +53,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MeteringIndexInfoServiceTests extends ESTestCase {
     public void testEmptyShardInfo() {
-        var service = new MeteringIndexInfoService();
+        var clusterService = createMockClusterService(Set::of);
+        var service = new MeteringIndexInfoService(clusterService);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -71,9 +81,6 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
     }
 
     public void testInitialShardInfoUpdate() {
-        var service = new MeteringIndexInfoService();
-        var initialShardInfo = service.getMeteringShardInfo();
-
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
@@ -83,6 +90,10 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L)),
             entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L))
         );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var service = new MeteringIndexInfoService(clusterService);
+        var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
         doAnswer(answer -> {
@@ -112,9 +123,6 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
     }
 
     public void testShardInfoPartialUpdate() {
-        var service = new MeteringIndexInfoService();
-        var initialShardInfo = service.getMeteringShardInfo();
-
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
@@ -129,6 +137,10 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 2, null)),
             entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 1, null))
         );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var service = new MeteringIndexInfoService(clusterService);
+        var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
         doAnswer(new TestCollectMeteringShardInfoActionAnswer(shardsInfo, shardsInfo2)).when(client)
@@ -166,9 +178,6 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
     }
 
     public void testShardInfoPartialUpdateWithNewUUID() {
-        var service = new MeteringIndexInfoService();
-        var initialShardInfo = service.getMeteringShardInfo();
-
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
@@ -184,6 +193,10 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, null)),
             entry(newShard3Id, new MeteringShardInfo(23L, 130L, 1, 1, null))
         );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var service = new MeteringIndexInfoService(clusterService);
+        var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
         doAnswer(new TestCollectMeteringShardInfoActionAnswer(shardsInfo, shardsInfo2)).when(client)
@@ -221,14 +234,11 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
     }
 
     public void testShardInfoPartialUpdateWithTwoUnknownUUIDs() {
-        var service = new MeteringIndexInfoService();
-        var initialShardInfo = service.getMeteringShardInfo();
+        var shard1Id = new ShardId("index1", "index1UUID", 0);
+        var shard2Id = new ShardId("index1", "index1UUID", 1);
 
-        var shard1Id = new ShardId("index1", "index1UUID", 1);
-        var shard2Id = new ShardId("index1", "index1UUID", 2);
-
-        var shard3Id1 = new ShardId("index1", "index1UUID-1", 3);
-        var shard3Id2 = new ShardId("index1", "index1UUID-2", 3);
+        var shard3Id1 = new ShardId("index1", "index1UUID-1", 2);
+        var shard3Id2 = new ShardId("index1", "index1UUID-2", 2);
 
         var shardsInfo = Map.ofEntries(
             entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, null)),
@@ -239,6 +249,10 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             entry(shard3Id1, new MeteringShardInfo(22L, 120L, 1, 1, null)),
             entry(shard3Id2, new MeteringShardInfo(23L, 130L, 1, 1, null))
         );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var service = new MeteringIndexInfoService(clusterService);
+        var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
 
@@ -278,10 +292,19 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         assertThat(secondRoundShardInfo.meteringShardInfoMap(), aMapWithSize(3));
     }
 
-    public void testShardInfoPartialUpdateWithOneOldOneNewUUIDs() {
-        var service = new MeteringIndexInfoService();
-        var initialShardInfo = service.getMeteringShardInfo();
+    private ClusterService createMockClusterService(Supplier<Set<ShardId>> shardsInfo) {
+        var clusterService = mock(ClusterService.class);
+        var clusterState = mock(ClusterState.class);
+        var routingTable = mock(RoutingTable.class);
+        when(routingTable.allShards()).thenAnswer(
+            a -> shardsInfo.get().stream().map(s -> TestShardRouting.newShardRouting(s, "node_0", true, ShardRoutingState.STARTED))
+        );
+        when(clusterState.routingTable()).thenReturn(routingTable);
+        when(clusterService.state()).thenReturn(clusterState);
+        return clusterService;
+    }
 
+    public void testShardInfoPartialUpdateWithOneOldOneNewUUIDs() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
 
@@ -298,6 +321,10 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             entry(shard3Id, new MeteringShardInfo(22L, 120L, 1, 2, null)),
             entry(shard3Id1, new MeteringShardInfo(23L, 130L, 1, 1, null))
         );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var service = new MeteringIndexInfoService(clusterService);
+        var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
 
@@ -336,9 +363,6 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
     }
 
     public void testShardInfoUpdateWithLatest() {
-        var service = new MeteringIndexInfoService();
-        var initialShardInfo = service.getMeteringShardInfo();
-
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
@@ -353,6 +377,10 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, null)),
             entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 2, null))
         );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var service = new MeteringIndexInfoService(clusterService);
+        var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
         doAnswer(new TestCollectMeteringShardInfoActionAnswer(shardsInfo, shardsInfo2)).when(client)
@@ -389,10 +417,55 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         assertThat(secondRoundShardInfo.meteringShardInfoMap(), aMapWithSize(3));
     }
 
-    public void testPersistentTaskNodeChangeResetShardInfo() {
-        var service = new MeteringIndexInfoService();
+    public void testShardInfoUpdateWhenIndexRemoved() {
+        var shard1Id = new ShardId("index1", "index1UUID", 1);
+        var shard2Id = new ShardId("index2", "index1UUID", 2);
+
+        var shardsInfo = Map.ofEntries(
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, null)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, null))
+        );
+
+        var shardsInfo2 = Map.ofEntries(entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, null)));
+
+        AtomicReference<Set<ShardId>> activeShards = new AtomicReference<>(shardsInfo.keySet());
+
+        var clusterService = createMockClusterService(activeShards::get);
+        var service = new MeteringIndexInfoService(clusterService);
         var initialShardInfo = service.getMeteringShardInfo();
 
+        var client = mock(Client.class);
+        doAnswer(new TestCollectMeteringShardInfoActionAnswer(shardsInfo, shardsInfo2)).when(client)
+            .execute(eq(CollectMeteringShardInfoAction.INSTANCE), any(), any());
+
+        service.updateMeteringShardInfo(client);
+        var firstRoundShardInfo = service.getMeteringShardInfo();
+        activeShards.set(shardsInfo2.keySet());
+
+        service.updateMeteringShardInfo(client);
+        var secondRoundShardInfo = service.getMeteringShardInfo();
+
+        assertThat(initialShardInfo, not(nullValue()));
+        assertThat(initialShardInfo.meteringShardInfoMap(), anEmptyMap());
+
+        assertThat(firstRoundShardInfo, not(nullValue()));
+        assertThat(
+            firstRoundShardInfo.meteringShardInfoMap(),
+            allOf(
+                hasEntry(is(MeteringIndexInfoService.ShardInfoKey.fromShardId(shard1Id)), withSizeInBytes(11L)),
+                hasEntry(is(MeteringIndexInfoService.ShardInfoKey.fromShardId(shard2Id)), withSizeInBytes(12L))
+            )
+        );
+        assertThat(firstRoundShardInfo.meteringShardInfoMap(), aMapWithSize(2));
+
+        assertThat(
+            secondRoundShardInfo.meteringShardInfoMap(),
+            allOf(hasEntry(is(MeteringIndexInfoService.ShardInfoKey.fromShardId(shard2Id)), withSizeInBytes(12L)))
+        );
+        assertThat(secondRoundShardInfo.meteringShardInfoMap(), aMapWithSize(1));
+    }
+
+    public void testPersistentTaskNodeChangeResetShardInfo() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
@@ -402,6 +475,10 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, null)),
             entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, null))
         );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var service = new MeteringIndexInfoService(clusterService);
+        var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
         doAnswer(answer -> {
