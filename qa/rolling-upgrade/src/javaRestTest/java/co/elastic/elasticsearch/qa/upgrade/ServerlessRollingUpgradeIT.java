@@ -29,7 +29,7 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class ServerlessRollingUpgradeIT extends ESRestTestCase {
 
-    private static final MutableSettingsProvider NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER = new MutableSettingsProvider();
+    private static final MutableSettingsProvider NEW_CLUSTER_UPLOAD_MAX_COMMITS_SETTINGS_PROVIDER = new MutableSettingsProvider();
 
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
@@ -38,7 +38,7 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
         .setting("stateless.enabled", "true")
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
-        .settings(NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER)
+        .settings(NEW_CLUSTER_UPLOAD_MAX_COMMITS_SETTINGS_PROVIDER)
         .user("admin-user", "x-pack-test-password")
         .withNode(
             indexNodeSpec -> indexNodeSpec.name("index-node-2")
@@ -92,14 +92,14 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
     }
 
     private void performUpgrade() throws IOException {
-        randomUploadDelayedSettingsForNewCluster();
+        randomUploadMaxCommitsSettingsForNewCluster();
         cluster.upgradeToVersion(Version.CURRENT);
         closeClients();
         initClient();
     }
 
-    private static void randomUploadDelayedSettingsForNewCluster() {
-        NEW_CLUSTER_UPLOAD_DELAYED_SETTINGS_PROVIDER.put(
+    private static void randomUploadMaxCommitsSettingsForNewCluster() {
+        NEW_CLUSTER_UPLOAD_MAX_COMMITS_SETTINGS_PROVIDER.put(
             "stateless.upload.max_commits",
             randomBoolean() ? String.valueOf(between(1, 10)) : "100"
         );
