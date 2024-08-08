@@ -51,7 +51,7 @@ import org.elasticsearch.action.datastreams.CreateDataStreamAction;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.support.WriteRequest;
+import org.elasticsearch.action.support.WriteRequest.RefreshPolicy;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
 import org.elasticsearch.cluster.metadata.Template;
@@ -495,40 +495,31 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         createIndex(indexName);
 
-        String scriptId = "script1";
-        putJsonStoredScript(scriptId, Strings.format("""
-            {"script": {"lang": "%s", "source": "ctx._source.b = 'xx'"} }""", MockScriptEngine.NAME));
-
         // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
-        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
-        long raSize = 3 * ASCII_SIZE + NUMBER_SIZE;
-
-        // update via stored script
-        final Script storedScript = new Script(ScriptType.STORED, null, scriptId, Collections.emptyMap());
-        client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).get();
-
-        // update via inlined script
-        String scriptCode = "ctx._source.b = 'xxx'";
-        final Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, scriptCode, Collections.emptyMap());
-        client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).get();
+        client().prepareIndex().setIndex(indexName).setId("1").setSource("a", 1, "b", "c").setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
+        long initialRaSize = 3 * ASCII_SIZE + NUMBER_SIZE;
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
+        // behavior is always the same, regardless of the script type
+        if (randomBoolean()) {
+            // update via stored script
+            String scriptId = "script1";
+            putJsonStoredScript(scriptId, Strings.format("""
+                {"script": {"lang": "%s", "source": "ctx._source.b = '0123456789'"} }""", MockScriptEngine.NAME));
+
+            Script storedScript = new Script(ScriptType.STORED, null, scriptId, Collections.emptyMap());
+            client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
+        } else {
+            // update via inlined script
+            Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, "ctx._source.b = '0123456789'", Collections.emptyMap());
+            client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
+        }
+        long updatedRaSize = 12 * ASCII_SIZE + NUMBER_SIZE;
+
         List<UsageRecord> usageRecords = new ArrayList<>();
-        assertBusy(() -> {
-            usageRecords.addAll(pollReceivedRecords());
-            var ingestRecords = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).toList();
-            // we don't expect RA-I records for updates, hence only 1 record from the newDoc request
-            assertThat(ingestRecords.size(), equalTo(1));
-
-            assertThat(ingestRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_raw_data")));
-            assertThat(ingestRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexName)));
-
-            var totalQuantity = ingestRecords.stream().mapToLong(x -> x.usage().quantity()).sum();
-            assertThat(totalQuantity, equalTo(raSize));
-        });
-
-        waitAndAssertRAStorageRecords(usageRecords, indexName, raSize, 1);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, updatedRaSize, 0);
+        waitAndAssertRAIngestRecords(usageRecords, indexName, initialRaSize); // only the initial version was ever ingested
         receivedMetrics().clear();
     }
 
@@ -673,8 +664,8 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         var result2 = client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        client().delete(new DeleteRequest(indexName, result1.getId()).setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)).actionGet();
-        client().delete(new DeleteRequest(indexName, result2.getId()).setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)).actionGet();
+        client().delete(new DeleteRequest(indexName, result1.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE)).actionGet();
+        client().delete(new DeleteRequest(indexName, result2.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE)).actionGet();
 
         admin().indices().forceMerge(new ForceMergeRequest(indexName).maxNumSegments(1)).actionGet();
 
@@ -696,8 +687,8 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         var result2 = client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        client().delete(new DeleteRequest(indexName, result1.getId()).setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)).actionGet();
-        client().delete(new DeleteRequest(indexName, result2.getId()).setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE)).actionGet();
+        client().delete(new DeleteRequest(indexName, result1.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE)).actionGet();
+        client().delete(new DeleteRequest(indexName, result2.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE)).actionGet();
         admin().indices().forceMerge(new ForceMergeRequest(indexName).maxNumSegments(1)).actionGet();
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));

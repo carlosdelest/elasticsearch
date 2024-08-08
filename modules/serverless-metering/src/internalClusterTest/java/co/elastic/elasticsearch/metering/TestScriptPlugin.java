@@ -31,6 +31,7 @@ public class TestScriptPlugin extends MockScriptPlugin {
         Map<String, Function<Map<String, Object>, Object>> scripts = new HashMap<>();
         scripts.put("ctx._source.b = 'xx'", vars -> srcScript(vars, source -> source.replace("b", "xx")));
         scripts.put("ctx._source.b = 'xxx'", vars -> srcScript(vars, source -> source.replace("b", "xxx")));
+        scripts.put("ctx._source.b = '0123456789'", vars -> srcScript(vars, source -> source.replace("b", "0123456789")));
         return scripts;
     }
 
