@@ -137,3 +137,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2518
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2520
+- class: co.elastic.elasticsearch.metering.StorageMeteringIT
+  method: testRAStorageWithNonTimeSeriesAllDeleted
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2522
