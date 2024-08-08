@@ -428,7 +428,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         // Ensure we no longer receive records for the old, deleted index (eventually)
         assertBusy(() -> {
             usageRecords.addAll(pollReceivedRecords());
-            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
+            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size")).toList();
             var allNewRecords = rawStorageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName));
             if (allNewRecords == false) {
                 usageRecords.clear();
@@ -741,7 +741,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         // Ensure we no longer receive records for the old, deleted index (eventually)
         assertBusy(() -> {
             usageRecords.addAll(pollReceivedRecords());
-            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
+            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size")).toList();
             var allNewRecords = rawStorageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName));
             if (allNewRecords == false) {
                 usageRecords.clear();
