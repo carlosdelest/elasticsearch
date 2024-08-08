@@ -33,7 +33,7 @@ public class ServerlessTransportVersions {
     static Set<Integer> IDS = new HashSet<>();
 
     public static final TransportVersion PUBLISH_NODE_SEARCH_LOAD_QUALITY = def(8_688_01_0);
-    public static final TransportVersion SHARD_FIELD_INFOS = def(8_717_01_0);
+    public static final TransportVersion SHARD_FIELD_INFOS = def(8_719_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,

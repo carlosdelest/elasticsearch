@@ -138,11 +138,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2499
 - class: co.elastic.elasticsearch.stateless.S3RegisterCASLinearizabilityTests
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2509
-- class: co.elastic.elasticsearch.qa.upgrade.ServerlessRollingUpgradeIT
-  method: testClusterUpgrade
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2511
-- class: org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2513
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceIT
   method: testCacheIsWarmedBeforeSearchShardRecoveryWhenVBCCGetsUploaded
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2518
