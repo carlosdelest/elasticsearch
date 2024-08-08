@@ -24,6 +24,7 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -45,6 +46,10 @@ public class RAStorageAccumulator implements DocumentSizeAccumulator {
         Map<String, String> prevUserDataMap = segmentInfos.getUserData();
         long aggregatedSize = counter.getAndSet(0);
         String previousValue = prevUserDataMap.get(RA_STORAGE_KEY);
+        if (aggregatedSize == 0 && previousValue == null) {
+            return Collections.emptyMap();
+        }
+
         long prevAggregatedSize = previousValue != null ? Long.parseLong(previousValue) : 0;
 
         long total = prevAggregatedSize + aggregatedSize;

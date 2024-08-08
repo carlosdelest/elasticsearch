@@ -676,26 +676,34 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
     }
 
-    public void testRAStorageWithNonTimeSeriesAllDeletedAndMerge() throws Exception {
-        CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(CustomMergePolicyStatelessPlugin.simpleMergePolicy);
+    public void testRAStorageWithNonTimeSeriesAllDeleted() throws Exception {
+        String indexName = "idx1", indexName2 = "idx2";
+        createIndex(indexName, indexName2);
+        ensureGreen(indexName, indexName2);
 
-        String indexName = "idx1";
-        createIndex(indexName, indexSettings(1, 1).put(INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING.getKey(), TimeValue.ZERO).build());
-        ensureGreen(indexName);
+        var result1 = client().prepareIndex(indexName).setSource("some_field", 123, "key", "abc").get();
+        var result2 = client().prepareIndex(indexName).setSource("some_field", 123, "key", "abc").get();
 
-        var result1 = client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
-        var result2 = client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
-        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+        client().prepareDelete(indexName, result1.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
+        client().prepareDelete(indexName, result2.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
 
-        client().delete(new DeleteRequest(indexName, result1.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE)).actionGet();
-        client().delete(new DeleteRequest(indexName, result2.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE)).actionGet();
-        admin().indices().forceMerge(new ForceMergeRequest(indexName).maxNumSegments(1)).actionGet();
+        client().prepareIndex(indexName2).setSource("some_field", 123, "key", "abc").get();
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, 0, 0);
+        waitAndAssertRAIngestRecords(usageRecords, indexName2, EXPECTED_SIZE);
+        waitAndAssertRAStorageRecords(usageRecords, indexName2, EXPECTED_SIZE, 0);
+        usageRecords.clear();
+
+        // wait until we've received at least 3 more RA-S records (which should be for the second index only)
+        waitUntil(() -> {
+            usageRecords.addAll(pollReceivedRecords().stream().filter(m -> m.id().startsWith("raw-stored-index-size:")).toList());
+            return usageRecords.size() >= 3;
+        });
+        // and make sure we don't report RA-S for the empty index
+        assertTrue(usageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + indexName2)));
     }
 
     public void testRAStorageWithNonTimeSeriesDeleteIndex() throws Exception {
