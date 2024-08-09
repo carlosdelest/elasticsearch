@@ -24,7 +24,7 @@ import java.util.TreeSet;
 
 public class ServerlessGetBuiltinPrivilegesResponseTranslator implements GetBuiltinPrivilegesResponseTranslator {
     @Override
-    public GetBuiltinPrivilegesResponse translate(GetBuiltinPrivilegesResponse response, boolean restrictResponse) {
+    public GetBuiltinPrivilegesResponse translate(GetBuiltinPrivilegesResponse response) {
         return new GetBuiltinPrivilegesResponse(
             new TreeSet<>(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames()),
             new TreeSet<>(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames())

@@ -91,6 +91,9 @@ tasks {
             "api_key/12_grant/*",
             "privileges/40_get_user_privs/*",
             "security/authz/40_condtional_cluster_priv/*",
+            // - Invalid application privileges assigned to roles
+            "privileges/20_has_application_privs/*",
+
             // - Legacy templates
             "analytics/multi_terms/*",
             // Set of privileges is different in Serverless; we cover this case in
@@ -108,6 +111,8 @@ tasks {
 
             // Bulk roles is not available in serverless
             "roles/60_bulk_roles/*",
+            // Global privileges not supported in Serverless
+            "roles/40_global_privileges/*"
         ).joinToString(","))
     }
 }

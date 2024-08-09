@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.security;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -48,6 +50,8 @@ import static org.elasticsearch.xpack.security.operator.OperatorPrivileges.OPERA
  * Custom rules for security, e.g. operator privileges and reserved roles, when running in the serverless environment.
  */
 public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
+
+    private static final Logger logger = LogManager.getLogger(ServerlessSecurityPlugin.class);
 
     /**
      * Register a <code>Setting</code> for the (x-pack) "native_users.enabled" implicit setting.
@@ -96,14 +100,14 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
-    public static final Setting<Boolean> OPERATOR_STRICT_ROLE_VALIDATION = Setting.boolSetting(
+    // TODO remove once overrides are removed; this setting is now a noop
+    private static final Setting<Boolean> OPERATOR_STRICT_ROLE_VALIDATION = Setting.boolSetting(
         "xpack.security.authz.operator.strict_role_validation.enabled",
-        false,
+        true,
         Setting.Property.OperatorDynamic,
         Setting.Property.NodeScope
     );
 
-    private volatile boolean operatorStrictRoleValidation;
     private final AtomicReference<SecurityContext> securityContext = new AtomicReference<>();
 
     @Override
@@ -124,7 +128,11 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
     }
 
     private void configureOperatorStrictRoleValidation(boolean enabled) {
-        this.operatorStrictRoleValidation = enabled;
+        if (enabled == false) {
+            logger.error(
+                "Setting [" + OPERATOR_STRICT_ROLE_VALIDATION.getKey() + "] is not an active setting and disabling it will be ignored"
+            );
+        }
     }
 
     @Override
@@ -136,7 +144,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .put(NATIVE_ROLES_SETTING.getKey(), false)
             .put(CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), true) // the setting is false by default; this sets it to true
             .put(NATIVE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), false) // the setting is true by default; this sets it to false
-            .put(OPERATOR_STRICT_ROLE_VALIDATION.getKey(), false)
+            .put(OPERATOR_STRICT_ROLE_VALIDATION.getKey(), true)
             .build();
     }
 
@@ -165,13 +173,8 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Supplier<DiscoveryNodes> nodesInCluster,
         Predicate<NodeFeature> clusterSupportsFeature
     ) {
-        this.operatorStrictRoleValidation = clusterSettings.get(OPERATOR_STRICT_ROLE_VALIDATION);
         restController.getApiProtections().setEnabled(true);
         return List.of();
-    }
-
-    public boolean isOperatorStrictRoleValidationEnabled() {
-        return operatorStrictRoleValidation;
     }
 
     public SecurityContext getSecurityContext() {

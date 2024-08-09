@@ -17,10 +17,11 @@
 
 package co.elastic.elasticsearch.serverless.security.apikey;
 
-import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleParser;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
 import org.elasticsearch.xcontent.XContentParser;
@@ -28,31 +29,17 @@ import org.elasticsearch.xpack.core.security.action.apikey.UpdateApiKeyRequest;
 import org.elasticsearch.xpack.core.security.action.apikey.UpdateApiKeyRequestTranslator;
 
 import java.io.IOException;
-import java.util.function.Supplier;
 
 public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequestTranslator.Default {
+    private static final Logger logger = LogManager.getLogger(ServerlessUpdateApiKeyRequestTranslator.class);
     private static final ConstructingObjectParser<Payload, Void> PARSER = createParser(
         ServerlessCustomRoleParser::parseApiKeyRoleDescriptor
     );
     private final ServerlessRoleValidator serverlessRoleValidator;
-    private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
 
     // Needed for java module
     public ServerlessUpdateApiKeyRequestTranslator() {
-        this(new ServerlessRoleValidator(), () -> false);
-    }
-
-    // For SPI
-    public ServerlessUpdateApiKeyRequestTranslator(ServerlessSecurityPlugin plugin) {
-        this(new ServerlessRoleValidator(), plugin::isOperatorStrictRoleValidationEnabled);
-    }
-
-    ServerlessUpdateApiKeyRequestTranslator(
-        ServerlessRoleValidator serverlessRoleValidator,
-        Supplier<Boolean> operatorStrictRoleValidationEnabled
-    ) {
-        this.serverlessRoleValidator = serverlessRoleValidator;
-        this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
+        this.serverlessRoleValidator = new ServerlessRoleValidator();
     }
 
     @Override
@@ -66,35 +53,11 @@ public class ServerlessUpdateApiKeyRequestTranslator extends UpdateApiKeyRequest
         }
 
         final RequestWithApiKeyId requestWithApiKeyId = new RequestWithApiKeyId(apiKeyId, request);
-        if (shouldApplyStrictValidation(request)) {
-            try {
-                return parseWithValidation(requestWithApiKeyId);
-            } catch (Exception ex) {
-                ServerlessCustomRoleErrorLogger.logException(
-                    "API key update request for API key [" + requestWithApiKeyId.apiKeyId() + "]",
-                    ex
-                );
-                throw ex;
-            }
-        }
-
-        final UpdateApiKeyRequest updateRequest = super.translate(request);
-        ServerlessCustomRoleErrorLogger.logCustomRoleErrors(
-            "API key update request for API key [" + requestWithApiKeyId.apiKeyId() + "]",
-            requestWithApiKeyId,
-            this::parseWithValidation,
-            updateRequest.getRoleDescriptors()
-        );
-
-        return updateRequest;
-    }
-
-    private boolean shouldApplyStrictValidation(RestRequest request) {
-        final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
-        if (restrictRequest) {
-            return true;
-        } else {
-            return operatorStrictRoleValidationEnabled.get();
+        try {
+            return parseWithValidation(requestWithApiKeyId);
+        } catch (Exception ex) {
+            logger.info("Invalid role descriptors in [API key update request for API key [" + requestWithApiKeyId.apiKeyId() + "]].", ex);
+            throw ex;
         }
     }
 
