@@ -190,6 +190,7 @@ public class GetMeteringStatsAction {
                         String datastream = datastreamStats.getKey();
                         builder.field("name", datastream);
                         builder.field("num_docs", datastreamStats.getValue().docCount());
+                        builder.field("size_in_bytes", datastreamStats.getValue().sizeInBytes());
                         builder.endObject();
                         return builder;
                     })

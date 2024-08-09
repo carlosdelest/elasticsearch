@@ -125,11 +125,17 @@ public class MeteringStatsRAStorageRestTestIT extends MeteringStatsRestTestCase 
                 for (int i = 0; i < numIndices; i++) {
                     Map<String, Object> index = (Map<String, Object>) indices.get(i);
                     String indexName = (String) index.get("name");
-                    assertThat(index.get("num_docs"), equalTo(indexNameToNumDocsMap.get(indexName)));
+                    int expectedDocsCount = indexNameToNumDocsMap.get(indexName);
+                    assertThat(index.get("num_docs"), equalTo(expectedDocsCount));
+                    int indexSize = (int) index.get("size_in_bytes");
                     if (datastreamIndexToDatastreamMap.containsKey(indexName)) {
                         assertThat(index.get("datastream"), equalTo(datastreamIndexToDatastreamMap.get(indexName)));
+                        int expectedIndexSize = expectedDocsCount * RA_DATASTREAM_DOC_SIZE;
+                        assertThat(indexSize, equalTo(expectedIndexSize));
                     } else {
                         assertThat(index.containsKey("datastream"), equalTo(false));
+                        int expectedIndexSize = expectedDocsCount * RA_INDEX_DOC_SIZE;
+                        assertThat(indexSize, equalTo(expectedIndexSize));
                     }
                 }
 
@@ -138,7 +144,11 @@ public class MeteringStatsRAStorageRestTestIT extends MeteringStatsRestTestCase 
                 for (int i = 0; i < numDatastreams; i++) {
                     Map<String, Object> index = (Map<String, Object>) datastreams.get(i);
                     String datastreamName = (String) index.get("name");
-                    assertThat(index.get("num_docs"), equalTo(datastreamNameToNumDocsMap.get(datastreamName)));
+                    int expectedDocsCount = datastreamNameToNumDocsMap.get(datastreamName);
+                    assertThat(index.get("num_docs"), equalTo(expectedDocsCount));
+                    int expectedIndexSize = expectedDocsCount * RA_DATASTREAM_DOC_SIZE;
+                    int indexSize = (int) index.get("size_in_bytes");
+                    assertThat(indexSize, equalTo(expectedIndexSize));
                     assertThat(index.containsKey("datastream"), equalTo(false));
                 }
             });
