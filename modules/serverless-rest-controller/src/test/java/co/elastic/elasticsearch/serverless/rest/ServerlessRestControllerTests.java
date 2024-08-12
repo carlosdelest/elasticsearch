@@ -353,13 +353,15 @@ public class ServerlessRestControllerTests extends ESTestCase {
     }
 
     private void validateRequest(String path, Map<String, String> requestParameters, boolean isOperator) {
-        final RestRequest req = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withPath(path)
-            .withParams(new HashMap<>(requestParameters))
-            .build();
-        req.markAsServerlessRequest();
-        if (isOperator) {
-            req.markAsOperatorRequest();
+        final Map<String, String> effectiveParams;
+        if (isOperator == false) {
+            effectiveParams = new HashMap<>(requestParameters);
+            effectiveParams.put(RestRequest.PATH_RESTRICTED, "serverless");
+        } else {
+            effectiveParams = requestParameters;
         }
+
+        final RestRequest req = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withPath(path).withParams(effectiveParams).build();
         controller.validateRequest(req, restHandler, client);
     }
 

@@ -79,8 +79,7 @@ public class ServerlessRestController extends RestController {
 
     @Override
     protected void validateRequest(RestRequest request, RestHandler handler, NodeClient client) throws ElasticsearchStatusException {
-        assert request.isServerlessRequest() : "serverless request control should only receive serverless requests";
-        if (false == request.isOperatorRequest()) {
+        if (request.hasParam(RestRequest.PATH_RESTRICTED)) {
             validateRestParameters(request.path(), handler.getConcreteRestHandler(), request.params());
         }
     }
