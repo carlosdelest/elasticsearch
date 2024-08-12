@@ -49,7 +49,8 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
         return indexNodeSpec -> indexNodeSpec.name(name)
             .setting("node.roles", nodeRoles)
             .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
-            .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB");
+            .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
+            .setting("stateless.translog.flush.interval", "20ms");
     }
 
 }

@@ -79,6 +79,7 @@ public class CoreServerlessLocalClusterSpecBuilder extends AbstractLocalClusterS
                 .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
                 .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
                 .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
+                .setting("stateless.translog.flush.interval", "20ms")
         );
         this.withNode0(
             n -> n.name("search")
