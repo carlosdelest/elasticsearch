@@ -189,8 +189,8 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             assertNotNull(task);
             assertTrue(task.isAssigned());
             var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(clusterState);
-            var committedTimestamp = sampledMetricsMetadata.getCommittedTimestamp();
             assertThat(sampledMetricsMetadata, is(notNullValue()));
+            var committedTimestamp = sampledMetricsMetadata.getCommittedTimestamp();
             assertThat(committedTimestamp, greaterThanOrEqualTo(lastUsageTimestamp));
             logger.info("Before restart committedTimestamp: [{}]", committedTimestamp);
             currentCursor.set(committedTimestamp);
@@ -242,19 +242,29 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             assertThat(timestamps, hasSize(greaterThanOrEqualTo(minimumSize)));
         });
 
-        // No holes
-        Instant prevTimestamp = null;
-        for (var timestamp : timestamps) {
-            if (prevTimestamp != null) {
-                var difference = Duration.between(prevTimestamp, timestamp);
-                assertThat(difference.toMillis(), equalTo(INTERVAL.getMillis()));
-            }
-            prevTimestamp = timestamp;
-        }
-
         if (samePersistentTaskNode.get()) {
-            // No missing timestamp
+            logger.info(
+                "Same persistent task node, backfilling. Last committed: [{}], timestamps: [{}]",
+                afterStopMetadata.getCommittedTimestamp(),
+                timestamps.stream().map(Instant::toString).collect(Collectors.joining(";"))
+            );
+            // We expect to be able to backfill, so no holes
+            Instant prevTimestamp = null;
+            for (var timestamp : timestamps) {
+                if (prevTimestamp != null) {
+                    var difference = Duration.between(prevTimestamp, timestamp);
+                    assertThat(difference.toMillis(), equalTo(INTERVAL.getMillis()));
+                }
+                prevTimestamp = timestamp;
+            }
+            // And no missing timestamp
             assertThat(timestamps, hasItem(afterStopMetadata.getCommittedTimestamp().plusMillis(INTERVAL.getMillis())));
+        } else {
+            logger.info(
+                "Different persistent task node, dropping. Last committed: [{}], timestamps: [{}]",
+                afterStopMetadata.getCommittedTimestamp(),
+                timestamps.stream().map(Instant::toString).collect(Collectors.joining(";"))
+            );
         }
 
         // Cursor advanced

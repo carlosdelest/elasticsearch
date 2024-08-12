@@ -115,9 +115,6 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2460"
   method: "testSearchShardGenerationFilesRetention"
-- class: co.elastic.elasticsearch.metering.SampledMetricsMetadataServiceIT
-  method: testRecordsSentFromLatestCommitedTimestampWhenPersistentTaskNodeRestarts
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2282
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2327
