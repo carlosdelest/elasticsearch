@@ -55,5 +55,4 @@ public class ServerlessBulkUpdateApiKeyRequestTranslator extends BulkUpdateApiKe
         serverlessRoleValidator.validateCustomRoleAndThrow(updateApiKeyRequest.getRoleDescriptors(), false);
         return updateApiKeyRequest;
     }
-
 }
