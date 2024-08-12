@@ -23,12 +23,12 @@ import org.elasticsearch.common.io.stream.Writeable;
 
 import java.io.IOException;
 
-public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTerm, long generation, Long storedIngestSizeInBytes)
+public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTerm, long generation, long storedIngestSizeInBytes)
     implements
         Writeable,
         ShardEra {
 
-    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0, null);
+    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0, 0);
 
     public MeteringShardInfo {
         assert sizeInBytes >= 0 : "size must be non negative";

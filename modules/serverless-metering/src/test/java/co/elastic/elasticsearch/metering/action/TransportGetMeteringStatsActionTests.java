@@ -249,18 +249,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testRequestRoutedToPersistentTaskNode() throws InterruptedException, TimeoutException {
-        var node1Response = new GetMeteringStatsAction.Response(10L, 100L, Map.of(), Map.of(), Map.of());
-        var transport = new CapturingTransport() {
-            @Override
-            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
-                super.onSendRequest(requestId, action, request, node);
-                if (node.getId().equals("node_1")) {
-                    handleResponse(requestId, node1Response);
-                } else {
-                    handleError(requestId, new TransportException("invalid node"));
-                }
-            }
-        };
+        var transport = createMockCapturingTransport(new GetMeteringStatsAction.Response(10L, 100L, Map.of(), Map.of(), Map.of()));
         var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         setState(clusterService, createMockClusterStateWithPersistentTask("node_1"));
@@ -309,9 +298,12 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
+        );
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -340,32 +332,23 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var node1Response = new GetMeteringStatsAction.Response(10L, 100L, Map.of(), Map.of(), Map.of());
         var node2Response = new GetMeteringStatsAction.Response(20L, 200L, Map.of(), Map.of(), Map.of());
 
-        var invocations = new AtomicInteger(0);
-        var transport = new CapturingTransport() {
-            @Override
-            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
-                super.onSendRequest(requestId, action, request, node);
-                var invocation = invocations.addAndGet(1);
-                if (invocation == 1) {
-                    handleResponse(requestId, node1Response);
-                } else {
-                    handleResponse(requestId, node2Response);
-                }
-            }
-        };
+        var transport = createMockCapturingTransport(node1Response, node2Response);
         var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
-        // Simulate assignement/unassignement/reassignement of PersistentTask node
+        // Simulate assignment/unassignment/reassignment of PersistentTask node
         when(task.isAssigned()).thenReturn(true, false, true);
         when(task.getExecutorNode()).thenReturn("node_1");
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
+        );
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -400,16 +383,18 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
-        // Simulate assignement/unassignement of PersistentTask node
+        // Simulate assignment/unassignment of PersistentTask node
         when(task.isAssigned()).thenReturn(true, false);
         when(task.getExecutorNode()).thenReturn("node_1");
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
+        );
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -466,14 +451,17 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Set.of()
         );
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.routingTable(
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.routingTable(
                 RoutingTable.builder()
                     .add(addLocalOnlyIndexRouting(index1, shardId1))
                     .add(addLocalOnlyIndexRouting(index2, shardId2))
                     .build()
-            );
-        });
+            )
+        );
 
         var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
@@ -510,14 +498,17 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Set.of()
         );
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.routingTable(
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.routingTable(
                 RoutingTable.builder()
                     .add(addLocalOnlyIndexRouting(index1, shardId1))
                     .add(addLocalOnlyIndexRouting(index2, shardId2))
                     .build()
-            );
-        });
+            )
+        );
 
         var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
@@ -797,8 +788,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Set.of()
         );
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.routingTable(
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.routingTable(
                 RoutingTable.builder()
                     .add(
                         IndexRoutingTable.builder(index1)
@@ -851,8 +845,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                             .build()
                     )
                     .build()
-            );
-        });
+            )
+        );
 
         var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
@@ -878,19 +872,22 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
             Map.of(
                 MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                new MeteringIndexInfoService.ShardInfoValue(10L, 100L, null, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 0, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
             ),
             Set.of()
         );
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.routingTable(
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.routingTable(
                 RoutingTable.builder()
                     .add(addLocalOnlyIndexRouting(index1, shardId1))
                     .add(addLocalOnlyIndexRouting(index2, shardId2))
                     .build()
-            );
-        });
+            )
+        );
 
         var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
@@ -946,5 +943,39 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 )
             )
             .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    private static CapturingTransport createMockCapturingTransport(GetMeteringStatsAction.Response node1Response) {
+
+        return new CapturingTransport() {
+            @Override
+            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
+                super.onSendRequest(requestId, action, request, node);
+                if (node.getId().equals("node_1")) {
+                    handleResponse(requestId, node1Response);
+                } else {
+                    handleError(requestId, new TransportException("invalid node"));
+                }
+            }
+        };
+    }
+
+    private static CapturingTransport createMockCapturingTransport(
+        GetMeteringStatsAction.Response node1Response,
+        GetMeteringStatsAction.Response node2Response
+    ) {
+        var invocations = new AtomicInteger(0);
+        return new CapturingTransport() {
+            @Override
+            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
+                super.onSendRequest(requestId, action, request, node);
+                var invocation = invocations.addAndGet(1);
+                if (invocation == 1) {
+                    handleResponse(requestId, node1Response);
+                } else {
+                    handleResponse(requestId, node2Response);
+                }
+            }
+        };
     }
 }

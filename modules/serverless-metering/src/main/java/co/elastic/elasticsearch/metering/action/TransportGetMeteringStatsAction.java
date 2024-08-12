@@ -288,17 +288,11 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
      * We provisionally add an extra "size" field, which is chosen internally from IX/RA-S based on the project type, to be consumed by
      * the UI. This method is immediately deprecated, as it is meant as a stopgap measure until we add a new user facing API.
      *
-     * @param shardId
-     * @param shardInfo containing IX/RA-S sizes
      * @return the size to display, based on the project type
      */
     @Deprecated
     long getSizeToDisplay(MeteringIndexInfoService.ShardInfoKey shardId, MeteringIndexInfoService.ShardInfoValue shardInfo) {
         if (meterRaStorage) {
-            if (shardInfo.storedIngestSizeInBytes() == null) {
-                logger.warn("display _rastorage NULL for [{}:{}]", shardId.indexName(), shardId.shardId());
-                return 0L;
-            }
             logger.trace(
                 "display _rastorage [{}] for [{}:{}]",
                 shardInfo.storedIngestSizeInBytes(),

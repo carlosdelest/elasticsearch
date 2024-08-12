@@ -43,7 +43,6 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -88,7 +87,7 @@ public class ShardReaderTests extends ESTestCase {
         when(index2.iterator()).thenReturn(Iterators.single(shard3));
 
         var engine = mock(Engine.class);
-        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
+        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(11L));
 
         when(shard1.getEngineOrNull()).thenReturn(engine);
         when(shard2.getEngineOrNull()).thenReturn(engine);
@@ -101,7 +100,15 @@ public class ShardReaderTests extends ESTestCase {
         var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
 
         verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
-        verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"), any());
+        verify(shardInfoCache, times(3)).updateCachedShardInfo(
+            any(),
+            anyLong(),
+            anyLong(),
+            anyLong(),
+            anyLong(),
+            eq("TEST-NODE"),
+            anyLong()
+        );
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
     }
@@ -157,7 +164,7 @@ public class ShardReaderTests extends ESTestCase {
         var indicesService = mock(IndicesService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
         when(shardInfoCache.getCachedShardInfo(eq(shardId3), anyLong(), anyLong())).thenReturn(
-            Optional.of(new LocalNodeMeteringShardInfoCache.CacheEntry(1L, 1L, 10L, 100L, "TEST-NODE", null))
+            Optional.of(new LocalNodeMeteringShardInfoCache.CacheEntry(1L, 1L, 10L, 100L, "TEST-NODE", 0))
         );
 
         var shardReader = new ShardReader(indicesService);
@@ -188,7 +195,15 @@ public class ShardReaderTests extends ESTestCase {
 
         verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
         // updateCachedShardInfo is not invoked when both generation and requestToken are up-to-date
-        verify(shardInfoCache, times(2)).updateCachedShardInfo(any(), anyLong(), anyLong(), anyLong(), anyLong(), eq("TEST-NODE"), any());
+        verify(shardInfoCache, times(2)).updateCachedShardInfo(
+            any(),
+            anyLong(),
+            anyLong(),
+            anyLong(),
+            anyLong(),
+            eq("TEST-NODE"),
+            anyLong()
+        );
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2));
     }
@@ -204,7 +219,7 @@ public class ShardReaderTests extends ESTestCase {
 
         assertThat(shardStats.liveDocCount(), equalTo(120L));
         assertThat(shardStats.sizeInBytes(), equalTo(30L));
-        assertThat(shardStats.raSizeInBytes(), nullValue());
+        assertThat(shardStats.raSizeInBytes(), equalTo(0L));
     }
 
     public void testComputeShardStatsWithFullRAMultipleSegments() throws IOException {

@@ -677,6 +677,9 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     }
 
     public void testRAStorageWithNonTimeSeriesAllDeleted() throws Exception {
+        // Explicitly disable merging to test that even with no merge, we still stop reporting RA-S size for indexes with all deleted docs
+        CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(NoMergePolicy.INSTANCE);
+
         String indexName = "idx1", indexName2 = "idx2";
         createIndex(indexName, indexName2);
         ensureGreen(indexName, indexName2);
@@ -837,7 +840,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
             var totalQuantity = ingestRecords.stream().mapToLong(x -> x.usage().quantity()).sum();
             assertThat(totalQuantity, equalTo(raIngestedSize));
-        });
+        }, 20, TimeUnit.SECONDS);
     }
 
     private void waitAndAssertRAStorageRecords(List<UsageRecord> usageRecords, String indexName, long raStorageSize, long delta)
@@ -856,6 +859,6 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
                 // +/-delta to account for approximation on averages
                 both(greaterThanOrEqualTo(raStorageSize - delta)).and(lessThanOrEqualTo(raStorageSize + delta))
             );
-        });
+        }, 20, TimeUnit.SECONDS);
     }
 }

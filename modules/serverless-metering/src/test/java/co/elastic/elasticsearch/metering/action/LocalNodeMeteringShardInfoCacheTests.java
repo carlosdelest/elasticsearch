@@ -98,10 +98,10 @@ public class LocalNodeMeteringShardInfoCacheTests extends ESTestCase {
 
         try (var shardSizeService = new LocalNodeMeteringShardInfoCache()) {
             var firstQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId, 1, 1, 10L, 100L, testNodeToken1, null);
+            shardSizeService.updateCachedShardInfo(shardId, 1, 1, 10L, 100L, testNodeToken1, 0);
             var secondQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
             var differentTokenQueryResult = shardSizeService.getCachedShardInfo(shardId, 1, 1);
-            shardSizeService.updateCachedShardInfo(shardId, 2, 2, 11L, 110L, testNodeToken2, null);
+            shardSizeService.updateCachedShardInfo(shardId, 2, 2, 11L, 110L, testNodeToken2, 0);
             var updatedQueryResult = shardSizeService.getCachedShardInfo(shardId, 2, 2);
 
             assertThat(firstQueryResult, isEmpty());

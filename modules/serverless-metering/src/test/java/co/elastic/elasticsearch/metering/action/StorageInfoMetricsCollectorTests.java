@@ -40,11 +40,11 @@ import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSett
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static java.util.Map.entry;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
-import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.either;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
@@ -89,6 +89,10 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.THIS_NODE;
     }
 
+    private static AssertionError elementMustBePresent() {
+        return new AssertionError("Element must be present");
+    }
+
     public void testGetMetrics() {
         String indexName = "myIndex";
         int shardIdInt = 0;
@@ -100,23 +104,26 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
-        assertThat(metricValues, isPresent());
-        Collection<MetricValue> metrics = iterableToList(metricValues.get());
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
 
         assertThat(metrics, hasSize(2));
 
-        var metric1 = metrics.stream().filter(m -> m.type().equals("es_indexed_data")).findFirst();
-        var metric2 = metrics.stream().filter(m -> m.type().equals("es_raw_stored_data")).findFirst();
+        var metric1 = metrics.stream()
+            .filter(m -> m.type().equals("es_indexed_data"))
+            .findFirst()
+            .orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent);
+        var metric2 = metrics.stream()
+            .filter(m -> m.type().equals("es_raw_stored_data"))
+            .findFirst()
+            .orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent);
 
-        assertThat(metric1, isPresent());
-        assertThat(metric1.get().id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
-        assertThat(metric1.get().metadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
-        assertThat(metric1.get().value(), is(11L));
+        assertThat(metric1.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
+        assertThat(metric1.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
+        assertThat(metric1.value(), is(11L));
 
-        assertThat(metric2, isPresent());
-        assertThat(metric2.get().id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
-        assertThat(metric2.get().metadata(), equalTo(Map.of("index", indexName)));
-        assertThat(metric2.get().value(), is(11L));
+        assertThat(metric2.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(metric2.metadata(), equalTo(Map.of("index", indexName)));
+        assertThat(metric2.value(), is(11L));
     }
 
     public void testGetMetricsWithNoStoredIngestSize() {
@@ -124,14 +131,13 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         int shardIdInt = 0;
         var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
 
-        var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(11L, 110L, null, "myIndexUUID", 1, 1)));
+        var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(11L, 110L, 0, "myIndexUUID", 1, 1)));
         var indexInfoService = new MeteringIndexInfoService(clusterService);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
-        assertThat(metricValues, isPresent());
-        Collection<MetricValue> metrics = iterableToList(metricValues.get());
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
 
         assertThat(metrics, hasSize(1));
 
@@ -143,6 +149,45 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         assertThat(metric.value(), is(11L));
     }
 
+    public void testGetMetricsWithNoIndexSize() {
+        String indexName = "myIndex";
+        int shardIdInt = 0;
+        var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
+
+        var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(0, 110L, 11L, "myIndexUUID", 1, 1)));
+        var indexInfoService = new MeteringIndexInfoService(clusterService);
+        setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
+
+        assertThat(metrics, hasSize(1));
+
+        var metric = (MetricValue) metrics.toArray()[0];
+        assertThat(metric.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(metric.type(), equalTo("es_raw_stored_data"));
+        assertThat(metric.metadata(), equalTo(Map.of("index", indexName)));
+
+        assertThat(metric.value(), is(11L));
+    }
+
+    public void testGetMetricsWithNoSize() {
+        String indexName = "myIndex";
+        int shardIdInt = 0;
+        var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
+
+        var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(0, 110L, 0, "myIndexUUID", 1, 1)));
+        var indexInfoService = new MeteringIndexInfoService(clusterService);
+        setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+
+        var metricValues = indexSizeMetricsCollector.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
+
+        assertThat(metrics, empty());
+    }
+
     public void testMultipleShardsWithMixedSizeType() {
         String indexName = "myMultiShardIndex";
 
@@ -150,10 +195,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
             var shardId = new MeteringIndexInfoService.ShardInfoKey(indexName, id);
             var size = 10L + id;
             var hasIngestSize = id < 5;
-            return entry(
-                shardId,
-                new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : null, "myIndexUUID", 1, 1)
-            );
+            return entry(shardId, new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : 0L, "myIndexUUID", 1, 1));
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
         var indexInfoService = new MeteringIndexInfoService(clusterService);
@@ -161,8 +203,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
-        assertThat(metricValues, isPresent());
-        Collection<MetricValue> metrics = iterableToList(metricValues.get());
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -199,7 +240,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
                 var hasIngestSize = indexIdx < 2;
                 shardsInfo.put(
                     shardId,
-                    new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : null, "myIndexUUID", 1, 1)
+                    new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : 0L, "myIndexUUID", 1, 1)
                 );
             }
         }
@@ -209,8 +250,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
-        assertThat(metricValues, isPresent());
-        Collection<MetricValue> metrics = iterableToList(metricValues.get());
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -249,7 +289,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
                 var hasIngestSize = shardIdx < 5;
                 shardsInfo.put(
                     shardId,
-                    new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : null, "myIndexUUID", 1, 1)
+                    new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : 0, "myIndexUUID", 1, 1)
                 );
             }
         }
@@ -259,8 +299,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
-        assertThat(metricValues, isPresent());
-        Collection<MetricValue> metrics = iterableToList(metricValues.get());
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -305,10 +344,9 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
-        assertThat(metricValues, isPresent());
-        Collection<MetricValue> metrics = iterableToList(metricValues.get());
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
 
-        assertThat(metrics, hasSize(11));
+        assertThat(metrics, hasSize(10));
         var hasPartial = hasEntry("partial", "" + true);
         for (MetricValue metric : metrics) {
             assertThat(
@@ -345,8 +383,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.ANOTHER_NODE;
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
-        assertThat(metricValues, isPresent());
-        Collection<MetricValue> metrics = iterableToList(metricValues.get());
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
 
         assertThat(metrics, hasSize(0));
     }

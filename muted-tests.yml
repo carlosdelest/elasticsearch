@@ -130,9 +130,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceIT
   method: testCacheIsWarmedBeforeSearchShardRecoveryWhenVBCCGetsUploaded
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2518
-- class: co.elastic.elasticsearch.metering.StorageMeteringIT
-  method: testRAStorageWithNonTimeSeriesAllDeleted
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2522
 - class: "co.elastic.elasticsearch.stateless.StatelessIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2473"
   method: "testCompoundCommitHasNodeEphemeralId"

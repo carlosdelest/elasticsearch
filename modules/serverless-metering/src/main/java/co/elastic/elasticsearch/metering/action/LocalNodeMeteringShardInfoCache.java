@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent {
 
-    record CacheEntry(long primaryTerm, long generation, long sizeInBytes, long docCount, String token, Long storedIngestSizeInBytes) {}
+    record CacheEntry(long primaryTerm, long generation, long sizeInBytes, long docCount, String token, long storedIngestSizeInBytes) {}
 
     // package private for testing
     Map<ShardId, CacheEntry> shardSizeCache = new ConcurrentHashMap<>();
@@ -60,7 +60,7 @@ public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent 
         long sizeInBytes,
         long docCount,
         String token,
-        Long storedIngestSizeInBytes
+        long storedIngestSizeInBytes
     ) {
         assert shardId != null;
         assert token != null;

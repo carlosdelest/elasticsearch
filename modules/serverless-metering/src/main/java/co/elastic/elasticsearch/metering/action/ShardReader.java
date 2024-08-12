@@ -44,7 +44,7 @@ class ShardReader {
         this.indicesService = indicesService;
     }
 
-    record ShardSizeAndDocCount(long sizeInBytes, long liveDocCount, Long raSizeInBytes) {}
+    record ShardSizeAndDocCount(long sizeInBytes, long liveDocCount, long raSizeInBytes) {}
 
     private static Long computeApproximatedRAStorage(long avgRASizePerDoc, long liveDocCount, long totalDocCount, ShardId shardId) {
         var raStorage = avgRASizePerDoc * liveDocCount;
@@ -120,7 +120,7 @@ class ShardReader {
             logger.trace("No _rastorage available for {}", shardId);
         }
 
-        return new ShardSizeAndDocCount(sizeInBytes, liveDocCount, totalRAValue);
+        return new ShardSizeAndDocCount(sizeInBytes, liveDocCount, totalRAValue == null ? 0L : totalRAValue);
     }
 
     Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap(

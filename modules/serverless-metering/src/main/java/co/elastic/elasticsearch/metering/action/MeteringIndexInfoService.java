@@ -79,12 +79,12 @@ public class MeteringIndexInfoService {
     record ShardInfoValue(
         long sizeInBytes,
         long docCount,
-        Long storedIngestSizeInBytes,
+        long storedIngestSizeInBytes,
         String indexUUID,
         long primaryTerm,
         long generation
     ) implements ShardEra {
-        public static final ShardInfoValue EMPTY = new ShardInfoValue(0, 0, null, null, 0, 0);
+        public static final ShardInfoValue EMPTY = new ShardInfoValue(0, 0, 0, null, 0, 0);
     }
 
     record CollectedMeteringShardInfo(
@@ -249,39 +249,35 @@ public class MeteringIndexInfoService {
             boolean partial = currentInfo.meteringShardInfoStatus().contains(CollectedMeteringShardInfoFlag.PARTIAL);
             List<MetricValue> metrics = new ArrayList<>();
             for (final var shardEntry : currentInfo.meteringShardInfoMap.entrySet()) {
-                int shardId = shardEntry.getKey().shardId();
                 long size = shardEntry.getValue().sizeInBytes();
+                // Do not generate records with size 0
+                if (size > 0) {
+                    int shardId = shardEntry.getKey().shardId();
+                    var indexName = shardEntry.getKey().indexName();
 
-                var indexName = shardEntry.getKey().indexName();
+                    Map<String, String> metadata = new HashMap<>();
+                    metadata.put(INDEX, indexName);
+                    metadata.put(SHARD, Integer.toString(shardId));
+                    if (partial) {
+                        metadata.put(PARTIAL, Boolean.TRUE.toString());
+                    }
 
-                Map<String, String> metadata = new HashMap<>();
-                metadata.put(INDEX, indexName);
-                metadata.put(SHARD, Integer.toString(shardId));
-                if (partial) {
-                    metadata.put(PARTIAL, Boolean.TRUE.toString());
+                    metrics.add(
+                        new MetricValue(format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()), IX_METRIC_TYPE, metadata, settings, size)
+                    );
                 }
-
-                metrics.add(
-                    new MetricValue(format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()), IX_METRIC_TYPE, metadata, settings, size)
-                );
             }
 
-            Map<String, Optional<Long>> storedIngestSizeInBytesMap = currentInfo.meteringShardInfoMap.entrySet()
+            Map<String, Long> storedIngestSizeInBytesMap = currentInfo.meteringShardInfoMap.entrySet()
                 .stream()
                 .collect(
-                    Collectors.groupingBy(
-                        e -> e.getKey().indexName(),
-                        Collectors.filtering(
-                            e -> e.getValue().storedIngestSizeInBytes() != null,
-                            Collectors.mapping(e -> e.getValue().storedIngestSizeInBytes(), Collectors.reducing(Long::sum))
-                        )
-                    )
+                    Collectors.groupingBy(e -> e.getKey().indexName(), Collectors.summingLong(e -> e.getValue().storedIngestSizeInBytes()))
                 );
             for (final var indexEntry : storedIngestSizeInBytesMap.entrySet()) {
                 final var indexName = indexEntry.getKey();
                 final var storedIngestSizeInBytes = indexEntry.getValue();
 
-                if (storedIngestSizeInBytes.isPresent()) {
+                if (storedIngestSizeInBytes > 0) {
                     Map<String, String> metadata = new HashMap<>();
                     metadata.put(INDEX, indexName);
                     if (partial) {
@@ -293,7 +289,7 @@ public class MeteringIndexInfoService {
                             RA_S_METRIC_TYPE,
                             metadata,
                             settings,
-                            storedIngestSizeInBytes.get()
+                            storedIngestSizeInBytes
                         )
                     );
                 }
