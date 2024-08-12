@@ -118,9 +118,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.SampledMetricsMetadataServiceIT
   method: testRecordsSentFromLatestCommitedTimestampWhenPersistentTaskNodeRestarts
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2282
-- class: "co.elastic.elasticsearch.stateless.recovery.SearchShardRelocationIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2479"
-  method: "testSearchShardRelocationWhenHostingNodeTerminates"
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2327
