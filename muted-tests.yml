@@ -130,8 +130,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupportedPrivilegesRegistryTests
   method: testSupportedClusterPrivileges
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2499
-- class: co.elastic.elasticsearch.stateless.S3RegisterCASLinearizabilityTests
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2509
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceIT
   method: testCacheIsWarmedBeforeSearchShardRecoveryWhenVBCCGetsUploaded
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2518
