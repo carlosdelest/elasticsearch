@@ -133,3 +133,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetentionTests
   method: testInvalidSettingsTooSmall
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2562
+- class: co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetentionTests
+  method: testInvalidCombination
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2563
