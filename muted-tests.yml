@@ -136,3 +136,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetentionTests
   method: testInvalidCombination
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2563
+- class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
+  method: testPreferredNodeIdsAreUsedDuringRelocation
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2564
