@@ -100,14 +100,6 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
-    // TODO remove once overrides are removed; this setting is now a noop
-    private static final Setting<Boolean> OPERATOR_STRICT_ROLE_VALIDATION = Setting.boolSetting(
-        "xpack.security.authz.operator.strict_role_validation.enabled",
-        true,
-        Setting.Property.OperatorDynamic,
-        Setting.Property.NodeScope
-    );
-
     private final AtomicReference<SecurityContext> securityContext = new AtomicReference<>();
 
     @Override
@@ -119,20 +111,10 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
                     + "] to true"
             );
         }
-        final ClusterSettings clusterSettings = services.clusterService().getClusterSettings();
-        clusterSettings.addSettingsUpdateConsumer(OPERATOR_STRICT_ROLE_VALIDATION, this::configureOperatorStrictRoleValidation);
 
         this.securityContext.set(new SecurityContext(services.environment().settings(), services.threadPool().getThreadContext()));
 
         return Collections.emptyList();
-    }
-
-    private void configureOperatorStrictRoleValidation(boolean enabled) {
-        if (enabled == false) {
-            logger.error(
-                "Setting [" + OPERATOR_STRICT_ROLE_VALIDATION.getKey() + "] is not an active setting and disabling it will be ignored"
-            );
-        }
     }
 
     @Override
@@ -144,7 +126,6 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .put(NATIVE_ROLES_SETTING.getKey(), false)
             .put(CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), true) // the setting is false by default; this sets it to true
             .put(NATIVE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), false) // the setting is true by default; this sets it to false
-            .put(OPERATOR_STRICT_ROLE_VALIDATION.getKey(), true)
             .build();
     }
 
@@ -156,8 +137,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             NATIVE_ROLES_SETTING,
             CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
             NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
-            EXCLUDE_ROLES,
-            OPERATOR_STRICT_ROLE_VALIDATION
+            EXCLUDE_ROLES
         );
     }
 
