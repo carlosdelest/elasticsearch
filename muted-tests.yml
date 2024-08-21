@@ -145,3 +145,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.cache.BlobCacheMetricsIT
   method: testSearchNodeMetrics
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2583
+- class: co.elastic.elasticsearch.serverless.health.ServerlessShardsHealthIT
+  method: testReplicaShardsAvailabilityOnServerless
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2585
