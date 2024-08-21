@@ -145,3 +145,6 @@ tests:
 - class: org.elasticsearch.datastreams.logsdb.qa.StandardVersusLogsIndexModeRandomDataChallengeRestIT
   method: testTermsAggregation
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2569
+- class: co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests
+  method: testAllCommitsAreDeletedWhenIndexIsDeleted
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2577
