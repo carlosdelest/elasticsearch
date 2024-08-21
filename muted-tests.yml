@@ -142,3 +142,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests
   method: testAllCommitsAreDeletedWhenIndexIsDeleted
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2577
+- class: co.elastic.elasticsearch.stateless.cache.BlobCacheMetricsIT
+  method: testSearchNodeMetrics
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2583
