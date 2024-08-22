@@ -21,6 +21,7 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.SuppressForbidden;
@@ -51,6 +52,7 @@ import java.util.stream.IntStream;
 import static org.elasticsearch.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.startsWith;
 
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
 @ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
@@ -82,6 +84,8 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
             assertThat(exchange.getRequestMethod(), equalTo("POST"));
+            assertTrue(exchange.getRequestHeaders().containsKey(HttpHeaders.USER_AGENT));
+            assertThat(exchange.getRequestHeaders().get(HttpHeaders.USER_AGENT), contains(startsWith("elasticsearch/metering")));
 
             if (nextRequestStatusCode == HttpStatus.SC_CREATED) {
                 var map = toUsageRecordMaps(exchange.getRequestBody());

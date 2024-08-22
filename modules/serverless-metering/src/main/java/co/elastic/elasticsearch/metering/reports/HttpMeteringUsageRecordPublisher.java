@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.reports;
 
+import org.elasticsearch.Build;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Setting;
@@ -57,6 +58,7 @@ import javax.net.ssl.X509ExtendedTrustManager;
 public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent implements MeteringUsageRecordPublisher {
 
     private static final Logger log = LogManager.getLogger(HttpMeteringUsageRecordPublisher.class);
+    private static final String USER_AGENT = "elasticsearch/metering/" + Build.current().version();
 
     public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "https://usage-api.elastic-system/api/v1/usage", s -> {
         try {
@@ -192,6 +194,7 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
         return HttpRequest.newBuilder(METERING_URL.get(settings))
             .POST(HttpRequest.BodyPublishers.ofByteArray(recordData.array(), recordData.arrayOffset(), recordData.length()))
             .header("Content-Type", "application/json")
+            .header("User-Agent", USER_AGENT)
             .build();
     }
 
