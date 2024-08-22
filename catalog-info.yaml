@@ -126,7 +126,6 @@ spec:
         everyone:
           access_level: READ_ONLY
       cancel_intermediate_builds: true
-      cancel_intermediate_builds_branch_filter: "!main patch/*"
       provider_settings:
         build_branches: false
         build_tags: false
