@@ -20,11 +20,13 @@ package co.elastic.elasticsearch.metering.action;
 import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.index.shard.ShardId;
@@ -44,6 +46,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.metering.action.utils.PersistentTaskUtils.findPersistentTaskNodeId;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
 import static org.elasticsearch.core.Strings.format;
 
 public class MeteringIndexInfoService {
@@ -189,6 +194,39 @@ public class MeteringIndexInfoService {
         private static final String PARTIAL = "partial";
         private static final String INDEX = "index";
         private static final String SHARD = "shard";
+        private static final String SEARCH_POWER = "search_power";
+
+        private volatile int searchPowerMinSetting;
+        private volatile int searchPowerMaxSetting;
+
+        StorageInfoMetricsCollector(ClusterSettings clusterSettings, Settings settings) {
+            this.searchPowerMinSetting = SEARCH_POWER_MIN_SETTING.get(settings);
+            this.searchPowerMaxSetting = SEARCH_POWER_MAX_SETTING.get(settings);
+            clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_MIN_SETTING, sp -> this.searchPowerMinSetting = sp);
+            clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_MAX_SETTING, sp -> this.searchPowerMaxSetting = sp);
+            clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_SETTING, sp -> {
+                if (this.searchPowerMinSetting == this.searchPowerMaxSetting) {
+                    this.searchPowerMinSetting = sp;
+                    this.searchPowerMaxSetting = sp;
+                } else {
+                    throw new IllegalArgumentException(
+                        "Updating "
+                            + ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey()
+                            + " ["
+                            + sp
+                            + "] while "
+                            + ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey()
+                            + " ["
+                            + this.searchPowerMinSetting
+                            + "] and "
+                            + ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey()
+                            + " ["
+                            + this.searchPowerMaxSetting
+                            + "] are not equal."
+                    );
+                }
+            });
+        }
 
         @Override
         public Optional<MetricValues> getMetrics() {
@@ -204,6 +242,9 @@ public class MeteringIndexInfoService {
                 // We have nothing to report
                 return Optional.of(SampledMetricsCollector.NO_VALUES);
             }
+
+            // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
+            Map<String, Object> settings = Map.of(SEARCH_POWER, this.searchPowerMinSetting);
 
             boolean partial = currentInfo.meteringShardInfoStatus().contains(CollectedMeteringShardInfoFlag.PARTIAL);
             List<MetricValue> metrics = new ArrayList<>();
@@ -222,7 +263,7 @@ public class MeteringIndexInfoService {
                     }
 
                     metrics.add(
-                        new MetricValue(format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()), IX_METRIC_TYPE, metadata, Map.of(), size)
+                        new MetricValue(format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()), IX_METRIC_TYPE, metadata, settings, size)
                     );
                 }
             }
@@ -247,7 +288,7 @@ public class MeteringIndexInfoService {
                             format("%s:%s", RA_S_METRIC_ID_PREFIX, indexName),
                             RA_S_METRIC_TYPE,
                             metadata,
-                            Map.of(),
+                            settings,
                             storedIngestSizeInBytes
                         )
                     );
@@ -258,7 +299,7 @@ public class MeteringIndexInfoService {
     }
 
     public SampledMetricsCollector createIndexSizeMetricsCollector(ClusterService clusterService, Settings settings) {
-        return new StorageInfoMetricsCollector();
+        return new StorageInfoMetricsCollector(clusterService.getClusterSettings(), settings);
     }
 
     private static CollectedMeteringShardInfo mergeShardInfo(

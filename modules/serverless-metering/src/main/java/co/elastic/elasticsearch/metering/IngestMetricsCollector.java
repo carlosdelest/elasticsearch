@@ -19,9 +19,12 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
 import co.elastic.elasticsearch.metrics.MetricValue;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
 
@@ -33,21 +36,26 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.BOOST_WINDOW_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
+
 /**
  * Responsible for the ingest document size collection.
  * <p>
  * Accumulates metric values from ingestion.
- * <p>
+ *
  * Note on concurrency used here:
  * getMetrics is expected to run far fewer than addIngestedDocValue.
  * getMetrics by default should be triggered once every 5min
- * <p>
+ *
  * It is expected to have a lot (really a lot) of concurrent addIngestedDocValue calls, but most likely
  * on different index value.
- * <p>
+ *
  * ConcurrentHashMap - metrics - allows for safe concurrent updates on different indexNames
  * AtomicLong - a value of ConcurrentHashMap - allows for safe concurrent updates on the same indexName
- * <p>
+ *
  * We want to pause adding elements to a map when getMetrics is called. Otherwise, we risk a live lock when
  * getMetrics would be iterating over elements from ConcurrentHashMap and at the same time addIngestedDocValue would
  * be keep on adding more. Hence, getMetrics might never finish.
@@ -57,25 +65,59 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public class IngestMetricsCollector implements CounterMetricsCollector {
     public static final String METRIC_TYPE = "es_raw_data";
-
+    private static final String SEARCH_POWER = "search_power";
+    private static final String BOOST_WINDOW = "boost_window";
     private final Logger logger = LogManager.getLogger(IngestMetricsCollector.class);
     private final Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
     private final String nodeId;
+    private volatile int searchPowerMinSetting;
+    private volatile int searchPowerMaxSetting;
+    private volatile long boostWindowSetting;
 
-    public IngestMetricsCollector(String nodeId) {
+    public IngestMetricsCollector(String nodeId, ClusterSettings clusterSettings, Settings settings) {
         this.nodeId = nodeId;
+        this.boostWindowSetting = BOOST_WINDOW_SETTING.get(settings).getSeconds();
+        this.searchPowerMinSetting = clusterSettings.get(SEARCH_POWER_MIN_SETTING);
+        this.searchPowerMaxSetting = clusterSettings.get(SEARCH_POWER_MAX_SETTING);
+        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_MIN_SETTING, sp -> this.searchPowerMinSetting = sp);
+        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_MAX_SETTING, sp -> this.searchPowerMaxSetting = sp);
+        clusterSettings.addSettingsUpdateConsumer(SEARCH_POWER_SETTING, sp -> {
+            if (this.searchPowerMinSetting == this.searchPowerMaxSetting) {
+                this.searchPowerMinSetting = sp;
+                this.searchPowerMaxSetting = sp;
+            } else {
+                throw new IllegalArgumentException(
+                    "Updating "
+                        + ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey()
+                        + " ["
+                        + sp
+                        + "] while "
+                        + ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey()
+                        + " ["
+                        + this.searchPowerMinSetting
+                        + "] and "
+                        + ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey()
+                        + " ["
+                        + this.searchPowerMaxSetting
+                        + "] are not equal."
+                );
+            }
+        });
+        clusterSettings.addSettingsUpdateConsumer(BOOST_WINDOW_SETTING, bw -> this.boostWindowSetting = bw.getSeconds());
     }
 
     private record SnapshotEntry(String key, long value) {}
 
     @Override
     public MetricValues getMetrics() {
+        // searchPowerMinSetting to be changed to `searchPowerSelected` when we calculate it.
+        Map<String, Object> settings = Map.of(SEARCH_POWER, this.searchPowerMinSetting, BOOST_WINDOW, boostWindowSetting);
 
         final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
-        final var toReturn = metricsSnapshot.stream().map(e -> metricValue(e.key(), e.value(), Map.of())).toList();
+        final var toReturn = metricsSnapshot.stream().map(e -> metricValue(e.key(), e.value(), settings)).toList();
         logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
 
         return new MetricValues() {
