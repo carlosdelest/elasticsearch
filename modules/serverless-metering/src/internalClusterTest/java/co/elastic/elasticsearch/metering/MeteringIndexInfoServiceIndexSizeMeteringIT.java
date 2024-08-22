@@ -97,8 +97,6 @@ public class MeteringIndexInfoServiceIndexSizeMeteringIT extends AbstractMeterin
             assertThat(metric.id(), startsWith(idPRefix));
             assertThat(metric.usage().type(), equalTo("es_indexed_data"));
             assertThat(metric.usage().quantity(), greaterThan(0L));
-            assertThat(metric.usage().es().get("search_power"), equalTo(DEFAULT_SEARCH_POWER));
-            assertThat(metric.usage().es().get("boost_window"), equalTo(null));
             assertThat(metric.source().metadata(), equalTo(Map.of("index", indexName, "shard", "0")));
         });
 
@@ -115,8 +113,6 @@ public class MeteringIndexInfoServiceIndexSizeMeteringIT extends AbstractMeterin
             assertThat(metric.id(), startsWith(idPRefix));
             assertThat(metric.usage().type(), equalTo("es_indexed_data"));
             assertThat(metric.usage().quantity(), greaterThan(0L));
-            assertThat(metric.usage().es().get("search_power"), equalTo(1234));
-            assertThat(metric.usage().es().get("boost_window"), equalTo(null));
         });
     }
 }

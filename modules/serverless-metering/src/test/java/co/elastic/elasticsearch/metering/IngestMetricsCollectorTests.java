@@ -50,8 +50,8 @@ public class IngestMetricsCollectorTests extends ESTestCase {
     );
 
     public void testMetricIdUniqueness() {
-        var ingestMetricsCollector1 = new IngestMetricsCollector("node1", clusterSettings, Settings.EMPTY);
-        var ingestMetricsCollector2 = new IngestMetricsCollector("node2", clusterSettings, Settings.EMPTY);
+        var ingestMetricsCollector1 = new IngestMetricsCollector("node1");
+        var ingestMetricsCollector2 = new IngestMetricsCollector("node2");
 
         ingestMetricsCollector1.addIngestedDocValue("index", 10);
 
@@ -65,7 +65,7 @@ public class IngestMetricsCollectorTests extends ESTestCase {
     }
 
     public void testMetricsValueRemainsIfNotCommited() {
-        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
+        final var ingestMetricsCollector = new IngestMetricsCollector("node");
         final int docSize = randomIntBetween(1, 10);
 
         ingestMetricsCollector.addIngestedDocValue("index1", docSize);
@@ -84,7 +84,7 @@ public class IngestMetricsCollectorTests extends ESTestCase {
     }
 
     public void testMetricsValueKeepsCountingUntilCommited() {
-        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
+        final var ingestMetricsCollector = new IngestMetricsCollector("node");
         final int docSize = randomIntBetween(1, 10);
 
         ingestMetricsCollector.addIngestedDocValue("index1", docSize);
@@ -112,7 +112,7 @@ public class IngestMetricsCollectorTests extends ESTestCase {
     }
 
     public void testMetricsValueRestartCountingAfterCommited() {
-        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
+        final var ingestMetricsCollector = new IngestMetricsCollector("node");
         final long docSize = randomIntBetween(1, 10);
 
         ingestMetricsCollector.addIngestedDocValue("index1", docSize);
@@ -144,7 +144,7 @@ public class IngestMetricsCollectorTests extends ESTestCase {
 
     public void testConcurrencyManyWritersOneReaderNoWait() throws InterruptedException {
         final var results = new ConcurrentLinkedQueue<MetricValue>();
-        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
+        final var ingestMetricsCollector = new IngestMetricsCollector("node");
 
         final int writerThreadsCount = randomIntBetween(4, 10);
         final int writeOpsPerThread = randomIntBetween(100, 2000);
@@ -176,7 +176,7 @@ public class IngestMetricsCollectorTests extends ESTestCase {
 
     public void testConcurrencyManyWritersOneReaderWithWait() throws InterruptedException {
         final var results = new ConcurrentLinkedQueue<MetricValue>();
-        final var ingestMetricsCollector = new IngestMetricsCollector("node", clusterSettings, Settings.EMPTY);
+        final var ingestMetricsCollector = new IngestMetricsCollector("node");
 
         final int writerThreadsCount = randomIntBetween(4, 10);
         final int writeOpsPerThread = randomIntBetween(100, 2000);
