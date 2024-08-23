@@ -195,6 +195,7 @@ tasks {
 
                 // Tests that depend on unavailable features (if possible, we should fix test)
                 "index/91_metrics_no_subobjects/*", // depends on a legacy template
+                "index/92_metrics_auto_subobjects/*",  // depends on a legacy template
                 "cat.templates/*/*", // depends on a legacy templates
 
                 // Tests relying on version filters - need to be ported to feature filters (ES-7317)
