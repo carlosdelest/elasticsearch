@@ -160,3 +160,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {mv_percentile.FromIndex ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2612
+- class: co.elastic.elasticsearch.stateless.cache.reader.MeteringCacheBlobReaderTests
+  method: testExceptionIsLoggedAtDebugWhenCallbackThrows
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2614
