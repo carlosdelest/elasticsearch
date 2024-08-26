@@ -154,3 +154,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT
   method: testVirtualBatchedCompoundCommitUploadMetrics
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2610
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {mv_percentile.FromIndex SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2611
