@@ -23,7 +23,7 @@ indices.merge.policy.max_time_based_merged_segment: 20gb
 # Force-termination happens after 1h, see ES-8164, so if we haven't shut down
 # by then we try and time out just before that in order to record the failure
 # in the logs.
-serverless.sigterm.timeout: 3590s
+serverless.sigterm.timeout: 3540s
 
 serverless.sigterm.poll_interval: 30s
 
