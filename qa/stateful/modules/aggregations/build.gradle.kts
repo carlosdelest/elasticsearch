@@ -21,5 +21,8 @@ tasks {
             // Disabled _source not supported in Serverless
             "aggregations/top_hits_nested_metric/top_hits aggregation with nested documents and disabled _source",
         ).joinToString(","))
+
+        // Running the tests for scripted metric aggs requires that we emulate Stateful's default settings.
+        systemProperty("tests.disable_scripted_metric_allow_list_per_default", "true")
     }
 }
