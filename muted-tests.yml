@@ -160,3 +160,5 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessRollingUpgradeIT
   method: testClusterUpgrade
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2619
+- class: org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2620
