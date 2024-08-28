@@ -15,15 +15,11 @@ The metrics metered can be categorized into two types:
 
 **This plugin currently computes and reports three different metrics:**
 
-* raw ingested data (**RA-I**ngest), a counter metric with bytes unit
-* raw stored data (**RA-S**torage), a sampled metric with bytes unit
-* index size (**IX**), a sampled metric with bytes unit
-
-| Project type/index type        | RA-I            | RA-S (per shard) | RA-S (per segment) | IX              |
-|--------------------------------|-----------------|------------------|--------------------|-----------------|
-| General/all                    | Yes, unused (*) | No               | No                 | Yes             |
-| O11y, Security/ Timeseries     | Yes             | Yes              | No                 | Yes, unused (*) |
-| O11y, Security/ Non-timeseries | Yes             | No               | Yes                | Yes, unused (*) |
+| Metric name    | Description                | Metric type | Usage type name    | Reporting granularity | Project types                               |
+|----------------|----------------------------|-------------|--------------------|-----------------------|---------------------------------------------|
+| **RA-I**ngest  | raw ingested data in bytes | counter     | `es_raw_data`        | per node and index    | general (unused*), O11y, Security           |
+| **RA-S**torage | raw stored data in bytes   | sample      | `es_raw_stored_data` | per cluster and index | O11y, Security                              |
+| **IX**         | index size in bytes        | sample      | `es_indexed_data`    | per cluster and shard | general, O11y (unused*), Security (unused*) |
 
 (*) Important: this table highlights what is computed and reported by the metering plugin; this may be different from what is actually consumed by the [metering pipeline](https://github.com/elastic/platform-billing/blob/main/teams/billing/services/serverless_onboarding.md#stages--responsibilities) and used for billing. For detailed and up-to-date documentation from a billing perspective, see the higher level business documentation: [PRD - Serverless monitoring](https://docs.google.com/document/d/1ILQHCrMSWFB403fJHI45jarolcOC4l6zlDoZbqKK0HA/edit#heading=h.7zjfkrex9jtg).
 
