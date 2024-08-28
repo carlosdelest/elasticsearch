@@ -175,12 +175,10 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
         });
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch/issues/112066")
     public void testReplicaShardsForNewPrimariesAvailabilityWithTimeBuffer() throws Exception {
         runTestReplicaShardsForNewPrimariesAvailability(true);
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch/issues/112066")
     public void testReplicaShardsForNewPrimariesAvailabilityNoTimeBuffer() throws Exception {
         runTestReplicaShardsForNewPrimariesAvailability(false);
     }
