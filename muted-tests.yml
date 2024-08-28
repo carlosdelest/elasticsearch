@@ -148,9 +148,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT
   method: testCommitsNotDeletedWhileAnUnpromotableIsRecovering
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2441
-- class: co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT
-  method: testVirtualBatchedCompoundCommitUploadMetrics
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2610
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessRollingUpgradeIT
   method: testClusterUpgrade
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2619
