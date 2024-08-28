@@ -25,9 +25,12 @@ import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.SuppressForbidden;
+import org.elasticsearch.telemetry.InstrumentType;
+import org.elasticsearch.telemetry.Measurement;
+import org.elasticsearch.telemetry.MetricRecorder;
+import org.elasticsearch.telemetry.RecordingMeterRegistry;
+import org.elasticsearch.telemetry.metric.Instrument;
 import org.elasticsearch.test.ESTestCase;
-import org.elasticsearch.threadpool.TestThreadPool;
-import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.spi.XContentProvider;
 import org.junit.After;
@@ -49,9 +52,13 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.elasticsearch.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.startsWith;
 
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
@@ -61,7 +68,6 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
 
     private HttpServer server;
-    private TestThreadPool threadPool;
     private Settings settings;
 
     private final BlockingQueue<List<?>> requests = new LinkedBlockingQueue<>();
@@ -75,8 +81,6 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
 
         server.createContext("/", this::handle);
         server.start();
-
-        threadPool = new TestThreadPool("meteringReporterTests");
 
         settings = Settings.builder().put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + port).build();
     }
@@ -125,7 +129,8 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
             new UsageSource("es-id", "instanceId", null)
         );
 
-        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, threadPool)) {
+        var meterRegistry = new RecordingMeterRegistry();
+        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, meterRegistry)) {
             reporter.start();
             reporter.sendRecords(List.of(record));
 
@@ -135,6 +140,16 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
 
             reporter.stop();
         }
+
+        final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
+        final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
+        final var sizes = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_SIZE);
+        final var times = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TIME);
+
+        assertThat(requests, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(errors, empty());
+        assertThat(sizes, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
+        assertThat(times, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
     }
 
     public void testReporterSendsLotsOfData() throws Exception {
@@ -151,7 +166,8 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
             )
             .toList();
 
-        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(testSettings, threadPool)) {
+        var meterRegistry = new RecordingMeterRegistry();
+        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(testSettings, meterRegistry)) {
             reporter.start();
             reporter.sendRecords(records);
 
@@ -170,6 +186,16 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
 
             reporter.stop();
         }
+
+        final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
+        final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
+        final var sizes = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_SIZE);
+        final var times = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TIME);
+
+        assertThat(requests, contains(transformedMatch(Measurement::getLong, equalTo(3L))));
+        assertThat(errors, empty());
+        assertThat(sizes, everyItem(transformedMatch(Measurement::getLong, greaterThan(0L))));
+        assertThat(times, everyItem(transformedMatch(Measurement::getLong, greaterThan(0L))));
     }
 
     public void testServerDown() {
@@ -182,11 +208,22 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
             new UsageSource("es-id", "instanceId", null)
         );
 
-        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, threadPool)) {
+        var meterRegistry = new RecordingMeterRegistry();
+        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, meterRegistry)) {
             reporter.start();
 
             expectThrows(ConnectException.class, () -> reporter.sendRecords(List.of(record)));
         }
+
+        final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
+        final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
+        final var sizes = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_SIZE);
+        final var times = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TIME);
+
+        assertThat(requests, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(errors, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(sizes, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
+        assertThat(times, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
     }
 
     public void testServerFailure() throws IOException, InterruptedException {
@@ -199,22 +236,38 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
             new UsageSource("es-id", "instanceId", null)
         );
 
-        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, threadPool)) {
+        var meterRegistry = new RecordingMeterRegistry();
+        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, meterRegistry)) {
             reporter.start();
-
-            // TODO: just log for now, needs some retries
             reporter.sendRecords(List.of(record));
         }
+
+        final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
+        final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
+        final var sizes = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_SIZE);
+        final var times = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TIME);
+
+        assertThat(requests, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(errors, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(sizes, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
+        assertThat(times, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
     }
 
     @After
-    public void stopThreadPool() {
-        ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
+    public void cleanup() {
         server.stop(0);
 
         // drain all requests
         if (requests.isEmpty() == false) {
             fail("Requests were unprocessed: " + requests);
         }
+    }
+
+    private static List<Measurement> getCounter(MetricRecorder<Instrument> recorder, String metricName) {
+        return Measurement.combine(recorder.getMeasurements(InstrumentType.LONG_COUNTER, metricName));
+    }
+
+    private static List<Measurement> getHistogram(MetricRecorder<Instrument> recorder, String metricName) {
+        return recorder.getMeasurements(InstrumentType.LONG_HISTOGRAM, metricName);
     }
 }

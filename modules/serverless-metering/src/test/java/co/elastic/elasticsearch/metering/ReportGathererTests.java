@@ -25,6 +25,10 @@ import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.util.concurrent.DeterministicTaskQueue;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.telemetry.InstrumentType;
+import org.elasticsearch.telemetry.Measurement;
+import org.elasticsearch.telemetry.RecordingMeterRegistry;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.LambdaMatchers;
 import org.elasticsearch.threadpool.TestThreadPool;
@@ -55,7 +59,9 @@ import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -190,7 +196,8 @@ public class ReportGathererTests extends ESTestCase {
             threadPool,
             threadPool.generic(),
             reportPeriod,
-            clock
+            clock,
+            MeterRegistry.NOOP
         );
 
         when(clock.instant()).thenReturn(Instant.EPOCH);
@@ -234,7 +241,8 @@ public class ReportGathererTests extends ESTestCase {
             threadPool,
             threadPool.generic(),
             TimeValue.timeValueSeconds(1),
-            Clock.systemUTC()
+            Clock.systemUTC(),
+            MeterRegistry.NOOP
         );
 
         reportGatherer.start();
@@ -261,7 +269,8 @@ public class ReportGathererTests extends ESTestCase {
             deterministicTaskQueue.getThreadPool(),
             deterministicTaskQueue.getThreadPool().generic(),
             TimeValue.timeValueMinutes(1),
-            Clock.systemUTC()
+            Clock.systemUTC(),
+            MeterRegistry.NOOP
         );
 
         reportGatherer.start();
@@ -335,7 +344,8 @@ public class ReportGathererTests extends ESTestCase {
             threadPool,
             threadPool.generic(),
             reportPeriod,
-            clock
+            clock,
+            MeterRegistry.NOOP
         );
 
         when(clock.instant()).thenAnswer(x -> now.get());
@@ -421,6 +431,7 @@ public class ReportGathererTests extends ESTestCase {
 
         final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
 
+        var meterRegistry = new RecordingMeterRegistry();
         var reportGatherer = new ReportGatherer(
             "nodeId",
             "projectId",
@@ -431,7 +442,8 @@ public class ReportGathererTests extends ESTestCase {
             threadPool,
             threadPool.generic(),
             reportPeriod,
-            clock
+            clock,
+            meterRegistry
         );
 
         when(clock.instant()).thenAnswer(x -> now.get());
@@ -477,6 +489,28 @@ public class ReportGathererTests extends ESTestCase {
         // We are now trying to transmit 2 time frames
         assertThat(recorder.lastRecordTimestamps, containsInAnyOrder(secondTimestamp, thirdTimestamp));
 
+        final List<Measurement> runs = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ReportGatherer.METERING_REPORTS_TOTAL)
+        );
+        final List<Measurement> retried = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ReportGatherer.METERING_REPORTS_RETRIED_TOTAL)
+        );
+        final List<Measurement> sent = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ReportGatherer.METERING_REPORTS_SENT_TOTAL)
+        );
+        final List<Measurement> backfilled = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ReportGatherer.METERING_REPORTS_BACKFILL_TOTAL)
+        );
+        final List<Measurement> dropped = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ReportGatherer.METERING_REPORTS_BACKFILL_DROPPED_TOTAL)
+        );
+
+        assertThat(runs, contains(transformedMatch(Measurement::getLong, greaterThan(1L))));
+        assertThat(retried, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
+        assertThat(sent, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(backfilled, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
+        assertThat(dropped, empty());
+
         reportGatherer.cancel();
     }
 
@@ -504,7 +538,8 @@ public class ReportGathererTests extends ESTestCase {
             threadPool,
             threadPool.generic(),
             reportPeriod,
-            clock
+            clock,
+            MeterRegistry.NOOP
         );
 
         when(clock.instant()).thenAnswer(x -> now.get());
@@ -548,6 +583,7 @@ public class ReportGathererTests extends ESTestCase {
 
         final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
 
+        var meterRegistry = new RecordingMeterRegistry();
         var reportGatherer = new ReportGatherer(
             "nodeId",
             "projectId",
@@ -558,7 +594,8 @@ public class ReportGathererTests extends ESTestCase {
             threadPool,
             threadPool.generic(),
             reportPeriod,
-            clock
+            clock,
+            meterRegistry
         );
 
         when(clock.instant()).thenAnswer(x -> now.get());
@@ -583,6 +620,15 @@ public class ReportGathererTests extends ESTestCase {
 
         // Check we actually try to transmit only N frames
         assertThat(recorder.lastRecordTimestamps, hasSize(reportGatherer.maxPeriodsLookback));
+
+        final List<Measurement> backfilled = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ReportGatherer.METERING_REPORTS_BACKFILL_TOTAL)
+        );
+        final List<Measurement> dropped = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ReportGatherer.METERING_REPORTS_BACKFILL_DROPPED_TOTAL)
+        );
+        assertThat(backfilled, contains(transformedMatch(Measurement::getLong, greaterThan(2000L))));
+        assertThat(dropped, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
 
         reportGatherer.cancel();
     }

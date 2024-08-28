@@ -30,19 +30,26 @@ import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.telemetry.InstrumentType;
+import org.elasticsearch.telemetry.Measurement;
+import org.elasticsearch.telemetry.RecordingMeterRegistry;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
 import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -57,13 +64,18 @@ public class ShardReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
-        var shardReader = new ShardReader(indicesService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var shardReader = new ShardReader(indicesService, meterRegistry);
 
         when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
 
         var shardSizes = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
 
         assertThat(shardSizes.keySet(), empty());
+        final List<Measurement> measurements = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
+        );
+        assertThat(measurements, empty());
     }
 
     public void testMultipleIndicesReportAllShards() throws IOException {
@@ -73,7 +85,8 @@ public class ShardReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
-        var shardReader = new ShardReader(indicesService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var shardReader = new ShardReader(indicesService, meterRegistry);
 
         var index1 = mock(IndexService.class);
         var index2 = mock(IndexService.class);
@@ -111,6 +124,11 @@ public class ShardReaderTests extends ESTestCase {
         );
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
+        final List<Measurement> measurements = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
+        );
+        assertThat(measurements, hasSize(1));
+        assertThat(measurements.get(0).getLong(), equalTo(3L));
     }
 
     public void testCacheUpdatedWhenIndexDeleted() throws IOException {
@@ -120,7 +138,8 @@ public class ShardReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var shardInfoCache = new LocalNodeMeteringShardInfoCache();
-        var shardReader = new ShardReader(indicesService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var shardReader = new ShardReader(indicesService, meterRegistry);
 
         var index1 = mock(IndexService.class);
         var index2 = mock(IndexService.class);
@@ -154,6 +173,18 @@ public class ShardReaderTests extends ESTestCase {
         shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
         assertThat(shardInfoMap.keySet(), empty());
         assertThat(shardInfoCache.shardSizeCache.keySet(), contains(shardId3));
+
+        final List<Measurement> requests = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
+        );
+        assertThat(requests, hasSize(1));
+        assertThat(requests.get(0).getLong(), equalTo(4L));
+
+        final List<Measurement> cached = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_CACHED_TOTAL_METRIC)
+        );
+        assertThat(cached, hasSize(1));
+        assertThat(cached.get(0).getLong(), equalTo(1L));
     }
 
     public void testNotReturningUnchangedDataInDiff() throws IOException {
@@ -167,7 +198,8 @@ public class ShardReaderTests extends ESTestCase {
             Optional.of(new LocalNodeMeteringShardInfoCache.CacheEntry(1L, 1L, 10L, 100L, "TEST-NODE", 0))
         );
 
-        var shardReader = new ShardReader(indicesService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var shardReader = new ShardReader(indicesService, meterRegistry);
 
         var index1 = mock(IndexService.class);
         var index2 = mock(IndexService.class);
@@ -206,6 +238,12 @@ public class ShardReaderTests extends ESTestCase {
         );
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2));
+
+        final List<Measurement> cached = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_CACHED_TOTAL_METRIC)
+        );
+        assertThat(cached, hasSize(1));
+        assertThat(cached.get(0).getLong(), equalTo(1L));
     }
 
     public void testComputeShardStatsWithoutRA() throws IOException {
@@ -215,11 +253,18 @@ public class ShardReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(10L, 100, 0, 0, null));
         segmentInfos.add(new TestSegmentCommitInfo(20L, 50, 10, 20, null));
 
-        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+        var indicesService = mock(IndicesService.class);
+        var meterRegistry = new RecordingMeterRegistry();
+        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardStats = shardReader.computeShardStats(shardId1, segmentInfos);
 
         assertThat(shardStats.liveDocCount(), equalTo(120L));
         assertThat(shardStats.sizeInBytes(), equalTo(30L));
         assertThat(shardStats.raSizeInBytes(), equalTo(0L));
+
+        final List<Measurement> approximated = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
+        assertThat(approximated, empty());
     }
 
     public void testComputeShardStatsWithFullRAMultipleSegments() throws IOException {
@@ -229,11 +274,18 @@ public class ShardReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, 8L));
         segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
 
-        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+        var indicesService = mock(IndicesService.class);
+        var meterRegistry = new RecordingMeterRegistry();
+        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardStats = shardReader.computeShardStats(shardId1, segmentInfos);
 
         assertThat(shardStats.liveDocCount(), equalTo(30L));
         assertThat(shardStats.sizeInBytes(), equalTo(300L));
         assertThat(shardStats.raSizeInBytes(), equalTo(80L + 120L));
+
+        final List<Measurement> approximated = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
+        assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.5))));
     }
 
     public void testComputeShardStatsWithPartialRAMultipleSegments() throws IOException {
@@ -245,11 +297,18 @@ public class ShardReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 0, 0, 11L));
         segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
 
-        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+        var indicesService = mock(IndicesService.class);
+        var meterRegistry = new RecordingMeterRegistry();
+        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardStats = shardReader.computeShardStats(shardId1, segmentInfos);
 
         assertThat(shardStats.liveDocCount(), equalTo(90L));
         assertThat(shardStats.sizeInBytes(), equalTo(600L));
         assertThat(shardStats.raSizeInBytes(), equalTo(80L + 550L + 120L));
+
+        final List<Measurement> approximated = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
+        assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.25))));
     }
 
     public void testComputeShardStatsWithTimeseriesRAMultipleSegments() throws IOException {
@@ -260,7 +319,9 @@ public class ShardReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(20L, 50, 10, 20, null));
         segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
 
-        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+        var indicesService = mock(IndicesService.class);
+        var shardReader = new ShardReader(indicesService, MeterRegistry.NOOP);
+        var shardStats = shardReader.computeShardStats(shardId1, segmentInfos);
 
         assertThat(shardStats.liveDocCount(), equalTo(120L));
         assertThat(shardStats.sizeInBytes(), equalTo(30L));
@@ -276,7 +337,9 @@ public class ShardReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
         segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
 
-        var shardStats = ShardReader.computeShardStats(shardId1, segmentInfos);
+        var indicesService = mock(IndicesService.class);
+        var shardReader = new ShardReader(indicesService, MeterRegistry.NOOP);
+        var shardStats = shardReader.computeShardStats(shardId1, segmentInfos);
 
         assertThat(shardStats.liveDocCount(), equalTo(30L));
         assertThat(shardStats.sizeInBytes(), equalTo(300L));

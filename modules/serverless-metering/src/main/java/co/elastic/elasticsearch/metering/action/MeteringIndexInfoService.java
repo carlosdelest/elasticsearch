@@ -32,6 +32,8 @@ import org.elasticsearch.core.Strings;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
+import org.elasticsearch.telemetry.metric.LongCounter;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,11 +55,35 @@ import static org.elasticsearch.core.Strings.format;
 
 public class MeteringIndexInfoService {
     private static final Logger logger = LogManager.getLogger(MeteringIndexInfoService.class);
-    private final ClusterService clusterService;
 
-    public MeteringIndexInfoService(ClusterService clusterService) {
+    static final String NODE_INFO_COLLECTIONS_TOTAL = "es.metering.node_info.collections.total";
+    static final String NODE_INFO_COLLECTIONS_ERRORS_TOTAL = "es.metering.node_info.collections.error.total";
+    static final String NODE_INFO_COLLECTIONS_PARTIALS_TOTAL = "es.metering.node_info.collections.partial.total";
+
+    private final ClusterService clusterService;
+    private final LongCounter collectionsTotalCounter;
+    private final LongCounter collectionsErrorsCounter;
+    private final LongCounter collectionsPartialsCounter;
+
+    public MeteringIndexInfoService(ClusterService clusterService, MeterRegistry meterRegistry) {
         this.clusterService = clusterService;
         clusterService.addListener(this::clusterChanged);
+
+        this.collectionsTotalCounter = meterRegistry.registerLongCounter(
+            NODE_INFO_COLLECTIONS_TOTAL,
+            "The total number of scatter operations to gather shard infos from all nodes in the cluster",
+            "unit"
+        );
+        this.collectionsErrorsCounter = meterRegistry.registerLongCounter(
+            NODE_INFO_COLLECTIONS_ERRORS_TOTAL,
+            "The total number of scatter operations that resulted in an error",
+            "unit"
+        );
+        this.collectionsPartialsCounter = meterRegistry.registerLongCounter(
+            NODE_INFO_COLLECTIONS_PARTIALS_TOTAL,
+            "The number of scatter operations that resulted in partial information (error/no response from one or more nodes)",
+            "unit"
+        );
     }
 
     enum CollectedMeteringShardInfoFlag {
@@ -139,6 +165,7 @@ public class MeteringIndexInfoService {
      */
     public void updateMeteringShardInfo(Client client) {
         logger.debug("Calling IndexSizeService#updateMeteringShardInfo");
+        collectionsTotalCounter.increment();
         // If we get called and ask to update, that request comes from the PersistentTask, so we are definitely on
         // the PersistentTask node
         persistentTaskNodeStatus = PersistentTaskNodeStatus.THIS_NODE;
@@ -147,6 +174,7 @@ public class MeteringIndexInfoService {
             public void onResponse(CollectMeteringShardInfoAction.Response response) {
                 Set<CollectedMeteringShardInfoFlag> status = EnumSet.noneOf(CollectedMeteringShardInfoFlag.class);
                 if (response.isComplete() == false) {
+                    collectionsPartialsCounter.increment();
                     status.add(CollectedMeteringShardInfoFlag.PARTIAL);
                 }
 
@@ -169,6 +197,7 @@ public class MeteringIndexInfoService {
                 status.add(CollectedMeteringShardInfoFlag.STALE);
                 collectedShardInfo.set(new CollectedMeteringShardInfo(previousSizes.meteringShardInfoMap(), status));
                 logger.error("failed to collect metering shard info", e);
+                collectionsErrorsCounter.increment();
             }
         });
     }

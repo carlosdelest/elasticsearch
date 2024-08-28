@@ -24,6 +24,7 @@ import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.time.Clock;
@@ -51,6 +52,7 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
     private final TimeValue reportPeriod;
     private final MeteringUsageRecordPublisher usageRecordPublisher;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
     private ReportGatherer reportGatherer;
 
@@ -63,7 +65,8 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
         TimeValue reportPeriod,
         MeteringUsageRecordPublisher usageRecordPublisher,
         ThreadPool threadPool,
-        ExecutorService executor
+        ExecutorService executor,
+        MeterRegistry meterRegistry
     ) {
         this(
             nodeId,
@@ -75,7 +78,8 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
             usageRecordPublisher,
             threadPool,
             executor,
-            Clock.systemUTC()
+            Clock.systemUTC(),
+            meterRegistry
         );
     }
 
@@ -89,7 +93,8 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
         MeteringUsageRecordPublisher usageRecordPublisher,
         ThreadPool threadPool,
         ExecutorService executor,
-        Clock clock
+        Clock clock,
+        MeterRegistry meterRegistry
     ) {
         this.nodeId = nodeId;
         this.projectId = projectId;
@@ -101,6 +106,7 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
         this.reportPeriod = reportPeriod;
         this.usageRecordPublisher = usageRecordPublisher;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -115,7 +121,8 @@ public class MeteringReportingService extends AbstractLifecycleComponent {
             threadPool,
             executor,
             reportPeriod,
-            clock
+            clock,
+            meterRegistry
         );
         reportGatherer.start();
     }

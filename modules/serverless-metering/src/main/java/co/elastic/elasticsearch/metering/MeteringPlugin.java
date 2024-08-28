@@ -177,7 +177,7 @@ public class MeteringPlugin extends Plugin
             environment.settings()
         );
 
-        var indexSizeService = new MeteringIndexInfoService(clusterService);
+        var indexSizeService = new MeteringIndexInfoService(clusterService, services.telemetryProvider().getMeterRegistry());
 
         List<CounterMetricsCollector> builtInCounterMetrics = new ArrayList<>();
         List<SampledMetricsCollector> builtInSampledMetrics = new ArrayList<>();
@@ -196,7 +196,10 @@ public class MeteringPlugin extends Plugin
             log.warn(PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
             usageRecordPublisher = MeteringUsageRecordPublisher.NOOP_REPORTER;
         } else {
-            usageRecordPublisher = new HttpMeteringUsageRecordPublisher(environment.settings(), threadPool);
+            usageRecordPublisher = new HttpMeteringUsageRecordPublisher(
+                environment.settings(),
+                services.telemetryProvider().getMeterRegistry()
+            );
         }
 
         reportingService = new MeteringReportingService(
@@ -208,7 +211,8 @@ public class MeteringPlugin extends Plugin
             reportPeriod,
             usageRecordPublisher,
             threadPool,
-            threadPool.executor(METERING_REPORTER_THREAD_POOL_NAME)
+            threadPool.executor(METERING_REPORTER_THREAD_POOL_NAME),
+            services.telemetryProvider().getMeterRegistry()
         );
 
         List<Object> cs = new ArrayList<>();

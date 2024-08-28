@@ -23,6 +23,7 @@ import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.tasks.Task;
+import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
@@ -38,7 +39,8 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
         IndicesService indicesService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache
+        LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache,
+        TelemetryProvider telemetryProvider
     ) {
         super(
             GetMeteringShardInfoAction.NAME,
@@ -48,7 +50,7 @@ public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
             GetMeteringShardInfoAction.Request::new,
             threadPool.executor(ThreadPool.Names.MANAGEMENT)
         );
-        this.shardReader = new ShardReader(indicesService);
+        this.shardReader = new ShardReader(indicesService, telemetryProvider.getMeterRegistry());
         this.localNodeMeteringShardInfoCache = localNodeMeteringShardInfoCache;
     }
 

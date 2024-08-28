@@ -26,6 +26,9 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.TestShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.telemetry.InstrumentType;
+import org.elasticsearch.telemetry.Measurement;
+import org.elasticsearch.telemetry.RecordingMeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.FeatureMatcher;
 import org.hamcrest.Matcher;
@@ -40,9 +43,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static java.util.Map.entry;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anEmptyMap;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.either;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
@@ -58,7 +63,8 @@ import static org.mockito.Mockito.when;
 public class MeteringIndexInfoServiceTests extends ESTestCase {
     public void testEmptyShardInfo() {
         var clusterService = createMockClusterService(Set::of);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -78,6 +84,11 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
 
         assertThat(firstRoundShardInfo, not(nullValue()));
         assertThat(firstRoundShardInfo.meteringShardInfoMap(), anEmptyMap());
+
+        final List<Measurement> measurements = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, MeteringIndexInfoService.NODE_INFO_COLLECTIONS_TOTAL)
+        );
+        assertThat(measurements, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
     }
 
     public void testInitialShardInfoUpdate() {
@@ -92,7 +103,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -120,9 +132,112 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             )
         );
         assertThat(firstRoundShardInfo.meteringShardInfoMap(), aMapWithSize(3));
+
+        final List<Measurement> measurements = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, MeteringIndexInfoService.NODE_INFO_COLLECTIONS_TOTAL)
+        );
+        assertThat(measurements, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
     }
 
-    public void testShardInfoPartialUpdate() {
+    public void testPartialShardInfoUpdate() {
+        var shard1Id = new ShardId("index1", "index1UUID", 1);
+        var shard2Id = new ShardId("index1", "index1UUID", 2);
+        var shard3Id = new ShardId("index1", "index1UUID", 3);
+
+        var shardsInfo = Map.ofEntries(
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L))
+        );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
+        var initialShardInfo = service.getMeteringShardInfo();
+
+        var client = mock(Client.class);
+        doAnswer(answer -> {
+            @SuppressWarnings("unchecked")
+            var listener = (ActionListener<CollectMeteringShardInfoAction.Response>) answer.getArgument(2, ActionListener.class);
+            listener.onResponse(new CollectMeteringShardInfoAction.Response(shardsInfo, List.of(new Exception("Partial failure"))));
+            return null;
+        }).when(client).execute(eq(CollectMeteringShardInfoAction.INSTANCE), any(), any());
+
+        service.updateMeteringShardInfo(client);
+
+        var firstRoundShardInfo = service.getMeteringShardInfo();
+
+        assertThat(initialShardInfo, not(nullValue()));
+        assertThat(initialShardInfo.meteringShardInfoMap(), anEmptyMap());
+
+        assertThat(firstRoundShardInfo, not(nullValue()));
+        assertThat(
+            firstRoundShardInfo.meteringShardInfoMap(),
+            allOf(
+                hasEntry(is(MeteringIndexInfoService.ShardInfoKey.fromShardId(shard1Id)), withSizeInBytes(11L)),
+                hasEntry(is(MeteringIndexInfoService.ShardInfoKey.fromShardId(shard2Id)), withSizeInBytes(12L)),
+                hasEntry(is(MeteringIndexInfoService.ShardInfoKey.fromShardId(shard3Id)), withSizeInBytes(13L))
+            )
+        );
+        assertThat(firstRoundShardInfo.meteringShardInfoMap(), aMapWithSize(3));
+
+        final List<Measurement> collections = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, MeteringIndexInfoService.NODE_INFO_COLLECTIONS_TOTAL)
+        );
+        final List<Measurement> partials = Measurement.combine(
+            meterRegistry.getRecorder()
+                .getMeasurements(InstrumentType.LONG_COUNTER, MeteringIndexInfoService.NODE_INFO_COLLECTIONS_PARTIALS_TOTAL)
+        );
+        assertThat(collections, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(partials, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+    }
+
+    public void testErrorShardInfoUpdate() {
+        var shard1Id = new ShardId("index1", "index1UUID", 1);
+        var shard2Id = new ShardId("index1", "index1UUID", 2);
+        var shard3Id = new ShardId("index1", "index1UUID", 3);
+
+        var shardsInfo = Map.ofEntries(
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L))
+        );
+
+        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
+        var initialShardInfo = service.getMeteringShardInfo();
+
+        var client = mock(Client.class);
+        doAnswer(answer -> {
+            @SuppressWarnings("unchecked")
+            var listener = (ActionListener<CollectMeteringShardInfoAction.Response>) answer.getArgument(2, ActionListener.class);
+            listener.onFailure(new Exception("Total failure"));
+            return null;
+        }).when(client).execute(eq(CollectMeteringShardInfoAction.INSTANCE), any(), any());
+
+        service.updateMeteringShardInfo(client);
+
+        var firstRoundShardInfo = service.getMeteringShardInfo();
+
+        assertThat(initialShardInfo, not(nullValue()));
+        assertThat(initialShardInfo.meteringShardInfoMap(), anEmptyMap());
+
+        assertThat(firstRoundShardInfo, not(nullValue()));
+        assertThat(firstRoundShardInfo.meteringShardInfoMap(), anEmptyMap());
+
+        final List<Measurement> collections = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, MeteringIndexInfoService.NODE_INFO_COLLECTIONS_TOTAL)
+        );
+        final List<Measurement> errors = Measurement.combine(
+            meterRegistry.getRecorder()
+                .getMeasurements(InstrumentType.LONG_COUNTER, MeteringIndexInfoService.NODE_INFO_COLLECTIONS_ERRORS_TOTAL)
+        );
+        assertThat(collections, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(errors, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+    }
+
+    public void testShardInfoDiffUpdate() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
@@ -139,7 +254,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -175,9 +291,14 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             )
         );
         assertThat(secondRoundShardInfo.meteringShardInfoMap(), aMapWithSize(3));
+
+        final List<Measurement> collections = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, MeteringIndexInfoService.NODE_INFO_COLLECTIONS_TOTAL)
+        );
+        assertThat(collections, contains(transformedMatch(Measurement::getLong, equalTo(2L))));
     }
 
-    public void testShardInfoPartialUpdateWithNewUUID() {
+    public void testShardInfoDiffUpdateWithNewUUID() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
@@ -195,7 +316,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -231,9 +353,14 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
             )
         );
         assertThat(secondRoundShardInfo.meteringShardInfoMap(), aMapWithSize(3));
+
+        final List<Measurement> collections = Measurement.combine(
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, MeteringIndexInfoService.NODE_INFO_COLLECTIONS_TOTAL)
+        );
+        assertThat(collections, contains(transformedMatch(Measurement::getLong, equalTo(2L))));
     }
 
-    public void testShardInfoPartialUpdateWithTwoUnknownUUIDs() {
+    public void testShardInfoDiffUpdateWithTwoUnknownUUIDs() {
         var shard1Id = new ShardId("index1", "index1UUID", 0);
         var shard2Id = new ShardId("index1", "index1UUID", 1);
 
@@ -251,7 +378,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -304,7 +432,7 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         return clusterService;
     }
 
-    public void testShardInfoPartialUpdateWithOneOldOneNewUUIDs() {
+    public void testShardInfoDiffUpdateWithOneOldOneNewUUIDs() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
 
@@ -323,7 +451,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -379,7 +508,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -431,7 +561,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         AtomicReference<Set<ShardId>> activeShards = new AtomicReference<>(shardsInfo.keySet());
 
         var clusterService = createMockClusterService(activeShards::get);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -477,7 +608,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
-        var service = new MeteringIndexInfoService(clusterService);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new MeteringIndexInfoService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -531,7 +663,7 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         }
 
         @Override
-        public Object answer(InvocationOnMock answer) throws Throwable {
+        public Object answer(InvocationOnMock answer) {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectMeteringShardInfoAction.Response>) answer.getArgument(2, ActionListener.class);
             var currentRequest = requestNumber.addAndGet(1);

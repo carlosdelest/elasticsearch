@@ -27,7 +27,9 @@ import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
-import org.elasticsearch.threadpool.Scheduler;
+import org.elasticsearch.telemetry.metric.LongCounter;
+import org.elasticsearch.telemetry.metric.LongHistogram;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.xcontent.ToXContent;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
@@ -47,6 +49,7 @@ import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
@@ -59,6 +62,12 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
 
     private static final Logger log = LogManager.getLogger(HttpMeteringUsageRecordPublisher.class);
     private static final String USER_AGENT = "elasticsearch/metering/" + Build.current().version();
+
+    static final String USAGE_API_REQUESTS_TOTAL = "es.metering.usage_api.request.total";
+    static final String USAGE_API_ERRORS_TOTAL = "es.metering.usage_api.error.total"; // (include http status in the attributes)
+    static final String USAGE_API_REQUESTS_TIME = "es.metering.usage_api.request.time";
+    static final String USAGE_API_REQUESTS_SIZE = "es.metering.usage_api.request.size";
+    static final String STATUS_CODE_KEY = "es_metering_status_code";
 
     public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "https://usage-api.elastic-system/api/v1/usage", s -> {
         try {
@@ -97,13 +106,15 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
 
     private final Settings settings;
     private final int batchSize;
-    private final Scheduler scheduler;
     private final HttpClient client;
+    private final LongCounter requestsTotalCounter;
+    private final LongCounter requestsErrorCounter;
+    private final LongHistogram requestsSize;
+    private final LongHistogram requestsTime;
 
-    public HttpMeteringUsageRecordPublisher(Settings settings, Scheduler scheduler) {
+    public HttpMeteringUsageRecordPublisher(Settings settings, MeterRegistry meterRegistry) {
         this.settings = settings;
         this.batchSize = BATCH_SIZE.get(settings);
-        this.scheduler = scheduler;
 
         SSLContext context;
         try {
@@ -118,6 +129,23 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
         }
 
         client = HttpClient.newBuilder().sslContext(context).followRedirects(HttpClient.Redirect.NORMAL).build();
+
+        this.requestsTotalCounter = meterRegistry.registerLongCounter(
+            USAGE_API_REQUESTS_TOTAL,
+            "The total number of REST request to usage-api",
+            "unit"
+        );
+        this.requestsErrorCounter = meterRegistry.registerLongCounter(
+            USAGE_API_ERRORS_TOTAL,
+            "The total number of unsuccessful REST request to usage-api",
+            "unit"
+        );
+        this.requestsSize = meterRegistry.registerLongHistogram(USAGE_API_REQUESTS_SIZE, "Size of REST request to usage-api", "bytes");
+        this.requestsTime = meterRegistry.registerLongHistogram(
+            USAGE_API_REQUESTS_TIME,
+            "Round-trip time of REST request to usage-api",
+            "ms"
+        );
     }
 
     @Override
@@ -129,10 +157,14 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
     @Override
     public void sendRecords(List<UsageRecord> records) throws IOException, InterruptedException {
         log.trace(() -> Strings.format("Sending records: %s", records));
-        if (records.isEmpty()) return;
+        if (records.isEmpty()) {
+            return;
+        }
 
         List<List<UsageRecord>> batches = CollectionUtils.eagerPartition(records, batchSize);
         for (List<UsageRecord> batch : batches) {
+            requestsTotalCounter.increment();
+            Instant startedAt = Instant.now();
             try {
                 HttpRequest request = createRequest(batch);
 
@@ -141,6 +173,8 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
                 );
                 handleResponse(response, batch);
             } catch (PrivilegedActionException e) {
+                log.error("Could not send {} records to billing service", batch.size(), e);
+                requestsErrorCounter.increment();
                 if (e.getCause() instanceof IOException ex) {
                     throw ex;
                 }
@@ -148,12 +182,14 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
                     throw ex;
                 }
                 assert false : e;
-                log.error("Could not send {} records to billing service", batch.size(), e);
+            } finally {
+                Instant completedAt = Instant.now();
+                requestsTime.record(startedAt.until(completedAt, ChronoUnit.MILLIS));
             }
         }
     }
 
-    private static void handleResponse(HttpResponse<?> response, List<UsageRecord> records) {
+    private void handleResponse(HttpResponse<?> response, List<UsageRecord> records) {
         int statusCode = response.statusCode();
         if (statusCode == 201) {
             // all ok
@@ -167,14 +203,17 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
             case 4 -> {
                 // problem with the request...?
                 log.warn("Unexpected status code {} sending {} records [{}]", response.statusCode(), records.size(), response.body());
+                requestsErrorCounter.incrementBy(1, Map.of(STATUS_CODE_KEY, response.statusCode()));
             }
             case 5 -> {
                 // problem with the server
                 log.warn("Received error code {} sending {} records [{}]", response.statusCode(), records.size(), response.body());
+                requestsErrorCounter.incrementBy(1, Map.of(STATUS_CODE_KEY, response.statusCode()));
             }
             default -> {
                 // another status code?
                 log.error("Unexpected status code {} sending {} records [{}]", response.statusCode(), records.size(), response.body());
+                requestsErrorCounter.incrementBy(1, Map.of(STATUS_CODE_KEY, response.statusCode()));
             }
         }
     }
@@ -190,6 +229,7 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
         builder.endArray();
 
         BytesReference recordData = BytesReference.bytes(builder);
+        requestsSize.record(recordData.length());
 
         return HttpRequest.newBuilder(METERING_URL.get(settings))
             .POST(HttpRequest.BodyPublishers.ofByteArray(recordData.array(), recordData.arrayOffset(), recordData.length()))

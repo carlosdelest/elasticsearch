@@ -29,6 +29,9 @@ import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
+import org.elasticsearch.telemetry.metric.DoubleHistogram;
+import org.elasticsearch.telemetry.metric.LongCounter;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -38,36 +41,43 @@ import java.util.Set;
 
 class ShardReader {
     private static final Logger logger = LogManager.getLogger(ShardReader.class);
-    private final IndicesService indicesService;
 
-    ShardReader(IndicesService indicesService) {
+    static final String SHARD_INFO_REQUESTS_TOTAL_METRIC = "es.metering.shard_info.requests.total";
+    static final String SHARD_INFO_CACHED_TOTAL_METRIC = "es.metering.shard_info.cached.total";
+    static final String SHARD_INFO_ERRORS_TOTAL_METRIC = "es.metering.shard_info.error.total";
+    static final String SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC = "es.metering.shard_info.rastorage.approximated.ratio";
+
+    private final IndicesService indicesService;
+    private final LongCounter shardInfoRequestsTotalCounter;
+    private final LongCounter shardInfoCachedTotalCounter;
+    private final LongCounter shardInfoErrorsTotalCounter;
+    private final DoubleHistogram shardInfoRaStorageApproximatedRatio;
+
+    ShardReader(IndicesService indicesService, MeterRegistry meterRegistry) {
         this.indicesService = indicesService;
+        this.shardInfoRequestsTotalCounter = meterRegistry.registerLongCounter(
+            SHARD_INFO_REQUESTS_TOTAL_METRIC,
+            "Total number of shard info requests processed",
+            "unit"
+        );
+        this.shardInfoCachedTotalCounter = meterRegistry.registerLongCounter(
+            SHARD_INFO_CACHED_TOTAL_METRIC,
+            "Total number of shard info requests resulting in a cache hit",
+            "unit"
+        );
+        this.shardInfoErrorsTotalCounter = meterRegistry.registerLongCounter(
+            SHARD_INFO_ERRORS_TOTAL_METRIC,
+            "Total number of errors computing shard infos",
+            "unit"
+        );
+        this.shardInfoRaStorageApproximatedRatio = meterRegistry.registerDoubleHistogram(
+            SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC,
+            "Percentage of approximated segment sizes per shard",
+            "unit"
+        );
     }
 
     record ShardSizeAndDocCount(long sizeInBytes, long liveDocCount, long raSizeInBytes) {}
-
-    private static Long computeApproximatedRAStorage(long avgRASizePerDoc, long liveDocCount, long totalDocCount, ShardId shardId) {
-        var raStorage = avgRASizePerDoc * liveDocCount;
-        if (liveDocCount == totalDocCount) {
-            logger.trace(
-                "using exact _rastorage [{}] (avg: [{}], live docs: [{}]) for {}",
-                raStorage,
-                avgRASizePerDoc,
-                liveDocCount,
-                shardId
-            );
-        } else {
-            logger.trace(
-                "using approximated _rastorage [{}] (avg: [{}], live docs: [{}], total docs: [{}]) for {}",
-                raStorage,
-                avgRASizePerDoc,
-                liveDocCount,
-                totalDocCount,
-                shardId
-            );
-        }
-        return raStorage;
-    }
 
     private static Long getRAStorageFromUserData(SegmentInfos segmentInfos, ShardId shardId) {
         var raStorageString = segmentInfos.getUserData().get(RAStorageAccumulator.RA_STORAGE_KEY);
@@ -78,11 +88,13 @@ class ShardReader {
         return null;
     }
 
-    static ShardSizeAndDocCount computeShardStats(ShardId shardId, SegmentInfos segmentInfos) throws IOException {
+    ShardSizeAndDocCount computeShardStats(ShardId shardId, SegmentInfos segmentInfos) throws IOException {
         long sizeInBytes = 0;
         long liveDocCount = 0;
 
         Long totalRAValue = null;
+        final int segmentsInShard = segmentInfos.size();
+        int approximatedSegmentsInShard = 0;
         for (SegmentCommitInfo si : segmentInfos) {
             try {
                 long commitSize = si.sizeInBytes();
@@ -94,14 +106,35 @@ class ShardReader {
                 var avgRASizePerDocAttribute = si.info.getAttribute(RAStorageAccumulator.RA_STORAGE_AVG_KEY);
                 if (avgRASizePerDocAttribute != null) {
                     var avgRASizePerDoc = Long.parseLong(avgRASizePerDocAttribute);
-                    if (totalRAValue == null) {
-                        totalRAValue = computeApproximatedRAStorage(avgRASizePerDoc, commitLiveDocCount, commitTotalDocCount, shardId);
+                    var raStorage = avgRASizePerDoc * commitLiveDocCount;
+                    boolean isExact = commitLiveDocCount == commitTotalDocCount;
+                    if (isExact) {
+                        logger.trace(
+                            "using exact _rastorage [{}] (avg: [{}], live docs: [{}]) for {}",
+                            raStorage,
+                            avgRASizePerDoc,
+                            liveDocCount,
+                            shardId
+                        );
                     } else {
-                        totalRAValue += computeApproximatedRAStorage(avgRASizePerDoc, commitLiveDocCount, commitTotalDocCount, shardId);
+                        ++approximatedSegmentsInShard;
+                        logger.trace(
+                            "using approximated _rastorage [{}] (avg: [{}], live docs: [{}], total docs: [{}]) for {}",
+                            raStorage,
+                            avgRASizePerDoc,
+                            liveDocCount,
+                            commitTotalDocCount,
+                            shardId
+                        );
+                    }
+                    if (totalRAValue == null) {
+                        totalRAValue = raStorage;
+                    } else {
+                        totalRAValue += raStorage;
                     }
                 }
-
             } catch (IOException err) {
+                shardInfoErrorsTotalCounter.increment();
                 logger.warn(
                     "Failed to read file size for shard: [{}], commitId: [{}], err: [{}]",
                     shardId,
@@ -112,12 +145,19 @@ class ShardReader {
             }
         }
 
-        if (totalRAValue == null) {
+        if (totalRAValue != null) {
+            // We computed and used RA per-segment
+            double approximatedSegmentsRatio = segmentsInShard == 0 ? 0 : (double) approximatedSegmentsInShard / (double) segmentsInShard;
+            this.shardInfoRaStorageApproximatedRatio.record(
+                approximatedSegmentsRatio,
+                Map.of("index", shardId.getIndexName(), "shard", Integer.toString(shardId.id()))
+            );
+        } else {
             // Try to use the per shard RA value (timeseries indices)
             totalRAValue = getRAStorageFromUserData(segmentInfos, shardId);
-        }
-        if (totalRAValue == null) {
-            logger.trace("No _rastorage available for {}", shardId);
+            if (totalRAValue == null) {
+                logger.trace("No _rastorage available for {}", shardId);
+            }
         }
 
         return new ShardSizeAndDocCount(sizeInBytes, liveDocCount, totalRAValue == null ? 0L : totalRAValue);
@@ -135,6 +175,7 @@ class ShardReader {
                 if (engine == null || shard.isSystem()) {
                     continue;
                 }
+                shardInfoRequestsTotalCounter.increment();
                 ShardId shardId = shard.shardId();
                 activeShards.add(shardId);
 
@@ -146,6 +187,7 @@ class ShardReader {
 
                 if (cachedShardInfo.isPresent()) {
                     // Cached information is up-to-date
+                    shardInfoCachedTotalCounter.increment();
                     logger.debug(
                         "cached shard size for [{}] at [{}:{}] is [{}]",
                         shardId,

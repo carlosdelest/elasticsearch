@@ -26,6 +26,7 @@ import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
 import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.common.util.concurrent.DeterministicTaskQueue;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -250,7 +251,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
-                clock
+                clock,
+                MeterRegistry.NOOP
             )
         ) {
 
@@ -292,7 +294,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
-                clock
+                clock,
+                MeterRegistry.NOOP
             )
         ) {
             counter1.add(10);
@@ -342,7 +345,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
-                clock
+                clock,
+                MeterRegistry.NOOP
             )
         ) {
             sampled1.set(50);
@@ -395,7 +399,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
-                clock
+                clock,
+                MeterRegistry.NOOP
             )
         ) {
 
@@ -450,7 +455,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
-                clock
+                clock,
+                MeterRegistry.NOOP
             )
         ) {
 
@@ -526,7 +532,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
-                clock
+                clock,
+                MeterRegistry.NOOP
             )
         ) {
 
@@ -591,7 +598,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 REPORT_PERIOD,
                 MeteringUsageRecordPublisher.NOOP_REPORTER,
                 threadPool,
-                threadPool.generic()
+                threadPool.generic(),
+                MeterRegistry.NOOP
             )
         ) {
             sampled1.set(valueForSampled1);
@@ -645,7 +653,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 REPORT_PERIOD,
                 MeteringUsageRecordPublisher.NOOP_REPORTER,
                 threadPool,
-                threadPool.generic()
+                threadPool.generic(),
+                MeterRegistry.NOOP
             )
         ) {
             // We mock manually ReportGatherer by
@@ -690,7 +699,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
                 new TestMeteringUsageRecordPublisher(records),
                 threadPool,
                 threadPool.generic(),
-                clock
+                clock,
+                MeterRegistry.NOOP
             )
         ) {
             counter1.add(15);

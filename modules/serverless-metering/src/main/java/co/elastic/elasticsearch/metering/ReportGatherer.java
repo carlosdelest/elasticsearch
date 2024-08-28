@@ -31,6 +31,9 @@ import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
+import org.elasticsearch.telemetry.metric.LongCounter;
+import org.elasticsearch.telemetry.metric.LongHistogram;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -54,6 +57,16 @@ class ReportGatherer {
     static final double MAX_JITTER_FACTOR = 0.25;
     private static final Duration MAX_BACKFILL_LOOKBACK = Duration.ofHours(24);
 
+    static final String METERING_REPORTS_TOTAL = "es.metering.reporting.runs.total";
+    static final String METERING_REPORTS_DELAYED_TOTAL = "es.metering.reporting.runs.delayed.total";
+    static final String METERING_REPORTS_RETRIED_TOTAL = "es.metering.reporting.runs.retried.total";
+    static final String METERING_REPORTS_TIME = "es.metering.reporting.runs.time";
+    static final String METERING_REPORTS_SENT_TOTAL = "es.metering.reporting.sent.total";
+    static final String METERING_REPORTS_BACKFILL_CURRENT = "es.metering.reporting.backfill.current";
+    static final String METERING_REPORTS_BACKFILL_TOTAL = "es.metering.reporting.backfill.total";
+    static final String METERING_REPORTS_BACKFILL_DROPPED_TOTAL = "es.metering.reporting.backfill.dropped.total";
+    static final String METERING_REPORTS_PERIOD = "es_metering_reporting_period";
+
     private final List<CounterMetricsCollector> counterMetricsCollectors;
     private final List<SampledMetricsCollector> sampledMetricsCollectors;
     private final SampledMetricsTimeCursor sampledMetricsTimeCursor;
@@ -66,6 +79,15 @@ class ReportGatherer {
     final int maxPeriodsLookback;
     private final String sourceId;
     private final String projectId;
+
+    private final LongCounter reportsTotalCounter;
+    private final LongCounter reportsDelayedCounter;
+    private final LongCounter reportsRetryCounter;
+    private final LongHistogram reportsRunTime;
+    private final LongCounter reportsSentTotalCounter;
+    private final LongCounter reportsBackfillTotalCounter;
+    private final LongHistogram reportsTimeframesToBackfill;
+    private final LongCounter reportsBackfillDroppedCounter;
 
     private volatile boolean cancel;
     private volatile Scheduler.Cancellable nextRun;
@@ -81,7 +103,8 @@ class ReportGatherer {
         ThreadPool threadPool,
         ExecutorService executor,
         TimeValue reportPeriod,
-        Clock clock
+        Clock clock,
+        MeterRegistry meterRegistry
     ) {
         this.projectId = projectId;
         this.counterMetricsCollectors = counterMetricsCollectors;
@@ -100,6 +123,43 @@ class ReportGatherer {
         }
         this.maxPeriodsLookback = (int) MAX_BACKFILL_LOOKBACK.dividedBy(reportPeriodDuration);
         this.sourceId = "es-" + nodeId;
+
+        this.reportsTotalCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_TOTAL,
+            "The total number the reporting task run",
+            "unit"
+        );
+        this.reportsDelayedCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_DELAYED_TOTAL,
+            "The total number the reporting task had to be delayed because it run for longer than the reporting period",
+            "unit"
+        );
+        this.reportsRetryCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_RETRIED_TOTAL,
+            "The number of times the reporting task was re-scheduled to retry after failing to published a report",
+            "unit"
+        );
+        this.reportsRunTime = meterRegistry.registerLongHistogram(METERING_REPORTS_TIME, "The run time of the reporting task, in ms", "ms");
+        this.reportsSentTotalCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_SENT_TOTAL,
+            "The number of times the reporting task successfully published a report",
+            "unit"
+        );
+        this.reportsBackfillTotalCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_BACKFILL_TOTAL,
+            "The number of times the reporting task had to backfill",
+            "unit"
+        );
+        this.reportsTimeframesToBackfill = meterRegistry.registerLongHistogram(
+            METERING_REPORTS_BACKFILL_CURRENT,
+            "The current number of timeframes that need to be backfilled (number of timeframes we are behind)",
+            "unit"
+        );
+        this.reportsBackfillDroppedCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_BACKFILL_DROPPED_TOTAL,
+            "The number of timeframes the reporting task had to drop during a backfill",
+            "unit"
+        );
     }
 
     void start() {
@@ -130,6 +190,7 @@ class ReportGatherer {
         if (cancel) {
             return; // cancelled - nothing to do
         }
+        reportsTotalCounter.increment();
 
         Instant startedAt = Instant.now(clock);
 
@@ -141,9 +202,14 @@ class ReportGatherer {
         if (cancel == false) {
             try {
                 final Instant nextSampleTimestamp = sampleTimestamp.plus(reportPeriodDuration);
-                final Instant nextSampleTimestampToGather = (reportsSent || completedAt.isAfter(nextSampleTimestamp))
-                    ? nextSampleTimestamp
-                    : sampleTimestamp;
+                var isRetry = (reportsSent == false && completedAt.isBefore(nextSampleTimestamp));
+                final Instant nextSampleTimestampToGather;
+                if (isRetry) {
+                    nextSampleTimestampToGather = sampleTimestamp;
+                    reportsRetryCounter.increment();
+                } else {
+                    nextSampleTimestampToGather = nextSampleTimestamp;
+                }
 
                 var timeToNextRun = timeToNextRun(reportsSent, completedAt, nextSampleTimestampToGather, reportPeriodDuration);
                 // schedule the next run
@@ -168,16 +234,16 @@ class ReportGatherer {
     private void checkRuntime(Instant startedAt, Instant completedAt) {
         long runtime = startedAt.until(completedAt, ChronoUnit.MILLIS);
         if (runtime > reportPeriodDuration.toMillis()) {
-            // TODO: report to somewhere that cares
+            reportsDelayedCounter.increment();
             log.error(
                 "Gathering metrics took {} [reportPeriod: {}], delaying the report schedule!",
                 TimeValue.timeValueMillis(runtime),
                 reportPeriod
             );
         } else if (runtime > reportPeriodDuration.toMillis() / 2) {
-            // TODO: report to somewhere that cares
             log.warn("Gathering metrics took {}", TimeValue.timeValueMillis(runtime));
         }
+        reportsRunTime.record(runtime, Map.of(METERING_REPORTS_PERIOD, reportPeriod.millis()));
     }
 
     static TimeValue timeToNextRun(boolean reportsSent, Instant now, Instant nextSampleTimestamp, Duration reportPeriodDuration) {
@@ -201,6 +267,7 @@ class ReportGatherer {
     private boolean sendReport(List<UsageRecord> report) {
         try {
             usageRecordPublisher.sendRecords(report);
+            reportsSentTotalCounter.increment();
             return true;
         } catch (Exception e) {
             log.warn("Exception thrown reporting metrics", e);
@@ -224,6 +291,7 @@ class ReportGatherer {
         var timestamps = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod);
         var timestampsToSend = Iterators.toList(Iterators.limit(timestamps, maxPeriodsLookback));
 
+        reportsTimeframesToBackfill.record(timestampsToSend.size() - 1);
         if (timestampsToSend.size() > 1) {
             var backfillDuration = Duration.between(timestamps.last(), sampleTimestamp);
             var periodsToSend = backfillDuration.dividedBy(reportPeriodDuration);
@@ -236,6 +304,7 @@ class ReportGatherer {
                     periodsToSend
                 );
             } else {
+                reportsBackfillTotalCounter.increment();
                 if (periodsToSend > maxPeriodsLookback) {
                     log.warn(
                         "Partially backfilling [{}-{}] -- the backfill window [{}-{}] is grater than the maximum lookback [{}]. "
@@ -247,6 +316,7 @@ class ReportGatherer {
                         MAX_BACKFILL_LOOKBACK,
                         periodsToSend - maxPeriodsLookback
                     );
+                    reportsBackfillDroppedCounter.incrementBy(periodsToSend - maxPeriodsLookback);
                 } else {
                     log.info(
                         "Backfilling [{}-{}] with [{}] sample(s)",
@@ -345,7 +415,7 @@ class ReportGatherer {
                         previousValue,
                         timestamp
                     );
-                    log.info(
+                    log.debug(
                         "Backfilling metric [{}] of type [{}] with value [{}] (prev: [{}], current [{}]) "
                             + "for time [{}] (prev: [{}], current: [{}])",
                         v.id(),
