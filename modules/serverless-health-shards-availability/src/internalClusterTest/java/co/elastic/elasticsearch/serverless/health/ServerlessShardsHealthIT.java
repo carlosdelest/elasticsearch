@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.CLUSTER_TOTAL_SHARDS_PER_NODE_SETTING;
 import static org.elasticsearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_SHARDS_PER_NODE_SETTING;
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -67,10 +68,7 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
             .setSettings(Settings.builder().put("index.number_of_replicas", 2))
             .get();
 
-        GetHealthAction.Response health = client().execute(GetHealthAction.INSTANCE, new GetHealthAction.Request(true, 10)).get();
-
-        HealthIndicatorResult hir = health.findIndicator("shards_availability");
-        assertThat(hir.status(), equalTo(HealthStatus.RED));
+        HealthIndicatorResult hir = waitForStatusAndGet(HealthStatus.RED);
         assertThat(
             Strings.collectionToCommaDelimitedString(hir.impacts().stream().map(HealthIndicatorImpact::impactDescription).toList()),
             containsString("Not all data is searchable. No searchable copies of the data exist on 1 index [myindex].")
@@ -162,12 +160,115 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
             GetHealthAction.Response health = client().execute(GetHealthAction.INSTANCE, new GetHealthAction.Request(true, 10)).get();
             HealthIndicatorResult hir = health.findIndicator("shards_availability");
             assertThat(hir.status(), equalTo(HealthStatus.YELLOW));
+            // verify that "myindex" is affected, since issues with "other" can also cause YELLOW health
+            assertTrue(hir.diagnosisList().stream().anyMatch(d -> d.affectedResources().get(0).getValues().contains(indexName)));
         });
 
         // Release the latch so the primary can move from INITIALIZING -> STARTED
         latch.countDown();
-        // We should go green for the "myindex" index finally.
-        ensureGreen(indexName);
+
+        // Delete "other" and make sure cluster goes green
+        assertAcked(indicesAdmin().prepareDelete("other"));
+        assertBusy(() -> {
+            var health = client().execute(GetHealthAction.INSTANCE, new GetHealthAction.Request(true, 10)).get();
+            assertEquals(HealthStatus.GREEN, health.getStatus());
+        });
+    }
+
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch/issues/112066")
+    public void testReplicaShardsForNewPrimariesAvailabilityWithTimeBuffer() throws Exception {
+        runTestReplicaShardsForNewPrimariesAvailability(true);
+    }
+
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch/issues/112066")
+    public void testReplicaShardsForNewPrimariesAvailabilityNoTimeBuffer() throws Exception {
+        runTestReplicaShardsForNewPrimariesAvailability(false);
+    }
+
+    void runTestReplicaShardsForNewPrimariesAvailability(boolean useTimeBuffer) throws Exception {
+        // This test is copied from testReplicaShardsForNewPrimariesAvailabilityOnServerless, which
+        // checks the shard availability health when primary is still initializing. This test checks
+        // replica shard availability shortly after the primary has started. It tests with the
+        // setting `health.shard_availability.replica_unassigned_buffer_time` both present and absent.
+        // When present, YELLOW health is expected; when absent RED health is expected.
+
+        startMasterOnlyNode();
+        startIndexNode();
+        startSearchNode();
+
+        // Ideally, we'd use the default values of 3s when `useTimeBuffer`,
+        // but to avoid transient test failures when run is slow, we use 10s.
+        var timeBuffer = useTimeBuffer ? "10s" : "0s";
+        updateClusterSettings(Settings.builder().put("health.shards_availability.replica_unassigned_buffer_time", timeBuffer));
+
+        // Shard health treats all replicas allocated as a "everything is green" sort of situation.
+        // However, the replicas.areAllAvailable() correctly ignores replicas that are initializing.
+        // We need it to look further in more detail, so we need to force there to be at least one
+        // unassigned replica. We create an index with two replicas (there is only one search node)
+        // for this purpose.
+        createIndex("other", 1, 2);
+
+        // We hook in to the transport service and catch the "shard started" event for the
+        // soon-to-be-created "myindex" index. We want to delay it so the primary stays in the
+        // "INITIALIZING" state until we release it.
+        var masterTransportService = MockTransportService.getInstance(internalCluster().getMasterName());
+        CountDownLatch latch1 = new CountDownLatch(1);
+        CountDownLatch latch2 = new CountDownLatch(1);
+        masterTransportService.<ShardStateAction.StartedShardEntry>addRequestHandlingBehavior(
+            ShardStateAction.SHARD_STARTED_ACTION_NAME,
+            (handler, request, channel, task) -> {
+                // Wait until after peer recovery so that primary is started, but replica is not
+                if (request.toString().contains("[myindex]") && request.toString().contains("[after peer recovery]")) {
+                    // release latch1 allowing assertions to run
+                    latch1.countDown();
+                    // wait until assertions complete
+                    latch2.await(30, TimeUnit.SECONDS);
+                }
+                handler.messageReceived(request, channel, task);
+            }
+        );
+
+        // Create the index (don't bother waiting for active shards because we've delayed them
+        // until release the latch.
+        String indexName = "myindex";
+        client().admin()
+            .indices()
+            .prepareCreate(indexName)
+            .setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 1))
+            .setWaitForActiveShards(0)
+            .get();
+
+        // Wait for latch1 so that primary has moved from INITIALIZED to STARTED
+        latch1.await(30, TimeUnit.SECONDS);
+
+        // The health should be yellow instead of red, even though the replica is not allocated,
+        // because we treat replicas for "INITIALIZING" primaries as "special"
+        assertBusy(() -> {
+            GetHealthAction.Response health = client().execute(GetHealthAction.INSTANCE, new GetHealthAction.Request(true, 10)).get();
+            HealthIndicatorResult hir = health.findIndicator("shards_availability");
+
+            // At this point the primary is STARTED but the replica is still INITIALIZING.
+            // If using a time buffer, this should run while still within the 3s buffer time, allowing health to be YELLOW
+            // If not using a time buffer, this state should cause shard_availability to go RED
+            if (useTimeBuffer) {
+                assertThat(hir.status(), equalTo(HealthStatus.YELLOW));
+            } else {
+                assertThat(hir.status(), equalTo(HealthStatus.RED));
+            }
+
+            // verify that "myindex" is affected, since issues with "other" also cause YELLOW/RED health
+            assertTrue(hir.diagnosisList().stream().anyMatch(d -> d.affectedResources().get(0).getValues().contains(indexName)));
+        }, 30, TimeUnit.SECONDS);
+
+        // Release the latch so the replica can move to STARTED
+        latch2.countDown();
+
+        // Delete "other" and make sure cluster goes green
+        assertAcked(indicesAdmin().prepareDelete("other"));
+        assertBusy(() -> {
+            var health = client().execute(GetHealthAction.INSTANCE, new GetHealthAction.Request(true, 10)).get();
+            assertEquals(HealthStatus.GREEN, health.getStatus());
+        });
     }
 
     public void testIncreaseClusterShardLimit() throws Exception {
