@@ -109,6 +109,8 @@ distribution_archives {
                     exclude("*/modules/rest-root")
                     exclude("*/modules/health-shards-availability")
                     exclude("*/modules/x-pack-deprecation")
+                    // Serverless has its own version of dot-prefix validation
+                    exclude("*/modules/dot-prefix-validation")
                     includeEmptyDirs = false
                 }
                 into("elasticsearch") {
