@@ -14,6 +14,14 @@ if [[ "${USE_GITHUB_CREDENTIALS:-}" == "true" ]]; then
   export GITHUB_TOKEN
 fi
 
+BUILDKITE_API_TOKEN=$(vault read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
+export BUILDKITE_API_TOKEN
+
+if [[ "${BUILDKITE_PIPELINE_SLUG:-}" == "elasticsearch-serverless-pull-request" && "${BUILDKITE_AGENT_META_DATA_PROVIDER:-}" != *"k8s"* ]]; then
+  echo 'Checking for custom ES branch...'
+  .buildkite/scripts/utils/use-es-branch.sh
+fi
+
 if [[ "$BUILDKITE_AGENT_META_DATA_PROVIDER" != *"k8s"* ]]; then
   # Run in the background, while the job continues
   nohup .buildkite/scripts/setup-monitoring.sh </dev/null >/dev/null 2>&1 &
