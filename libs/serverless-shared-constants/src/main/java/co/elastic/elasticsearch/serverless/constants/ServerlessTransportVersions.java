@@ -34,6 +34,7 @@ public class ServerlessTransportVersions {
 
     public static final TransportVersion PUBLISH_NODE_SEARCH_LOAD_QUALITY = def(8_688_01_0);
     public static final TransportVersion SHARD_FIELD_INFOS = def(8_719_01_0);
+    public static final TransportVersion NODE_NAME_IN_PUBLISH_INGEST_LOAD_REQUEST = def(8_733_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
