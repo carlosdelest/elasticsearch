@@ -149,3 +149,5 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2656
 - class: co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersionsTests
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2657
+- class: co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettingsTests
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2658
