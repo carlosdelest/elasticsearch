@@ -154,3 +154,6 @@ tests:
 - class: co.elasticsearch.serverless.datastream.rest.ServerlessDataStreamYamlTestSuiteIT
   method: test {yaml=/10_failure_store/Check failure store index refresh interval}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2659
+- class: org.elasticsearch.datastreams.LazyRolloverDataStreamIT
+  method: testLazyRolloverFailsIndexing
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2661
