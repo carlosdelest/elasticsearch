@@ -160,3 +160,6 @@ tests:
 - class: org.elasticsearch.datastreams.LazyRolloverDataStreamIT
   method: testLazyRollover
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2662
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=security/authz/50_data_streams/Test that get data stream is limited to authorized namespace}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2663
