@@ -163,3 +163,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=security/authz/50_data_streams/Test that get data stream is limited to authorized namespace}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2663
+- class: co.elastic.elasticsearch.stateless.allocation.ServerlessDefaultShardAllocationSettingsRestIT
+  method: testDefaultNumberOfShardsForRegularIndicesDoesNotChangeDataStreamSingleShardDefault
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2665
