@@ -70,6 +70,7 @@ public class TransportUpdateSampledMetricsMetadataAction extends TransportMaster
     ) {
         super(
             UpdateSampledMetricsMetadataAction.NAME,
+            false,
             transportService,
             clusterService,
             threadPool,
