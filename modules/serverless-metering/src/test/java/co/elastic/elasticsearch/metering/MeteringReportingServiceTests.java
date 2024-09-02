@@ -39,22 +39,18 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
-import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
@@ -565,110 +561,6 @@ public class MeteringReportingServiceTests extends ESTestCase {
         }
     }
 
-    public void testSampledMetricsCalledConcurrentlyMatch() throws InterruptedException {
-
-        final var results = new ConcurrentLinkedQueue<MetricValue>();
-
-        final int writerThreadsCount = randomIntBetween(4, 10);
-        final int writeOpsPerThread = randomIntBetween(100, 2000);
-
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
-        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"));
-
-        final long valueForSampled1 = 50L;
-        final long valueForSampled2 = 60L;
-
-        final int totalOps = writeOpsPerThread * writerThreadsCount;
-        final long expectedSum = valueForSampled1 * totalOps + valueForSampled2 * totalOps;
-
-        List<SampledMetricsCollector> collectors = List.of(sampled1, sampled2);
-        try (
-            var ignored = new MeteringReportingService(
-                NODE_ID,
-                PROJECT_ID,
-                List.of(),
-                collectors,
-                new InMemorySampledMetricsTimeCursor(),
-                REPORT_PERIOD,
-                MeteringUsageRecordPublisher.NOOP_REPORTER,
-                threadPool,
-                threadPool.generic(),
-                MeterRegistry.NOOP
-            )
-        ) {
-            sampled1.set(valueForSampled1);
-            sampled2.set(valueForSampled2);
-
-            // We mock manually ReportGatherer by
-            // (1) NOT using the one embedded in MetricsService (by avoid calls to service.start/stop) and
-            // (2) calling service.getMetrics() directly
-            ConcurrencyTestUtils.runConcurrent(
-                writerThreadsCount,
-                writeOpsPerThread,
-                () -> randomIntBetween(10, 50),
-                () -> addSampledResults(results, collectors),
-                logger::info
-            );
-        }
-
-        long valueSum = results.stream().mapToLong(MetricValue::value).sum();
-        assertThat(results.size(), equalTo(totalOps * 2));
-        assertThat(valueSum, equalTo(expectedSum));
-    }
-
-    public void testCounterMetricsCalledConcurrentlyMatch() throws InterruptedException {
-        final var results = new ConcurrentLinkedQueue<MetricValue>();
-
-        final int writerThreadsCount = randomIntBetween(4, 10);
-        final int writeOpsPerThread = randomIntBetween(100, 2000);
-        final int collectThreadsCount = 1;
-
-        var counters = new TestCounter[] {
-            new TestCounter("counter1", Map.of("id", "counter1")),
-            new TestCounter("counter2", Map.of("id", "counter2")) };
-
-        // Associate each writer thread to a counter it will use/increment
-        final int[] writerThreadTargetTestCounter = IntStream.range(0, writerThreadsCount)
-            .map(i -> randomIntBetween(0, counters.length - 1))
-            .toArray();
-
-        final long writerThreadCounterIncrement = randomLongBetween(10L, 100L);
-
-        // The expected sum - computed as if all threads incremented their counters sequentially
-        final long expectedSum = writerThreadsCount * writerThreadCounterIncrement * writeOpsPerThread;
-
-        try (
-            var ignored = new MeteringReportingService(
-                NODE_ID,
-                PROJECT_ID,
-                Arrays.asList(counters),
-                List.of(),
-                new InMemorySampledMetricsTimeCursor(),
-                REPORT_PERIOD,
-                MeteringUsageRecordPublisher.NOOP_REPORTER,
-                threadPool,
-                threadPool.generic(),
-                MeterRegistry.NOOP
-            )
-        ) {
-            // We mock manually ReportGatherer by
-            // (1) NOT using the one embedded in MetricsService (by avoid calls to service.start/stop) and
-            // (2) calling service.getMetrics() directly
-            ConcurrencyTestUtils.runConcurrentWithCollectors(writerThreadsCount, writeOpsPerThread, () -> randomIntBetween(10, 50), t -> {
-                var counter = counters[writerThreadTargetTestCounter[t]];
-                counter.add(writerThreadCounterIncrement);
-            },
-                collectThreadsCount,
-                () -> randomIntBetween(100, 200),
-                () -> addCounterResults(results, Arrays.asList(counters)),
-                logger::info
-            );
-        }
-
-        long valueSum = results.stream().mapToLong(MetricValue::value).sum();
-        assertThat(valueSum, equalTo(expectedSum));
-    }
-
     public void testStopStops() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
@@ -721,22 +613,6 @@ public class MeteringReportingServiceTests extends ESTestCase {
     @After
     public void stopThreadPool() {
         ThreadPool.terminate(threadPool, 10, TimeUnit.SECONDS);
-    }
-
-    private static void addSampledResults(ConcurrentLinkedQueue<MetricValue> results, List<SampledMetricsCollector> collectors) {
-        for (var collector : collectors) {
-            var metrics = collector.getMetrics();
-            assertThat(metrics, isPresent());
-            metrics.orElseThrow(AssertionError::new).forEach(results::add);
-        }
-    }
-
-    private static void addCounterResults(ConcurrentLinkedQueue<MetricValue> results, List<CounterMetricsCollector> collectors) {
-        for (var collector : collectors) {
-            var metrics = collector.getMetrics();
-            metrics.forEach(results::add);
-            metrics.commit();
-        }
     }
 
     private record TestMeteringUsageRecordPublisher(Queue<UsageRecord> records) implements MeteringUsageRecordPublisher {

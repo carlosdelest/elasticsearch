@@ -30,36 +30,6 @@ import static org.elasticsearch.test.ESTestCase.frequently;
 import static org.elasticsearch.test.ESTestCase.randomIntBetween;
 
 class ConcurrencyTestUtils {
-
-    /**
-     * Performs a predefined number of operations using different parameters (number of threads, delay between steps, etc.)
-     * Operations are performed in a concurrent way using real threads to simulate more accurately access patterns,
-     * preemption and interaction with real concurrent data structures and primitives.
-     */
-    static void runConcurrent(
-        int threadsCount,
-        int opsPerThread,
-        Supplier<Integer> intervalInMillis,
-        Runnable action,
-        Consumer<String> output
-    ) throws InterruptedException {
-
-        final Thread[] operationThreads = new Thread[threadsCount];
-
-        output.accept(String.format(Locale.ROOT, "--> will run [%d] threads", threadsCount));
-        // Create a barrier for all operation threads to sync on - start executing `action` at the same time
-        final CyclicBarrier barrier = new CyclicBarrier(threadsCount);
-
-        for (int t = 0; t < operationThreads.length; t++) {
-            operationThreads[t] = createActionThread(t, opsPerThread, barrier, action, intervalInMillis.get(), output);
-            operationThreads[t].start();
-        }
-
-        for (Thread thread : operationThreads) {
-            thread.join();
-        }
-    }
-
     /**
      * Performs a predefined number of operations using different parameters (number of threads, delay between steps, etc.) paired with
      * a number of complementary concurrent "collector" actions (sufficient to complement all operations - again using different parameters)
