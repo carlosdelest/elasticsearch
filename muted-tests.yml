@@ -145,3 +145,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceIT
   method: testCacheIsWarmedBeforeSearchShardRecoveryWhenVBCCGetsUploaded
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2675
+- class: co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT
+  method: testVirtualBatchedCompoundCommitUploadMetrics
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2676
