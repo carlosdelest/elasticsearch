@@ -32,6 +32,7 @@ import org.elasticsearch.logging.Logger;
 import org.elasticsearch.telemetry.metric.LongCounter;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -42,6 +43,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.metering.action.utils.PersistentTaskUtils.findPersistentTaskNodeId;
@@ -102,9 +104,10 @@ public class MeteringIndexInfoService {
         long storedIngestSizeInBytes,
         String indexUUID,
         long primaryTerm,
-        long generation
+        long generation,
+        Instant indexCreationDate
     ) implements ShardEra {
-        public static final ShardInfoValue EMPTY = new ShardInfoValue(0, 0, 0, null, 0, 0);
+        public static final ShardInfoValue EMPTY = new ShardInfoValue(0, 0, 0, null, 0, 0, null);
     }
 
     record CollectedMeteringShardInfo(
@@ -249,18 +252,30 @@ public class MeteringIndexInfoService {
                         metadata.put(PARTIAL, Boolean.TRUE.toString());
                     }
 
-                    metrics.add(new MetricValue(format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()), IX_METRIC_TYPE, metadata, size));
+                    metrics.add(
+                        new MetricValue(
+                            format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()),
+                            IX_METRIC_TYPE,
+                            metadata,
+                            size,
+                            shardEntry.getValue().indexCreationDate()
+                        )
+                    );
                 }
             }
 
-            Map<String, Long> storedIngestSizeInBytesMap = currentInfo.meteringShardInfoMap.entrySet()
+            Map<String, RaStorageInfo> raStorageInfos = currentInfo.meteringShardInfoMap.entrySet()
                 .stream()
                 .collect(
-                    Collectors.groupingBy(e -> e.getKey().indexName(), Collectors.summingLong(e -> e.getValue().storedIngestSizeInBytes()))
+                    Collectors.groupingBy(
+                        e -> e.getKey().indexName(),
+                        Collector.of(RaStorageInfo::new, RaStorageInfo::accumulate, RaStorageInfo::combine)
+                    )
                 );
-            for (final var indexEntry : storedIngestSizeInBytesMap.entrySet()) {
+            for (final var indexEntry : raStorageInfos.entrySet()) {
                 final var indexName = indexEntry.getKey();
-                final var storedIngestSizeInBytes = indexEntry.getValue();
+                final var storedIngestSizeInBytes = indexEntry.getValue().raStorageSize;
+                final var indexCreationDate = indexEntry.getValue().indexCreationDate;
 
                 if (storedIngestSizeInBytes > 0) {
                     Map<String, String> metadata = new HashMap<>();
@@ -273,12 +288,36 @@ public class MeteringIndexInfoService {
                             format("%s:%s", RA_S_METRIC_ID_PREFIX, indexName),
                             RA_S_METRIC_TYPE,
                             metadata,
-                            storedIngestSizeInBytes
+                            storedIngestSizeInBytes,
+                            indexCreationDate
                         )
                     );
                 }
             }
             return Optional.of(SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics)));
+        }
+
+        private static final class RaStorageInfo {
+            private Instant indexCreationDate;
+            private long raStorageSize;
+
+            void accumulate(Map.Entry<ShardInfoKey, ShardInfoValue> t) {
+                raStorageSize += t.getValue().storedIngestSizeInBytes();
+                indexCreationDate = getEarlierValidCreationDate(indexCreationDate, t.getValue().indexCreationDate());
+            }
+
+            RaStorageInfo combine(RaStorageInfo b) {
+                raStorageSize += b.raStorageSize;
+                indexCreationDate = getEarlierValidCreationDate(indexCreationDate, b.indexCreationDate);
+                return this;
+            }
+
+            private static Instant getEarlierValidCreationDate(Instant a, Instant b) {
+                if (a == null || (b != null && b.isBefore(a))) {
+                    return b;
+                }
+                return a;
+            }
         }
     }
 
@@ -301,7 +340,8 @@ public class MeteringIndexInfoService {
                 info.storedIngestSizeInBytes(),
                 newEntry.getKey().getIndex().getUUID(),
                 info.primaryTerm(),
-                info.generation()
+                info.generation(),
+                Instant.ofEpochMilli(info.indexCreationDateEpochMilli())
             );
             map.merge(shardKey, shardValue, (oldValue, newValue) -> {
                 // In case there is a conflict, we need the index UUID from the original map value to decide what to do

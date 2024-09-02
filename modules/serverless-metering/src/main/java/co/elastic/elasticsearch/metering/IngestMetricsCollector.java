@@ -121,6 +121,6 @@ public class IngestMetricsCollector implements CounterMetricsCollector {
     }
 
     private MetricValue metricValue(String index, long value) {
-        return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, Map.of("index", index), value);
+        return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, Map.of("index", index), value, null);
     }
 }

@@ -24,6 +24,7 @@ import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Version;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine;
@@ -37,6 +38,7 @@ import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -88,27 +90,12 @@ public class ShardReaderTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var shardReader = new ShardReader(indicesService, meterRegistry);
 
-        var index1 = mock(IndexService.class);
-        var index2 = mock(IndexService.class);
-
-        var shard1 = mock(IndexShard.class);
-        var shard2 = mock(IndexShard.class);
-        var shard3 = mock(IndexShard.class);
+        var engine = mock(Engine.class);
+        var index1 = createMockIndexService(engine, shardId1, shardId2);
+        var index2 = createMockIndexService(engine, shardId3);
 
         when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
-        when(index1.iterator()).thenReturn(Iterators.concat(Iterators.single(shard1), Iterators.single(shard2)));
-        when(index2.iterator()).thenReturn(Iterators.single(shard3));
-
-        var engine = mock(Engine.class);
         when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(11L));
-
-        when(shard1.getEngineOrNull()).thenReturn(engine);
-        when(shard2.getEngineOrNull()).thenReturn(engine);
-        when(shard3.getEngineOrNull()).thenReturn(engine);
-
-        when(shard1.shardId()).thenReturn(shardId1);
-        when(shard2.shardId()).thenReturn(shardId2);
-        when(shard3.shardId()).thenReturn(shardId3);
 
         var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
 
@@ -141,34 +128,19 @@ public class ShardReaderTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var shardReader = new ShardReader(indicesService, meterRegistry);
 
-        var index1 = mock(IndexService.class);
-        var index2 = mock(IndexService.class);
-
-        var shard1 = mock(IndexShard.class);
-        var shard2 = mock(IndexShard.class);
-        var shard3 = mock(IndexShard.class);
+        var engine = mock(Engine.class);
+        var index1 = createMockIndexService(engine, shardId1, shardId2);
+        var index2 = createMockIndexService(engine, shardId3);
 
         when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
-        when(index1.iterator()).thenReturn(Iterators.concat(Iterators.single(shard1), Iterators.single(shard2)));
-        when(index2.iterator()).thenReturn(Iterators.single(shard3));
-
-        var engine = mock(Engine.class);
         when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
-
-        when(shard1.getEngineOrNull()).thenReturn(engine);
-        when(shard2.getEngineOrNull()).thenReturn(engine);
-        when(shard3.getEngineOrNull()).thenReturn(engine);
-
-        when(shard1.shardId()).thenReturn(shardId1);
-        when(shard2.shardId()).thenReturn(shardId2);
-        when(shard3.shardId()).thenReturn(shardId3);
 
         var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
         assertThat(shardInfoCache.shardSizeCache.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
 
+        index2 = createMockIndexService(engine, shardId3);
         when(indicesService.iterator()).thenReturn(Iterators.single(index2));
-        when(index2.iterator()).thenReturn(Iterators.single(shard3));
 
         shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
         assertThat(shardInfoMap.keySet(), empty());
@@ -201,27 +173,12 @@ public class ShardReaderTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var shardReader = new ShardReader(indicesService, meterRegistry);
 
-        var index1 = mock(IndexService.class);
-        var index2 = mock(IndexService.class);
-
-        var shard1 = mock(IndexShard.class);
-        var shard2 = mock(IndexShard.class);
-        var shard3 = mock(IndexShard.class);
+        var engine = mock(Engine.class);
+        var index1 = createMockIndexService(engine, shardId1, shardId2);
+        var index2 = createMockIndexService(engine, shardId3);
 
         when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
-        when(index1.iterator()).thenReturn(Iterators.concat(Iterators.single(shard1), Iterators.single(shard2)));
-        when(index2.iterator()).thenReturn(Iterators.single(shard3));
-
-        var engine = mock(Engine.class);
         when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
-
-        when(shard1.getEngineOrNull()).thenReturn(engine);
-        when(shard2.getEngineOrNull()).thenReturn(engine);
-        when(shard3.getEngineOrNull()).thenReturn(engine);
-
-        when(shard1.shardId()).thenReturn(shardId1);
-        when(shard2.shardId()).thenReturn(shardId2);
-        when(shard3.shardId()).thenReturn(shardId3);
 
         var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
 
@@ -387,5 +344,19 @@ public class ShardReaderTests extends ESTestCase {
         var segmentInfo = new TestSegmentCommitInfo(size, 100, 0, 0, null);
         segmentInfos.add(segmentInfo);
         return segmentInfos;
+    }
+
+    private static IndexService createMockIndexService(Engine engine, ShardId... shardIds) {
+        var index = mock(IndexService.class);
+        when(index.iterator()).thenReturn(Arrays.stream(shardIds).map(shardId -> {
+            var shard1 = mock(IndexShard.class);
+            when(shard1.getEngineOrNull()).thenReturn(engine);
+            when(shard1.shardId()).thenReturn(shardId);
+            return shard1;
+        }).iterator());
+        var metadata = mock(IndexMetadata.class);
+        when(metadata.getCreationDate()).thenReturn(0L);
+        when(index.getMetadata()).thenReturn(metadata);
+        return index;
     }
 }

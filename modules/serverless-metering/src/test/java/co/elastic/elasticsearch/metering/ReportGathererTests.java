@@ -42,6 +42,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -91,6 +92,7 @@ public class ReportGathererTests extends ESTestCase {
     private static class TestRecordingMetricsCollector implements SampledMetricsCollector, MeteringUsageRecordPublisher {
 
         private final Supplier<String> metricIdProvider;
+        private final Instant meteredObjectCreationDate;
 
         private record TestRecordedMetric(long value, String id) {}
 
@@ -101,19 +103,24 @@ public class ReportGathererTests extends ESTestCase {
         private volatile boolean failReporting;
         private Set<Instant> lastRecordTimestamps = Set.of();
 
-        TestRecordingMetricsCollector(Supplier<String> metricIdProvider) {
+        TestRecordingMetricsCollector(Supplier<String> metricIdProvider, Instant meteredObjectCreationDate) {
             this.metricIdProvider = metricIdProvider;
+            this.meteredObjectCreationDate = meteredObjectCreationDate;
         }
 
         TestRecordingMetricsCollector() {
-            this(new Supplier<>() {
+            this(randomConstantIdProvider(), Instant.EPOCH);
+        }
+
+        public static Supplier<String> randomConstantIdProvider() {
+            return new Supplier<>() {
                 private final String metricId = UUIDs.randomBase64UUID();
 
                 @Override
                 public String get() {
                     return metricId;
                 }
-            });
+            };
         }
 
         public void setFailCollecting(boolean b) {
@@ -141,7 +148,7 @@ public class ReportGathererTests extends ESTestCase {
             assertNull("There should not be a pending recorded metric", lastRecord);
 
             // store and return new metrics
-            return new MetricValue(newRecord.id(), "type1", Map.of(), newRecord.value);
+            return new MetricValue(newRecord.id(), "type1", Map.of(), newRecord.value, meteredObjectCreationDate);
         }
 
         @Override
@@ -514,13 +521,11 @@ public class ReportGathererTests extends ESTestCase {
         reportGatherer.cancel();
     }
 
-    public void testNoBackfillingWhenNoLocalStatus() {
-        var recorder = new TestRecordingMetricsCollector(UUIDs::randomBase64UUID);
+    public void testNoBackfillingWhenMetricNotFoundInLocalStatus() {
+        var recorder = new TestRecordingMetricsCollector(() -> "id" + randomAlphaOfLength(10), Instant.EPOCH);
         var reportPeriod = TimeValue.timeValueMinutes(5);
         var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
         var firstTimestamp = Instant.EPOCH;
-        var secondTimestamp = firstTimestamp.plus(reportPeriodDuration);
-        var thirdTimestamp = secondTimestamp.plus(reportPeriodDuration);
 
         var clock = Mockito.mock(Clock.class);
         var deterministicTaskQueue = new DeterministicTaskQueue();
@@ -528,12 +533,13 @@ public class ReportGathererTests extends ESTestCase {
 
         final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
 
+        var timeCursor = new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration));
         var reportGatherer = new ReportGatherer(
             "nodeId",
             "projectId",
             List.of(),
             List.of(recorder),
-            new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
+            timeCursor,
             recorder,
             threadPool,
             threadPool.generic(),
@@ -560,13 +566,196 @@ public class ReportGathererTests extends ESTestCase {
         var firstAttemptTime = now.get();
         deterministicTaskQueue.advanceTime();
 
-        // Advance to include the next timestamp, still failing
-        var lastAttemptTime = firstAttemptTime.plus(reportPeriodDuration).plus(2, ChronoUnit.MINUTES);
+        // Advance to include multiple timeframes, still failing
+        var lastAttemptTime = firstAttemptTime.plus(reportPeriodDuration).plus(13, ChronoUnit.MINUTES);
         deterministicTaskQueue.runTasksUpToTimeInOrder(lastAttemptTime.toEpochMilli());
         deterministicTaskQueue.advanceTime();
 
-        // But since we are changing ids, we try to transmit only the last timeframe
-        assertThat(recorder.lastRecordTimestamps, contains(thirdTimestamp));
+        // But since we have new metrics (metrics with new id), we transmit only the last (current) timeframe
+        var lastTimestamp = SampleTimestampUtils.calculateSampleTimestamp(lastAttemptTime, reportPeriodDuration);
+        assertThat(recorder.lastRecordTimestamps, contains(lastTimestamp));
+
+        reportGatherer.cancel();
+    }
+
+    public void testBackfillingOnlyForMetricFoundInLocalStatus() {
+        var reportPeriod = TimeValue.timeValueMinutes(5);
+        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
+        var firstTimestamp = Instant.EPOCH;
+        var secondTimestamp = firstTimestamp.plus(reportPeriodDuration);
+
+        var clock = Mockito.mock(Clock.class);
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+        var threadPool = deterministicTaskQueue.getThreadPool();
+
+        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+
+        List<MetricValue> producedMetricValues = new ArrayList<>();
+        List<UsageRecord> sentRecords = new ArrayList<>();
+
+        var timeCursor = new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration));
+        var meterRegistry = new RecordingMeterRegistry();
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            List.of(() -> Optional.of(producedMetricValues::iterator)),
+            timeCursor,
+            new MeteringUsageRecordPublisher() {
+                @Override
+                public void sendRecords(List<UsageRecord> records) {
+                    sentRecords.clear();
+                    sentRecords.addAll(records);
+                }
+
+                @Override
+                public void close() {}
+            },
+            threadPool,
+            threadPool.generic(),
+            reportPeriod,
+            clock,
+            meterRegistry
+        );
+
+        when(clock.instant()).thenAnswer(x -> now.get());
+        reportGatherer.start();
+        Instant creationDate = Instant.now();
+        producedMetricValues.add(new MetricValue("id-index1", "type1", Map.of(), 50L, creationDate));
+
+        deterministicTaskQueue.advanceTime();
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(sentRecords, hasSize(1));
+        assertThat(sentRecords, contains(transformedMatch(UsageRecord::usageTimestamp, equalTo(firstTimestamp))));
+        deterministicTaskQueue.advanceTime();
+
+        sentRecords.clear();
+        producedMetricValues.clear();
+        producedMetricValues.add(new MetricValue("id-index1", "type1", Map.of(), 60L, creationDate));
+        // Add a previously unknown metric
+        producedMetricValues.add(new MetricValue("id-index2", "type1", Map.of(), 70L, creationDate));
+
+        // Simulate a retry by manually rolling back the cursor
+        timeCursor.commitUpTo(firstTimestamp.minus(reportPeriodDuration));
+        deterministicTaskQueue.runAllRunnableTasks();
+
+        assertThat(sentRecords, hasSize(3));
+        var index1Records = sentRecords.stream().filter(x -> x.id().startsWith("id-index1")).toList();
+        var index2Records = sentRecords.stream().filter(x -> x.id().startsWith("id-index2")).toList();
+
+        // We have 2 interpolated records for the previously seen metric
+        assertThat(
+            index1Records,
+            containsInAnyOrder(
+                both(transformedMatch(UsageRecord::usageTimestamp, equalTo(firstTimestamp))).and(
+                    transformedMatch(x -> x.usage().quantity(), equalTo(55L))
+                ),
+                both(transformedMatch(UsageRecord::usageTimestamp, equalTo(secondTimestamp))).and(
+                    transformedMatch(x -> x.usage().quantity(), equalTo(60L))
+                )
+            )
+        );
+        // We only have one record, the most recent one, for the "new" metric
+        assertThat(
+            index2Records,
+            contains(
+                both(transformedMatch(UsageRecord::usageTimestamp, equalTo(secondTimestamp))).and(
+                    transformedMatch(x -> x.usage().quantity(), equalTo(70L))
+                )
+            )
+        );
+
+        reportGatherer.cancel();
+    }
+
+    /**
+     * On a node change, we will have no local status. Test that we are backfilling a few (2) samples anyway, to account for common
+     * scenarios in which this happens (scaling and rolling upgrade).
+     */
+    public void testConstantLimitedBackfillingWhenNoLocalStatus() {
+        var reportPeriod = TimeValue.timeValueMinutes(5);
+        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
+        var currentTimestamp = Instant.EPOCH;
+        var startTime = Instant.EPOCH.minus(reportPeriodDuration.multipliedBy(10));
+        var recorder = new TestRecordingMetricsCollector(TestRecordingMetricsCollector.randomConstantIdProvider(), startTime);
+
+        var clock = Mockito.mock(Clock.class);
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+        var threadPool = deterministicTaskQueue.getThreadPool();
+
+        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+        var meterRegistry = new RecordingMeterRegistry();
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            List.of(recorder),
+            new InMemorySampledMetricsTimeCursor(startTime),
+            recorder,
+            threadPool,
+            threadPool.generic(),
+            reportPeriod,
+            clock,
+            meterRegistry
+        );
+
+        when(clock.instant()).thenAnswer(x -> now.get());
+        reportGatherer.start();
+
+        deterministicTaskQueue.advanceTime();
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(recorder.invocations.get(), equalTo(1));
+        assertThat(
+            recorder.lastRecordTimestamps,
+            containsInAnyOrder(
+                currentTimestamp,
+                currentTimestamp.minus(reportPeriodDuration),
+                currentTimestamp.minus(reportPeriodDuration.multipliedBy(2))
+            )
+        );
+
+        reportGatherer.cancel();
+    }
+
+    public void testConstantBackfillingOnlyAfterCreationDate() {
+        var recorder = new TestRecordingMetricsCollector(
+            TestRecordingMetricsCollector.randomConstantIdProvider(),
+            Instant.EPOCH.minus(1, ChronoUnit.MINUTES)
+        );
+
+        var reportPeriod = TimeValue.timeValueMinutes(5);
+        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
+        var currentTimestamp = Instant.EPOCH;
+
+        var clock = Mockito.mock(Clock.class);
+        var deterministicTaskQueue = new DeterministicTaskQueue();
+        var threadPool = deterministicTaskQueue.getThreadPool();
+
+        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+        var meterRegistry = new RecordingMeterRegistry();
+        var reportGatherer = new ReportGatherer(
+            "nodeId",
+            "projectId",
+            List.of(),
+            List.of(recorder),
+            new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration.multipliedBy(10))),
+            recorder,
+            threadPool,
+            threadPool.generic(),
+            reportPeriod,
+            clock,
+            meterRegistry
+        );
+
+        when(clock.instant()).thenAnswer(x -> now.get());
+        reportGatherer.start();
+
+        deterministicTaskQueue.advanceTime();
+        deterministicTaskQueue.runAllRunnableTasks();
+        assertThat(recorder.invocations.get(), equalTo(1));
+
+        // Only 1 sample this time, as the others are before the creation time
+        assertThat(recorder.lastRecordTimestamps, contains(currentTimestamp));
 
         reportGatherer.cancel();
     }

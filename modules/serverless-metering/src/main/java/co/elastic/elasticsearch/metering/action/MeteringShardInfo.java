@@ -17,18 +17,24 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
+
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 
 import java.io.IOException;
 
-public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTerm, long generation, long storedIngestSizeInBytes)
-    implements
-        Writeable,
-        ShardEra {
+public record MeteringShardInfo(
+    long sizeInBytes,
+    long docCount,
+    long primaryTerm,
+    long generation,
+    long storedIngestSizeInBytes,
+    long indexCreationDateEpochMilli
+) implements Writeable, ShardEra {
 
-    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0, 0);
+    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0, 0, 0);
 
     public MeteringShardInfo {
         assert sizeInBytes >= 0 : "size must be non negative";
@@ -39,8 +45,15 @@ public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTer
         long docCount = in.readVLong();
         var primaryTerm = in.readVLong();
         var generation = in.readVLong();
-        Long ingestedSizeInBytes = in.readOptionalVLong();
-        return new MeteringShardInfo(sizeInBytes, docCount, primaryTerm, generation, ingestedSizeInBytes);
+        final long storedIngestSizeInBytes;
+        long indexCreationDateEpochMilli = 0;
+        if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_INDEX_CREATION_DATE_ADDED)) {
+            storedIngestSizeInBytes = in.readVLong();
+            indexCreationDateEpochMilli = in.readVLong();
+        } else {
+            storedIngestSizeInBytes = in.readOptionalVLong();
+        }
+        return new MeteringShardInfo(sizeInBytes, docCount, primaryTerm, generation, storedIngestSizeInBytes, indexCreationDateEpochMilli);
     }
 
     @Override
@@ -49,6 +62,11 @@ public record MeteringShardInfo(long sizeInBytes, long docCount, long primaryTer
         out.writeVLong(docCount);
         out.writeVLong(primaryTerm);
         out.writeVLong(generation);
-        out.writeOptionalVLong(storedIngestSizeInBytes);
+        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_INDEX_CREATION_DATE_ADDED)) {
+            out.writeVLong(storedIngestSizeInBytes);
+            out.writeVLong(indexCreationDateEpochMilli);
+        } else {
+            out.writeOptionalVLong(storedIngestSizeInBytes);
+        }
     }
 }

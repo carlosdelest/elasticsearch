@@ -127,6 +127,6 @@ class TestTransportActionUtils {
 
     static MeteringShardInfo createMeteringShardInfo(ShardId shardId) {
         var size = ESTestCase.randomLongBetween(0, 10000);
-        return new MeteringShardInfo(size, ESTestCase.randomLongBetween(0, 10000), 0, 0, size);
+        return new MeteringShardInfo(size, ESTestCase.randomLongBetween(0, 10000), 0, 0, size, 0L);
     }
 }

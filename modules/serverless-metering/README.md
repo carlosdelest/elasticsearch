@@ -154,7 +154,9 @@ The billing pipeline operates using a "billing period" of 1h; the reporting (sam
 
 For this reason, `ReportGatherer` keeps a “cursor” in cluster state which refers to the last successfully transmitted sampling period. Upon successful publication, the cursor is updated with the last sampling timestamp. The persistent task node also retains in memory the most recently published sampling records.\
 If `ReportGatherer` detects that some previous sampling intervals have been missed (e.g. due to delays or failures due to unavailability of the usage API), it backfills sample records using linear interpolation between the latest successfully published samples and the most up-to-date samples.\
-If no previous sample for a particular index exists or if there’s no previous samples at all (e.g. after changing the persistent task node), backfilling is skipped. In any case, at most 24h of data is getting backfilled.
+If there are no previous samples at all (e.g. after changing the persistent task node), we do a limited backfilling: only 2 additional timeframes, using constant interpolation. This covers a couple of common scenarios in which this happens (scaling and rolling upgrade).\
+If no previous sample for a particular index exists, backfilling for that index is skipped (we just transmit the new available data); a missing sample for a single index means that either the index is new or a shard/node was not available.\
+In any case, at most 24h of data is backfilled.
 
 The same reporting infrastructure is used to report both RA-S and IX usage records. However, for historic reasons, IX usage samples are reported per shard instead of per index.
 

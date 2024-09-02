@@ -57,6 +57,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -441,11 +442,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Map.ofEntries(
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 10L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 10L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
-                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 20L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 20L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 )
             ),
             Set.of()
@@ -488,11 +489,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Map.ofEntries(
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
-                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 )
             ),
             Set.of()
@@ -535,11 +536,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Map.ofEntries(
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
-                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 )
             ),
             Set.of()
@@ -602,19 +603,19 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Map.ofEntries(
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 10L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 10L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
-                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 20L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 20L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId3),
-                    new MeteringIndexInfoService.ShardInfoValue(30L, 300L, 30L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(30L, 300L, 30L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId4),
-                    new MeteringIndexInfoService.ShardInfoValue(40L, 400L, 40L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(40L, 400L, 40L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 )
             ),
             Set.of()
@@ -684,19 +685,19 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Map.ofEntries(
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 10L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 10L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
-                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 20L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 20L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId3),
-                    new MeteringIndexInfoService.ShardInfoValue(30L, 300L, 30L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(30L, 300L, 30L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(dsShardId),
-                    new MeteringIndexInfoService.ShardInfoValue(40L, 400L, 40L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(40L, 400L, 40L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 )
             ),
             Set.of()
@@ -778,11 +779,11 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             Map.ofEntries(
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 11L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 ),
                 Map.entry(
                     MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId2),
-                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                    new MeteringIndexInfoService.ShardInfoValue(20L, 200L, 22L, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
                 )
             ),
             Set.of()
@@ -872,7 +873,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
             Map.of(
                 MeteringIndexInfoService.ShardInfoKey.fromShardId(shardId1),
-                new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 0, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0)
+                new MeteringIndexInfoService.ShardInfoValue(10L, 100L, 0, IndexMetadata.INDEX_UUID_NA_VALUE, 0, 0, Instant.EPOCH)
             ),
             Set.of()
         );

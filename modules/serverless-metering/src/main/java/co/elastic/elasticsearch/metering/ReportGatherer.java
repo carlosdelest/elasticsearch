@@ -56,6 +56,7 @@ class ReportGatherer {
     private static final Logger log = LogManager.getLogger(ReportGatherer.class);
     static final double MAX_JITTER_FACTOR = 0.25;
     private static final Duration MAX_BACKFILL_LOOKBACK = Duration.ofHours(24);
+    static final int MAX_BACKFILL_WITHOUT_HISTORY = 3; // current timestamp + 2 previous
 
     static final String METERING_REPORTS_TOTAL = "es.metering.reporting.runs.total";
     static final String METERING_REPORTS_DELAYED_TOTAL = "es.metering.reporting.runs.delayed.total";
@@ -289,34 +290,46 @@ class ReportGatherer {
         });
 
         var timestamps = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod);
-        var timestampsToSend = Iterators.toList(Iterators.limit(timestamps, maxPeriodsLookback));
+        var periodsLimit = lastSampledMetricValues == null ? MAX_BACKFILL_WITHOUT_HISTORY : maxPeriodsLookback;
+        var timestampsToSend = Iterators.toList(Iterators.limit(timestamps, periodsLimit));
 
         reportsTimeframesToBackfill.record(timestampsToSend.size() - 1);
         if (timestampsToSend.size() > 1) {
             var backfillDuration = Duration.between(timestamps.last(), sampleTimestamp);
             var periodsToSend = backfillDuration.dividedBy(reportPeriodDuration);
             assert periodsToSend > 0;
+            reportsBackfillTotalCounter.increment();
             if (lastSampledMetricValues == null) {
-                log.warn(
-                    "Skip backfilling [{}-{}] -- missing the necessary state to calculate backfill samples. We will drop [{}] sample(s).",
-                    timestampsToSend.get(timestampsToSend.size() - 1),
-                    timestampsToSend.get(0),
-                    periodsToSend
-                );
-            } else {
-                reportsBackfillTotalCounter.increment();
-                if (periodsToSend > maxPeriodsLookback) {
+                if (periodsToSend > periodsLimit) {
                     log.warn(
-                        "Partially backfilling [{}-{}] -- the backfill window [{}-{}] is grater than the maximum lookback [{}]. "
+                        "Partially backfilling [{}-{}] with constant value(s) -- missing the necessary state to calculate backfill "
+                            + "samples. We will drop [{}] sample(s).",
+                        timestampsToSend.get(timestampsToSend.size() - 1),
+                        timestampsToSend.get(0),
+                        periodsToSend - periodsLimit
+                    );
+                    reportsBackfillDroppedCounter.incrementBy(periodsToSend - periodsLimit);
+                } else {
+                    log.warn(
+                        "Backfilling [{}-{}] with [{}] constant sample(s)",
+                        timestampsToSend.get(timestampsToSend.size() - 1),
+                        timestampsToSend.get(0),
+                        periodsToSend
+                    );
+                }
+            } else {
+                if (periodsToSend > periodsLimit) {
+                    log.warn(
+                        "Partially backfilling [{}-{}] -- the backfill window [{}-{}] is greater than the maximum lookback [{}]. "
                             + "We will drop [{}] sample(s).",
                         timestampsToSend.get(timestampsToSend.size() - 1),
                         timestampsToSend.get(0),
                         timestamps.last(),
                         sampleTimestamp,
                         MAX_BACKFILL_LOOKBACK,
-                        periodsToSend - maxPeriodsLookback
+                        periodsToSend - periodsLimit
                     );
-                    reportsBackfillDroppedCounter.incrementBy(periodsToSend - maxPeriodsLookback);
+                    reportsBackfillDroppedCounter.incrementBy(periodsToSend - periodsLimit);
                 } else {
                     log.info(
                         "Backfilling [{}-{}] with [{}] sample(s)",
@@ -354,10 +367,12 @@ class ReportGatherer {
                 }
             }
 
-            if (timestampsToSend.size() <= 1 || lastSampledMetricValues == null) {
+            if (timestampsToSend.size() <= 1) {
                 buildRecordsWithoutBackfill(sampleTimestamp, currentSampledMetricValues, records);
+            } else if (lastSampledMetricValues == null) {
+                buildRecordsWithConstantBackfill(sampleTimestamp, timestampsToSend, currentSampledMetricValues, timestamps.last(), records);
             } else {
-                buildRecordsWithBackfill(sampleTimestamp, timestampsToSend, currentSampledMetricValues, timestamps.last(), records);
+                buildRecordsWithLinearBackfill(sampleTimestamp, timestampsToSend, currentSampledMetricValues, timestamps.last(), records);
             }
         }
 
@@ -393,7 +408,34 @@ class ReportGatherer {
         }
     }
 
-    private void buildRecordsWithBackfill(
+    // interpolate with a polynomial of degree zero (constant, or "sample-and-hold")
+    private void buildRecordsWithConstantBackfill(
+        Instant sampleTimestamp,
+        List<Instant> timestampsToSend,
+        List<MetricValue> currentSampledMetricValues,
+        Instant latestCommittedTimestamp,
+        List<UsageRecord> records
+    ) {
+        for (var v : currentSampledMetricValues) {
+            for (var timestamp : timestampsToSend) {
+                if (v.meteredObjectCreationTime() == null || timestamp.isAfter(v.meteredObjectCreationTime())) {
+                    log.debug(
+                        "Backfilling metric [{}] of type [{}] with constant value [{}] for time [{}] (prev: [{}], current: [{}])",
+                        v.id(),
+                        v.type(),
+                        v.value(),
+                        timestamp,
+                        latestCommittedTimestamp,
+                        sampleTimestamp
+                    );
+                    records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), timestamp));
+                }
+            }
+        }
+    }
+
+    // interpolate with a polynomial of degree one (linear interpolation)
+    private void buildRecordsWithLinearBackfill(
         Instant sampleTimestamp,
         List<Instant> timestampsToSend,
         List<MetricValue> currentSampledMetricValues,
@@ -403,7 +445,13 @@ class ReportGatherer {
         for (var v : currentSampledMetricValues) {
             var previousMetricValue = lastSampledMetricValues.get(v.id());
             if (previousMetricValue == null) {
-                log.info("Metric [{}] of type [{}] does not have a previous value, not backfilling", v.id(), v.type());
+                // This node has sent sampled metrics before; if it does not have values for this metric id, it means that this sampled
+                // metric was not "seen" by this node before. This can be because:
+                // - the metric id is new (e.g. new index/shard)
+                // - the metric id refers to something that was not available before, but it is now (e.g. shard recovered)
+                // - the metric id was not available before, but it is now (e.g. node not reachable during a previous collect (PARTIAL))
+                // In all these cases, the metric refers to data that was either not existing or not available. Therefore, we do not
+                // interpolate (not even with a constant value), as this might lead to over-billing.
                 records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), sampleTimestamp));
             } else {
                 for (var timestamp : timestampsToSend) {

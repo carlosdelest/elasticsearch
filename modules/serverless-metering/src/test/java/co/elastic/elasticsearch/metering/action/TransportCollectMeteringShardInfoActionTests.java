@@ -233,14 +233,14 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         final Map<String, Map<ShardId, MeteringShardInfo>> nodesShardAnswer = Map.of(
             searchNodes.get(0).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 14L)),
-                Map.entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 15L)),
-                Map.entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 16L))
+                Map.entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 14L, 0L)),
+                Map.entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 15L, 0L)),
+                Map.entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 16L, 0L))
             ),
             searchNodes.get(1).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new MeteringShardInfo(21L, 210L, 2, 1, 24L)),
-                Map.entry(shard2Id, new MeteringShardInfo(22L, 220L, 1, 1, 25L))
+                Map.entry(shard1Id, new MeteringShardInfo(21L, 210L, 2, 1, 24L, 0L)),
+                Map.entry(shard2Id, new MeteringShardInfo(22L, 220L, 1, 1, 25L, 0L))
             )
         );
 

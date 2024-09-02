@@ -17,16 +17,18 @@
 
 package co.elastic.elasticsearch.metrics;
 
+import java.time.Instant;
 import java.util.Map;
 
 /**
  * A single metric value for reporting
  *
- * @param id       An id for the metric this value is for. Used to identify duplicates in the AWS glue billing pipeline.
- * @param type     The type to use for the record. For a list of defined types, see the
- *                 <a href="https://ela.st/metering-functions-common">metering_functions.common</a>
- *                 definition in metring-glue-functions.
- * @param metadata Associated metadata for the metric
- * @param value    The current metric value
+ * @param id                        An id for the metric this value is for. Used to identify duplicates in the AWS glue billing pipeline.
+ * @param type                      The type to use for the record. For a list of defined types, see the
+ *                                  <a href="https://ela.st/metering-functions-common">metering_functions.common</a>
+ *                                  definition in metring-glue-functions.
+ * @param metadata                  Associated metadata for the metric
+ * @param value                     The current metric value
+ * @param meteredObjectCreationTime The creation time of the metered object. Optional, may be null.
  */
-public record MetricValue(String id, String type, Map<String, String> metadata, long value) {}
+public record MetricValue(String id, String type, Map<String, String> metadata, long value, Instant meteredObjectCreationTime) {}

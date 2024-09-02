@@ -206,7 +206,8 @@ class ShardReader {
                                 cachedShardInfo.get().docCount(),
                                 primaryTerm,
                                 generation,
-                                cachedShardInfo.get().storedIngestSizeInBytes()
+                                cachedShardInfo.get().storedIngestSizeInBytes(),
+                                indexService.getMetadata().getCreationDate()
                             )
                         );
                         localNodeMeteringShardInfoCache.updateCachedShardInfo(
@@ -229,7 +230,8 @@ class ShardReader {
                             shardSizeAndDocCount.liveDocCount(),
                             primaryTerm,
                             generation,
-                            shardSizeAndDocCount.raSizeInBytes()
+                            shardSizeAndDocCount.raSizeInBytes(),
+                            indexService.getMetadata().getCreationDate()
                         )
                     );
                     if (requestCacheToken != null) {

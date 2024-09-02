@@ -97,9 +97,9 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L, 0L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -145,9 +145,9 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L, 0L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -198,9 +198,9 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 21L, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 22L, 0L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 23L, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -243,14 +243,14 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 0))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0, 0L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 0, 0L))
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 2, 0)),
-            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 1, 0))
+            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 2, 0, 0L)),
+            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 1, 0, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -305,14 +305,14 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var newShard3Id = new ShardId("index1", "index1UUID-2", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 2, 0))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0, 0L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 2, 0, 0L))
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, 0)),
-            entry(newShard3Id, new MeteringShardInfo(23L, 130L, 1, 1, 0))
+            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, 0, 0L)),
+            entry(newShard3Id, new MeteringShardInfo(23L, 130L, 1, 1, 0, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -368,13 +368,13 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id2 = new ShardId("index1", "index1UUID-2", 2);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0, 0L))
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard3Id1, new MeteringShardInfo(22L, 120L, 1, 1, 0)),
-            entry(shard3Id2, new MeteringShardInfo(23L, 130L, 1, 1, 0))
+            entry(shard3Id1, new MeteringShardInfo(22L, 120L, 1, 1, 0, 0L)),
+            entry(shard3Id2, new MeteringShardInfo(23L, 130L, 1, 1, 0, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -440,14 +440,14 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id1 = new ShardId("index1", "index1UUID-1", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0)),
-            entry(shard3Id, new MeteringShardInfo(13L, 120L, 1, 1, 0))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0, 0L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 120L, 1, 1, 0, 0L))
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard3Id, new MeteringShardInfo(22L, 120L, 1, 2, 0)),
-            entry(shard3Id1, new MeteringShardInfo(23L, 130L, 1, 1, 0))
+            entry(shard3Id, new MeteringShardInfo(22L, 120L, 1, 2, 0, 0L)),
+            entry(shard3Id1, new MeteringShardInfo(23L, 130L, 1, 1, 0, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -497,14 +497,14 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 0))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0, 0L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 0, 0L))
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, 0)),
-            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 2, 0))
+            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, 0, 0L)),
+            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 2, 0, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -552,11 +552,11 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard2Id = new ShardId("index2", "index1UUID", 2);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0, 0L))
         );
 
-        var shardsInfo2 = Map.ofEntries(entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, 0)));
+        var shardsInfo2 = Map.ofEntries(entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 1, 0, 0L)));
 
         AtomicReference<Set<ShardId>> activeShards = new AtomicReference<>(shardsInfo.keySet());
 
@@ -602,9 +602,9 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0)),
-            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0)),
-            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 0))
+            entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 0, 0L)),
+            entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 0, 0L)),
+            entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 0, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
