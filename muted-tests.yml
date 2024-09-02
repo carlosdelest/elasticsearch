@@ -142,21 +142,3 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testAutoscalingWithQueueSize
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2655
-- class: co.elasticsearch.serverless.datastream.rest.ServerlessDataStreamYamlTestSuiteIT
-  method: test {yaml=/10_failure_store/Check failure store index refresh interval}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2659
-- class: org.elasticsearch.datastreams.LazyRolloverDataStreamIT
-  method: testLazyRolloverFailsIndexing
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2661
-- class: org.elasticsearch.datastreams.LazyRolloverDataStreamIT
-  method: testLazyRollover
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2662
-- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=security/authz/50_data_streams/Test that get data stream is limited to authorized namespace}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2663
-- class: co.elastic.elasticsearch.stateless.allocation.ServerlessDefaultShardAllocationSettingsRestIT
-  method: testDefaultNumberOfShardsForRegularIndicesDoesNotChangeDataStreamSingleShardDefault
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2665
-- class: co.elastic.elasticsearch.stateless.allocation.ServerlessDefaultShardAllocationSettingsRestIT
-  method: testDefaultNumberOfShardsForRegularIndicesDoesNotChangeSystemIndicesSingleShardDefault
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2666
