@@ -128,14 +128,35 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
         assertThat(validator.validatePredefinedRole(role), is(nullValue()));
     }
 
+    public void testInvalidCustomRoleName() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+
+        Map.ofEntries(
+            Map.entry("superuser", containsString("is reserved and may not be used")),
+            Map.entry("_" + randomAlphaOfLength(30), containsString("role name may not start with [_]")),
+            Map.entry("this role name has spaces", containsString(ServerlessRoleValidator.INVALID_ROLE_NAME_MESSAGE))
+        ).entrySet().forEach(testCase -> {
+            final String roleName = testCase.getKey();
+            final Matcher<String> validationErrorMatcher = testCase.getValue();
+
+            final ActionRequestValidationException ex = validator.validateCustomRole(
+                new RoleDescriptor(roleName, null, null, null, null, null, Map.of(), Map.of(), null, null, null, null)
+            );
+            assertThat("validating role name: " + roleName, ex, is(notNullValue()));
+            assertThat(ex.validationErrors(), containsInAnyOrder(validationErrorMatcher));
+        });
+
+    }
+
     public void testInvalidCustomRole() {
         final ServerlessRoleValidator validator = new ServerlessRoleValidator();
 
-        final int roleNameCaseNo = randomIntBetween(0, 2);
+        final int roleNameCaseNo = randomIntBetween(0, 3);
         final String roleName = switch (roleNameCaseNo) {
             case 0 -> randomAlphaOfLength(30); // valid
             case 1 -> "superuser"; // reserved
             case 2 -> "_" + randomAlphaOfLength(30); // invalid prefix
+            case 3 -> "this role name has spaces"; // spaces are not allowed
             default -> throw new IllegalStateException("Unexpected value: " + roleNameCaseNo);
         };
         final boolean invalidRoleName = roleNameCaseNo != 0;
@@ -241,6 +262,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
                 itemMatchers.add(containsString("is reserved and may not be used"));
             }
             case 2 -> itemMatchers.add(containsString("role name may not start with [_]"));
+            case 3 -> itemMatchers.add(containsString(ServerlessRoleValidator.INVALID_ROLE_NAME_MESSAGE));
         }
         if (unknownClusterPrivilege) {
             itemMatchers.add(

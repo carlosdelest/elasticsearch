@@ -25,7 +25,6 @@ import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.core.security.authz.RoleDescriptor;
-import org.elasticsearch.xpack.core.security.support.Validation;
 import org.elasticsearch.xpack.core.security.xcontent.XContentUtils;
 
 import java.io.IOException;
@@ -49,10 +48,10 @@ public final class ServerlessCustomRoleParser {
     public static RoleDescriptor parse(String name, XContentParser parser, boolean allowRestriction, boolean allowDescription)
         throws IOException {
         // validate name
-        Validation.Error validationError = Validation.Roles.validateRoleName(name, true);
+        final String validationError = ServerlessRoleValidator.validateRoleName(name, true);
         if (validationError != null) {
             ValidationException ve = new ValidationException();
-            ve.addValidationError(validationError.toString());
+            ve.addValidationError(validationError);
             throw ve;
         }
 
