@@ -102,7 +102,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(11L, 110L, 11L, "myIndexUUID", 1, 1)));
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
@@ -135,7 +135,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(11L, 110L, 0, "myIndexUUID", 1, 1)));
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
@@ -158,7 +158,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(0, 110L, 11L, "myIndexUUID", 1, 1)));
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
@@ -181,7 +181,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
         var shardsInfo = Map.ofEntries(entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(0, 110L, 0, "myIndexUUID", 1, 1)));
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
@@ -201,7 +201,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
 
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
@@ -248,7 +248,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
 
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
@@ -297,7 +297,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
 
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
@@ -342,7 +342,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
             Set.of(MeteringIndexInfoService.CollectedMeteringShardInfoFlag.PARTIAL)
         );
 
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsCollectorTests::elementMustBePresent));
@@ -370,7 +370,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
     public void testNoPersistentTaskNode() {
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
 
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
         indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.NO_NODE;
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
@@ -380,7 +380,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
     public void testAnotherNodeIsPersistentTaskNode() {
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
 
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
         indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.ANOTHER_NODE;
 
         var metricValues = indexSizeMetricsCollector.getMetrics();
@@ -392,7 +392,7 @@ public class StorageInfoMetricsCollectorTests extends ESTestCase {
     public void testThisNodeIsPersistentTaskNodeButNotReady() {
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
 
-        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector(clusterService, Settings.EMPTY);
+        var indexSizeMetricsCollector = indexInfoService.createIndexSizeMetricsCollector();
         indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.THIS_NODE;
 
         var metricValues = indexSizeMetricsCollector.getMetrics();

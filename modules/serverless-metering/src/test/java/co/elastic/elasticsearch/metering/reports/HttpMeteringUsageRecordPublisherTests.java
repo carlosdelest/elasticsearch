@@ -125,7 +125,7 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
         UsageRecord record = new UsageRecord(
             "id1",
             Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null, null),
+            new UsageMetrics("type", null, 1, null, null, null),
             new UsageSource("es-id", "instanceId", null)
         );
 
@@ -160,7 +160,7 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
                 i -> new UsageRecord(
                     "id" + i,
                     Instant.now(),
-                    new UsageMetrics("type", null, 1, null, null, null, null),
+                    new UsageMetrics("type", null, 1, null, null, null),
                     new UsageSource("es-id", "instanceId", null)
                 )
             )
@@ -204,7 +204,7 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
         UsageRecord record = new UsageRecord(
             "id1",
             Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null, null),
+            new UsageMetrics("type", null, 1, null, null, null),
             new UsageSource("es-id", "instanceId", null)
         );
 
@@ -232,7 +232,7 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
         UsageRecord record = new UsageRecord(
             "id1",
             Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null, null),
+            new UsageMetrics("type", null, 1, null, null, null),
             new UsageSource("es-id", "instanceId", null)
         );
 

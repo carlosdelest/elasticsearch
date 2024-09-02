@@ -72,6 +72,7 @@ public record UsageRecord(String id, Instant usageTimestamp, UsageMetrics usage,
         return builder;
     }
 
+    // Public visibility only for tests
     public static UsageRecord fromXContent(XContentParser parser) {
         return PARSER.apply(parser, null);
     }

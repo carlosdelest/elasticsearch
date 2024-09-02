@@ -141,7 +141,7 @@ public class ReportGathererTests extends ESTestCase {
             assertNull("There should not be a pending recorded metric", lastRecord);
 
             // store and return new metrics
-            return new MetricValue(newRecord.id(), "type1", Map.of(), Map.of(), newRecord.value);
+            return new MetricValue(newRecord.id(), "type1", Map.of(), newRecord.value);
         }
 
         @Override

@@ -284,7 +284,7 @@ class ReportGatherer {
 
         counterMetricValuesList.forEach(counterMetricValues -> {
             for (var v : counterMetricValues) {
-                records.add(getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), v.settings(), now));
+                records.add(getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), now));
             }
         });
 
@@ -389,7 +389,7 @@ class ReportGatherer {
         List<UsageRecord> records
     ) {
         for (var v : currentSampledMetricValues) {
-            records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp));
+            records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), sampleTimestamp));
         }
     }
 
@@ -404,7 +404,7 @@ class ReportGatherer {
             var previousMetricValue = lastSampledMetricValues.get(v.id());
             if (previousMetricValue == null) {
                 log.info("Metric [{}] of type [{}] does not have a previous value, not backfilling", v.id(), v.type());
-                records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), v.settings(), sampleTimestamp));
+                records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), sampleTimestamp));
             } else {
                 for (var timestamp : timestampsToSend) {
                     var previousValue = previousMetricValue.value();
@@ -427,7 +427,7 @@ class ReportGatherer {
                         latestCommittedTimestamp,
                         sampleTimestamp
                     );
-                    records.add(getRecordForSample(v.id(), v.type(), value, v.metadata(), v.settings(), timestamp));
+                    records.add(getRecordForSample(v.id(), v.type(), value, v.metadata(), timestamp));
                 }
             }
         }
@@ -437,34 +437,20 @@ class ReportGatherer {
         return key + "-" + time.truncatedTo(ChronoUnit.SECONDS);
     }
 
-    private UsageRecord getRecordForCount(
-        String metric,
-        String type,
-        long count,
-        Map<String, String> metadata,
-        Map<String, Object> settings,
-        Instant now
-    ) {
+    private UsageRecord getRecordForCount(String metric, String type, long count, Map<String, String> metadata, Instant now) {
         return new UsageRecord(
             generateId(metric, now),
             now,
-            new UsageMetrics(type, null, count, reportPeriod, null, settings, null),
+            new UsageMetrics(type, null, count, reportPeriod, null, null),
             new UsageSource(sourceId, projectId, metadata)
         );
     }
 
-    private UsageRecord getRecordForSample(
-        String metric,
-        String type,
-        long value,
-        Map<String, String> metadata,
-        Map<String, Object> settings,
-        Instant sampleTimestamp
-    ) {
+    private UsageRecord getRecordForSample(String metric, String type, long value, Map<String, String> metadata, Instant sampleTimestamp) {
         return new UsageRecord(
             generateId(metric, sampleTimestamp),
             sampleTimestamp,
-            new UsageMetrics(type, null, value, reportPeriod, null, settings, null),
+            new UsageMetrics(type, null, value, reportPeriod, null, null),
             new UsageSource(sourceId, projectId, metadata)
         );
     }

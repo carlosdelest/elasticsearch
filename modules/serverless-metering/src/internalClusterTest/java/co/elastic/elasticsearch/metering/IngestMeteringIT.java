@@ -18,9 +18,7 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.reports.UsageRecord;
-import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
-import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.ingest.PutPipelineRequest;
@@ -28,7 +26,6 @@ import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
-import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.MockScriptEngine;
@@ -52,55 +49,16 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.startsWith;
 
 public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
-    protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
-    protected static final int DEFAULT_SEARCH_POWER = 100;
-    protected static final int OVERRIDE_SEARCH_POWER = 150;
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
 
-    Map<String, Object> defaultAttributes = Map.of(
-        "boost_window",
-        (int) DEFAULT_BOOST_WINDOW.seconds(),
-        "search_power",
-        DEFAULT_SEARCH_POWER
-    );
-
-    Map<String, Object> expectedDefaultAttributes = Map.of(
-        "boost_window",
-        (int) DEFAULT_BOOST_WINDOW.seconds(),
-        "search_power",
-        DEFAULT_SEARCH_POWER
-    );
-    Map<String, Object> expectedOverriddenAttributes = Map.of(
-        "boost_window",
-        (int) TimeValue.timeValueDays(3).seconds(),
-        "search_power",
-        OVERRIDE_SEARCH_POWER
-    );
-    Settings.Builder overrideSettings = Settings.builder()
-        .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), TimeValue.timeValueDays(3))
-        .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), OVERRIDE_SEARCH_POWER)
-        .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), OVERRIDE_SEARCH_POWER);
-
     @Override
-    @SuppressWarnings("unchecked")
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        var list = new ArrayList<Class<? extends Plugin>>();
-        list.addAll(super.nodePlugins());
+        var list = new ArrayList<>(super.nodePlugins());
         list.add(InternalSettingsPlugin.class);
         list.add(IngestCommonPlugin.class);
         list.add(TestScriptPlugin.class);
         return list;
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal, otherSettings))
-            .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
-            .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), DEFAULT_SEARCH_POWER)
-            .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), DEFAULT_SEARCH_POWER)
-            .build();
     }
 
     @Before
@@ -129,12 +87,8 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
 
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
 
-        // change settings propagated to usage records
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.transientSettings(overrideSettings);
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
         receivedMetrics().clear();
 
         // size 3*char+int (long size)
@@ -142,7 +96,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, expectedOverriddenAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
     }
 
     public void testIngestMetricsAreRecordedThroughIngestPipelines() throws InterruptedException, IOException {
@@ -158,12 +112,8 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName2));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName2);
-        assertUsageRecord(indexName2, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
 
-        // change settings propagated to usage records
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.transientSettings(overrideSettings);
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
         receivedMetrics().clear();
 
         client().index(
@@ -173,7 +123,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName2));
         usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName2);
-        assertUsageRecord(indexName2, usageRecord, expectedOverriddenAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
     }
 
     public void testDocumentFailingInPipelineNotReported() throws InterruptedException, IOException {
@@ -194,7 +144,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName3));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName3);
         // even though 2 documents were in bulk request, we will only have 1 reported
-        assertUsageRecord(indexName3, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName3, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
     }
 
     public void testUpdatesAreMeteredInBulkRawWithPartialDoc() throws InterruptedException, IOException {
@@ -202,13 +152,13 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         startSearchNode();
         String indexName4 = "update_partial_doc";
         createIndex(indexName4);
-        indexDoc(indexName4, defaultAttributes);
+        indexDoc(indexName4);
 
         client().prepareUpdate().setIndex(indexName4).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
 
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName4));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName4);
-        assertUsageRecord(indexName4, usageRecord, expectedDefaultAttributes, ASCII_SIZE + NUMBER_SIZE);// partial doc size
+        assertUsageRecord(indexName4, usageRecord, ASCII_SIZE + NUMBER_SIZE);// partial doc size
     }
 
     public void testUpdatesViaScriptAreNotMetered() throws InterruptedException, IOException {
@@ -236,27 +186,26 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
 
-        assertUsageRecord(indexName, usageRecord, defaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
         receivedMetrics().clear();
     }
 
-    private void indexDoc(String indexName, Map<String, Object> settings) throws InterruptedException {
+    private void indexDoc(String indexName) throws InterruptedException {
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
         waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
         UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
 
-        assertUsageRecord(indexName, usageRecord, settings, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
         receivedMetrics().clear();
     }
 
-    private static void assertUsageRecord(String indexName, UsageRecord metric, Map<String, Object> settings, int expectedQuantity) {
+    private static void assertUsageRecord(String indexName, UsageRecord metric, int expectedQuantity) {
         String id = "ingested-doc:" + indexName;
         assertThat(metric.id(), startsWith(id));
         assertThat(metric.usage().type(), equalTo("es_raw_data"));
         assertThat(metric.usage().quantity(), equalTo((long) expectedQuantity));
         assertThat(metric.source().metadata(), equalTo(Map.of("index", indexName)));
-        settings.forEach((k, v) -> assertThat(metric.usage().es().get(k), equalTo(v)));
     }
 
     private void createFailPipeline() {

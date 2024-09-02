@@ -108,8 +108,7 @@ import static org.hamcrest.Matchers.startsWith;
     value = "co.elastic.elasticsearch.metering:TRACE,co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageReporter:TRACE"
 )
 public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
-    protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
-    protected static final int DEFAULT_SEARCH_POWER = 100;
+
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
     private static final long EXPECTED_SIZE = 10 * ASCII_SIZE + NUMBER_SIZE + 6 * ASCII_SIZE;
@@ -255,9 +254,6 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
-            .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
-            .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), DEFAULT_SEARCH_POWER)
-            .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), DEFAULT_SEARCH_POWER)
             .put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), ProjectType.OBSERVABILITY)
             .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
             .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))

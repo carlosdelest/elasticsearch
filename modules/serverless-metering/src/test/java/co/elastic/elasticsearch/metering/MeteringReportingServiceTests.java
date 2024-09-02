@@ -77,14 +77,12 @@ public class MeteringReportingServiceTests extends ESTestCase {
     private static class TestCounter implements CounterMetricsCollector {
         private final String id;
         private final Map<String, String> metadata;
-        private final Map<String, Object> settings;
 
         private final AtomicLong metricValue = new AtomicLong();
 
-        private TestCounter(String id, Map<String, String> metadata, Map<String, Object> settings) {
+        private TestCounter(String id, Map<String, String> metadata) {
             this.id = id;
             this.metadata = metadata;
-            this.settings = settings;
         }
 
         public void add(long value) {
@@ -98,7 +96,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
 
             TestCommitMetricValues() {
                 this.snapshotValue = metricValue.get();
-                this.metric = new MetricValue(id, "test", metadata, settings, snapshotValue);
+                this.metric = new MetricValue(id, "test", metadata, snapshotValue);
             }
 
             @Override
@@ -122,14 +120,12 @@ public class MeteringReportingServiceTests extends ESTestCase {
     private static class TestSample implements SampledMetricsCollector {
         private final String id;
         private final Map<String, String> metadata;
-        private final Map<String, Object> settings;
 
         private long value;
 
-        private TestSample(String id, Map<String, String> metadata, Map<String, Object> settings) {
+        private TestSample(String id, Map<String, String> metadata) {
             this.id = id;
             this.metadata = metadata;
-            this.settings = settings;
         }
 
         public void set(long value) {
@@ -138,9 +134,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
 
         @Override
         public Optional<MetricValues> getMetrics() {
-            return Optional.of(
-                SampledMetricsCollector.valuesFromCollection(List.of(new MetricValue(id, "test", metadata, settings, value)))
-            );
+            return Optional.of(SampledMetricsCollector.valuesFromCollection(List.of(new MetricValue(id, "test", metadata, value))));
         }
     }
 
@@ -227,10 +221,10 @@ public class MeteringReportingServiceTests extends ESTestCase {
     public void testServiceReportsMetrics() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
-        var counter2 = new TestCounter("counter2", Map.of("id", "counter2"), Map.of("setting", 2));
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 3));
-        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"), Map.of("setting", 4));
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var counter2 = new TestCounter("counter2", Map.of("id", "counter2"));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
+        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"));
 
         var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
 
@@ -274,8 +268,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
     public void testCounterMetricsReset() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
-        var counter2 = new TestCounter("counter2", Map.of("id", "counter2"), Map.of("setting", 2));
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var counter2 = new TestCounter("counter2", Map.of("id", "counter2"));
 
         var deterministicTaskQueue = new DeterministicTaskQueue();
         var threadPool = deterministicTaskQueue.getThreadPool();
@@ -324,8 +318,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
     public void testSampledMetricsMaintained() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 1));
-        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"), Map.of("setting", 2));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
+        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"));
 
         var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
 
@@ -373,8 +367,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
     public void testMultipleRecordsNotBackfilledWhenMissingData() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 3));
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
 
         var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
         var initialTime = Instant.EPOCH.minus(reportPeriodDuration.multipliedBy(2));
@@ -428,8 +422,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
     public void testMultipleRecordsSentUpToCommittedTimestampWithInterpolation() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 3));
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
 
         var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
         var initialTime = Instant.EPOCH.minus(reportPeriodDuration.multipliedBy(2));
@@ -507,8 +501,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
     public void testRecordsNotSentAgainWhenTimestampCommitted() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 3));
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
 
         var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
         final var initialTimestamp = Instant.EPOCH.minus(reportPeriodDuration);
@@ -578,8 +572,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
         final int writerThreadsCount = randomIntBetween(4, 10);
         final int writeOpsPerThread = randomIntBetween(100, 2000);
 
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 1));
-        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"), Map.of("setting", 2));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
+        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"));
 
         final long valueForSampled1 = 50L;
         final long valueForSampled2 = 60L;
@@ -630,8 +624,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
         final int collectThreadsCount = 1;
 
         var counters = new TestCounter[] {
-            new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1)),
-            new TestCounter("counter2", Map.of("id", "counter2"), Map.of("setting", 2)) };
+            new TestCounter("counter1", Map.of("id", "counter1")),
+            new TestCounter("counter2", Map.of("id", "counter2")) };
 
         // Associate each writer thread to a counter it will use/increment
         final int[] writerThreadTargetTestCounter = IntStream.range(0, writerThreadsCount)
@@ -678,8 +672,8 @@ public class MeteringReportingServiceTests extends ESTestCase {
     public void testStopStops() {
         BlockingQueue<UsageRecord> records = new LinkedBlockingQueue<>();
 
-        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"), Map.of("setting", 1));
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("setting", 2));
+        var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"));
 
         var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
 
@@ -733,7 +727,7 @@ public class MeteringReportingServiceTests extends ESTestCase {
         for (var collector : collectors) {
             var metrics = collector.getMetrics();
             assertThat(metrics, isPresent());
-            metrics.get().forEach(results::add);
+            metrics.orElseThrow(AssertionError::new).forEach(results::add);
         }
     }
 

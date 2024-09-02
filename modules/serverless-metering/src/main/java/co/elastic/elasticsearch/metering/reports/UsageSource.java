@@ -68,7 +68,7 @@ public record UsageSource(String id, String instanceGroupId, @Nullable Map<Strin
         return builder;
     }
 
-    public static UsageSource fromXContent(XContentParser parser) {
+    static UsageSource fromXContent(XContentParser parser) {
         return PARSER.apply(parser, null);
     }
 }

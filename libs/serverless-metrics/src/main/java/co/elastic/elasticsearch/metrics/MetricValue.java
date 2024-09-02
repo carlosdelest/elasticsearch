@@ -27,7 +27,6 @@ import java.util.Map;
  *                 <a href="https://ela.st/metering-functions-common">metering_functions.common</a>
  *                 definition in metring-glue-functions.
  * @param metadata Associated metadata for the metric
- * @param settings Additional values associated with the metric
  * @param value    The current metric value
  */
-public record MetricValue(String id, String type, Map<String, String> metadata, Map<String, Object> settings, long value) {}
+public record MetricValue(String id, String type, Map<String, String> metadata, long value) {}
