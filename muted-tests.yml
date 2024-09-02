@@ -145,10 +145,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testAutoscalingWithQueueSize
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2655
-- class: co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersionsTests
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2657
-- class: co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettingsTests
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2658
 - class: co.elasticsearch.serverless.datastream.rest.ServerlessDataStreamYamlTestSuiteIT
   method: test {yaml=/10_failure_store/Check failure store index refresh interval}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2659
