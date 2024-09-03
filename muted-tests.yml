@@ -139,9 +139,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_processor/Test create processor with missing mandatory fields}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2648
-- class: co.elastic.elasticsearch.metering.StorageMeteringIT
-  method: testRAStorageIsAccumulated
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2681
 - class: co.elasticsearch.serverless.datastream.rest.ServerlessDataStreamYamlTestSuiteIT
   method: test {yaml=/10_failure_store/Check failure store index refresh interval}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2659
