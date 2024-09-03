@@ -142,6 +142,3 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testAutoscalingWithQueueSize
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2655
-- class: co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT
-  method: testVirtualBatchedCompoundCommitUploadMetrics
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2676
