@@ -151,3 +151,6 @@ tests:
 - class: org.elasticsearch.datastreams.LazyRolloverDataStreamIT
   method: testLazyRolloverFailsIndexing
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2661
+- class: org.elasticsearch.datastreams.LazyRolloverDataStreamIT
+  method: testLazyRollover
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2662
