@@ -345,7 +345,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         );
     }
 
-    public void testNonDataStreamWithTimestamp() throws InterruptedException {
+    public void testNonDataStreamWithTimestamp() throws Exception {
         String indexName = "idx1";
 
         // document contains a @timestamp field but it is not a timeseries data stream (no mappings with that field created upfront)
@@ -354,17 +354,12 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + indexName));
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + indexName);
-        assertUsageRecord(indexName, usageRecord, "raw-stored-index-size:" + indexName, "es_raw_stored_data", equalTo(EXPECTED_SIZE));
-
-        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", equalTo(EXPECTED_SIZE));
+        final List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
     }
 
-    public void testRAStorageWithTimeSeries() throws InterruptedException {
+    public void testRAStorageWithTimeSeries() throws Exception {
         String indexName = "idx1";
         createTimeSeriesIndex(indexName);
         ensureGreen(indexName);
@@ -374,14 +369,9 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + indexName));
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + indexName);
-        assertUsageRecord(indexName, usageRecord, "raw-stored-index-size:" + indexName, "es_raw_stored_data", equalTo(EXPECTED_SIZE));
-
-        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", equalTo(EXPECTED_SIZE));
+        final List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
     }
 
     public void testRAStorageWithTimeSeriesDeleteIndex() throws Exception {
@@ -416,14 +406,14 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         // Wait until we have raw-stored-index-size record(s) for the new index (which means the collector run)
         assertBusy(() -> {
             usageRecords.clear();
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
             assertFalse(rawStorageRecords.isEmpty());
         });
 
         // Ensure we no longer receive records for the old, deleted index (eventually)
         assertBusy(() -> {
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size")).toList();
             var allNewRecords = rawStorageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName));
             if (allNewRecords == false) {
@@ -436,7 +426,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         }, 1, TimeUnit.MINUTES);
     }
 
-    public void testDataStreamNoMapping() throws InterruptedException, IOException {
+    public void testDataStreamNoMapping() throws Exception {
         String indexName = "idx1";
         String dsName = ".ds-" + indexName;
 
@@ -450,17 +440,12 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + dsName));
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + dsName));
-        List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + dsName);
-        assertUsageRecord(dsName, usageRecord, "raw-stored-index-size:" + dsName, "es_raw_stored_data", equalTo(EXPECTED_SIZE));
-
-        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + dsName);
-        assertUsageRecord(dsName, usageRecord, "ingested-doc:" + dsName, "es_raw_data", equalTo(EXPECTED_SIZE));
+        final List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
+        waitAndAssertRAStorageRecords(usageRecords, dsName, EXPECTED_SIZE, 0);
     }
 
-    public void testRaStorageIsReportedAfterCommit() throws InterruptedException, IOException {
+    public void testRaStorageIsReportedAfterCommit() throws Exception {
         String indexName = "idx1";
         String dsName = ".ds-" + indexName;
         createDataStream(indexName);
@@ -472,14 +457,9 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + dsName));
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + dsName));
-        List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + dsName);
-        assertUsageRecord(dsName, usageRecord, "raw-stored-index-size:" + dsName, "es_raw_stored_data", equalTo(EXPECTED_SIZE));
-
-        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + dsName);
-        assertUsageRecord(dsName, usageRecord, "ingested-doc:" + dsName, "es_raw_data", equalTo(EXPECTED_SIZE));
+        final List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
+        waitAndAssertRAStorageRecords(usageRecords, dsName, EXPECTED_SIZE, 0);
     }
 
     // this test is confirming that for nontimeseries index we will meter ra-s updates by script in solution's cluster
@@ -550,7 +530,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         receivedMetrics().clear();
     }
 
-    public void testRAStorageIsAccumulated() throws InterruptedException {
+    public void testRAStorageIsAccumulated() throws Exception {
         String indexName = "idx2";
         ensureStableCluster(2);
         createTimeSeriesIndex(indexName);
@@ -565,14 +545,9 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        waitUntil(() -> hasReceivedRecords("raw-stored-index-size:" + indexName));
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        UsageRecord usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "raw-stored-index-size:" + indexName);
-        assertUsageRecord(indexName, usageRecord, "raw-stored-index-size:" + indexName, "es_raw_stored_data", equalTo(2 * EXPECTED_SIZE));
-
-        usageRecord = filterByIdStartsWithAndGetFirst(usageRecordStream, "ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, "ingested-doc:" + indexName, "es_raw_data", equalTo(2 * EXPECTED_SIZE));
+        final List<UsageRecord> usageRecords = new ArrayList<>();
+        waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
     }
 
     public void testRAStorageWithNonTimeSeries() throws Exception {
@@ -698,7 +673,9 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         // wait until we've received at least 3 more RA-S records (which should be for the second index only)
         waitUntil(() -> {
-            usageRecords.addAll(pollReceivedRecords().stream().filter(m -> m.id().startsWith("raw-stored-index-size:")).toList());
+            var newRecords = new ArrayList<UsageRecord>();
+            pollReceivedRecords(newRecords);
+            usageRecords.addAll(newRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:")).toList());
             return usageRecords.size() >= 3;
         });
         // and make sure we don't report RA-S for the empty index
@@ -740,14 +717,14 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         // Wait until we have raw-stored-index-size record(s) for the new index (which means the collector run)
         assertBusy(() -> {
             usageRecords.clear();
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
             assertFalse(rawStorageRecords.isEmpty());
         });
 
         // Ensure we no longer receive records for the old, deleted index (eventually)
         assertBusy(() -> {
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size")).toList();
             var allNewRecords = rawStorageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName));
             if (allNewRecords == false) {
@@ -827,7 +804,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     private void waitAndAssertRAIngestRecords(List<UsageRecord> usageRecords, String indexName, long raIngestedSize) throws Exception {
         assertBusy(() -> {
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var ingestRecords = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).toList();
             assertFalse(ingestRecords.isEmpty());
 
@@ -842,7 +819,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     private void waitAndAssertRAStorageRecords(List<UsageRecord> usageRecords, String indexName, long raStorageSize, long delta)
         throws Exception {
         assertBusy(() -> {
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var lastUsageRecord = usageRecords.stream()
                 .filter(m -> m.id().startsWith("raw-stored-index-size:" + indexName))
                 .max(Comparator.comparing(UsageRecord::usageTimestamp));

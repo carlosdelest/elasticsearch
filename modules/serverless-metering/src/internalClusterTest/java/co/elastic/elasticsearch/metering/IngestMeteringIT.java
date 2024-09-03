@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
@@ -84,9 +85,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         // size 3*char+int (long size)
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
         assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
 
         receivedMetrics().clear();
@@ -94,8 +93,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         // size 3*char+int (long size)
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
+        usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
         assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
     }
 
@@ -110,8 +108,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
             new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
         ).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName2));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName2);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
         assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
 
         receivedMetrics().clear();
@@ -121,8 +118,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
             new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
         ).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName2));
-        usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName2);
+        usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
         assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
     }
 
@@ -141,8 +137,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
                 .add(new IndexRequest(indexName3).setPipeline("fail_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c"))
         ).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName3));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName3);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName3);
         // even though 2 documents were in bulk request, we will only have 1 reported
         assertUsageRecord(indexName3, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
     }
@@ -156,8 +151,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         client().prepareUpdate().setIndex(indexName4).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName4));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName4);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName4);
         assertUsageRecord(indexName4, usageRecord, ASCII_SIZE + NUMBER_SIZE);// partial doc size
     }
 
@@ -183,8 +177,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         final Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, scriptCode, Collections.emptyMap());
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).get();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
 
         assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
         receivedMetrics().clear();
@@ -193,8 +186,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     private void indexDoc(String indexName) throws InterruptedException {
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
 
         assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
         receivedMetrics().clear();
@@ -243,5 +235,12 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
             }
             """);
         clusterAdmin().putPipeline(new PutPipelineRequest("new_field_pipeline", pipelineBody, XContentType.JSON)).actionGet();
+    }
+
+    private UsageRecord pollReceivedRAIRecordsAndGetFirst(String indexName) {
+        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
+        List<UsageRecord> usageRecords = new ArrayList<>();
+        pollReceivedRecords(usageRecords);
+        return usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).findFirst().get();
     }
 }

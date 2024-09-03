@@ -51,8 +51,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
@@ -139,22 +137,9 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         return receivedMetrics().stream().flatMap(List::stream).anyMatch(m -> m.id().startsWith(prefix));
     }
 
-    protected UsageRecord pollReceivedRecordsAndGetFirst(String prefix) {
-        List<UsageRecord> usageRecords = pollReceivedRecords();
-        return filterByIdStartsWithAndGetFirst(usageRecords, prefix);
-    }
-
-    protected Stream<UsageRecord> filterByIdStartsWith(Stream<UsageRecord> usageRecordStream, String prefix) {
-        return usageRecordStream.filter(m -> m.id().startsWith(prefix));
-    }
-
-    protected UsageRecord filterByIdStartsWithAndGetFirst(List<UsageRecord> usageRecordStream, String prefix) {
-        return filterByIdStartsWith(usageRecordStream.stream(), prefix).findFirst().get();
-    }
-
-    protected List<UsageRecord> pollReceivedRecords() {
+    protected void pollReceivedRecords(List<UsageRecord> usageRecords) {
         List<List<UsageRecord>> recordLists = new ArrayList<>();
         receivedMetrics().drainTo(recordLists);
-        return recordLists.stream().flatMap(List::stream).collect(Collectors.toList());
+        recordLists.stream().flatMap(List::stream).forEach(usageRecords::add);
     }
 }

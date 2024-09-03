@@ -82,7 +82,7 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         String idPRefix = "shard-size:" + indexName + ":0";
         var usageRecords = new ArrayList<UsageRecord>();
         assertBusy(() -> {
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var lastUsageRecord = usageRecords.stream()
                 .filter(m -> m.id().startsWith(idPRefix))
                 .max(Comparator.comparing(UsageRecord::usageTimestamp));

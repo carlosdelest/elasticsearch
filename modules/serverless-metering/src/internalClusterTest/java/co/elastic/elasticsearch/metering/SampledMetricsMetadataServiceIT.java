@@ -279,7 +279,7 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
 
     private void waitAndAssertIXRecords(List<UsageRecord> usageRecords, String indexName) throws Exception {
         assertBusy(() -> {
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var ixRecords = usageRecords.stream().filter(m -> m.id().startsWith("shard-size")).toList();
             assertFalse(ixRecords.isEmpty());
 
@@ -291,7 +291,7 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
 
     private void waitAndAssertRAIngestRecords(List<UsageRecord> usageRecords, String indexName) throws Exception {
         assertBusy(() -> {
-            usageRecords.addAll(pollReceivedRecords());
+            pollReceivedRecords(usageRecords);
             var ingestRecords = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).toList();
             assertFalse(ingestRecords.isEmpty());
 

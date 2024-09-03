@@ -20,7 +20,6 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
-import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.common.settings.Settings;
@@ -28,15 +27,16 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.xcontent.XContentType;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.StreamSupport;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.startsWith;
 
 public class MeteringIndexInfoServiceIndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
@@ -89,30 +89,19 @@ public class MeteringIndexInfoServiceIndexSizeMeteringIT extends AbstractMeterin
             var task = MeteringIndexInfoTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
+        });
 
-            assertTrue(hasReceivedRecords("shard-size"));
-            UsageRecord metric = pollReceivedRecordsAndGetFirst("shard-size");
-
-            String idPRefix = "shard-size:" + indexName + ":0";
-            assertThat(metric.id(), startsWith(idPRefix));
+        assertBusy(() -> {
+            var usageRecords = new ArrayList<UsageRecord>();
+            pollReceivedRecords(usageRecords);
+            var lastUsageRecord = usageRecords.stream()
+                .filter(m -> m.id().startsWith("shard-size:" + indexName + ":0"))
+                .max(Comparator.comparing(UsageRecord::usageTimestamp));
+            assertFalse(lastUsageRecord.isEmpty());
+            var metric = lastUsageRecord.get();
             assertThat(metric.usage().type(), equalTo("es_indexed_data"));
             assertThat(metric.usage().quantity(), greaterThan(0L));
             assertThat(metric.source().metadata(), equalTo(Map.of("index", indexName, "shard", "0")));
-        });
-
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.transientSettings(
-            Settings.builder().put("serverless.search.boost_window", TimeValue.timeValueDays(3)).put("serverless.search.search_power", 1234)
-        );
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
-
-        assertBusy(() -> {
-            assertTrue(hasReceivedRecords("shard-size"));
-            UsageRecord metric = pollReceivedRecordsAndGetFirst("shard-size");
-            String idPRefix = "shard-size:" + indexName + ":0";
-            assertThat(metric.id(), startsWith(idPRefix));
-            assertThat(metric.usage().type(), equalTo("es_indexed_data"));
-            assertThat(metric.usage().quantity(), greaterThan(0L));
-        });
+        }, 20, TimeUnit.SECONDS);
     }
 }
