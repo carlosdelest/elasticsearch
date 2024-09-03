@@ -176,7 +176,7 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     void startStopTask(ClusterChangedEvent event) {
         // Wait until cluster has recovered. Plus, start the task only when every node in the cluster supports IX
         if (event.state().clusterRecovered() == false
-            || featureService.clusterHasFeature(event.state(), MeteringPlugin.INDEX_INFO_SUPPORTED) == false) {
+            || featureService.clusterHasFeature(event.state(), MeteringFeatures.INDEX_INFO_SUPPORTED) == false) {
             return;
         }
 

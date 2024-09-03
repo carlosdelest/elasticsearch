@@ -10,8 +10,8 @@ This plugin adds functionalities to serverless Elasticsearch to meter data usage
 
 The metrics metered can be categorized into two types:
 
-* sampled metrics (point-in-time quantities), implementing the `SampledMetricsCollector` interface,
-* counter metrics (accumulators for monotonically increasing functions), implementing the `CounterMetricsCollector`.
+* sampled metrics (point-in-time quantities), implementing the `SampledMetricsProvider` interface,
+* counter metrics (accumulators for monotonically increasing functions), implementing the `CounterMetricsProvider`.
 
 **This plugin currently computes and reports three different metrics:**
 
@@ -48,7 +48,7 @@ For update-by-doc, the RA-I increment for the update (i.e. the normalized raw si
 
 The ratio of these decisions, described in more detail in the [PRD document](https://docs.google.com/document/d/1ILQHCrMSWFB403fJHI45jarolcOC4l6zlDoZbqKK0HA/), is that RA-I measures  the "amount of data the customer sends to the cluster". In update-by-doc, the “data sent to the cluster” is the update document, in update-by-script, customers do not send any data to the cluster, they process existing data.
 
-RA-I is reported _per node_. During document parsing we compute RA-I creating a per-document size. When the indexing of a document completes successfully, the per-document size is accumulated on the indexing node, in memory(**), incrementing a per-index counter. A dedicated component (`ReportGatherer`, running on every node) calls the RA-I counter collector at a regular interval (by default,  5 minutes) to create and publish a billing usage record from the per-index counters. As a final step we commit the operation to the counter collector, resetting the per-index counters. This is done only after `ReportGatherer` has successfully published the usage record(s) to Usage API, so that in case of failure the counters are preserved and the operation can be retried at the next iteration.
+RA-I is reported _per node_. During document parsing we compute RA-I creating a per-document size. When the indexing of a document completes successfully, the per-document size is accumulated on the indexing node, in memory(**), incrementing a per-index counter. A dedicated component (`UsageReportCollector`, running on every node) calls the RA-I counter provider at a regular interval (by default 5 minutes) to create and publish a billing usage record from the per-index counters. As a final step we commit the operation to the counter provider, resetting the per-index counters. This is done only after `UsageReportCollector` has successfully published the usage record(s) to Usage API, so that - in case of failure - the counters are preserved and the operation can be retried at the next iteration.
 
 (**) This means that if a node crashes we lose the data we have yet to report. Since RA-I is a counter (an accumulator for a monotonically increasing function), losing the partial data for the period means under-billing, which is the better alternative in case of error.
 
@@ -61,11 +61,7 @@ RA-I usage records look as follows:
     "usage": {
         "type": "es-raw-data",
         "period_seconds": {reporting period},
-
-        "quantity": {RA-Ingest},
-        "es": {
-            ...
-        }
+        "quantity": {RA-Ingest}
     },
     "source": {
         "id": "es-{node id}",
@@ -79,10 +75,10 @@ RA-I usage records look as follows:
 
 Code references:
 
-* [`XContentMeteringParser`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/XContentMeteringParser.java): Metering of RA-I while parsing a document source
-* [`RAIngestMetricReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAIngestMetricReporter.java): Reports RA-I per doc to `IngestMetricsCollector` once indexing completed
-* [`IngestMetricsCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/IngestMetricsCollector.java): Accumulates RA-I per index in memory and generates ingest usage metrics based on that
-* [`ReportGatherer`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ReportGatherer.java): Periodically gathers usage metrics from all collectors and publishes those
+* [`XContentMeteringParser`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/xcontent/XContentMeteringParser.java): Metering of RA-I while parsing a document source
+* [`RAIngestMetricReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAIngestMetricReporter.java): Reports RA-I per doc to `IngestMetricsProvider` once indexing completed
+* [`IngestMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/IngestMetricsProvider.java): Accumulates RA-I per index in memory and generates ingest usage metrics based on that
+* [`UsageReportCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/usagereports/UsageReportCollector.java): Periodically collects usage metrics from all metrics providers and publishes those
 
 
 ### RA-Storage
@@ -147,13 +143,13 @@ Each node responds with per-shard information on IX and RA-S (plus other informa
 
 The `MeteringIndexInfoService` running on the persistent task node builds and stores a consolidated view of metering shard infos of all responses. `MeteringIndexInfoService` considers only the most up to date generations and handles corner cases such as indices being deleted or potentially even re-generated with the same name.
 
-Like for RA-I, a separate service (`ReportGatherer`) schedules a periodic function (with a default interval of 5 minutes) via a dedicated threadpool scheduler to collect metrics from all registered collectors; in the case of RA-S and IX, the sample collector exposed by `MeteringIndexInfoService` generates per-index billing usage records for both storage metrics by aggregating the most up-to-date per-shard info. Records for empty indices without any live documents are omitted. The sample records are then associated with the current reporting period (aka sampling period), which is "snapped" (or aligned) to multiples of the sampling period boundaries within the hour.
+Like for RA-I, a separate service (`UsageReportCollector`) schedules a periodic function (with a default interval of 5 minutes) via a dedicated threadpool scheduler to collect metrics from all registered metrics providers; in the case of RA-S and IX, the sampled metrics provider exposed by `MeteringIndexInfoService` generates per-index billing usage records for both storage metrics by aggregating the most up-to-date per-shard info. Records for empty indices without any live documents are omitted. The sample records are then associated with the current reporting period (aka sampling period), which is "snapped" (or aligned) to multiples of the sampling period boundaries within the hour.
 
 Because of its architecture/technology combination, the billing pipeline is not able to detect missing samples and is not able to adjust for them, resulting in potentially incorrect computations.
 The billing pipeline operates using a "billing period" of 1h; the reporting (sampling) period must be set so the billing period is divisible by the sampling period, without reminder. In other words, there must be an integer number of sampling periods within a billing period. With the default sampling period of 5 minutes, this number is 12. The billing pipeline averages all samples in its billing period, but it only considers samples individually; therefore it performs a "live average": it divides each sample by the number of expected samples in the billing period to obtain a contribution to the final value and sums them.
 
-For this reason, `ReportGatherer` keeps a “cursor” in cluster state which refers to the last successfully transmitted sampling period. Upon successful publication, the cursor is updated with the last sampling timestamp. The persistent task node also retains in memory the most recently published sampling records.\
-If `ReportGatherer` detects that some previous sampling intervals have been missed (e.g. due to delays or failures due to unavailability of the usage API), it backfills sample records using linear interpolation between the latest successfully published samples and the most up-to-date samples.\
+For this reason, `UsageReportCollector` keeps a “cursor” in cluster state which refers to the last successfully transmitted sampling period. Upon successful publication, the cursor is updated with the last sampling timestamp. The persistent task node also retains in memory the most recently published sampling records.\
+If `UsageReportCollector` detects that some previous sampling intervals have been missed (e.g. due to delays or failures due to unavailability of the usage API), it backfills sample records using linear interpolation between the latest successfully published samples and the most up-to-date samples.\
 If there are no previous samples at all (e.g. after changing the persistent task node), we do a limited backfilling: only 2 additional timeframes, using constant interpolation. This covers a couple of common scenarios in which this happens (scaling and rolling upgrade).\
 If no previous sample for a particular index exists, backfilling for that index is skipped (we just transmit the new available data); a missing sample for a single index means that either the index is new or a shard/node was not available.\
 In any case, at most 24h of data is backfilled.
@@ -166,7 +162,7 @@ Notes:
     * When queried, the node recalculates only the information that needs to be updated, based on the generation.
     * If metering infos of a shard on a particular node haven’t changed, that information  is omitted from the response when being queried by the persistent task node (i.e. we only answer with the diff).
 * `MeteringIndexInfoService` runs on every node of the cluster, but it effectively do something (generate and send records) only on the persistent task node; however, the persistent task can be re-allocated to a different node at any time (e.g. during a rolling upgrade), so any node needs to be ready to start collecting and sending usage metrics.
-* ReportGatherer also runs on every node; on search nodes, it will collect and forward metrics from the (single active) sampled collector for RA-S/IX running on the persistent task node. On index nodes, it will collect and forward metrics from the counter collectors for RA-I.
+* UsageReportCollector also runs on every node; on search nodes, it will collect and forward metrics from the (single active) sampled storage metrics provider for RA-S/IX running on the persistent task node. On index nodes, it will collect and forward metrics from the ingest counter metrics provider for RA-I.
 
 RA-S usage sample records look as follows:
 
@@ -177,11 +173,7 @@ RA-S usage sample records look as follows:
     "usage": {
         "type": "es_raw_stored_data",
         "period_seconds": {reporting period},
-
-        "quantity": {RA-Storage},
-        "es": {
-           ...
-        }
+        "quantity": {RA-Storage}
     },
     "source": {
         "id": "es-{node id}",
@@ -202,18 +194,14 @@ IX usage sample records look as follows:
     "usage": {
         "type": "es_indexed_data",
         "period_seconds": {reporting period},
-
-        "quantity": {IX},
-        "es": {
-           ...
-        }
+        "quantity": {IX}
     },
     "source": {
         "id": "es-{node id}",
         "instance_group_id": "{project id}",
         "metadata": {
             "index": "{index name}",
-            "shard": "{shard id}",
+            "shard": "{shard id}"
         }
     }
 }
@@ -223,8 +211,8 @@ Code references:
 
 * [`MeteringIndexInfoTask`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/MeteringIndexInfoTask.java): periodically polls metering updates via MeteringIndexInfoService
 * [`MeteringIndexInfoService`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/action/MeteringIndexInfoService.java): maintains consolidated view of latest shard metering infos
-* [`StorageInfoMetricsCollector`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/action/MeteringIndexInfoService.java#L189): generates per index RA-S usage samples using above
-* [`ReportGatherer`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ReportGatherer.java): periodically gathers the RA-S usage samples and backfills samples if necessary
+* [`StorageInfoMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/action/MeteringIndexInfoService.java#L189): provides per index RA-S usage samples using above
+* [`UsageReportCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/usagereports/UsageReportCollector.java): periodically collects the RA-S usage samples and backfills samples if necessary
 
 
 ## Metering stats API

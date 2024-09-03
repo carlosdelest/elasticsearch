@@ -315,7 +315,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
 
     private ClusterState initialState() {
         return ClusterState.builder(initialStateWithoutFeature())
-            .nodeFeatures(Map.of(localNodeId, Set.of(MeteringPlugin.INDEX_INFO_SUPPORTED.id())))
+            .nodeFeatures(Map.of(localNodeId, Set.of(MeteringFeatures.INDEX_INFO_SUPPORTED.id())))
             .build();
     }
 

@@ -17,9 +17,10 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.reports.HttpClientThreadFilter;
-import co.elastic.elasticsearch.metering.reports.HttpMeteringUsageRecordPublisher;
-import co.elastic.elasticsearch.metering.reports.UsageRecord;
+import co.elastic.elasticsearch.metering.usagereports.UsageReportService;
+import co.elastic.elasticsearch.metering.usagereports.publisher.HttpClientThreadFilter;
+import co.elastic.elasticsearch.metering.usagereports.publisher.HttpMeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 
@@ -108,7 +109,7 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
         return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
             .put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
-            .put(MeteringReportingService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
+            .put(UsageReportService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
             .put("xpack.searchable.snapshot.shared_cache.size", "16MB")
             .put("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
             .build();

@@ -29,12 +29,13 @@ import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForPrim
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSecondaryUserAction;
 import co.elastic.elasticsearch.metering.action.TransportUpdateSampledMetricsMetadataAction;
 import co.elastic.elasticsearch.metering.action.UpdateSampledMetricsMetadataAction;
-import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
-import co.elastic.elasticsearch.metering.reports.HttpMeteringUsageRecordPublisher;
-import co.elastic.elasticsearch.metering.reports.MeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.stats.rest.RestGetMeteringStatsAction;
-import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
-import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
+import co.elastic.elasticsearch.metering.usagereports.UsageReportService;
+import co.elastic.elasticsearch.metering.usagereports.publisher.HttpMeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.usagereports.publisher.MeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.xcontent.MeteringDocumentParsingProvider;
+import co.elastic.elasticsearch.metrics.CounterMetricsProvider;
+import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.elasticsearch.action.ActionRequest;
@@ -109,19 +110,16 @@ public class MeteringPlugin extends Plugin
 
     private static final String METERING_REPORTER_THREAD_POOL_NAME = "metering_reporter";
 
-    static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
-    static final NodeFeature SAMPLED_METRICS_METADATA = new NodeFeature("metering.sampled-metrics-metadata");
-
     private final ProjectType projectType;
 
     private MeteringIndexInfoTaskExecutor meteringIndexInfoTaskExecutor;
     private final boolean hasSearchRole;
-    private List<SampledMetricsCollector> sampledMetricsCollectors;
-    private List<CounterMetricsCollector> counterMetricsCollectors;
+    private List<SampledMetricsProvider> sampledMetricsProviders;
+    private List<CounterMetricsProvider> counterMetricsProviders;
     private MeteringUsageRecordPublisher usageRecordPublisher;
-    private MeteringReportingService reportingService;
+    private UsageReportService usageReportService;
 
-    private volatile IngestMetricsCollector ingestMetricsCollector;
+    private volatile IngestMetricsProvider ingestMetricsCollector;
     private volatile SystemIndices systemIndices;
 
     public MeteringPlugin(Settings settings) {
@@ -132,7 +130,7 @@ public class MeteringPlugin extends Plugin
     @Override
     public List<Setting<?>> getSettings() {
         return List.of(
-            MeteringReportingService.REPORT_PERIOD,
+            UsageReportService.REPORT_PERIOD,
             HttpMeteringUsageRecordPublisher.METERING_URL,
             HttpMeteringUsageRecordPublisher.BATCH_SIZE,
             MeteringIndexInfoTaskExecutor.ENABLED_SETTING,
@@ -142,8 +140,8 @@ public class MeteringPlugin extends Plugin
 
     @Override
     public void loadExtensions(ExtensionLoader loader) {
-        sampledMetricsCollectors = loader.loadExtensions(SampledMetricsCollector.class);
-        counterMetricsCollectors = loader.loadExtensions(CounterMetricsCollector.class);
+        sampledMetricsProviders = loader.loadExtensions(SampledMetricsProvider.class);
+        counterMetricsProviders = loader.loadExtensions(CounterMetricsProvider.class);
     }
 
     @Override
@@ -171,22 +169,22 @@ public class MeteringPlugin extends Plugin
         String projectId = PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
-        ingestMetricsCollector = new IngestMetricsCollector(nodeEnvironment.nodeId());
+        ingestMetricsCollector = new IngestMetricsProvider(nodeEnvironment.nodeId());
 
         var indexSizeService = new MeteringIndexInfoService(clusterService, services.telemetryProvider().getMeterRegistry());
 
-        List<CounterMetricsCollector> builtInCounterMetrics = new ArrayList<>();
-        List<SampledMetricsCollector> builtInSampledMetrics = new ArrayList<>();
+        List<CounterMetricsProvider> builtInCounterMetrics = new ArrayList<>();
+        List<SampledMetricsProvider> builtInSampledMetrics = new ArrayList<>();
         List<DiscoveryNodeRole> discoveryNodeRoles = NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings());
         if (discoveryNodeRoles.contains(DiscoveryNodeRole.INGEST_ROLE) || discoveryNodeRoles.contains(DiscoveryNodeRole.INDEX_ROLE)) {
             builtInCounterMetrics.add(ingestMetricsCollector);
         }
 
-        TimeValue reportPeriod = MeteringReportingService.REPORT_PERIOD.get(environment.settings());
+        TimeValue reportPeriod = UsageReportService.REPORT_PERIOD.get(environment.settings());
 
-        builtInCounterMetrics.addAll(counterMetricsCollectors);
-        builtInSampledMetrics.add(indexSizeService.createIndexSizeMetricsCollector());
-        builtInSampledMetrics.addAll(sampledMetricsCollectors);
+        builtInCounterMetrics.addAll(counterMetricsProviders);
+        builtInSampledMetrics.add(indexSizeService.createIndexSizeMetricsProvider());
+        builtInSampledMetrics.addAll(sampledMetricsProviders);
 
         if (projectId.isEmpty()) {
             log.warn(PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
@@ -198,12 +196,14 @@ public class MeteringPlugin extends Plugin
             );
         }
 
-        reportingService = new MeteringReportingService(
+        usageReportService = new UsageReportService(
             nodeEnvironment.nodeId(),
             projectId,
             builtInCounterMetrics,
             builtInSampledMetrics,
-            new ClusterStateSampledMetricsTimeCursor(clusterService, services.featureService(), services.client()),
+            clusterService,
+            services.featureService(),
+            services.client(),
             reportPeriod,
             usageRecordPublisher,
             threadPool,
@@ -213,7 +213,7 @@ public class MeteringPlugin extends Plugin
 
         List<Object> cs = new ArrayList<>();
         cs.add(usageRecordPublisher);
-        cs.add(reportingService);
+        cs.add(usageReportService);
         cs.add(indexSizeService);
         cs.addAll(builtInCounterMetrics);
         cs.addAll(builtInSampledMetrics);
@@ -265,10 +265,10 @@ public class MeteringPlugin extends Plugin
 
     @Override
     public void close() throws IOException {
-        IOUtils.close(usageRecordPublisher, reportingService);
+        IOUtils.close(usageRecordPublisher, usageReportService);
     }
 
-    IngestMetricsCollector getIngestMetricsCollector() {
+    IngestMetricsProvider getIngestMetricsCollector() {
         return ingestMetricsCollector;
     }
 

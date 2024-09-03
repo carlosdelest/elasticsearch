@@ -15,19 +15,20 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.usagereports.publisher;
 
-import org.elasticsearch.features.FeatureSpecification;
-import org.elasticsearch.features.NodeFeature;
+import java.io.Closeable;
+import java.io.IOException;
+import java.util.List;
 
-import java.util.Set;
+public interface MeteringUsageRecordPublisher extends Closeable {
+    MeteringUsageRecordPublisher NOOP_REPORTER = new MeteringUsageRecordPublisher() {
+        @Override
+        public void sendRecords(List<UsageRecord> records) {}
 
-public class MeteringFeatures implements FeatureSpecification {
-    public static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
-    public static final NodeFeature SAMPLED_METRICS_METADATA = new NodeFeature("metering.sampled-metrics-metadata");
+        @Override
+        public void close() {}
+    };
 
-    @Override
-    public Set<NodeFeature> getFeatures() {
-        return Set.of(INDEX_INFO_SUPPORTED, SAMPLED_METRICS_METADATA);
-    }
+    void sendRecords(List<UsageRecord> records) throws IOException, InterruptedException;
 }

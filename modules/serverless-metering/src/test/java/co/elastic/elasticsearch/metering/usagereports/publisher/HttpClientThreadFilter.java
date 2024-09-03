@@ -15,19 +15,14 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.usagereports.publisher;
 
-import org.elasticsearch.features.FeatureSpecification;
-import org.elasticsearch.features.NodeFeature;
+import com.carrotsearch.randomizedtesting.ThreadFilter;
 
-import java.util.Set;
-
-public class MeteringFeatures implements FeatureSpecification {
-    public static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
-    public static final NodeFeature SAMPLED_METRICS_METADATA = new NodeFeature("metering.sampled-metrics-metadata");
-
+public class HttpClientThreadFilter implements ThreadFilter {
     @Override
-    public Set<NodeFeature> getFeatures() {
-        return Set.of(INDEX_INFO_SUPPORTED, SAMPLED_METRICS_METADATA);
+    public boolean reject(Thread t) {
+        // Java HttpClient has a selector thread that only goes away when it is GCd
+        return t.getName().startsWith("HttpClient-");
     }
 }

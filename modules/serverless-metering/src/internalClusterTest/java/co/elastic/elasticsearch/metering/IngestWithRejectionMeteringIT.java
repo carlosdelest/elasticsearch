@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
+import co.elastic.elasticsearch.metering.xcontent.MeteringDocumentParsingProvider;
 
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.bulk.BulkRequest;

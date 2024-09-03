@@ -17,16 +17,16 @@
 
 package co.elastic.elasticsearch.metering.ingested_size.reporter;
 
-import co.elastic.elasticsearch.metering.IngestMetricsCollector;
+import co.elastic.elasticsearch.metering.IngestMetricsProvider;
 
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
 public class RAIngestMetricReporter implements DocumentSizeReporter {
-    private final IngestMetricsCollector ingestMetricsCollector;
+    private final IngestMetricsProvider ingestMetricsCollector;
     private final String indexName;
 
-    public RAIngestMetricReporter(String indexName, IngestMetricsCollector ingestMetricsCollector) {
+    public RAIngestMetricReporter(String indexName, IngestMetricsProvider ingestMetricsCollector) {
         this.indexName = indexName;
         this.ingestMetricsCollector = ingestMetricsCollector;
     }

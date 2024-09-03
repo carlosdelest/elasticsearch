@@ -18,7 +18,7 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
-import co.elastic.elasticsearch.metering.reports.UsageRecord;
+import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;

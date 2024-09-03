@@ -19,7 +19,7 @@ package co.elastic.elasticsearch.metering.action;
 
 import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
 import co.elastic.elasticsearch.metrics.MetricValue;
-import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
+import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
@@ -212,7 +212,7 @@ public class MeteringIndexInfoService {
             .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    class StorageInfoMetricsCollector implements SampledMetricsCollector {
+    class StorageInfoMetricsProvider implements SampledMetricsProvider {
         private static final String IX_METRIC_TYPE = "es_indexed_data";
         static final String IX_METRIC_ID_PREFIX = "shard-size";
         private static final String RA_S_METRIC_TYPE = "es_raw_stored_data";
@@ -233,7 +233,7 @@ public class MeteringIndexInfoService {
 
             if (persistentTaskNodeStatus == PersistentTaskNodeStatus.ANOTHER_NODE || (currentInfo == CollectedMeteringShardInfo.EMPTY)) {
                 // We have nothing to report
-                return Optional.of(SampledMetricsCollector.NO_VALUES);
+                return Optional.of(SampledMetricsProvider.NO_VALUES);
             }
 
             boolean partial = currentInfo.meteringShardInfoStatus().contains(CollectedMeteringShardInfoFlag.PARTIAL);
@@ -294,7 +294,7 @@ public class MeteringIndexInfoService {
                     );
                 }
             }
-            return Optional.of(SampledMetricsCollector.valuesFromCollection(Collections.unmodifiableCollection(metrics)));
+            return Optional.of(SampledMetricsProvider.valuesFromCollection(Collections.unmodifiableCollection(metrics)));
         }
 
         private static final class RaStorageInfo {
@@ -321,8 +321,8 @@ public class MeteringIndexInfoService {
         }
     }
 
-    public SampledMetricsCollector createIndexSizeMetricsCollector() {
-        return new StorageInfoMetricsCollector();
+    public SampledMetricsProvider createIndexSizeMetricsProvider() {
+        return new StorageInfoMetricsProvider();
     }
 
     private static CollectedMeteringShardInfo mergeShardInfo(
