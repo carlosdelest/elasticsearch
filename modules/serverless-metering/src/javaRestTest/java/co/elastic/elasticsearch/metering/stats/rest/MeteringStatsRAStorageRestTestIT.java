@@ -55,7 +55,6 @@ public class MeteringStatsRAStorageRestTestIT extends MeteringStatsRestTestCase 
         .name("javaRestTest")
         .user("admin-user", "x-pack-test-password")
         .setting("xpack.ml.enabled", "false")
-        .setting("metering.index-info-task.enabled", "true")
         .setting("metering.index-info-task.poll.interval", "5s")
         .setting("serverless.project_type", "OBSERVABILITY")
         .build();

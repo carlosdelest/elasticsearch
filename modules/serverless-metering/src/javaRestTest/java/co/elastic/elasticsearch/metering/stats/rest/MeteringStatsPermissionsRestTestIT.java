@@ -51,7 +51,6 @@ public class MeteringStatsPermissionsRestTestIT extends MeteringStatsRestTestCas
         .setting("xpack.security.enabled", "true")
         .setting("xpack.security.transport.ssl.enabled", "false")
         .setting("xpack.security.http.ssl.enabled", "false")
-        .setting("metering.index-info-task.enabled", "true")
         .user("test_admin", PASSWORD, "superuser", true)
         .user("test_foo_monitor", PASSWORD, "monitor_foo_indices", false)
         .user("test_bar_monitor", PASSWORD, "monitor_bar_indices", false)

@@ -73,6 +73,8 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         .setting("metering.project_id", "testProjectId")
         .setting("metering.url", "http://localhost:" + usageApiTestServer.getAddress().getPort())
         .setting("metering.report_period", REPORT_PERIOD + "s") // speed things up a bit
+        .setting("metering.index-info-task.poll.interval", REPORT_PERIOD + "s")
+        .setting("serverless.project_type", randomFrom("SECURITY", "OBSERVABILITY"))
         .build();
 
     @Override
@@ -99,6 +101,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
 
         // ingest more docs so that each shard has some
         int numDocs = 1000;
+        int rawSizePerDoc = 6; // raw size in bytes of the single doc
 
         StringBuilder bulk = new StringBuilder();
         for (int i = 0; i < numDocs; i++) {
@@ -125,7 +128,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
             int sum = sumQuantity(ingestedDocs);
 
             // asserting that eventually records value sum up to expected value
-            assertThat(sum, equalTo(numDocs * 6 /* size in bytes of the single doc*/));
+            assertThat(sum, equalTo(numDocs * rawSizePerDoc));
             logger.info(numDocs);
             logger.info(ingestedDocs.size());
             logger.info(sum);
@@ -133,29 +136,28 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         assertBusy(() -> {
             var allUsageRecords = usageApiTestServer.drainAllUsageRecords();
             var ingestedDocsRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "ingested-doc");
-            // once we asserted total size numDocs*96 there will be no more records
+            // once we asserted the expected total ingest size there will be no more ingest usage records
             assertThat(ingestedDocsRecords, empty());
         });
 
-        List<Map<?, ?>> latestRecords = new ArrayList<>();
+        List<Map<?, ?>> latestIXShardSizes = new ArrayList<>();
         assertBusy(() -> {
             var allUsageRecords = usageApiTestServer.getAllUsageRecords();
-            var shardSizeRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "shard-size");
+            var ixShardSizeRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "shard-size");
+            var raStorageRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "raw-stored-index-size");
 
-            // there might be records from multiple metering.report_period. We are interested in the latest
-            // because the replication might take time and also some nodes might be reporting with a delay
+            // there might be records from multiple metering periods, we are interested in the latest only
 
-            // we are expecting 3 records in a full batch as the IX is running on one node.
-            var latestTimestampWithSixRecords = getLatestFullBatch(shardSizeRecords, 3);
-            latestRecords.clear();
-            latestRecords.addAll(latestTimestampWithSixRecords.getValue());
+            // we are expecting 1 record (1 per index)
+            var latestRAStorageBatch = getLatestFullBatch(raStorageRecords, 1);
+            assertThat(usageQuantity(latestRAStorageBatch.getValue().get(0)), equalTo(numDocs * rawSizePerDoc));
+
+            // we are expecting 3 records (1 per shard)
+            var latestIXShardSizesBatch = getLatestFullBatch(ixShardSizeRecords, 3);
+            latestIXShardSizes.clear();
+            latestIXShardSizes.addAll(latestIXShardSizesBatch.getValue());
             logger.info(
-                debugInfoForShardSize(
-                    indexName,
-                    latestTimestampWithSixRecords.getKey(),
-                    latestTimestampWithSixRecords.getValue(),
-                    shardSizeRecords
-                )
+                debugInfoForShardSize(indexName, latestIXShardSizesBatch.getKey(), latestIXShardSizesBatch.getValue(), ixShardSizeRecords)
             );
         }, 30, TimeUnit.SECONDS);
 
@@ -163,7 +165,7 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         // we are asserting that there will be only 1 segment per shard and taking its sizeInBytes
         Map<String, Map<Integer, Integer>> nodeToShardToSize = getExpectedReplicaSizes();
 
-        Map<String, List<Map<?, ?>>> groupByNode = groupByNodeName(latestRecords);
+        Map<String, List<Map<?, ?>>> groupByNode = groupByNodeName(latestIXShardSizes);
         assertThat(groupByNode.size(), equalTo(1));
 
         Iterator<String> iterator = groupByNode.keySet().iterator();
@@ -242,18 +244,22 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         List<Map<?, ?>> shardSizeRecords
     ) throws IOException {
         StringBuilder msgBuilder = new StringBuilder();
-        msgBuilder.append("Latest timestamp with 6 records " + timestamp);
+        msgBuilder.append("Latest timestamp: " + timestamp);
         msgBuilder.append(System.lineSeparator());
-        msgBuilder.append("Latest records " + latestRecords);
+        msgBuilder.append("Latest records: " + latestRecords);
         msgBuilder.append(System.lineSeparator());
-        msgBuilder.append("All usage records for shard-size " + shardSizeRecords);
+        msgBuilder.append("All usage records for shard-size: " + shardSizeRecords);
         msgBuilder.append(System.lineSeparator());
         msgBuilder.append(prepareShardAllocationInformation(indexName));
         return msgBuilder.toString();
     }
 
-    private static int sumQuantity(List<Map<?, ?>> ingestedDocs) {
-        return ingestedDocs.stream().mapToInt(m -> (Integer) ((Map<?, ?>) m.get("usage")).get("quantity")).sum();
+    private static int sumQuantity(List<Map<?, ?>> records) {
+        return records.stream().mapToInt(Metering1kDocsRestTestIT::usageQuantity).sum();
+    }
+
+    private static int usageQuantity(Map<?, ?> record) {
+        return (int) ((Map<?, ?>) record.get("usage")).get("quantity");
     }
 
     private static Map.Entry<Instant, List<Map<?, ?>>> getLatestFullBatch(List<Map<?, ?>> metric, int expectedNumberOfRecords) {
