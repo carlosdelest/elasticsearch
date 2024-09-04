@@ -154,3 +154,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.allocation.ServerlessDefaultShardAllocationSettingsRestIT
   method: testDefaultNumberOfShardsForRegularIndicesDoesNotChangeDataStreamSingleShardDefault
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2687
+- class: co.elastic.elasticsearch.stateless.allocation.ServerlessDefaultShardAllocationSettingsRestIT
+  method: testDefaultNumberOfShardsForRegularIndicesDoesNotChangeSystemIndicesSingleShardDefault
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2688
