@@ -32,7 +32,7 @@ public record MeteringShardInfo(
     long generation,
     long storedIngestSizeInBytes,
     long indexCreationDateEpochMilli
-) implements Writeable, ShardEra {
+) implements Writeable {
 
     public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0, 0, 0);
 
@@ -68,5 +68,13 @@ public record MeteringShardInfo(
         } else {
             out.writeOptionalVLong(storedIngestSizeInBytes);
         }
+    }
+
+    boolean isMoreRecentThan(MeteringShardInfo other) {
+        return primaryTerm > other.primaryTerm || (primaryTerm == other.primaryTerm && generation > other.generation);
+    }
+
+    MeteringShardInfo mostRecent(MeteringShardInfo other) {
+        return isMoreRecentThan(other) ? this : other;
     }
 }

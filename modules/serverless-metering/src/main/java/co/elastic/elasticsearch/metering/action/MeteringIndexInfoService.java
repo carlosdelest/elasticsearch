@@ -98,16 +98,8 @@ public class MeteringIndexInfoService {
         }
     }
 
-    record ShardInfoValue(
-        long sizeInBytes,
-        long docCount,
-        long storedIngestSizeInBytes,
-        String indexUUID,
-        long primaryTerm,
-        long generation,
-        Instant indexCreationDate
-    ) implements ShardEra {
-        public static final ShardInfoValue EMPTY = new ShardInfoValue(0, 0, 0, null, 0, 0, null);
+    record ShardInfoValue(String indexUUID, MeteringShardInfo shardInfo) {
+        public static final ShardInfoValue EMPTY = new ShardInfoValue(null, MeteringShardInfo.EMPTY);
     }
 
     record CollectedMeteringShardInfo(
@@ -119,9 +111,9 @@ public class MeteringIndexInfoService {
             Set.of(CollectedMeteringShardInfoFlag.STALE)
         );
 
-        ShardInfoValue getShardInfo(ShardInfoKey shardInfoKey) {
-            var shardInfo = meteringShardInfoMap.get(shardInfoKey);
-            return Objects.requireNonNullElse(shardInfo, ShardInfoValue.EMPTY);
+        MeteringShardInfo getShardInfo(ShardId shardId) {
+            var shardInfo = meteringShardInfoMap.get(ShardInfoKey.fromShardId(shardId));
+            return Objects.requireNonNullElse(shardInfo, ShardInfoValue.EMPTY).shardInfo;
         }
     }
 
@@ -239,11 +231,12 @@ public class MeteringIndexInfoService {
             boolean partial = currentInfo.meteringShardInfoStatus().contains(CollectedMeteringShardInfoFlag.PARTIAL);
             List<MetricValue> metrics = new ArrayList<>();
             for (final var shardEntry : currentInfo.meteringShardInfoMap.entrySet()) {
-                long size = shardEntry.getValue().sizeInBytes();
+                long size = shardEntry.getValue().shardInfo().sizeInBytes();
                 // Do not generate records with size 0
                 if (size > 0) {
                     int shardId = shardEntry.getKey().shardId();
                     var indexName = shardEntry.getKey().indexName();
+                    var indexCreationDate = Instant.ofEpochMilli(shardEntry.getValue().shardInfo().indexCreationDateEpochMilli());
 
                     Map<String, String> metadata = new HashMap<>();
                     metadata.put(INDEX, indexName);
@@ -258,7 +251,7 @@ public class MeteringIndexInfoService {
                             IX_METRIC_TYPE,
                             metadata,
                             size,
-                            shardEntry.getValue().indexCreationDate()
+                            indexCreationDate
                         )
                     );
                 }
@@ -302,8 +295,11 @@ public class MeteringIndexInfoService {
             private long raStorageSize;
 
             void accumulate(Map.Entry<ShardInfoKey, ShardInfoValue> t) {
-                raStorageSize += t.getValue().storedIngestSizeInBytes();
-                indexCreationDate = getEarlierValidCreationDate(indexCreationDate, t.getValue().indexCreationDate());
+                raStorageSize += t.getValue().shardInfo().storedIngestSizeInBytes();
+                indexCreationDate = getEarlierValidCreationDate(
+                    indexCreationDate,
+                    Instant.ofEpochMilli(t.getValue().shardInfo.indexCreationDateEpochMilli())
+                );
             }
 
             RaStorageInfo combine(RaStorageInfo b) {
@@ -332,17 +328,9 @@ public class MeteringIndexInfoService {
     ) {
         HashMap<ShardInfoKey, ShardInfoValue> map = new HashMap<>(current);
         for (var newEntry : updated.entrySet()) {
-            var info = newEntry.getValue();
             var shardKey = ShardInfoKey.fromShardId(newEntry.getKey());
-            var shardValue = new ShardInfoValue(
-                info.sizeInBytes(),
-                info.docCount(),
-                info.storedIngestSizeInBytes(),
-                newEntry.getKey().getIndex().getUUID(),
-                info.primaryTerm(),
-                info.generation(),
-                Instant.ofEpochMilli(info.indexCreationDateEpochMilli())
-            );
+            var shardValue = new ShardInfoValue(newEntry.getKey().getIndex().getUUID(), newEntry.getValue());
+
             map.merge(shardKey, shardValue, (oldValue, newValue) -> {
                 // In case there is a conflict, we need the index UUID from the original map value to decide what to do
                 var originalMapValue = current.get(shardKey);
@@ -356,7 +344,7 @@ public class MeteringIndexInfoService {
 
                     // Same UUID -> compare mostRecent
                     if (oldValue.indexUUID().equals(newValue.indexUUID())) {
-                        return ShardEra.mostRecent(oldValue, newValue);
+                        return oldValue.shardInfo.isMoreRecentThan(newValue.shardInfo) ? oldValue : newValue;
                     }
 
                     // oldValue and newValue have different UUIDs

@@ -38,6 +38,7 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.persistent.NotPersistentTaskNodeException;
 import org.elasticsearch.persistent.PersistentTaskNodeNotAssignedException;
 import org.elasticsearch.tasks.Task;
@@ -291,17 +292,17 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
      * @return the size to display, based on the project type
      */
     @Deprecated
-    long getSizeToDisplay(MeteringIndexInfoService.ShardInfoKey shardId, MeteringIndexInfoService.ShardInfoValue shardInfo) {
+    long getSizeToDisplay(ShardId shardId, MeteringShardInfo shardInfo) {
         if (meterRaStorage) {
             logger.trace(
                 "display _rastorage [{}] for [{}:{}]",
                 shardInfo.storedIngestSizeInBytes(),
-                shardId.indexName(),
-                shardId.shardId()
+                shardId.getIndexName(),
+                shardId.getId()
             );
             return shardInfo.storedIngestSizeInBytes();
         }
-        logger.trace("display IX [{}] for [{}:{}]", shardInfo.sizeInBytes(), shardId.indexName(), shardId.shardId());
+        logger.trace("display IX [{}] for [{}:{}]", shardInfo.sizeInBytes(), shardId.getIndexName(), shardId.getId());
         return shardInfo.sizeInBytes();
     }
 
@@ -320,13 +321,12 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
 
         var shardIds = StreamSupport.stream(clusterState.routingTable().allShards(indicesNames).spliterator(), false)
             .map(ShardRouting::shardId)
-            .map(MeteringIndexInfoService.ShardInfoKey::fromShardId)
             .collect(Collectors.toSet());
 
         for (var shardId : shardIds) {
             var shardInfo = shardsInfo.getShardInfo(shardId);
 
-            String indexName = shardId.indexName();
+            String indexName = shardId.getIndexName();
             IndexAbstraction indexAbstraction = metadata.getIndicesLookup().get(indexName);
 
             long currentCount = shardInfo.docCount();

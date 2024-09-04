@@ -181,7 +181,7 @@ public class TransportCollectMeteringShardInfoAction extends HandledTransportAct
             .filter(SingleNodeResponse::isValid)
             .map(SingleNodeResponse::getResponse)
             .flatMap(m -> m.entrySet().stream())
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, ShardEra::mostRecent));
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, MeteringShardInfo::mostRecent));
 
         var failures = Arrays.stream(responses)
             .filter(Predicate.not(SingleNodeResponse::isValid))

@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent {
 
-    record CacheEntry(long primaryTerm, long generation, long sizeInBytes, long docCount, String token, long storedIngestSizeInBytes) {}
+    record CacheEntry(String token, MeteringShardInfo shardInfo) {}
 
     // package private for testing
     Map<ShardId, CacheEntry> shardSizeCache = new ConcurrentHashMap<>();
@@ -47,24 +47,16 @@ public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent 
 
     Optional<CacheEntry> getCachedShardInfo(ShardId shardId, long primaryTerm, long generation) {
         var cacheEntry = shardSizeCache.get(shardId);
-        if (cacheEntry != null && cacheEntry.primaryTerm == primaryTerm && cacheEntry.generation == generation) {
+        if (cacheEntry != null && cacheEntry.shardInfo.primaryTerm() == primaryTerm && cacheEntry.shardInfo.generation() == generation) {
             return Optional.of(cacheEntry);
         }
         return Optional.empty();
     }
 
-    void updateCachedShardInfo(
-        ShardId shardId,
-        long primaryTerm,
-        long generation,
-        long sizeInBytes,
-        long docCount,
-        String token,
-        long storedIngestSizeInBytes
-    ) {
+    void updateCachedShardInfo(ShardId shardId, String token, MeteringShardInfo shardInfo) {
         assert shardId != null;
         assert token != null;
-        shardSizeCache.put(shardId, new CacheEntry(primaryTerm, generation, sizeInBytes, docCount, token, storedIngestSizeInBytes));
+        shardSizeCache.put(shardId, new CacheEntry(token, shardInfo));
     }
 
     void retainActive(Set<ShardId> activeShards) {

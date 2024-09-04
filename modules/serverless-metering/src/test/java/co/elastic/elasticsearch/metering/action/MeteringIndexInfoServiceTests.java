@@ -249,8 +249,8 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 2, 0, 0L)),
-            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 1, 0, 0L))
+            entry(shard2Id, new MeteringShardInfo(22L, 120L, 1, 3, 0, 0L)),
+            entry(shard3Id, new MeteringShardInfo(23L, 130L, 1, 2, 0, 0L))
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -647,7 +647,7 @@ public class MeteringIndexInfoServiceTests extends ESTestCase {
         return new FeatureMatcher<>(equalTo(expected), "shard info with size", "size") {
             @Override
             protected Long featureValueOf(MeteringIndexInfoService.ShardInfoValue actual) {
-                return actual.sizeInBytes();
+                return actual.shardInfo().sizeInBytes();
             }
         };
     }

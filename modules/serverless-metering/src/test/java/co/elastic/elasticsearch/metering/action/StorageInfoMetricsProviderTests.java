@@ -102,7 +102,13 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
         var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(11L, 110L, 11L, "myIndexUUID", 1, 1, Instant.now()))
+            entry(
+                shard1Id,
+                new MeteringIndexInfoService.ShardInfoValue(
+                    "myIndexUUID",
+                    new MeteringShardInfo(11L, 110L, 1, 1, 11L, Instant.now().toEpochMilli())
+                )
+            )
         );
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
@@ -139,7 +145,13 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
         var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
         Instant creationDate = Instant.now();
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(11L, 110L, 0, "myIndexUUID", 1, 1, creationDate))
+            entry(
+                shard1Id,
+                new MeteringIndexInfoService.ShardInfoValue(
+                    "myIndexUUID",
+                    new MeteringShardInfo(11L, 110L, 1, 1, 0, creationDate.toEpochMilli())
+                )
+            )
         );
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
@@ -164,7 +176,13 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
         var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
         Instant creationDate = Instant.now();
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(0, 110L, 11L, "myIndexUUID", 1, 1, creationDate))
+            entry(
+                shard1Id,
+                new MeteringIndexInfoService.ShardInfoValue(
+                    "myIndexUUID",
+                    new MeteringShardInfo(0, 110L, 1, 1, 11L, creationDate.toEpochMilli())
+                )
+            )
         );
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
@@ -189,7 +207,13 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
         var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
         Instant creationDate = Instant.now();
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new MeteringIndexInfoService.ShardInfoValue(0, 110L, 0, "myIndexUUID", 1, 1, creationDate))
+            entry(
+                shard1Id,
+                new MeteringIndexInfoService.ShardInfoValue(
+                    "myIndexUUID",
+                    new MeteringShardInfo(0, 110L, 1, 1, 0, creationDate.toEpochMilli())
+                )
+            )
         );
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
@@ -210,7 +234,10 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
             var hasIngestSize = id < 5;
             return entry(
                 shardId,
-                new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : 0L, "myIndexUUID", 1, 1, creationDate)
+                new MeteringIndexInfoService.ShardInfoValue(
+                    "myIndexUUID",
+                    new MeteringShardInfo(size, 110L, 1, 1, hasIngestSize ? size : 0L, creationDate.toEpochMilli())
+                )
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
@@ -256,7 +283,10 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
                 var hasIngestSize = indexIdx < 2;
                 shardsInfo.put(
                     shardId,
-                    new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : 0L, "myIndexUUID", 1, 1, creationDate)
+                    new MeteringIndexInfoService.ShardInfoValue(
+                        "myIndexUUID",
+                        new MeteringShardInfo(size, 110L, 1, 1, hasIngestSize ? size : 0L, creationDate.toEpochMilli())
+                    )
                 );
             }
         }
@@ -305,7 +335,10 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
                 var hasIngestSize = shardIdx < 5;
                 shardsInfo.put(
                     shardId,
-                    new MeteringIndexInfoService.ShardInfoValue(size, 110L, hasIngestSize ? size : 0, "myIndexUUID", 1, 1, creationDate)
+                    new MeteringIndexInfoService.ShardInfoValue(
+                        "myIndexUUID",
+                        new MeteringShardInfo(size, 110L, 1, 1, hasIngestSize ? size : 0, creationDate.toEpochMilli())
+                    )
                 );
             }
         }
@@ -347,7 +380,13 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
             var shardId = new MeteringIndexInfoService.ShardInfoKey(indexName, id);
             var size = failedIndex == id ? 0 : 10L + id;
-            return entry(shardId, new MeteringIndexInfoService.ShardInfoValue(size, 110L, size, "myIndexUUID", 1, 1, creationDate));
+            return entry(
+                shardId,
+                new MeteringIndexInfoService.ShardInfoValue(
+                    "myIndexUUID",
+                    new MeteringShardInfo(size, 110L, 1, 1, size, creationDate.toEpochMilli())
+                )
+            );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
         var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
