@@ -15,7 +15,6 @@ steps:
       GRADLE_MAX_WORKERS: "10"
 
   - label: ":s3: Run AWS S3 third party tests"
-    if: build.env('GITOPS_ENV') == 'dev'
     command: ".buildkite/scripts/run-s3-third-party-tests.sh"
     agents:
       provider: "gcp"
