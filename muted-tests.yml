@@ -157,3 +157,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.allocation.ServerlessDefaultShardAllocationSettingsRestIT
   method: testDefaultNumberOfShardsForRegularIndicesDoesNotChangeSystemIndicesSingleShardDefault
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2688
+- class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
+  method: testRelocationsWithUploadDelayed
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2689
