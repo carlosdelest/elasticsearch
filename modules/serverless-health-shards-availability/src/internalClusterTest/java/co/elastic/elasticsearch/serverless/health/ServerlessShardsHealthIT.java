@@ -22,19 +22,23 @@ import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.health.Diagnosis;
 import org.elasticsearch.health.GetHealthAction;
 import org.elasticsearch.health.HealthIndicatorImpact;
 import org.elasticsearch.health.HealthIndicatorResult;
 import org.elasticsearch.health.HealthStatus;
+import org.elasticsearch.health.SimpleHealthIndicatorDetails;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.transport.MockTransportService;
 
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static org.elasticsearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.CLUSTER_TOTAL_SHARDS_PER_NODE_SETTING;
 import static org.elasticsearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider.INDEX_TOTAL_SHARDS_PER_NODE_SETTING;
@@ -69,6 +73,7 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
             .get();
 
         HealthIndicatorResult hir = waitForStatusAndGet(HealthStatus.RED);
+        assertUnavailablePrimaryAndReplicaIndices(hir, null, indexName);
         assertThat(
             Strings.collectionToCommaDelimitedString(hir.impacts().stream().map(HealthIndicatorImpact::impactDescription).toList()),
             containsString("Not all data is searchable. No searchable copies of the data exist on 1 index [myindex].")
@@ -92,6 +97,7 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
         startSearchNode();
 
         hir = waitForStatusAndGet(HealthStatus.YELLOW);
+        assertUnavailablePrimaryAndReplicaIndices(hir, null, indexName);
         // We should inherit the existing impacts from the Stateful code version
         assertThat(
             Strings.collectionToCommaDelimitedString(hir.impacts().stream().map(HealthIndicatorImpact::impactDescription).toList()),
@@ -292,6 +298,7 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
         internalCluster().stopNode(shutDownIndexNode ? indexNode : searchNode);
 
         HealthIndicatorResult hir = waitForStatusAndGet(HealthStatus.RED);
+        assertUnavailablePrimaryAndReplicaIndices(hir, shutDownIndexNode ? indexName : null, indexName);
         assertThat(
             Strings.collectionToCommaDelimitedString(hir.impacts().stream().map(HealthIndicatorImpact::impactDescription).toList()),
             containsString(
@@ -367,6 +374,7 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
                     : "Not all data is searchable. No searchable copies of the data exist on 1 index [myindex]."
             )
         );
+        assertUnavailablePrimaryAndReplicaIndices(hir, shutDownIndexNode ? indexName : null, indexName);
         assertThat(
             hir.symptom(),
             containsString(
@@ -408,9 +416,11 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
         startMasterOnlyNode();
         String indexNode = startIndexNode();
 
-        String indexName = "myindex";
-        createIndex(indexName, 1, 0);
-        ensureGreen(indexName);
+        final List<String> indexNames = IntStream.range(0, between(1, 11)).mapToObj(i -> Strings.format("myindex-%02d", i)).toList();
+        indexNames.forEach(indexName -> {
+            createIndex(indexName, 1, 0);
+            ensureGreen(indexName);
+        });
 
         GetHealthAction.Response health = client().execute(GetHealthAction.INSTANCE, new GetHealthAction.Request(randomBoolean(), 10))
             .get();
@@ -421,11 +431,30 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
         internalCluster().stopNode(indexNode);
 
         hir = waitForStatusAndGet(HealthStatus.RED);
+
+        final String reportedIndices = indexNames.size() > 10
+            ? Strings.collectionToDelimitedString(indexNames.subList(0, 10), ", ") + ", ..."
+            : Strings.collectionToDelimitedString(indexNames, ", ");
+
+        assertUnavailablePrimaryAndReplicaIndices(hir, reportedIndices, null);
         assertThat(
             Strings.collectionToCommaDelimitedString(hir.impacts().stream().map(HealthIndicatorImpact::impactDescription).toList()),
-            containsString("Cannot add data to 1 index [myindex]. Searches might return incomplete results.")
+            containsString(
+                "Cannot add data to "
+                    + indexNames.size()
+                    + " "
+                    + (indexNames.size() == 1 ? "index" : "indices")
+                    + " ["
+                    + reportedIndices
+                    + "]. Searches might return incomplete results."
+            )
         );
-        assertThat(hir.symptom(), containsString("This cluster has 1 unavailable primary shard."));
+        assertThat(
+            hir.symptom(),
+            containsString(
+                "This cluster has " + indexNames.size() + " unavailable primary " + (indexNames.size() == 1 ? "shard" : "shards") + "."
+            )
+        );
         assertThat(hir.diagnosisList().size(), equalTo(1));
         Diagnosis diagnosis = hir.diagnosisList().get(0);
         assertThat(diagnosis.definition().id(), equalTo("debug_node:role:index"));
@@ -435,8 +464,10 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
                 .filter(r -> r.getType() == Diagnosis.Resource.Type.INDEX)
                 .flatMap(r -> r.getValues().stream())
                 .toList(),
-            equalTo(List.of(indexName))
+            equalTo(indexNames.size() > 10 ? indexNames.subList(0, 10) : indexNames)
         );
+
+        safeGet(indicesAdmin().prepareDelete(indexNames.toArray(String[]::new)).execute());
     }
 
     /**
@@ -453,5 +484,15 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
             result[0] = health.findIndicator(indicator);
         });
         return result[0];
+    }
+
+    private void assertUnavailablePrimaryAndReplicaIndices(
+        HealthIndicatorResult hir,
+        @Nullable String unavailablePrimaries,
+        @Nullable String unavailableReplicas
+    ) {
+        final Map<String, Object> details = ((SimpleHealthIndicatorDetails) hir.details()).details();
+        assertThat(details.get("indices_with_unavailable_primaries"), equalTo(unavailablePrimaries));
+        assertThat(details.get("indices_with_unavailable_replicas"), equalTo(unavailableReplicas));
     }
 }
