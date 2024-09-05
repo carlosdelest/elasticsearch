@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.sampling;
 
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.TransportVersions;
@@ -29,21 +29,21 @@ import org.elasticsearch.xcontent.XContentParser;
 import java.io.IOException;
 
 /**
- * Encapsulates the parameters needed to start the {@link MeteringIndexInfoTask} task. Currently, no parameters are required.
+ * Encapsulates the parameters needed to start the {@link SampledClusterMetricsSchedulingTask} task. Currently, no parameters are required.
  */
-public class MeteringIndexInfoTaskParams implements PersistentTaskParams {
+public class SampledClusterMetricsSchedulingTaskParams implements PersistentTaskParams {
 
-    public static final MeteringIndexInfoTaskParams INSTANCE = new MeteringIndexInfoTaskParams();
+    public static final SampledClusterMetricsSchedulingTaskParams INSTANCE = new SampledClusterMetricsSchedulingTaskParams();
 
-    public static final ObjectParser<MeteringIndexInfoTaskParams, Void> PARSER = new ObjectParser<>(
-        MeteringIndexInfoTask.TASK_NAME,
+    public static final ObjectParser<SampledClusterMetricsSchedulingTaskParams, Void> PARSER = new ObjectParser<>(
+        SampledClusterMetricsSchedulingTask.TASK_NAME,
         true,
         () -> INSTANCE
     );
 
-    MeteringIndexInfoTaskParams() {}
+    SampledClusterMetricsSchedulingTaskParams() {}
 
-    MeteringIndexInfoTaskParams(StreamInput ignored) {}
+    SampledClusterMetricsSchedulingTaskParams(StreamInput ignored) {}
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
@@ -54,7 +54,7 @@ public class MeteringIndexInfoTaskParams implements PersistentTaskParams {
 
     @Override
     public String getWriteableName() {
-        return MeteringIndexInfoTask.TASK_NAME;
+        return SampledClusterMetricsSchedulingTask.TASK_NAME;
     }
 
     @Override
@@ -65,7 +65,7 @@ public class MeteringIndexInfoTaskParams implements PersistentTaskParams {
     @Override
     public void writeTo(StreamOutput out) {}
 
-    public static MeteringIndexInfoTaskParams fromXContent(XContentParser parser) {
+    public static SampledClusterMetricsSchedulingTaskParams fromXContent(XContentParser parser) {
         return PARSER.apply(parser, null);
     }
 
@@ -76,6 +76,6 @@ public class MeteringIndexInfoTaskParams implements PersistentTaskParams {
 
     @Override
     public boolean equals(Object obj) {
-        return obj instanceof MeteringIndexInfoTaskParams;
+        return obj instanceof SampledClusterMetricsSchedulingTaskParams;
     }
 }

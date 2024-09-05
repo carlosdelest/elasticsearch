@@ -15,7 +15,10 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling.action;
+
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
+import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -31,10 +34,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Action used to collect shard metering info from all data node and reduce it to a single response for {@link MeteringIndexInfoService}.
+ * Action used to collect metering samples from nodes and reduce those to a single response for {@link SampledClusterMetricsService}.
  */
-public class CollectMeteringShardInfoAction {
+public class CollectClusterSamplesAction {
 
+    // FIXME Is it possible to rename this?
     public static final String NAME = "cluster:monitor/collect/metering/shard-info";
     public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
@@ -52,27 +56,27 @@ public class CollectMeteringShardInfoAction {
 
         @Override
         public String getDescription() {
-            return "Collect shard metering information from all search nodes";
+            return "Collect samples from nodes";
         }
     }
 
     public static class Response extends ActionResponse {
-        private final Map<ShardId, MeteringShardInfo> shardInfo;
+        private final Map<ShardId, ShardInfoMetrics> shardInfos;
         private final List<Exception> exceptions;
 
         public Response(StreamInput in) throws IOException {
-            this.shardInfo = in.readImmutableMap(ShardId::new, MeteringShardInfo::from);
+            this.shardInfos = in.readImmutableMap(ShardId::new, ShardInfoMetrics::from);
             this.exceptions = in.readCollectionAsImmutableList(StreamInput::readException);
         }
 
-        public Response(Map<ShardId, MeteringShardInfo> shardInfo, List<Exception> exceptions) {
-            this.shardInfo = shardInfo;
+        public Response(Map<ShardId, ShardInfoMetrics> shardInfos, List<Exception> exceptions) {
+            this.shardInfos = shardInfos;
             this.exceptions = exceptions;
         }
 
         @Override
         public void writeTo(StreamOutput output) throws IOException {
-            output.writeMap(shardInfo, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
+            output.writeMap(shardInfos, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
             output.writeGenericList(exceptions, StreamOutput::writeException);
         }
 
@@ -82,18 +86,18 @@ public class CollectMeteringShardInfoAction {
                 return true;
             }
             if (o instanceof Response response) {
-                return Objects.equals(shardInfo, response.shardInfo) && Objects.equals(exceptions, response.exceptions);
+                return Objects.equals(shardInfos, response.shardInfos) && Objects.equals(exceptions, response.exceptions);
             }
             return false;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(shardInfo, exceptions);
+            return Objects.hash(shardInfos, exceptions);
         }
 
-        public Map<ShardId, MeteringShardInfo> getShardInfo() {
-            return shardInfo;
+        public Map<ShardId, ShardInfoMetrics> getShardInfos() {
+            return shardInfos;
         }
 
         public boolean isComplete() {

@@ -15,9 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
+import co.elastic.elasticsearch.metering.MeteringFeatures;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,11 +48,11 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Persistent task executor that is managing the {@link MeteringIndexInfoTask}.
+ * Persistent task executor that is managing the {@link SampledClusterMetricsSchedulingTask}.
  */
-public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor<MeteringIndexInfoTaskParams> {
+public final class SampledClusterMetricsSchedulingTaskExecutor extends PersistentTasksExecutor<SampledClusterMetricsSchedulingTaskParams> {
 
-    private static final Logger logger = LogManager.getLogger(MeteringIndexInfoTaskExecutor.class);
+    private static final Logger logger = LogManager.getLogger(SampledClusterMetricsSchedulingTaskExecutor.class);
 
     public static final Setting<Boolean> ENABLED_SETTING = Setting.boolSetting(
         "metering.index-info-task.enabled",
@@ -75,30 +75,30 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     private final ClusterService clusterService;
     private final FeatureService featureService;
     private final ThreadPool threadPool;
-    private final MeteringIndexInfoService meteringIndexInfoService;
+    private final SampledClusterMetricsService clusterMetricsService;
 
     // Holds a reference to IndexSizeTask. This will have a valid value only on the executor node, otherwise it will be null.
-    private final AtomicReference<MeteringIndexInfoTask> executorNodeTask = new AtomicReference<>();
+    private final AtomicReference<SampledClusterMetricsSchedulingTask> executorNodeTask = new AtomicReference<>();
     private final PersistentTasksService persistentTasksService;
     private volatile boolean enabled;
     private volatile TimeValue pollInterval;
 
-    private MeteringIndexInfoTaskExecutor(
+    private SampledClusterMetricsSchedulingTaskExecutor(
         Client client,
         ClusterService clusterService,
         PersistentTasksService persistentTasksService,
         FeatureService featureService,
         ThreadPool threadPool,
-        MeteringIndexInfoService meteringIndexInfoService,
+        SampledClusterMetricsService clusterMetricsService,
         Settings settings
     ) {
-        super(MeteringIndexInfoTask.TASK_NAME, threadPool.executor(ThreadPool.Names.MANAGEMENT));
+        super(SampledClusterMetricsSchedulingTask.TASK_NAME, threadPool.executor(ThreadPool.Names.MANAGEMENT));
         this.client = client;
 
         this.clusterService = clusterService;
         this.featureService = featureService;
         this.threadPool = threadPool;
-        this.meteringIndexInfoService = meteringIndexInfoService;
+        this.clusterMetricsService = clusterMetricsService;
         this.persistentTasksService = persistentTasksService;
         this.enabled = ENABLED_SETTING.get(settings);
         this.pollInterval = POLL_INTERVAL_SETTING.get(settings);
@@ -107,7 +107,7 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     private static void registerListeners(
         ClusterService clusterService,
         ClusterSettings clusterSettings,
-        MeteringIndexInfoTaskExecutor executor
+        SampledClusterMetricsSchedulingTaskExecutor executor
     ) {
         clusterService.addListener(executor::startStopTask);
         clusterService.addListener(executor::shuttingDown);
@@ -115,22 +115,22 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
         clusterSettings.addSettingsUpdateConsumer(POLL_INTERVAL_SETTING, executor::updatePollInterval);
     }
 
-    public static MeteringIndexInfoTaskExecutor create(
+    public static SampledClusterMetricsSchedulingTaskExecutor create(
         Client client,
         ClusterService clusterService,
         PersistentTasksService persistentTasksService,
         FeatureService featureService,
         ThreadPool threadPool,
-        MeteringIndexInfoService meteringIndexInfoService,
+        SampledClusterMetricsService clusterMetricsService,
         Settings settings
     ) {
-        var executor = new MeteringIndexInfoTaskExecutor(
+        var executor = new SampledClusterMetricsSchedulingTaskExecutor(
             client,
             clusterService,
             persistentTasksService,
             featureService,
             threadPool,
-            meteringIndexInfoService,
+            clusterMetricsService,
             settings
         );
         registerListeners(clusterService, clusterService.getClusterSettings(), executor);
@@ -138,27 +138,31 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     }
 
     @Override
-    protected void nodeOperation(AllocatedPersistentTask task, MeteringIndexInfoTaskParams params, PersistentTaskState state) {
-        MeteringIndexInfoTask meteringIndexInfoTask = (MeteringIndexInfoTask) task;
-        executorNodeTask.set(meteringIndexInfoTask);
+    protected void nodeOperation(
+        AllocatedPersistentTask task,
+        SampledClusterMetricsSchedulingTaskParams params,
+        PersistentTaskState state
+    ) {
+        SampledClusterMetricsSchedulingTask clusterMetricsSchedulingTask = (SampledClusterMetricsSchedulingTask) task;
+        executorNodeTask.set(clusterMetricsSchedulingTask);
         DiscoveryNode node = clusterService.localNode();
         logger.info("Node [{{}}{{}}] is selected as the current Index Info node.", node.getName(), node.getId());
         if (this.enabled) {
-            meteringIndexInfoTask.run();
+            clusterMetricsSchedulingTask.run();
         }
     }
 
     @Override
-    protected MeteringIndexInfoTask createTask(
+    protected SampledClusterMetricsSchedulingTask createTask(
         long id,
         String type,
         String action,
         TaskId parentTaskId,
-        PersistentTasksCustomMetadata.PersistentTask<MeteringIndexInfoTaskParams> taskInProgress,
+        PersistentTasksCustomMetadata.PersistentTask<SampledClusterMetricsSchedulingTaskParams> taskInProgress,
         Map<String, String> headers
     ) {
         logger.debug("Creating MeteringIndexInfoTask [{}][{}]", type, action);
-        return new MeteringIndexInfoTask(
+        return new SampledClusterMetricsSchedulingTask(
             id,
             type,
             action,
@@ -166,7 +170,7 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
             parentTaskId,
             headers,
             threadPool,
-            meteringIndexInfoService,
+            clusterMetricsService,
             client,
             () -> pollInterval,
             () -> executorNodeTask.set(null)
@@ -190,7 +194,7 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     }
 
     private void doStartStopTask(ClusterState clusterState) {
-        boolean indexSizeTaskRunningInCluster = MeteringIndexInfoTask.findTask(clusterState) != null;
+        boolean indexSizeTaskRunningInCluster = SampledClusterMetricsSchedulingTask.findTask(clusterState) != null;
 
         boolean isElectedMaster = clusterService.state().nodes().isLocalNodeElectedMaster();
         // we should only start/stop task from single node, master is the best as it will go through it anyway
@@ -206,9 +210,9 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
 
     private void startTask() {
         persistentTasksService.sendStartRequest(
-            MeteringIndexInfoTask.TASK_NAME,
-            MeteringIndexInfoTask.TASK_NAME,
-            MeteringIndexInfoTaskParams.INSTANCE,
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
+            SampledClusterMetricsSchedulingTaskParams.INSTANCE,
             null,
             ActionListener.wrap(r -> logger.debug("Created MeteringIndexInfoTask task"), e -> {
                 Throwable t = e instanceof RemoteTransportException ? e.getCause() : e;
@@ -221,7 +225,7 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
 
     private void stopTask() {
         persistentTasksService.sendRemoveRequest(
-            MeteringIndexInfoTask.TASK_NAME,
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
             null,
             ActionListener.wrap(r -> logger.debug("Stopped MeteringIndexInfoTask task"), e -> {
                 Throwable t = e instanceof RemoteTransportException ? e.getCause() : e;
@@ -250,7 +254,7 @@ public final class MeteringIndexInfoTaskExecutor extends PersistentTasksExecutor
     void shuttingDown(ClusterChangedEvent event) {
         DiscoveryNode node = clusterService.localNode();
         if (isNodeShuttingDown(event, node.getId())) {
-            var persistentTask = MeteringIndexInfoTask.findTask(event.state());
+            var persistentTask = SampledClusterMetricsSchedulingTask.findTask(event.state());
             if (persistentTask != null && persistentTask.isAssigned()) {
                 if (node.getId().equals(persistentTask.getExecutorNode())) {
                     stopTask();

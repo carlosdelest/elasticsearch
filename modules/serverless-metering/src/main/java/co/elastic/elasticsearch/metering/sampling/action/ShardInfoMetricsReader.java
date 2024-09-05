@@ -15,9 +15,10 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator;
+import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
@@ -39,8 +40,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-class ShardReader {
-    private static final Logger logger = LogManager.getLogger(ShardReader.class);
+class ShardInfoMetricsReader {
+    private static final Logger logger = LogManager.getLogger(ShardInfoMetricsReader.class);
 
     static final String SHARD_INFO_REQUESTS_TOTAL_METRIC = "es.metering.shard_info.requests.total";
     static final String SHARD_INFO_CACHED_TOTAL_METRIC = "es.metering.shard_info.cached.total";
@@ -53,7 +54,7 @@ class ShardReader {
     private final LongCounter shardInfoErrorsTotalCounter;
     private final DoubleHistogram shardInfoRaStorageApproximatedRatio;
 
-    ShardReader(IndicesService indicesService, MeterRegistry meterRegistry) {
+    ShardInfoMetricsReader(IndicesService indicesService, MeterRegistry meterRegistry) {
         this.indicesService = indicesService;
         this.shardInfoRequestsTotalCounter = meterRegistry.registerLongCounter(
             SHARD_INFO_REQUESTS_TOTAL_METRIC,
@@ -86,13 +87,8 @@ class ShardReader {
         return null;
     }
 
-    MeteringShardInfo computeShardInfo(
-        ShardId shardId,
-        long primaryTerm,
-        long generation,
-        long indexCreationDate,
-        SegmentInfos segmentInfos
-    ) throws IOException {
+    ShardInfoMetrics computeShardInfo(ShardId shardId, long primaryTerm, long generation, long indexCreationDate, SegmentInfos segmentInfos)
+        throws IOException {
         long sizeInBytes = 0;
         long liveDocCount = 0;
 
@@ -165,12 +161,12 @@ class ShardReader {
             }
         }
 
-        return new MeteringShardInfo(sizeInBytes, liveDocCount, primaryTerm, generation, totalRAValue, indexCreationDate);
+        return new ShardInfoMetrics(sizeInBytes, liveDocCount, primaryTerm, generation, totalRAValue, indexCreationDate);
     }
 
-    Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap(LocalNodeMeteringShardInfoCache shardInfoCache, String requestCacheToken)
+    Map<ShardId, ShardInfoMetrics> getUpdatedShardInfos(InMemoryShardInfoMetricsCache shardMetricsCache, String requestCacheToken)
         throws IOException {
-        Map<ShardId, MeteringShardInfo> shardsWithNewInfo = new HashMap<>();
+        Map<ShardId, ShardInfoMetrics> shardsWithNewInfo = new HashMap<>();
         Set<ShardId> activeShards = new HashSet<>();
         for (final IndexService indexService : indicesService) {
             for (final IndexShard shard : indexService) {
@@ -186,7 +182,7 @@ class ShardReader {
                 long primaryTerm = shard.getOperationPrimaryTerm();
                 long generation = segmentInfos.getGeneration();
 
-                var cachedShardInfo = shardInfoCache.getCachedShardInfo(shardId, primaryTerm, generation);
+                var cachedShardInfo = shardMetricsCache.getCachedShardMetrics(shardId, primaryTerm, generation);
 
                 if (cachedShardInfo.isPresent()) {
                     // Cached information is up-to-date
@@ -205,7 +201,7 @@ class ShardReader {
                     // the new request token
                     if (token.equals(requestCacheToken) == false) {
                         shardsWithNewInfo.put(shardId, shardInfo);
-                        shardInfoCache.updateCachedShardInfo(shardId, requestCacheToken, shardInfo);
+                        shardMetricsCache.updateCachedShardMetrics(shardId, requestCacheToken, shardInfo);
                     }
 
                 } else {
@@ -214,12 +210,12 @@ class ShardReader {
                     var shardInfo = computeShardInfo(shardId, primaryTerm, generation, indexCreationDate, segmentInfos);
                     shardsWithNewInfo.put(shardId, shardInfo);
                     if (requestCacheToken != null) {
-                        shardInfoCache.updateCachedShardInfo(shardId, requestCacheToken, shardInfo);
+                        shardMetricsCache.updateCachedShardMetrics(shardId, requestCacheToken, shardInfo);
                     }
                 }
             }
         }
-        shardInfoCache.retainActive(activeShards);
+        shardMetricsCache.retainActive(activeShards);
         return shardsWithNewInfo;
     }
 }

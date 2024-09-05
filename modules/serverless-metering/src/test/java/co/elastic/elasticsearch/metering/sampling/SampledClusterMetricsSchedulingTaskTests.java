@@ -15,9 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
-
-import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
+package co.elastic.elasticsearch.metering.sampling;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.core.TimeValue;
@@ -43,16 +41,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
-public class MeteringIndexInfoTaskTests extends ESTestCase {
+public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
 
     public void testRunInvokesService() {
         var mockThreadPool = mock(ThreadPool.class, withSettings().strictness(Strictness.STRICT_STUBS));
-        var mockIndexSizeService = mock(MeteringIndexInfoService.class);
+        var mockIndexSizeService = mock(SampledClusterMetricsService.class);
         var mockScheduler = mock(ScheduledExecutorService.class);
 
         var initialPollInterval = TimeValue.timeValueMinutes(12);
 
-        var task = new MeteringIndexInfoTask(
+        var task = new SampledClusterMetricsSchedulingTask(
             0L,
             "",
             "",
@@ -75,18 +73,18 @@ public class MeteringIndexInfoTaskTests extends ESTestCase {
         assertThat(task.scheduled.isCancelled(), is(false));
         assertThat(task.scheduled.getDelay(TimeUnit.MINUTES), is(12L));
 
-        verify(mockIndexSizeService, times(1)).updateMeteringShardInfo(any());
+        verify(mockIndexSizeService, times(1)).updateSamples(any());
     }
 
     public void testCancellationStopsServiceInvocation() {
         var mockThreadPool = mock(ThreadPool.class, withSettings().strictness(Strictness.STRICT_STUBS));
-        var mockIndexSizeService = mock(MeteringIndexInfoService.class);
+        var mockIndexSizeService = mock(SampledClusterMetricsService.class);
         var mockScheduler = mock(ScheduledExecutorService.class);
 
         var initialPollInterval = TimeValue.timeValueMinutes(12);
 
         var task = spy(
-            new MeteringIndexInfoTask(
+            new SampledClusterMetricsSchedulingTask(
                 0L,
                 "",
                 "",
@@ -106,7 +104,7 @@ public class MeteringIndexInfoTaskTests extends ESTestCase {
         doNothing().when(task).markAsCompleted();
 
         task.run();
-        verify(mockIndexSizeService, times(1)).updateMeteringShardInfo(any());
+        verify(mockIndexSizeService, times(1)).updateSamples(any());
 
         assertThat(task.scheduled, notNullValue());
         assertThat(task.scheduled.isCancelled(), is(false));
@@ -117,17 +115,17 @@ public class MeteringIndexInfoTaskTests extends ESTestCase {
 
         // Run on a cancelled task no longer invokes the service
         task.run();
-        verify(mockIndexSizeService, times(1)).updateMeteringShardInfo(any());
+        verify(mockIndexSizeService, times(1)).updateSamples(any());
     }
 
     public void testRequestRescheduleCancelsAndRescheduleImmediately() {
         var mockThreadPool = mock(ThreadPool.class, withSettings().strictness(Strictness.STRICT_STUBS));
-        var mockIndexSizeService = mock(MeteringIndexInfoService.class, withSettings().strictness(Strictness.STRICT_STUBS));
+        var mockIndexSizeService = mock(SampledClusterMetricsService.class, withSettings().strictness(Strictness.STRICT_STUBS));
         var mockScheduler = mock(ScheduledExecutorService.class);
 
         var initialPollInterval = TimeValue.timeValueMinutes(12);
 
-        var task = new MeteringIndexInfoTask(
+        var task = new SampledClusterMetricsSchedulingTask(
             0L,
             "",
             "",

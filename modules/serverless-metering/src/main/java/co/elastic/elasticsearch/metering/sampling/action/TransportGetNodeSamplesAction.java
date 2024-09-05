@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling.action;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
@@ -27,42 +27,36 @@ import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
-public class TransportGetMeteringShardInfoAction extends HandledTransportAction<
-    GetMeteringShardInfoAction.Request,
-    GetMeteringShardInfoAction.Response> {
-    private final ShardReader shardReader;
-    private final LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache;
+public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNodeSamplesAction.Request, GetNodeSamplesAction.Response> {
+    private final ShardInfoMetricsReader shardMetricsReader;
+    private final InMemoryShardInfoMetricsCache shardMetricsCache;
 
     @Inject
-    public TransportGetMeteringShardInfoAction(
+    public TransportGetNodeSamplesAction(
         TransportService transportService,
         IndicesService indicesService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        LocalNodeMeteringShardInfoCache localNodeMeteringShardInfoCache,
+        InMemoryShardInfoMetricsCache shardMetricsCache,
         TelemetryProvider telemetryProvider
     ) {
         super(
-            GetMeteringShardInfoAction.NAME,
+            GetNodeSamplesAction.NAME,
             false,
             transportService,
             actionFilters,
-            GetMeteringShardInfoAction.Request::new,
+            GetNodeSamplesAction.Request::new,
             threadPool.executor(ThreadPool.Names.MANAGEMENT)
         );
-        this.shardReader = new ShardReader(indicesService, telemetryProvider.getMeterRegistry());
-        this.localNodeMeteringShardInfoCache = localNodeMeteringShardInfoCache;
+        this.shardMetricsReader = new ShardInfoMetricsReader(indicesService, telemetryProvider.getMeterRegistry());
+        this.shardMetricsCache = shardMetricsCache;
     }
 
     @Override
-    protected void doExecute(
-        Task task,
-        GetMeteringShardInfoAction.Request request,
-        ActionListener<GetMeteringShardInfoAction.Response> listener
-    ) {
+    protected void doExecute(Task task, GetNodeSamplesAction.Request request, ActionListener<GetNodeSamplesAction.Response> listener) {
         try {
-            var shardSizes = shardReader.getMeteringShardInfoMap(localNodeMeteringShardInfoCache, request.getCacheToken());
-            listener.onResponse(new GetMeteringShardInfoAction.Response(shardSizes));
+            var shardSizes = shardMetricsReader.getUpdatedShardInfos(shardMetricsCache, request.getCacheToken());
+            listener.onResponse(new GetNodeSamplesAction.Response(shardSizes));
         } catch (Exception ex) {
             listener.onFailure(ex);
         }

@@ -18,6 +18,8 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
@@ -74,10 +76,10 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         assertThat(initialMetadata, is(nullValue()));
 
         // Defer service start until we are ready to get "immediately" a good (stable) read
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
         });
@@ -87,8 +89,8 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
     public void cleanUp() {
         updateClusterSettings(
             Settings.builder()
-                .putNull(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey())
-                .putNull(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey())
+                .putNull(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey())
+                .putNull(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey())
         );
     }
 
@@ -98,8 +100,8 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
             .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), DEFAULT_SEARCH_POWER)
-            .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
-            .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), INTERVAL)
+            .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
+            .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), INTERVAL)
             .build();
     }
 
@@ -142,20 +144,20 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         });
 
         // toggle the persistent task executor, so we can check that metadata is preserved and picked up
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false));
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNull(task);
         });
 
         var afterStopMetadata = SampledMetricsMetadata.getFromClusterState(internalCluster().clusterService().state());
         assertThat(afterStopMetadata.getCommittedTimestamp(), greaterThanOrEqualTo(currentCursor.get()));
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
         });
@@ -185,7 +187,7 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         // Compare them with cursor, remember it
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
             var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(clusterState);
@@ -198,10 +200,10 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         });
 
         // Switch off the persistent task executor, so we can check that metadata is preserved and picked up
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false));
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNull(task);
         });
 
@@ -215,10 +217,10 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         waitAndAssertRAIngestRecords(newMetrics, indexName);
 
         // Re-enable the persistent task
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
             var previousPersistentTaskNode = currentPersistentTaskNode.get();

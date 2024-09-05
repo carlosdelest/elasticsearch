@@ -15,7 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling.action;
+
+import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -30,10 +32,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Action used to collect metering shard info from a single data node.
+ * Action used to collect metering samples (including shard infos) from a single data node.
  */
-public class GetMeteringShardInfoAction {
+public class GetNodeSamplesAction {
 
+    // FIXME Is it possible to rename this?
     public static final String NAME = "cluster:monitor/get/metering/shard-info";
     public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
@@ -76,19 +79,19 @@ public class GetMeteringShardInfoAction {
     }
 
     public static class Response extends ActionResponse {
-        private final Map<ShardId, MeteringShardInfo> meteringShardInfoMap;
+        private final Map<ShardId, ShardInfoMetrics> shardInfos;
 
-        public Response(final Map<ShardId, MeteringShardInfo> shardSizes) {
-            this.meteringShardInfoMap = Objects.requireNonNull(shardSizes);
+        public Response(final Map<ShardId, ShardInfoMetrics> shardSizes) {
+            this.shardInfos = Objects.requireNonNull(shardSizes);
         }
 
         public Response(StreamInput in) throws IOException {
-            this.meteringShardInfoMap = in.readImmutableMap(ShardId::new, MeteringShardInfo::from);
+            this.shardInfos = in.readImmutableMap(ShardId::new, ShardInfoMetrics::from);
         }
 
         @Override
         public void writeTo(StreamOutput output) throws IOException {
-            output.writeMap(meteringShardInfoMap, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
+            output.writeMap(shardInfos, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
         }
 
         @Override
@@ -97,18 +100,18 @@ public class GetMeteringShardInfoAction {
                 return true;
             }
             if (o instanceof Response response) {
-                return Objects.equals(meteringShardInfoMap, response.meteringShardInfoMap);
+                return Objects.equals(shardInfos, response.shardInfos);
             }
             return false;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(meteringShardInfoMap);
+            return Objects.hash(shardInfos);
         }
 
-        public Map<ShardId, MeteringShardInfo> getMeteringShardInfoMap() {
-            return meteringShardInfoMap;
+        public Map<ShardId, ShardInfoMetrics> getShardInfos() {
+            return shardInfos;
         }
     }
 }

@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
@@ -25,7 +25,7 @@ import org.elasticsearch.common.io.stream.Writeable;
 
 import java.io.IOException;
 
-public record MeteringShardInfo(
+public record ShardInfoMetrics(
     long sizeInBytes,
     long docCount,
     long primaryTerm,
@@ -34,13 +34,13 @@ public record MeteringShardInfo(
     long indexCreationDateEpochMilli
 ) implements Writeable {
 
-    public static final MeteringShardInfo EMPTY = new MeteringShardInfo(0, 0, 0, 0, 0, 0);
+    public static final ShardInfoMetrics EMPTY = new ShardInfoMetrics(0, 0, 0, 0, 0, 0);
 
-    public MeteringShardInfo {
+    public ShardInfoMetrics {
         assert sizeInBytes >= 0 : "size must be non negative";
     }
 
-    public static MeteringShardInfo from(StreamInput in) throws IOException {
+    public static ShardInfoMetrics from(StreamInput in) throws IOException {
         var sizeInBytes = in.readVLong();
         long docCount = in.readVLong();
         var primaryTerm = in.readVLong();
@@ -53,7 +53,7 @@ public record MeteringShardInfo(
         } else {
             storedIngestSizeInBytes = in.readOptionalVLong();
         }
-        return new MeteringShardInfo(sizeInBytes, docCount, primaryTerm, generation, storedIngestSizeInBytes, indexCreationDateEpochMilli);
+        return new ShardInfoMetrics(sizeInBytes, docCount, primaryTerm, generation, storedIngestSizeInBytes, indexCreationDateEpochMilli);
     }
 
     @Override
@@ -70,11 +70,11 @@ public record MeteringShardInfo(
         }
     }
 
-    boolean isMoreRecentThan(MeteringShardInfo other) {
+    public boolean isMoreRecentThan(ShardInfoMetrics other) {
         return primaryTerm > other.primaryTerm || (primaryTerm == other.primaryTerm && generation > other.generation);
     }
 
-    MeteringShardInfo mostRecent(MeteringShardInfo other) {
+    public ShardInfoMetrics mostRecent(ShardInfoMetrics other) {
         return isMoreRecentThan(other) ? this : other;
     }
 }

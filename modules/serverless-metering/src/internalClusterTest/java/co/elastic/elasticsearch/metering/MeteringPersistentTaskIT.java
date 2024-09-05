@@ -17,6 +17,9 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
+
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -51,15 +54,15 @@ public class MeteringPersistentTaskIT extends ESIntegTestCase {
     public void cleanUp() {
         updateClusterSettings(
             Settings.builder()
-                .putNull(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey())
-                .putNull(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey())
+                .putNull(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey())
+                .putNull(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey())
         );
     }
 
     public void testTaskRemovedAfterCancellation() throws Exception {
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
         assertBusy(() -> {
-            var task = MeteringIndexInfoTask.findTask(clusterService().state());
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterService().state());
             assertNotNull(task);
             assertTrue(task.isAssigned());
         });
@@ -67,7 +70,7 @@ public class MeteringPersistentTaskIT extends ESIntegTestCase {
             ListTasksResponse tasks = clusterAdmin().listTasks(new ListTasksRequest().setActions("metering-index-info[c]")).actionGet();
             assertThat(tasks.getTasks(), hasSize(1));
         });
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false));
         assertBusy(() -> {
             ListTasksResponse tasks2 = clusterAdmin().listTasks(new ListTasksRequest().setActions("metering-index-info[c]")).actionGet();
             assertThat(tasks2.getTasks(), empty());
@@ -75,7 +78,7 @@ public class MeteringPersistentTaskIT extends ESIntegTestCase {
     }
 
     public void testTaskMoveToAnotherNode() throws Exception {
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         var persistentTaskNode1 = getMeteringPersistentTaskAssignedNode();
 
@@ -106,7 +109,7 @@ public class MeteringPersistentTaskIT extends ESIntegTestCase {
         AtomicReference<DiscoveryNode> persistentTaskNode = new AtomicReference<>();
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
             persistentTaskNode.set(clusterState.nodes().get(task.getAssignment().getExecutorNode()));

@@ -15,9 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
+import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
@@ -46,11 +46,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
-import static co.elastic.elasticsearch.metering.action.utils.PersistentTaskUtils.findPersistentTaskNodeId;
+import static co.elastic.elasticsearch.metering.sampling.utils.PersistentTaskUtils.findPersistentTaskNodeId;
 import static org.elasticsearch.core.Strings.format;
 
-public class MeteringIndexInfoService {
-    private static final Logger logger = LogManager.getLogger(MeteringIndexInfoService.class);
+public class SampledClusterMetricsService {
+    private static final Logger logger = LogManager.getLogger(SampledClusterMetricsService.class);
 
     static final String NODE_INFO_COLLECTIONS_TOTAL = "es.metering.node_info.collections.total";
     static final String NODE_INFO_COLLECTIONS_ERRORS_TOTAL = "es.metering.node_info.collections.error.total";
@@ -61,7 +61,7 @@ public class MeteringIndexInfoService {
     private final LongCounter collectionsErrorsCounter;
     private final LongCounter collectionsPartialsCounter;
 
-    public MeteringIndexInfoService(ClusterService clusterService, MeterRegistry meterRegistry) {
+    public SampledClusterMetricsService(ClusterService clusterService, MeterRegistry meterRegistry) {
         this.clusterService = clusterService;
         clusterService.addListener(this::clusterChanged);
 
@@ -82,38 +82,38 @@ public class MeteringIndexInfoService {
         );
     }
 
-    enum CollectedMeteringShardInfoFlag {
+    public interface SampledShardInfos {
+        ShardInfoMetrics get(ShardId shardId);
+    }
+
+    enum SamplingStatus {
+        /** Partial samples, at least 1 node failed to respond. */
         PARTIAL,
+        /** Stale data, the last attempt to collect samples failed. */
         STALE
     }
 
-    record ShardInfoKey(String indexName, int shardId) {
+    record ShardKey(String indexName, int shardId) {
         @Override
         public String toString() {
             return indexName + ":" + shardId;
         }
 
-        public static ShardInfoKey fromShardId(ShardId shardId) {
-            return new ShardInfoKey(shardId.getIndexName(), shardId.id());
+        static ShardKey fromShardId(ShardId shardId) {
+            return new ShardKey(shardId.getIndexName(), shardId.id());
         }
     }
 
-    record ShardInfoValue(String indexUUID, MeteringShardInfo shardInfo) {
-        public static final ShardInfoValue EMPTY = new ShardInfoValue(null, MeteringShardInfo.EMPTY);
+    record ShardSample(String indexUUID, ShardInfoMetrics shardInfo) {
+        static final ShardSample EMPTY = new ShardSample(null, ShardInfoMetrics.EMPTY);
     }
 
-    record CollectedMeteringShardInfo(
-        Map<ShardInfoKey, ShardInfoValue> meteringShardInfoMap,
-        Set<CollectedMeteringShardInfoFlag> meteringShardInfoStatus
-    ) {
-        static final CollectedMeteringShardInfo EMPTY = new CollectedMeteringShardInfo(
-            Map.of(),
-            Set.of(CollectedMeteringShardInfoFlag.STALE)
-        );
+    record SampledClusterMetrics(Map<ShardKey, ShardSample> shardSamples, Set<SamplingStatus> status) implements SampledShardInfos {
+        static final SampledClusterMetrics EMPTY = new SampledClusterMetrics(Map.of(), Set.of(SamplingStatus.STALE));
 
-        MeteringShardInfo getShardInfo(ShardId shardId) {
-            var shardInfo = meteringShardInfoMap.get(ShardInfoKey.fromShardId(shardId));
-            return Objects.requireNonNullElse(shardInfo, ShardInfoValue.EMPTY).shardInfo;
+        public ShardInfoMetrics get(ShardId shardId) {
+            var shardInfo = shardSamples.get(ShardKey.fromShardId(shardId));
+            return Objects.requireNonNullElse(shardInfo, ShardSample.EMPTY).shardInfo;
         }
     }
 
@@ -123,7 +123,7 @@ public class MeteringIndexInfoService {
         ANOTHER_NODE
     }
 
-    final AtomicReference<CollectedMeteringShardInfo> collectedShardInfo = new AtomicReference<>(CollectedMeteringShardInfo.EMPTY);
+    final AtomicReference<SampledClusterMetrics> collectedShardInfo = new AtomicReference<>(SampledClusterMetrics.EMPTY);
     volatile PersistentTaskNodeStatus persistentTaskNodeStatus = PersistentTaskNodeStatus.NO_NODE;
 
     /**
@@ -132,7 +132,7 @@ public class MeteringIndexInfoService {
      * Package-private for testing.
      */
     void clusterChanged(ClusterChangedEvent event) {
-        var currentPersistentTaskNode = findPersistentTaskNodeId(event.state(), MeteringIndexInfoTask.TASK_NAME);
+        var currentPersistentTaskNode = findPersistentTaskNodeId(event.state(), SampledClusterMetricsSchedulingTask.TASK_NAME);
         var localNode = event.state().nodes().getLocalNodeId();
 
         var wasPersistentTaskNode = persistentTaskNodeStatus == PersistentTaskNodeStatus.THIS_NODE;
@@ -145,36 +145,36 @@ public class MeteringIndexInfoService {
         }
 
         if (persistentTaskNodeStatus != PersistentTaskNodeStatus.THIS_NODE && wasPersistentTaskNode) {
-            collectedShardInfo.set(CollectedMeteringShardInfo.EMPTY);
+            collectedShardInfo.set(SampledClusterMetrics.EMPTY);
         }
     }
 
     /**
      * Updates the internal storage of metering shard info, by performing a scatter-gather operation towards all (search) nodes
      */
-    public void updateMeteringShardInfo(Client client) {
+    void updateSamples(Client client) {
         logger.debug("Calling IndexSizeService#updateMeteringShardInfo");
         collectionsTotalCounter.increment();
         // If we get called and ask to update, that request comes from the PersistentTask, so we are definitely on
         // the PersistentTask node
         persistentTaskNodeStatus = PersistentTaskNodeStatus.THIS_NODE;
-        client.execute(CollectMeteringShardInfoAction.INSTANCE, new CollectMeteringShardInfoAction.Request(), new ActionListener<>() {
+        client.execute(CollectClusterSamplesAction.INSTANCE, new CollectClusterSamplesAction.Request(), new ActionListener<>() {
             @Override
-            public void onResponse(CollectMeteringShardInfoAction.Response response) {
-                Set<CollectedMeteringShardInfoFlag> status = EnumSet.noneOf(CollectedMeteringShardInfoFlag.class);
+            public void onResponse(CollectClusterSamplesAction.Response response) {
+                Set<SamplingStatus> status = EnumSet.noneOf(SamplingStatus.class);
                 if (response.isComplete() == false) {
                     collectionsPartialsCounter.increment();
-                    status.add(CollectedMeteringShardInfoFlag.PARTIAL);
+                    status.add(SamplingStatus.PARTIAL);
                 }
 
                 // Create a new MeteringShardInfo from diffs.
                 collectedShardInfo.getAndUpdate(
-                    current -> mergeShardInfo(removeStaleEntries(current.meteringShardInfoMap()), response.getShardInfo(), status)
+                    current -> mergeShardInfos(removeStaleEntries(current.shardSamples()), response.getShardInfos(), status)
                 );
                 logger.debug(
                     () -> Strings.format(
                         "collected new metering shard info for shards [%s]",
-                        response.getShardInfo().keySet().stream().map(ShardId::toString).collect(Collectors.joining(","))
+                        response.getShardInfos().keySet().stream().map(ShardId::toString).collect(Collectors.joining(","))
                     )
                 );
             }
@@ -182,20 +182,20 @@ public class MeteringIndexInfoService {
             @Override
             public void onFailure(Exception e) {
                 var previousSizes = collectedShardInfo.get();
-                var status = EnumSet.copyOf(previousSizes.meteringShardInfoStatus());
-                status.add(CollectedMeteringShardInfoFlag.STALE);
-                collectedShardInfo.set(new CollectedMeteringShardInfo(previousSizes.meteringShardInfoMap(), status));
+                var status = EnumSet.copyOf(previousSizes.status());
+                status.add(SamplingStatus.STALE);
+                collectedShardInfo.set(new SampledClusterMetrics(previousSizes.shardSamples(), status));
                 logger.error("failed to collect metering shard info", e);
                 collectionsErrorsCounter.increment();
             }
         });
     }
 
-    private Map<ShardInfoKey, ShardInfoValue> removeStaleEntries(Map<ShardInfoKey, ShardInfoValue> shardInfoKeyShardInfoValueMap) {
-        Set<ShardInfoKey> activeShards = clusterService.state()
+    private Map<ShardKey, ShardSample> removeStaleEntries(Map<ShardKey, ShardSample> shardInfoKeyShardInfoValueMap) {
+        Set<ShardKey> activeShards = clusterService.state()
             .routingTable()
             .allShards()
-            .map(x -> ShardInfoKey.fromShardId(x.shardId()))
+            .map(x -> ShardKey.fromShardId(x.shardId()))
             .collect(Collectors.toUnmodifiableSet());
 
         return shardInfoKeyShardInfoValueMap.entrySet()
@@ -204,7 +204,8 @@ public class MeteringIndexInfoService {
             .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    class StorageInfoMetricsProvider implements SampledMetricsProvider {
+    // TODO move this to a separate class
+    class SampledStorageMetricsProvider implements SampledMetricsProvider {
         private static final String IX_METRIC_TYPE = "es_indexed_data";
         static final String IX_METRIC_ID_PREFIX = "shard-size";
         private static final String RA_S_METRIC_TYPE = "es_raw_stored_data";
@@ -218,19 +219,19 @@ public class MeteringIndexInfoService {
             var currentInfo = collectedShardInfo.get();
 
             if (persistentTaskNodeStatus == PersistentTaskNodeStatus.NO_NODE
-                || (currentInfo == CollectedMeteringShardInfo.EMPTY && persistentTaskNodeStatus == PersistentTaskNodeStatus.THIS_NODE)) {
+                || (currentInfo == SampledClusterMetrics.EMPTY && persistentTaskNodeStatus == PersistentTaskNodeStatus.THIS_NODE)) {
                 // We are not ready to return metrics yet
                 return Optional.empty();
             }
 
-            if (persistentTaskNodeStatus == PersistentTaskNodeStatus.ANOTHER_NODE || (currentInfo == CollectedMeteringShardInfo.EMPTY)) {
+            if (persistentTaskNodeStatus == PersistentTaskNodeStatus.ANOTHER_NODE || (currentInfo == SampledClusterMetrics.EMPTY)) {
                 // We have nothing to report
                 return Optional.of(SampledMetricsProvider.NO_VALUES);
             }
 
-            boolean partial = currentInfo.meteringShardInfoStatus().contains(CollectedMeteringShardInfoFlag.PARTIAL);
+            boolean partial = currentInfo.status().contains(SamplingStatus.PARTIAL);
             List<MetricValue> metrics = new ArrayList<>();
-            for (final var shardEntry : currentInfo.meteringShardInfoMap.entrySet()) {
+            for (final var shardEntry : currentInfo.shardSamples.entrySet()) {
                 long size = shardEntry.getValue().shardInfo().sizeInBytes();
                 // Do not generate records with size 0
                 if (size > 0) {
@@ -257,7 +258,7 @@ public class MeteringIndexInfoService {
                 }
             }
 
-            Map<String, RaStorageInfo> raStorageInfos = currentInfo.meteringShardInfoMap.entrySet()
+            Map<String, RaStorageInfo> raStorageInfos = currentInfo.shardSamples.entrySet()
                 .stream()
                 .collect(
                     Collectors.groupingBy(
@@ -294,7 +295,7 @@ public class MeteringIndexInfoService {
             private Instant indexCreationDate;
             private long raStorageSize;
 
-            void accumulate(Map.Entry<ShardInfoKey, ShardInfoValue> t) {
+            void accumulate(Map.Entry<ShardKey, ShardSample> t) {
                 raStorageSize += t.getValue().shardInfo().storedIngestSizeInBytes();
                 indexCreationDate = getEarlierValidCreationDate(
                     indexCreationDate,
@@ -317,19 +318,19 @@ public class MeteringIndexInfoService {
         }
     }
 
-    public SampledMetricsProvider createIndexSizeMetricsProvider() {
-        return new StorageInfoMetricsProvider();
+    public SampledMetricsProvider createSampledStorageMetricsProvider() {
+        return new SampledStorageMetricsProvider();
     }
 
-    private static CollectedMeteringShardInfo mergeShardInfo(
-        Map<ShardInfoKey, ShardInfoValue> current,
-        Map<ShardId, MeteringShardInfo> updated,
-        Set<CollectedMeteringShardInfoFlag> status
+    private static SampledClusterMetrics mergeShardInfos(
+        Map<ShardKey, ShardSample> current,
+        Map<ShardId, ShardInfoMetrics> updated,
+        Set<SamplingStatus> status
     ) {
-        HashMap<ShardInfoKey, ShardInfoValue> map = new HashMap<>(current);
+        HashMap<ShardKey, ShardSample> map = new HashMap<>(current);
         for (var newEntry : updated.entrySet()) {
-            var shardKey = ShardInfoKey.fromShardId(newEntry.getKey());
-            var shardValue = new ShardInfoValue(newEntry.getKey().getIndex().getUUID(), newEntry.getValue());
+            var shardKey = ShardKey.fromShardId(newEntry.getKey());
+            var shardValue = new ShardSample(newEntry.getKey().getIndex().getUUID(), newEntry.getValue());
 
             map.merge(shardKey, shardValue, (oldValue, newValue) -> {
                 // In case there is a conflict, we need the index UUID from the original map value to decide what to do
@@ -357,10 +358,10 @@ public class MeteringIndexInfoService {
                 }
             });
         }
-        return new CollectedMeteringShardInfo(map, status);
+        return new SampledClusterMetrics(map, status);
     }
 
-    CollectedMeteringShardInfo getMeteringShardInfo() {
+    public SampledShardInfos getMeteringShardInfo() {
         return collectedShardInfo.get();
     }
 }

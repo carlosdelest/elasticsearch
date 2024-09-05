@@ -15,9 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
-
-import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
+package co.elastic.elasticsearch.metering.sampling;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
@@ -34,20 +32,20 @@ import org.elasticsearch.threadpool.ThreadPool;
 import java.util.Map;
 import java.util.function.Supplier;
 
-public class MeteringIndexInfoTask extends AllocatedPersistentTask {
+public class SampledClusterMetricsSchedulingTask extends AllocatedPersistentTask {
 
     public static final String TASK_NAME = "metering-index-info";
 
-    private static final Logger logger = LogManager.getLogger(MeteringIndexInfoTask.class);
+    private static final Logger logger = LogManager.getLogger(SampledClusterMetricsSchedulingTask.class);
     private final ThreadPool threadPool;
     volatile Scheduler.ScheduledCancellable scheduled;
     private final Client client;
     private final Supplier<TimeValue> pollIntervalSupplier;
     private final Runnable notifyCancelled;
 
-    private final MeteringIndexInfoService meteringIndexInfoService;
+    private final SampledClusterMetricsService clusterMetricsService;
 
-    MeteringIndexInfoTask(
+    SampledClusterMetricsSchedulingTask(
         long id,
         String type,
         String action,
@@ -55,14 +53,14 @@ public class MeteringIndexInfoTask extends AllocatedPersistentTask {
         TaskId parentTask,
         Map<String, String> headers,
         ThreadPool threadPool,
-        MeteringIndexInfoService meteringIndexInfoService,
+        SampledClusterMetricsService clusterMetricsService,
         Client client,
         Supplier<TimeValue> pollIntervalSupplier,
         Runnable notifyCancelled
     ) {
         super(id, type, action, description, parentTask, headers);
         this.threadPool = threadPool;
-        this.meteringIndexInfoService = meteringIndexInfoService;
+        this.clusterMetricsService = clusterMetricsService;
         this.client = client;
         this.pollIntervalSupplier = pollIntervalSupplier;
         this.notifyCancelled = notifyCancelled;
@@ -91,7 +89,7 @@ public class MeteringIndexInfoTask extends AllocatedPersistentTask {
             return;
         }
         try {
-            meteringIndexInfoService.updateMeteringShardInfo(client);
+            clusterMetricsService.updateSamples(client);
         } catch (Exception e) {
             logger.error("Failed during MeteringIndexInfoTask run", e);
         }

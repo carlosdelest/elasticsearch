@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metrics.MetricValue;
 
@@ -35,8 +35,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
-import static co.elastic.elasticsearch.metering.action.MeteringIndexInfoService.StorageInfoMetricsProvider.IX_METRIC_ID_PREFIX;
-import static co.elastic.elasticsearch.metering.action.MeteringIndexInfoService.StorageInfoMetricsProvider.RA_S_METRIC_ID_PREFIX;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_SETTING;
@@ -61,7 +61,7 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class StorageInfoMetricsProviderTests extends ESTestCase {
+public class SampledStorageMetricsProviderTests extends ESTestCase {
     protected final ClusterSettings clusterSettings = new ClusterSettings(
         Settings.builder().put(SEARCH_POWER_MIN_SETTING.getKey(), 100).put(SEARCH_POWER_MAX_SETTING.getKey(), 200).build(),
         Set.of(SEARCH_POWER_MIN_SETTING, SEARCH_POWER_MAX_SETTING, SEARCH_POWER_SETTING)
@@ -77,19 +77,19 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
     }
 
     private void setInternalIndexInfoServiceData(
-        MeteringIndexInfoService indexInfoService,
-        Map<MeteringIndexInfoService.ShardInfoKey, MeteringIndexInfoService.ShardInfoValue> data
+        SampledClusterMetricsService indexInfoService,
+        Map<SampledClusterMetricsService.ShardKey, SampledClusterMetricsService.ShardSample> data
     ) {
         setInternalIndexInfoServiceData(indexInfoService, data, Set.of());
     }
 
     private void setInternalIndexInfoServiceData(
-        MeteringIndexInfoService indexInfoService,
-        Map<MeteringIndexInfoService.ShardInfoKey, MeteringIndexInfoService.ShardInfoValue> data,
-        Set<MeteringIndexInfoService.CollectedMeteringShardInfoFlag> flags
+        SampledClusterMetricsService indexInfoService,
+        Map<SampledClusterMetricsService.ShardKey, SampledClusterMetricsService.ShardSample> data,
+        Set<SampledClusterMetricsService.SamplingStatus> flags
     ) {
-        indexInfoService.collectedShardInfo.set(new MeteringIndexInfoService.CollectedMeteringShardInfo(data, flags));
-        indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.THIS_NODE;
+        indexInfoService.collectedShardInfo.set(new SampledClusterMetricsService.SampledClusterMetrics(data, flags));
+        indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
     }
 
     private static AssertionError elementMustBePresent() {
@@ -99,34 +99,36 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
     public void testGetMetrics() {
         String indexName = "myIndex";
         int shardIdInt = 0;
-        var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
+        var shard1Id = new SampledClusterMetricsService.ShardKey(indexName, shardIdInt);
 
         var shardsInfo = Map.ofEntries(
             entry(
                 shard1Id,
-                new MeteringIndexInfoService.ShardInfoValue(
+                new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new MeteringShardInfo(11L, 110L, 1, 1, 11L, Instant.now().toEpochMilli())
+                    new ShardInfoMetrics(11L, 110L, 1, 1, 11L, Instant.now().toEpochMilli())
                 )
             )
         );
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
+        );
 
         assertThat(metrics, hasSize(2));
 
         var metric1 = metrics.stream()
             .filter(m -> m.type().equals("es_indexed_data"))
             .findFirst()
-            .orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent);
+            .orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent);
         var metric2 = metrics.stream()
             .filter(m -> m.type().equals("es_raw_stored_data"))
             .findFirst()
-            .orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent);
+            .orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent);
 
         assertThat(metric1.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
         assertThat(metric1.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
@@ -142,23 +144,25 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
     public void testGetMetricsWithNoStoredIngestSize() {
         String indexName = "myIndex";
         int shardIdInt = 0;
-        var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
+        var shard1Id = new SampledClusterMetricsService.ShardKey(indexName, shardIdInt);
         Instant creationDate = Instant.now();
         var shardsInfo = Map.ofEntries(
             entry(
                 shard1Id,
-                new MeteringIndexInfoService.ShardInfoValue(
+                new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new MeteringShardInfo(11L, 110L, 1, 1, 0, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(11L, 110L, 1, 1, 0, creationDate.toEpochMilli())
                 )
             )
         );
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
+        );
 
         assertThat(metrics, hasSize(1));
 
@@ -173,23 +177,25 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
     public void testGetMetricsWithNoIndexSize() {
         String indexName = "myIndex";
         int shardIdInt = 0;
-        var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
+        var shard1Id = new SampledClusterMetricsService.ShardKey(indexName, shardIdInt);
         Instant creationDate = Instant.now();
         var shardsInfo = Map.ofEntries(
             entry(
                 shard1Id,
-                new MeteringIndexInfoService.ShardInfoValue(
+                new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new MeteringShardInfo(0, 110L, 1, 1, 11L, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(0, 110L, 1, 1, 11L, creationDate.toEpochMilli())
                 )
             )
         );
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
+        );
 
         assertThat(metrics, hasSize(1));
 
@@ -204,23 +210,25 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
     public void testGetMetricsWithNoSize() {
         String indexName = "myIndex";
         int shardIdInt = 0;
-        var shard1Id = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdInt);
+        var shard1Id = new SampledClusterMetricsService.ShardKey(indexName, shardIdInt);
         Instant creationDate = Instant.now();
         var shardsInfo = Map.ofEntries(
             entry(
                 shard1Id,
-                new MeteringIndexInfoService.ShardInfoValue(
+                new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new MeteringShardInfo(0, 110L, 1, 1, 0, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(0, 110L, 1, 1, 0, creationDate.toEpochMilli())
                 )
             )
         );
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
+        );
 
         assertThat(metrics, empty());
     }
@@ -229,24 +237,26 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
         String indexName = "myMultiShardIndex";
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardId = new MeteringIndexInfoService.ShardInfoKey(indexName, id);
+            var shardId = new SampledClusterMetricsService.ShardKey(indexName, id);
             var size = 10L + id;
             var hasIngestSize = id < 5;
             return entry(
                 shardId,
-                new MeteringIndexInfoService.ShardInfoValue(
+                new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new MeteringShardInfo(size, 110L, 1, 1, hasIngestSize ? size : 0L, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(size, 110L, 1, 1, hasIngestSize ? size : 0L, creationDate.toEpochMilli())
                 )
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
+        );
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -274,29 +284,31 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
     public void testMultipleIndicesWithMixedSizeType() {
         String baseIndexName = "myMultiShardIndex";
         Instant creationDate = Instant.now();
-        var shardsInfo = new LinkedHashMap<MeteringIndexInfoService.ShardInfoKey, MeteringIndexInfoService.ShardInfoValue>();
+        var shardsInfo = new LinkedHashMap<SampledClusterMetricsService.ShardKey, SampledClusterMetricsService.ShardSample>();
         for (var indexIdx = 0; indexIdx < 5; indexIdx++) {
             var indexName = baseIndexName + indexIdx;
             for (var shardIdx = 0; shardIdx < 10; shardIdx++) {
-                var shardId = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdx);
+                var shardId = new SampledClusterMetricsService.ShardKey(indexName, shardIdx);
                 var size = 10L + shardIdx;
                 var hasIngestSize = indexIdx < 2;
                 shardsInfo.put(
                     shardId,
-                    new MeteringIndexInfoService.ShardInfoValue(
+                    new SampledClusterMetricsService.ShardSample(
                         "myIndexUUID",
-                        new MeteringShardInfo(size, 110L, 1, 1, hasIngestSize ? size : 0L, creationDate.toEpochMilli())
+                        new ShardInfoMetrics(size, 110L, 1, 1, hasIngestSize ? size : 0L, creationDate.toEpochMilli())
                     )
                 );
             }
         }
 
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
+        );
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -326,29 +338,31 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
     public void testMultipleIndicesWithMixedShardSizeType() {
         String baseIndexName = "myMultiShardIndex";
         Instant creationDate = Instant.now();
-        var shardsInfo = new LinkedHashMap<MeteringIndexInfoService.ShardInfoKey, MeteringIndexInfoService.ShardInfoValue>();
+        var shardsInfo = new LinkedHashMap<SampledClusterMetricsService.ShardKey, SampledClusterMetricsService.ShardSample>();
         for (var indexIdx = 0; indexIdx < 5; indexIdx++) {
             var indexName = baseIndexName + indexIdx;
             for (var shardIdx = 0; shardIdx < 10; shardIdx++) {
-                var shardId = new MeteringIndexInfoService.ShardInfoKey(indexName, shardIdx);
+                var shardId = new SampledClusterMetricsService.ShardKey(indexName, shardIdx);
                 var size = 10L + shardIdx;
                 var hasIngestSize = shardIdx < 5;
                 shardsInfo.put(
                     shardId,
-                    new MeteringIndexInfoService.ShardInfoValue(
+                    new SampledClusterMetricsService.ShardSample(
                         "myIndexUUID",
-                        new MeteringShardInfo(size, 110L, 1, 1, hasIngestSize ? size : 0, creationDate.toEpochMilli())
+                        new ShardInfoMetrics(size, 110L, 1, 1, hasIngestSize ? size : 0, creationDate.toEpochMilli())
                     )
                 );
             }
         }
 
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
+        );
 
         var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
         var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
@@ -378,28 +392,26 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
         int failedIndex = 7;
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardId = new MeteringIndexInfoService.ShardInfoKey(indexName, id);
+            var shardId = new SampledClusterMetricsService.ShardKey(indexName, id);
             var size = failedIndex == id ? 0 : 10L + id;
             return entry(
                 shardId,
-                new MeteringIndexInfoService.ShardInfoValue(
+                new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new MeteringShardInfo(size, 110L, 1, 1, size, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(size, 110L, 1, 1, size, creationDate.toEpochMilli())
                 )
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
-        setInternalIndexInfoServiceData(
-            indexInfoService,
-            shardsInfo,
-            Set.of(MeteringIndexInfoService.CollectedMeteringShardInfoFlag.PARTIAL)
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        setInternalIndexInfoServiceData(indexInfoService, shardsInfo, Set.of(SampledClusterMetricsService.SamplingStatus.PARTIAL));
+
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
+
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );
-
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
-
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
 
         assertThat(metrics, hasSize(10));
         var hasPartial = hasEntry("partial", "" + true);
@@ -422,34 +434,36 @@ public class StorageInfoMetricsProviderTests extends ESTestCase {
     }
 
     public void testNoPersistentTaskNode() {
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
 
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
-        indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.NO_NODE;
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
+        indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.NO_NODE;
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
         assertThat(metricValues, isEmpty());
     }
 
     public void testAnotherNodeIsPersistentTaskNode() {
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
 
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
-        indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.ANOTHER_NODE;
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
+        indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.ANOTHER_NODE;
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(StorageInfoMetricsProviderTests::elementMustBePresent));
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
+        Collection<MetricValue> metrics = iterableToList(
+            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
+        );
 
         assertThat(metrics, hasSize(0));
     }
 
     public void testThisNodeIsPersistentTaskNodeButNotReady() {
-        var indexInfoService = new MeteringIndexInfoService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
 
-        var indexSizeMetricsProvider = indexInfoService.createIndexSizeMetricsProvider();
-        indexInfoService.persistentTaskNodeStatus = MeteringIndexInfoService.PersistentTaskNodeStatus.THIS_NODE;
+        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
+        indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 
-        var metricValues = indexSizeMetricsProvider.getMetrics();
+        var metricValues = sampledStorageMetricsProvider.getMetrics();
         assertThat(metricValues, isEmpty());
     }
 }

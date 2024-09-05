@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
@@ -48,8 +50,8 @@ public class MeteringIndexInfoServiceIndexSizeMeteringIT extends AbstractMeterin
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
             .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), DEFAULT_SEARCH_POWER)
-            .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
-            .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
+            .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
+            .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
             .build();
     }
 
@@ -82,11 +84,11 @@ public class MeteringIndexInfoServiceIndexSizeMeteringIT extends AbstractMeterin
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
         // Defer service start until we are ready to get "immediately" a good (stable) read
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
         });

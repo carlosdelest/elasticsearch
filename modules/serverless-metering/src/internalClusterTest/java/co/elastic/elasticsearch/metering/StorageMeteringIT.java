@@ -18,6 +18,8 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.codec.RAStorageDocValuesFormatFactory;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
@@ -255,8 +257,8 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), ProjectType.OBSERVABILITY)
-            .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
-            .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
+            .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
+            .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
             .build();
     }
 
@@ -352,7 +354,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "@timestamp", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
@@ -367,7 +369,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "@timestamp", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
@@ -379,10 +381,10 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         createTimeSeriesIndex(indexName);
         ensureGreen(indexName);
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
         });
@@ -438,7 +440,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         ).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
@@ -455,7 +457,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         ).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
@@ -475,7 +477,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         client().prepareIndex().setIndex(indexName).setId("1").setSource("a", 1, "b", "c").setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
         long initialRaSize = 3 * ASCII_SIZE + NUMBER_SIZE;
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         // behavior is always the same, regardless of the script type
         if (randomBoolean()) {
@@ -508,7 +510,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         createIndex(indexName);
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         long raSize = 3 * ASCII_SIZE + NUMBER_SIZE;
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
@@ -543,7 +545,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         ).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
@@ -557,7 +559,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
@@ -573,7 +575,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, 3 * EXPECTED_SIZE);
@@ -595,7 +597,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         long raAvgPerDoc = raIngestedSize / 3;
         long raEstimated = raAvgPerDoc * 3;
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, raIngestedSize);
@@ -616,7 +618,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         var raAvgPerDoc = raIngestedSize / 3;
         var raEstimated = raAvgPerDoc * 2;
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, raIngestedSize);
@@ -640,7 +642,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         admin().indices().forceMerge(new ForceMergeRequest(indexName).maxNumSegments(1)).actionGet();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, 3 * EXPECTED_SIZE);
@@ -663,7 +665,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         client().prepareIndex(indexName2).setSource("some_field", 123, "key", "abc").get();
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
@@ -689,10 +691,10 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         createIndex(indexName, indexSettings(1, 1).put(INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING.getKey(), TimeValue.ZERO).build());
         ensureGreen(indexName);
 
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
         });

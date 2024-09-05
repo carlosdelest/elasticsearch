@@ -18,6 +18,8 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListenerResponseHandler;
@@ -64,7 +66,7 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
-            .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false)
+            .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
             .build();
     }
 
@@ -72,8 +74,8 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
     public void cleanUp() {
         updateClusterSettings(
             Settings.builder()
-                .putNull(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey())
-                .putNull(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey())
+                .putNull(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey())
+                .putNull(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey())
         );
     }
 
@@ -81,7 +83,8 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         var getMeteringStatsHandled = new AtomicInteger();
 
         updateClusterSettings(
-            Settings.builder().put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(30))
+            Settings.builder()
+                .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(30))
         );
 
         var masterNode = clusterService().state().nodes().getMasterNode();
@@ -104,7 +107,7 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         assertFalse(listener.isDone());
 
         // Enable the executor, and wait for a node to be assigned
-        updateClusterSettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true));
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
         var persistentTaskNode = getMeteringPersistentTaskAssignedNode();
 
         // Now we have an assigned node, and the request is completed.
@@ -130,8 +133,8 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
 
         updateClusterSettings(
             Settings.builder()
-                .put(MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(60))
-                .put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true)
+                .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(60))
+                .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true)
         );
 
         var persistentTaskNode1 = getMeteringPersistentTaskAssignedNode();
@@ -188,7 +191,7 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         // Now forcing the task to be re-assigned (with a chance to switch to another node)
         PlainActionFuture<PersistentTasksCustomMetadata.PersistentTask<?>> unassignmentFuture = new PlainActionFuture<>();
 
-        var currentTask = MeteringIndexInfoTask.findTask(clusterService().state());
+        var currentTask = SampledClusterMetricsSchedulingTask.findTask(clusterService().state());
 
         persistentTasksClusterService.unassignPersistentTask(
             currentTask.getId(),
@@ -246,7 +249,7 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
         AtomicReference<DiscoveryNode> persistentTaskNode = new AtomicReference<>();
         assertBusy(() -> {
             var clusterState = clusterService().state();
-            var task = MeteringIndexInfoTask.findTask(clusterState);
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterState);
             assertNotNull(task);
             assertTrue(task.isAssigned());
             persistentTaskNode.set(clusterState.nodes().get(task.getAssignment().getExecutorNode()));

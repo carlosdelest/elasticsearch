@@ -15,9 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
+import co.elastic.elasticsearch.metering.MeteringFeatures;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
@@ -60,7 +60,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
+public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase {
     /** Needed by {@link ClusterService} **/
     private static ThreadPool threadPool;
 
@@ -69,7 +69,7 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
     private PersistentTasksService persistentTasksService;
     private FeatureService featureService;
 
-    private MeteringIndexInfoService meteringIndexInfoService;
+    private SampledClusterMetricsService clusterMetricsService;
     private String localNodeId;
     private ClusterSettings clusterSettings;
     private Settings settings;
@@ -82,25 +82,28 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
 
     @BeforeClass
     public static void setUpThreadPool() {
-        threadPool = new TestThreadPool(MeteringIndexInfoTaskExecutorTests.class.getSimpleName());
+        threadPool = new TestThreadPool(SampledClusterMetricsSchedulingTaskExecutorTests.class.getSimpleName());
     }
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         client = mock(Client.class);
-        settings = Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), true).build();
+        settings = Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true).build();
         clusterSettings = new ClusterSettings(
             settings,
             Stream.concat(
                 ClusterSettings.BUILT_IN_CLUSTER_SETTINGS.stream(),
-                Stream.of(MeteringIndexInfoTaskExecutor.ENABLED_SETTING, MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING)
+                Stream.of(
+                    SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING,
+                    SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING
+                )
             ).collect(Collectors.toSet())
         );
         clusterService = spy(createClusterService(threadPool, clusterSettings));
         localNodeId = clusterService.localNode().getId();
         persistentTasksService = mock(PersistentTasksService.class);
-        meteringIndexInfoService = mock(MeteringIndexInfoService.class);
+        clusterMetricsService = mock(SampledClusterMetricsService.class);
         featureService = new FeatureService(List.of(new MeteringFeatures()));
     }
 
@@ -116,104 +119,104 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
     }
 
     public void testTaskCreation() {
-        var executor = MeteringIndexInfoTaskExecutor.create(
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
             client,
             clusterService,
             persistentTasksService,
             featureService,
             threadPool,
-            meteringIndexInfoService,
+            clusterMetricsService,
             settings
         );
         executor.startStopTask(new ClusterChangedEvent("", initialState(), ClusterState.EMPTY_STATE));
         verify(persistentTasksService, times(1)).sendStartRequest(
-            eq(MeteringIndexInfoTask.TASK_NAME),
-            eq(MeteringIndexInfoTask.TASK_NAME),
-            eq(new MeteringIndexInfoTaskParams()),
+            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
+            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
+            eq(new SampledClusterMetricsSchedulingTaskParams()),
             any(),
             any()
         );
     }
 
     public void testSkippingTaskCreationIfItExists() {
-        var executor = MeteringIndexInfoTaskExecutor.create(
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
             client,
             clusterService,
             persistentTasksService,
             featureService,
             threadPool,
-            meteringIndexInfoService,
+            clusterMetricsService,
             settings
         );
         executor.startStopTask(new ClusterChangedEvent("", stateWithLocalAssignedIndexSizeTask(initialState()), ClusterState.EMPTY_STATE));
         verify(persistentTasksService, never()).sendStartRequest(
-            eq(MeteringIndexInfoTask.TASK_NAME),
-            eq(MeteringIndexInfoTask.TASK_NAME),
-            eq(new MeteringIndexInfoTaskParams()),
+            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
+            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
+            eq(new SampledClusterMetricsSchedulingTaskParams()),
             any(),
             any()
         );
     }
 
     public void testSkippingTaskCreationIfClusterDoesNotSupportFeature() {
-        var executor = MeteringIndexInfoTaskExecutor.create(
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
             client,
             clusterService,
             persistentTasksService,
             featureService,
             threadPool,
-            meteringIndexInfoService,
+            clusterMetricsService,
             settings
         );
         executor.startStopTask(
             new ClusterChangedEvent("", stateWithUnassignedIndexSizeTask(initialStateWithoutFeature()), ClusterState.EMPTY_STATE)
         );
         verify(persistentTasksService, never()).sendStartRequest(
-            eq(MeteringIndexInfoTask.TASK_NAME),
-            eq(MeteringIndexInfoTask.TASK_NAME),
-            eq(new MeteringIndexInfoTaskParams()),
+            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
+            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
+            eq(new SampledClusterMetricsSchedulingTaskParams()),
             any(),
             any()
         );
     }
 
     public void testRunTaskOnNodeOperation() {
-        var executor = MeteringIndexInfoTaskExecutor.create(
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
             client,
             clusterService,
             persistentTasksService,
             featureService,
             threadPool,
-            meteringIndexInfoService,
+            clusterMetricsService,
             settings
         );
-        MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
+        SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
         PersistentTaskState state = mock(PersistentTaskState.class);
-        executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
+        executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
         verify(task, times(1)).run();
     }
 
     public void testAbortOnShutdown() {
         for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
-            var executor = MeteringIndexInfoTaskExecutor.create(
+            var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
                 client,
                 clusterService,
                 persistentTasksService,
                 featureService,
                 threadPool,
-                meteringIndexInfoService,
+                clusterMetricsService,
                 settings
             );
-            MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
+            SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
             PersistentTaskState state = mock(PersistentTaskState.class);
-            executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
+            executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
 
             ClusterState initialState = stateWithLocalAssignedIndexSizeTask(initialState());
             ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
             executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
         }
         verify(persistentTasksService, times(REMOVE_SHUTDOWN_TYPES.size())).sendRemoveRequest(
-            eq(MeteringIndexInfoTask.TASK_NAME),
+            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
             any(),
             any()
         );
@@ -221,85 +224,87 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
 
     public void testDoNothingIfAlreadyStoppedOnShutdown() {
         for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
-            var executor = MeteringIndexInfoTaskExecutor.create(
+            var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
                 client,
                 clusterService,
                 persistentTasksService,
                 featureService,
                 threadPool,
-                meteringIndexInfoService,
+                clusterMetricsService,
                 settings
             );
-            MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
+            SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
             PersistentTaskState state = mock(PersistentTaskState.class);
-            executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
+            executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
 
             ClusterState initialState = initialState();
             ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
             executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
         }
-        verify(persistentTasksService, never()).sendRemoveRequest(eq(MeteringIndexInfoTask.TASK_NAME), any(), any());
+        verify(persistentTasksService, never()).sendRemoveRequest(eq(SampledClusterMetricsSchedulingTask.TASK_NAME), any(), any());
     }
 
     public void testDoNothingIfTaskAssignedToAnotherNodeOnShutdown() {
         for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
-            var executor = MeteringIndexInfoTaskExecutor.create(
+            var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
                 client,
                 clusterService,
                 persistentTasksService,
                 featureService,
                 threadPool,
-                meteringIndexInfoService,
+                clusterMetricsService,
                 settings
             );
-            MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
+            SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
             PersistentTaskState state = mock(PersistentTaskState.class);
-            executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
+            executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
 
             ClusterState initialState = stateWithOtherAssignedIndexSizeTask(initialState());
             ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
             executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
         }
-        verify(persistentTasksService, never()).sendRemoveRequest(eq(MeteringIndexInfoTask.TASK_NAME), any(), any());
+        verify(persistentTasksService, never()).sendRemoveRequest(eq(SampledClusterMetricsSchedulingTask.TASK_NAME), any(), any());
     }
 
     public void testDoNothingIfAlreadyShutdown() {
         for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
-            var executor = MeteringIndexInfoTaskExecutor.create(
+            var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
                 client,
                 clusterService,
                 persistentTasksService,
                 featureService,
                 threadPool,
-                meteringIndexInfoService,
+                clusterMetricsService,
                 settings
             );
-            MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
+            SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
             PersistentTaskState state = mock(PersistentTaskState.class);
-            executor.nodeOperation(task, new MeteringIndexInfoTaskParams(), state);
+            executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
 
             ClusterState withShutdown = stateWithNodeShuttingDown(stateWithLocalAssignedIndexSizeTask(initialState()), type);
             executor.shuttingDown(new ClusterChangedEvent("unchanged", withShutdown, withShutdown));
-            verify(persistentTasksService, never()).sendRemoveRequest(eq(MeteringIndexInfoTask.TASK_NAME), any(), any());
+            verify(persistentTasksService, never()).sendRemoveRequest(eq(SampledClusterMetricsSchedulingTask.TASK_NAME), any(), any());
         }
     }
 
     public void testAbortOnDisable() {
-        var executor = MeteringIndexInfoTaskExecutor.create(
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
             client,
             clusterService,
             persistentTasksService,
             featureService,
             threadPool,
-            meteringIndexInfoService,
+            clusterMetricsService,
             settings
         );
-        MeteringIndexInfoTask task = mock(MeteringIndexInfoTask.class);
+        SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
         PersistentTaskState state = mock(PersistentTaskState.class);
-        executor.nodeOperation(task, MeteringIndexInfoTaskParams.INSTANCE, state);
+        executor.nodeOperation(task, SampledClusterMetricsSchedulingTaskParams.INSTANCE, state);
 
-        clusterSettings.applySettings(Settings.builder().put(MeteringIndexInfoTaskExecutor.ENABLED_SETTING.getKey(), false).build());
-        verify(persistentTasksService, never()).sendRemoveRequest(eq(MeteringIndexInfoTask.TASK_NAME), any(), any());
+        clusterSettings.applySettings(
+            Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false).build()
+        );
+        verify(persistentTasksService, never()).sendRemoveRequest(eq(SampledClusterMetricsSchedulingTask.TASK_NAME), any(), any());
     }
 
     private ClusterState initialStateWithoutFeature() {
@@ -342,9 +347,9 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
         ClusterState.Builder builder = ClusterState.builder(clusterState);
         PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
         tasks.addTask(
-            MeteringIndexInfoTask.TASK_NAME,
-            MeteringIndexInfoTask.TASK_NAME,
-            new MeteringIndexInfoTaskParams(),
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
+            new SampledClusterMetricsSchedulingTaskParams(),
             new PersistentTasksCustomMetadata.Assignment(localNodeId, "")
         );
 
@@ -356,9 +361,9 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
         ClusterState.Builder builder = ClusterState.builder(clusterState);
         PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
         tasks.addTask(
-            MeteringIndexInfoTask.TASK_NAME,
-            MeteringIndexInfoTask.TASK_NAME,
-            new MeteringIndexInfoTaskParams(),
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
+            new SampledClusterMetricsSchedulingTaskParams(),
             new PersistentTasksCustomMetadata.Assignment("another-node", "")
         );
 
@@ -369,7 +374,12 @@ public class MeteringIndexInfoTaskExecutorTests extends ESTestCase {
     private ClusterState stateWithUnassignedIndexSizeTask(ClusterState clusterState) {
         ClusterState.Builder builder = ClusterState.builder(clusterState);
         PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
-        tasks.addTask(MeteringIndexInfoTask.TASK_NAME, MeteringIndexInfoTask.TASK_NAME, new MeteringIndexInfoTaskParams(), NO_NODE_FOUND);
+        tasks.addTask(
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
+            SampledClusterMetricsSchedulingTask.TASK_NAME,
+            new SampledClusterMetricsSchedulingTaskParams(),
+            NO_NODE_FOUND
+        );
 
         Metadata.Builder metadata = Metadata.builder(clusterState.metadata()).putCustom(PersistentTasksCustomMetadata.TYPE, tasks.build());
         return builder.metadata(metadata).build();

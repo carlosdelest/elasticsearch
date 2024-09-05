@@ -15,7 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling.action;
+
+import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.index.shard.ShardId;
@@ -25,41 +27,41 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class LocalNodeMeteringShardInfoCache extends AbstractLifecycleComponent {
+public class InMemoryShardInfoMetricsCache extends AbstractLifecycleComponent {
 
-    record CacheEntry(String token, MeteringShardInfo shardInfo) {}
+    record CacheEntry(String token, ShardInfoMetrics shardInfo) {}
 
     // package private for testing
-    Map<ShardId, CacheEntry> shardSizeCache = new ConcurrentHashMap<>();
+    Map<ShardId, CacheEntry> shardMetricsCache = new ConcurrentHashMap<>();
 
     @Override
     protected void doStart() {
-        shardSizeCache = new ConcurrentHashMap<>();
+        shardMetricsCache = new ConcurrentHashMap<>();
     }
 
     @Override
     protected void doStop() {
-        shardSizeCache = new ConcurrentHashMap<>();
+        shardMetricsCache = new ConcurrentHashMap<>();
     }
 
     @Override
     protected void doClose() {}
 
-    Optional<CacheEntry> getCachedShardInfo(ShardId shardId, long primaryTerm, long generation) {
-        var cacheEntry = shardSizeCache.get(shardId);
+    Optional<CacheEntry> getCachedShardMetrics(ShardId shardId, long primaryTerm, long generation) {
+        var cacheEntry = shardMetricsCache.get(shardId);
         if (cacheEntry != null && cacheEntry.shardInfo.primaryTerm() == primaryTerm && cacheEntry.shardInfo.generation() == generation) {
             return Optional.of(cacheEntry);
         }
         return Optional.empty();
     }
 
-    void updateCachedShardInfo(ShardId shardId, String token, MeteringShardInfo shardInfo) {
+    void updateCachedShardMetrics(ShardId shardId, String token, ShardInfoMetrics shardInfo) {
         assert shardId != null;
         assert token != null;
-        shardSizeCache.put(shardId, new CacheEntry(token, shardInfo));
+        shardMetricsCache.put(shardId, new CacheEntry(token, shardInfo));
     }
 
     void retainActive(Set<ShardId> activeShards) {
-        shardSizeCache.keySet().retainAll(activeShards);
+        shardMetricsCache.keySet().retainAll(activeShards);
     }
 }

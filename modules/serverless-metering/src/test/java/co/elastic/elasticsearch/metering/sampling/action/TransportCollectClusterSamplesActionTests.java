@@ -15,9 +15,10 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling.action;
 
-import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.PlainActionFuture;
@@ -53,9 +54,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.TASK_ALLOCATION_ID;
-import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterState;
-import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterStateWithPersistentTask;
+import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.TASK_ALLOCATION_ID;
+import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.createMockClusterState;
+import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
@@ -63,18 +64,18 @@ import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
+public class TransportCollectClusterSamplesActionTests extends ESTestCase {
     private static final String TEST_THREAD_POOL_NAME = "test_thread_pool";
     private static ThreadPool THREAD_POOL;
 
     private ClusterService clusterService;
     private CapturingTransport transport;
 
-    private TransportCollectMeteringShardInfoAction action;
+    private TransportCollectClusterSamplesAction action;
     private TransportService transportService;
 
-    private class TestTransportCollectMeteringShardInfoAction extends TransportCollectMeteringShardInfoAction {
-        TestTransportCollectMeteringShardInfoAction() {
+    private class TestTransportCollectClusterSamplesAction extends TransportCollectClusterSamplesAction {
+        TestTransportCollectClusterSamplesAction() {
             super(
                 transportService,
                 clusterService,
@@ -87,7 +88,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     @BeforeClass
     public static void startThreadPool() {
         THREAD_POOL = new TestThreadPool(
-            TransportCollectMeteringShardInfoActionTests.class.getSimpleName(),
+            TransportCollectClusterSamplesActionTests.class.getSimpleName(),
             new ScalingExecutorBuilder(TEST_THREAD_POOL_NAME, 1, 1, TimeValue.timeValueSeconds(60), true)
         );
     }
@@ -107,7 +108,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         );
         transportService.start();
         transportService.acceptIncomingRequests();
-        action = new TestTransportCollectMeteringShardInfoAction();
+        action = new TestTransportCollectClusterSamplesAction();
     }
 
     @After
@@ -126,8 +127,8 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
     public void testOneRequestIsSentToEachNode() {
         createMockClusterStateWithPersistentTask(clusterService);
 
-        var request = new CollectMeteringShardInfoAction.Request();
-        PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
+        var request = new CollectClusterSamplesAction.Request();
+        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
@@ -151,9 +152,9 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
 
             var capturedRequest = entry.getValue().get(0);
             assertThat(capturedRequest.action(), is("cluster:monitor/get/metering/shard-info"));
-            assertThat(capturedRequest.request(), instanceOf(GetMeteringShardInfoAction.Request.class));
+            assertThat(capturedRequest.request(), instanceOf(GetNodeSamplesAction.Request.class));
             assertThat(
-                asInstanceOf(GetMeteringShardInfoAction.Request.class, capturedRequest.request()).getCacheToken(),
+                asInstanceOf(GetNodeSamplesAction.Request.class, capturedRequest.request()).getCacheToken(),
                 equalTo(Long.toString(TASK_ALLOCATION_ID))
             );
         }
@@ -170,7 +171,7 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
             new ShardId("index2", "index2UUID", 3)
         );
 
-        final Map<String, Map<ShardId, MeteringShardInfo>> nodesShardAnswer = clusterService.state()
+        final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswer = clusterService.state()
             .nodes()
             .stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
@@ -178,11 +179,11 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
                 var shardCount = randomIntBetween(0, shards.size());
                 var nodeShards = randomSubsetOf(shardCount, shards);
                 return nodeShards.stream()
-                    .collect(Collectors.toMap(Function.identity(), TestTransportActionUtils::createMeteringShardInfo));
+                    .collect(Collectors.toMap(Function.identity(), TransportCollectClusterSamplesActionTests::createMeteringShardInfo));
             }));
 
-        var request = new CollectMeteringShardInfoAction.Request();
-        PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
+        var request = new CollectClusterSamplesAction.Request();
+        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
@@ -203,14 +204,14 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
                     totalSuccess++;
                     var response = nodesShardAnswer.get(nodeId);
                     seenShards.addAll(response.keySet());
-                    transport.handleResponse(requestId, new GetMeteringShardInfoAction.Response(response));
+                    transport.handleResponse(requestId, new GetNodeSamplesAction.Response(response));
                 }
             }
         }
 
         var totalShards = seenShards.size();
         var response = listener.get();
-        assertEquals("total shards", totalShards, response.getShardInfo().size());
+        assertEquals("total shards", totalShards, response.getShardInfos().size());
         // response.isComplete -> totalFailed == 0;
         assertTrue("if response.isComplete no failed shards", response.isComplete() == false || totalFailed == 0);
         assertEquals(nodesShardAnswer.size(), totalSuccess + totalFailed);
@@ -230,25 +231,25 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
-        final Map<String, Map<ShardId, MeteringShardInfo>> nodesShardAnswer = Map.of(
+        final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswer = Map.of(
             searchNodes.get(0).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new MeteringShardInfo(11L, 110L, 1, 1, 14L, 0L)),
-                Map.entry(shard2Id, new MeteringShardInfo(12L, 120L, 1, 2, 15L, 0L)),
-                Map.entry(shard3Id, new MeteringShardInfo(13L, 130L, 1, 1, 16L, 0L))
+                Map.entry(shard1Id, new ShardInfoMetrics(11L, 110L, 1, 1, 14L, 0L)),
+                Map.entry(shard2Id, new ShardInfoMetrics(12L, 120L, 1, 2, 15L, 0L)),
+                Map.entry(shard3Id, new ShardInfoMetrics(13L, 130L, 1, 1, 16L, 0L))
             ),
             searchNodes.get(1).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new MeteringShardInfo(21L, 210L, 2, 1, 24L, 0L)),
-                Map.entry(shard2Id, new MeteringShardInfo(22L, 220L, 1, 1, 25L, 0L))
+                Map.entry(shard1Id, new ShardInfoMetrics(21L, 210L, 2, 1, 24L, 0L)),
+                Map.entry(shard2Id, new ShardInfoMetrics(22L, 220L, 1, 1, 25L, 0L))
             )
         );
 
         var expectedSizes = Map.of(shard1Id, 21L, shard2Id, 12L, shard3Id, 13L);
         var expectedIngestedSizes = Map.of(shard1Id, 24L, shard2Id, 15L, shard3Id, 16L);
 
-        var request = new CollectMeteringShardInfoAction.Request();
-        PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
+        var request = new CollectClusterSamplesAction.Request();
+        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
@@ -259,27 +260,27 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
             for (var capturedRequest : entry.getValue()) {
                 long requestId = capturedRequest.requestId();
                 var response = nodesShardAnswer.get(nodeId);
-                transport.handleResponse(requestId, new GetMeteringShardInfoAction.Response(response));
+                transport.handleResponse(requestId, new GetNodeSamplesAction.Response(response));
             }
         }
 
         var response = listener.get();
-        assertEquals("total shards", 3, response.getShardInfo().size());
+        assertEquals("total shards", 3, response.getShardInfos().size());
         assertTrue(response.isComplete());
-        assertThat(response.getShardInfo().get(shard1Id).sizeInBytes(), is(expectedSizes.get(shard1Id)));
-        assertThat(response.getShardInfo().get(shard2Id).sizeInBytes(), is(expectedSizes.get(shard2Id)));
-        assertThat(response.getShardInfo().get(shard3Id).sizeInBytes(), is(expectedSizes.get(shard3Id)));
+        assertThat(response.getShardInfos().get(shard1Id).sizeInBytes(), is(expectedSizes.get(shard1Id)));
+        assertThat(response.getShardInfos().get(shard2Id).sizeInBytes(), is(expectedSizes.get(shard2Id)));
+        assertThat(response.getShardInfos().get(shard3Id).sizeInBytes(), is(expectedSizes.get(shard3Id)));
 
-        assertThat(response.getShardInfo().get(shard1Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard1Id)));
-        assertThat(response.getShardInfo().get(shard2Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard2Id)));
-        assertThat(response.getShardInfo().get(shard3Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard3Id)));
+        assertThat(response.getShardInfos().get(shard1Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard1Id)));
+        assertThat(response.getShardInfos().get(shard2Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard2Id)));
+        assertThat(response.getShardInfos().get(shard3Id).storedIngestSizeInBytes(), is(expectedIngestedSizes.get(shard3Id)));
     }
 
     public void testNoPersistentTaskNodeFails() {
         createMockClusterState(clusterService);
 
-        var request = new CollectMeteringShardInfoAction.Request();
-        PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
+        var request = new CollectClusterSamplesAction.Request();
+        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
@@ -294,19 +295,24 @@ public class TransportCollectMeteringShardInfoActionTests extends ESTestCase {
         when(task.isAssigned()).thenReturn(true);
         when(task.getExecutorNode()).thenReturn("FOO");
 
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
 
         createMockClusterState(clusterService, 3, 2, b -> {
             b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
         });
 
-        var request = new CollectMeteringShardInfoAction.Request();
-        PlainActionFuture<CollectMeteringShardInfoAction.Response> listener = new PlainActionFuture<>();
+        var request = new CollectClusterSamplesAction.Request();
+        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
 
         var exception = expectThrows(ExecutionException.class, listener::get);
         assertThat(exception.getCause(), instanceOf(NotPersistentTaskNodeException.class));
+    }
+
+    static ShardInfoMetrics createMeteringShardInfo(ShardId shardId) {
+        var size = ESTestCase.randomLongBetween(0, 10000);
+        return new ShardInfoMetrics(size, ESTestCase.randomLongBetween(0, 10000), 0, 0, size, 0L);
     }
 }

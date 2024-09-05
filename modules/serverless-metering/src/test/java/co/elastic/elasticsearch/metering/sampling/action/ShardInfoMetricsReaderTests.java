@@ -15,7 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.sampling.action;
+
+import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.index.SegmentCommitInfo;
@@ -60,22 +62,23 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class ShardReaderTests extends ESTestCase {
+public class ShardInfoMetricsReaderTests extends ESTestCase {
 
     public void testEmptySetWhenNoIndices() throws IOException {
 
         var indicesService = mock(IndicesService.class);
-        var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
+        var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
 
         when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
 
-        var shardSizes = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
+        var shardSizes = shardReader.getUpdatedShardInfos(shardInfoCache, "TEST-NODE");
 
         assertThat(shardSizes.keySet(), empty());
         final List<Measurement> measurements = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
+            meterRegistry.getRecorder()
+                .getMeasurements(InstrumentType.LONG_COUNTER, ShardInfoMetricsReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
         );
         assertThat(measurements, empty());
     }
@@ -86,9 +89,9 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
-        var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
+        var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
 
         var engine = mock(Engine.class);
         var index1 = createMockIndexService(engine, shardId1, shardId2);
@@ -97,14 +100,15 @@ public class ShardReaderTests extends ESTestCase {
         when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
         when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(11L));
 
-        var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
+        var shardInfoMap = shardReader.getUpdatedShardInfos(shardInfoCache, "TEST-NODE");
 
-        verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
-        verify(shardInfoCache, times(3)).updateCachedShardInfo(any(), eq("TEST-NODE"), any());
+        verify(shardInfoCache, times(3)).getCachedShardMetrics(any(), anyLong(), anyLong());
+        verify(shardInfoCache, times(3)).updateCachedShardMetrics(any(), eq("TEST-NODE"), any());
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
         final List<Measurement> measurements = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
+            meterRegistry.getRecorder()
+                .getMeasurements(InstrumentType.LONG_COUNTER, ShardInfoMetricsReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
         );
         assertThat(measurements, hasSize(1));
         assertThat(measurements.get(0).getLong(), equalTo(3L));
@@ -116,9 +120,9 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
-        var shardInfoCache = new LocalNodeMeteringShardInfoCache();
+        var shardInfoCache = new InMemoryShardInfoMetricsCache();
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
 
         var engine = mock(Engine.class);
         var index1 = createMockIndexService(engine, shardId1, shardId2);
@@ -127,25 +131,26 @@ public class ShardReaderTests extends ESTestCase {
         when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
         when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
 
-        var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
+        var shardInfoMap = shardReader.getUpdatedShardInfos(shardInfoCache, "TEST-NODE");
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
-        assertThat(shardInfoCache.shardSizeCache.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
+        assertThat(shardInfoCache.shardMetricsCache.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
 
         index2 = createMockIndexService(engine, shardId3);
         when(indicesService.iterator()).thenReturn(Iterators.single(index2));
 
-        shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
+        shardInfoMap = shardReader.getUpdatedShardInfos(shardInfoCache, "TEST-NODE");
         assertThat(shardInfoMap.keySet(), empty());
-        assertThat(shardInfoCache.shardSizeCache.keySet(), contains(shardId3));
+        assertThat(shardInfoCache.shardMetricsCache.keySet(), contains(shardId3));
 
         final List<Measurement> requests = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
+            meterRegistry.getRecorder()
+                .getMeasurements(InstrumentType.LONG_COUNTER, ShardInfoMetricsReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
         );
         assertThat(requests, hasSize(1));
         assertThat(requests.get(0).getLong(), equalTo(4L));
 
         final List<Measurement> cached = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_CACHED_TOTAL_METRIC)
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardInfoMetricsReader.SHARD_INFO_CACHED_TOTAL_METRIC)
         );
         assertThat(cached, hasSize(1));
         assertThat(cached.get(0).getLong(), equalTo(1L));
@@ -157,13 +162,13 @@ public class ShardReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
-        var shardInfoCache = mock(LocalNodeMeteringShardInfoCache.class);
-        when(shardInfoCache.getCachedShardInfo(eq(shardId3), anyLong(), anyLong())).thenReturn(
-            Optional.of(new LocalNodeMeteringShardInfoCache.CacheEntry("TEST-NODE", new MeteringShardInfo(10L, 100L, 1L, 1L, 0, 0)))
+        var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
+        when(shardInfoCache.getCachedShardMetrics(eq(shardId3), anyLong(), anyLong())).thenReturn(
+            Optional.of(new InMemoryShardInfoMetricsCache.CacheEntry("TEST-NODE", new ShardInfoMetrics(10L, 100L, 1L, 1L, 0, 0)))
         );
 
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
 
         var engine = mock(Engine.class);
         var index1 = createMockIndexService(engine, shardId1, shardId2);
@@ -172,16 +177,16 @@ public class ShardReaderTests extends ESTestCase {
         when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
         when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
 
-        var shardInfoMap = shardReader.getMeteringShardInfoMap(shardInfoCache, "TEST-NODE");
+        var shardInfoMap = shardReader.getUpdatedShardInfos(shardInfoCache, "TEST-NODE");
 
-        verify(shardInfoCache, times(3)).getCachedShardInfo(any(), anyLong(), anyLong());
+        verify(shardInfoCache, times(3)).getCachedShardMetrics(any(), anyLong(), anyLong());
         // updateCachedShardInfo is not invoked when both generation and requestToken are up-to-date
-        verify(shardInfoCache, times(2)).updateCachedShardInfo(any(), eq("TEST-NODE"), any());
+        verify(shardInfoCache, times(2)).updateCachedShardMetrics(any(), eq("TEST-NODE"), any());
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2));
 
         final List<Measurement> cached = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardReader.SHARD_INFO_CACHED_TOTAL_METRIC)
+            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, ShardInfoMetricsReader.SHARD_INFO_CACHED_TOTAL_METRIC)
         );
         assertThat(cached, hasSize(1));
         assertThat(cached.get(0).getLong(), equalTo(1L));
@@ -196,7 +201,7 @@ public class ShardReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(120L));
@@ -204,7 +209,7 @@ public class ShardReaderTests extends ESTestCase {
         assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(0L));
 
         final List<Measurement> approximated = meterRegistry.getRecorder()
-            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
+            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
         assertThat(approximated, empty());
     }
 
@@ -217,7 +222,7 @@ public class ShardReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(30L));
@@ -225,7 +230,7 @@ public class ShardReaderTests extends ESTestCase {
         assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(80L + 120L));
 
         final List<Measurement> approximated = meterRegistry.getRecorder()
-            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
+            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
         assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.5))));
     }
 
@@ -240,7 +245,7 @@ public class ShardReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(90L));
@@ -248,7 +253,7 @@ public class ShardReaderTests extends ESTestCase {
         assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(80L + 550L + 120L));
 
         final List<Measurement> approximated = meterRegistry.getRecorder()
-            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
+            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, ShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
         assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.25))));
     }
 
@@ -261,7 +266,7 @@ public class ShardReaderTests extends ESTestCase {
         segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
 
         var indicesService = mock(IndicesService.class);
-        var shardReader = new ShardReader(indicesService, MeterRegistry.NOOP);
+        var shardReader = new ShardInfoMetricsReader(indicesService, MeterRegistry.NOOP);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(120L));
@@ -279,7 +284,7 @@ public class ShardReaderTests extends ESTestCase {
         segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
 
         var indicesService = mock(IndicesService.class);
-        var shardReader = new ShardReader(indicesService, MeterRegistry.NOOP);
+        var shardReader = new ShardInfoMetricsReader(indicesService, MeterRegistry.NOOP);
         var shardStats = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardStats.docCount(), equalTo(30L));
