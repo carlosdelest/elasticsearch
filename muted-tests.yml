@@ -141,3 +141,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2648
 - class: co.elastic.packaging.docker.DockerClientYamlTestSuiteIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2693
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=simulate.ingest/10_basic/Test mapping validation from templates}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2700
