@@ -136,9 +136,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2619
 - class: org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2620
-- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=ml/inference_processor/Test create processor with missing mandatory fields}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2648
 - class: co.elastic.packaging.docker.DockerClientYamlTestSuiteIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2693
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
