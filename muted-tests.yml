@@ -139,24 +139,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_processor/Test create processor with missing mandatory fields}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2648
-- class: co.elasticsearch.serverless.datastream.rest.ServerlessDataStreamYamlTestSuiteIT
-  method: test {yaml=/10_failure_store/Check failure store index refresh interval}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2659
-- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=security/authz/50_data_streams/Test that get data stream is limited to authorized namespace}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2663
-- class: org.elasticsearch.datastreams.LazyRolloverDataStreamIT
-  method: testLazyRolloverFailsIndexing
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2661
-- class: org.elasticsearch.datastreams.LazyRolloverDataStreamIT
-  method: testLazyRollover
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2662
-- class: co.elastic.elasticsearch.stateless.allocation.ServerlessDefaultShardAllocationSettingsRestIT
-  method: testDefaultNumberOfShardsForRegularIndicesDoesNotChangeDataStreamSingleShardDefault
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2687
-- class: co.elastic.elasticsearch.stateless.allocation.ServerlessDefaultShardAllocationSettingsRestIT
-  method: testDefaultNumberOfShardsForRegularIndicesDoesNotChangeSystemIndicesSingleShardDefault
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2688
 - class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
   method: testRelocationsWithUploadDelayed
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2689
