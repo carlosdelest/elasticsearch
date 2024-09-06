@@ -18,11 +18,8 @@
 package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
-import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForPrimaryUserAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSecondaryUserAction;
-import co.elastic.elasticsearch.metering.action.TransportUpdateSampledMetricsMetadataAction;
-import co.elastic.elasticsearch.metering.action.UpdateSampledMetricsMetadataAction;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskParams;
@@ -34,6 +31,9 @@ import co.elastic.elasticsearch.metering.sampling.action.TransportCollectCluster
 import co.elastic.elasticsearch.metering.sampling.action.TransportGetNodeSamplesAction;
 import co.elastic.elasticsearch.metering.stats.rest.RestGetMeteringStatsAction;
 import co.elastic.elasticsearch.metering.usagereports.UsageReportService;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
+import co.elastic.elasticsearch.metering.usagereports.action.TransportUpdateSampledMetricsMetadataAction;
+import co.elastic.elasticsearch.metering.usagereports.action.UpdateSampledMetricsMetadataAction;
 import co.elastic.elasticsearch.metering.usagereports.publisher.HttpMeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.usagereports.publisher.MeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.xcontent.MeteringDocumentParsingProvider;

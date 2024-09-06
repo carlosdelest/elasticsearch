@@ -18,7 +18,7 @@
 package co.elastic.elasticsearch.metering.xcontent;
 
 import co.elastic.elasticsearch.metering.IngestMetricsProvider;
-import co.elastic.elasticsearch.metering.ingested_size.reporter.RAIngestMetricReporter;
+import co.elastic.elasticsearch.metering.reporter.RAIngestMetricReporter;
 
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.indices.SystemIndices;

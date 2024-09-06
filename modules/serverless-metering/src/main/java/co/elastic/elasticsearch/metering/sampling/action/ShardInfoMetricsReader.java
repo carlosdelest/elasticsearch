@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
-import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator;
+import co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.apache.lucene.index.SegmentCommitInfo;

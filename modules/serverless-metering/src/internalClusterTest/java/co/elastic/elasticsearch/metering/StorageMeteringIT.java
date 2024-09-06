@@ -107,7 +107,7 @@ import static org.hamcrest.Matchers.startsWith;
 
 @TestLogging(
     reason = "development",
-    value = "co.elastic.elasticsearch.metering:TRACE,co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageReporter:TRACE"
+    value = "co.elastic.elasticsearch.metering:TRACE,co.elastic.elasticsearch.metering.reporter.RAStorageReporter:TRACE"
 )
 public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 

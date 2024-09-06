@@ -15,9 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
-
-import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
+package co.elastic.elasticsearch.metering.usagereports.action;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.ClusterState;
@@ -33,16 +31,16 @@ import org.elasticsearch.core.Tuple;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
-public class SampledMetricsMetadataService {
+class SampledMetricsMetadataService {
     private static final Logger logger = LogManager.getLogger(SampledMetricsMetadataService.class);
 
     private final MasterServiceTaskQueue<UpsertSampledMetricsMetadataTask> taskQueue;
 
-    public SampledMetricsMetadataService(ClusterService clusterService) {
+    SampledMetricsMetadataService(ClusterService clusterService) {
         this.taskQueue = clusterService.createTaskQueue("index info collector metadata", Priority.NORMAL, new Executor());
     }
 
-    public void update(SampledMetricsMetadata metadata, TimeValue timeout, ActionListener<Void> listener) {
+    void update(SampledMetricsMetadata metadata, TimeValue timeout, ActionListener<Void> listener) {
         logger.debug("Updating metadata to {}", metadata);
         // Write metadata with new committed timestamp into cluster state and only complete once successfully updated cluster state.
         // This is to apply backpressure to avoid running a reporting iteration with an outdated sample timestamp.

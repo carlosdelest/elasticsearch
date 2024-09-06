@@ -15,33 +15,32 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.ingested_size.reporter;
-
-import co.elastic.elasticsearch.metering.IngestMetricsProvider;
+package co.elastic.elasticsearch.metering.reporter;
 
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
-public class RAIngestMetricReporter implements DocumentSizeReporter {
-    private final IngestMetricsProvider ingestMetricsCollector;
-    private final String indexName;
+import java.util.Collection;
 
-    public RAIngestMetricReporter(String indexName, IngestMetricsProvider ingestMetricsCollector) {
-        this.indexName = indexName;
-        this.ingestMetricsCollector = ingestMetricsCollector;
+/**
+ * This is a reporter that encloses other reporters and will be delegating the method calls
+ * to all enclosed reporters.
+ */
+public class CompositeDocumentSizeReporter implements DocumentSizeReporter {
+
+    private final Collection<DocumentSizeReporter> reporters;
+
+    public CompositeDocumentSizeReporter(Collection<DocumentSizeReporter> reporters) {
+        this.reporters = reporters;
     }
 
     @Override
     public void onParsingCompleted(ParsedDocument parsedDocument) {
-        // noop
+        reporters.forEach(r -> r.onParsingCompleted(parsedDocument));
     }
 
     @Override
     public void onIndexingCompleted(ParsedDocument parsedDocument) {
-        var normalizedBytesParsed = parsedDocument.getNormalizedSize().ingestedBytes();
-        if (normalizedBytesParsed > 0) {
-            this.ingestMetricsCollector.addIngestedDocValue(indexName, normalizedBytesParsed);
-        }
+        reporters.forEach((r -> r.onIndexingCompleted(parsedDocument)));
     }
-
 }

@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering.codec;
 
-import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator;
+import co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator;
 import co.elastic.elasticsearch.stateless.api.DocValuesFormatFactory;
 
 import org.apache.lucene.codecs.DocValuesConsumer;

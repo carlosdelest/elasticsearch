@@ -15,9 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
-
-import co.elastic.elasticsearch.metering.SampledMetricsMetadataService;
+package co.elastic.elasticsearch.metering.usagereports.action;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionResponse;

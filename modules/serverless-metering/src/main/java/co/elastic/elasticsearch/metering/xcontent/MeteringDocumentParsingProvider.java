@@ -18,10 +18,10 @@
 package co.elastic.elasticsearch.metering.xcontent;
 
 import co.elastic.elasticsearch.metering.IngestMetricsProvider;
-import co.elastic.elasticsearch.metering.ingested_size.reporter.CompositeDocumentSizeReporter;
-import co.elastic.elasticsearch.metering.ingested_size.reporter.RAIngestMetricReporter;
-import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator;
-import co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageReporter;
+import co.elastic.elasticsearch.metering.reporter.CompositeDocumentSizeReporter;
+import co.elastic.elasticsearch.metering.reporter.RAIngestMetricReporter;
+import co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator;
+import co.elastic.elasticsearch.metering.reporter.RAStorageReporter;
 
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.index.IndexRequest;

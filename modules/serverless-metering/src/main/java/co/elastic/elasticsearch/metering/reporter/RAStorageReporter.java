@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.ingested_size.reporter;
+package co.elastic.elasticsearch.metering.reporter;
 
 import co.elastic.elasticsearch.metering.RaStorageMetadataFieldMapper;
 

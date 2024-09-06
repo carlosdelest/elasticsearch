@@ -15,10 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.usagereports.action;
 
-import co.elastic.elasticsearch.metering.SampledMetricsMetadataService.UpsertSampledMetricsMetadataTask;
-import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadataService.UpsertSampledMetricsMetadataTask;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.ClusterState;

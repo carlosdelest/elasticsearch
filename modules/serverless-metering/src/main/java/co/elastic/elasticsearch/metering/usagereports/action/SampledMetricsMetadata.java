@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.action;
+package co.elastic.elasticsearch.metering.usagereports.action;
 
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.TransportVersions;

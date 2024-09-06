@@ -41,8 +41,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
-import static co.elastic.elasticsearch.metering.ingested_size.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
+import static co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
+import static co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
 public class RAStorageDocValuesConsumerTests extends BaseDocValuesFormatTestCase {

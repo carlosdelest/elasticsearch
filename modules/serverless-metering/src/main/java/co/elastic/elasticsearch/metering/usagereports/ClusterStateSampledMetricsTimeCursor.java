@@ -17,8 +17,8 @@
 
 package co.elastic.elasticsearch.metering.usagereports;
 
-import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
-import co.elastic.elasticsearch.metering.action.UpdateSampledMetricsMetadataAction;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
+import co.elastic.elasticsearch.metering.usagereports.action.UpdateSampledMetricsMetadataAction;
 
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.PlainActionFuture;

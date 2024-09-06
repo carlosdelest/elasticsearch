@@ -18,7 +18,7 @@
 package co.elastic.elasticsearch.metering.usagereports;
 
 import co.elastic.elasticsearch.metering.MeteringFeatures;
-import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionListener;
