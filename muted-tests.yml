@@ -1,28 +1,28 @@
 tests:
-# Examples:
-#
-#  Mute a single test case in a YAML test suite:
-#  - class: org.elasticsearch.analysis.common.CommonAnalysisClientYamlTestSuiteIT
-#    method: test {yaml=analysis-common/30_tokenizers/letter}
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute several methods of a Java test:
-#  - class: org.elasticsearch.common.CharArraysTests
-#    methods:
-#      - testCharsBeginsWith
-#      - testCharsToBytes
-#      - testConstantTimeEquals
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute an entire test class:
-#  - class: org.elasticsearch.common.unit.TimeValueTests
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute a single method in a test class:
-#  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
-#    method: testCrankyEvaluateBlockWithoutNulls
-#    issue: https://github.com/elastic/elasticsearch/...
-- class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
+- # Examples:
+  #
+  #  Mute a single test case in a YAML test suite:
+  #  - class: org.elasticsearch.analysis.common.CommonAnalysisClientYamlTestSuiteIT
+  #    method: test {yaml=analysis-common/30_tokenizers/letter}
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute several methods of a Java test:
+  #  - class: org.elasticsearch.common.CharArraysTests
+  #    methods:
+  #      - testCharsBeginsWith
+  #      - testCharsToBytes
+  #      - testConstantTimeEquals
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute an entire test class:
+  #  - class: org.elasticsearch.common.unit.TimeValueTests
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute a single method in a test class:
+  #  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
+  #    method: testCrankyEvaluateBlockWithoutNulls
+  #    issue: https://github.com/elastic/elasticsearch/...
+  class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/1987"
   method: "testOngoingTasksAreReflectedInSearchLoad"
 - class: "co.elastic.elasticsearch.settings.secure.FileSecureSettingsServiceIT"
@@ -141,3 +141,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=simulate.ingest/10_basic/Test mapping validation from templates}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2700
+- class: "co.elastic.elasticsearch.stateless.cache.reader.MeteringCacheBlobReaderTests"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2704"
+  method: "testReadCompleteCallback"
