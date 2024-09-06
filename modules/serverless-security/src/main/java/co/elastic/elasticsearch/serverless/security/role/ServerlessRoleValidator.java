@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
@@ -60,17 +61,8 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
 
     static final int MIN_ROLE_NAME_LENGTH = 1;
     static final int MAX_ROLE_NAME_LENGTH = NativeRealmValidationUtil.MAX_NAME_LENGTH;
-    static final String INVALID_ROLE_NAME_MESSAGE = "Role names must be at least "
-        + MIN_ROLE_NAME_LENGTH
-        + " and no more than "
-        + MAX_ROLE_NAME_LENGTH
-        + " characters. "
-        + "They can contain alphanumeric characters (a-z, A-Z, 0-9), punctuation, and printable symbols in the "
-        + "Basic Latin (ASCII) block. Whitespaces are not allowed.";
-
-    static Set<Character> VALID_ROLE_NAME_CHARS = Validation.VALID_NAME_CHARS.stream()
-        .filter(c -> Character.isSpaceChar(c) == false)
-        .collect(Collectors.toSet());
+    private static final Pattern VALID_ROLE_NAME = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9_.-]*$");
+    private static final Pattern VALID_RESERVED_ROLE_NAME = Pattern.compile("^[a-zA-Z0-9_.-]*$");
 
     public ServerlessRoleValidator() {}
 
@@ -151,30 +143,23 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
         if (roleName == null) {
             return "role name is missing";
         }
-        if (isValidRoleName(roleName) == false) {
-            return INVALID_ROLE_NAME_MESSAGE;
+        if (roleName.length() < MIN_ROLE_NAME_LENGTH || roleName.length() > MAX_ROLE_NAME_LENGTH) {
+            return "role name must be at least " + MIN_ROLE_NAME_LENGTH + " and no more than " + MAX_ROLE_NAME_LENGTH + " characters";
         }
-        if (allowReserved == false) {
+        if (allowReserved) {
+            if (VALID_RESERVED_ROLE_NAME.matcher(roleName).matches() == false) {
+                return "role name can only contain letters, digits and the characters '_', '-', and '.'";
+            }
+        } else {
+            if (VALID_ROLE_NAME.matcher(roleName).matches() == false) {
+                return "role name must begin with a letter or digit "
+                    + "and can only contain letters, digits and the characters '_', '-', and '.'";
+            }
             if (ReservedRolesStore.isReserved(roleName)) {
                 return "Role [" + roleName + "] is reserved and may not be used.";
             }
-            if (roleName.startsWith(RESERVED_ROLE_NAME_PREFIX)) {
-                return "role name may not start with [" + RESERVED_ROLE_NAME_PREFIX + "]";
-            }
         }
         return null;
-    }
-
-    private static boolean isValidRoleName(String name) {
-        if (name.length() < MIN_ROLE_NAME_LENGTH || name.length() > MAX_ROLE_NAME_LENGTH) {
-            return false;
-        }
-        for (char character : name.toCharArray()) {
-            if (VALID_ROLE_NAME_CHARS.contains(character) == false) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private ActionRequestValidationException validateRoleDescriptor(
