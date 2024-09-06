@@ -64,8 +64,13 @@ public class RAStorageDocValuesFormatFactory implements DocValuesFormatFactory {
                     long raSize = 0;
                     long docCount = 0;
                     while (values.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
-                        raSize += values.longValue();
-                        docCount = docCount + 1;
+                        long raDocValue = values.longValue();
+                        // Currently we do not meter RA-S when replaying from translog (ES-8577).
+                        // However, due to a bug we recorded the default raw size (-1 meaning not metered) in this case.
+                        if (raDocValue >= 0) {
+                            raSize += raDocValue;
+                            docCount = docCount + 1;
+                        }
                     }
                     long avgRASizePerDoc = docCount == 0 ? 0 : raSize / docCount;
                     logger.trace("addNumericField: [{}] is [{}] (size: [{}], docs: [{}])", field.name, avgRASizePerDoc, raSize, docCount);

@@ -76,6 +76,12 @@ public class RAStorageDocValuesConsumerTests extends BaseDocValuesFormatTestCase
         doc.add(new NumericDocValuesField(RA_STORAGE_KEY, 13L));
         iwriter.addDocument(doc);
 
+        // ES-9361: documents containing a negative RA-S will be ignored
+        doc = new Document();
+        doc.add(new StringField("id", "2", Field.Store.NO));
+        doc.add(new NumericDocValuesField(RA_STORAGE_KEY, -1));
+        iwriter.addDocument(doc);
+
         iwriter.commit();
 
         DirectoryReader ireader = iwriter.getReader();
@@ -93,9 +99,11 @@ public class RAStorageDocValuesConsumerTests extends BaseDocValuesFormatTestCase
         values.add(dv.longValue());
         assertNotEquals(NO_MORE_DOCS, dv.nextDoc());
         values.add(dv.longValue());
+        assertNotEquals(NO_MORE_DOCS, dv.nextDoc());
+        values.add(dv.longValue());
         assertEquals(NO_MORE_DOCS, dv.nextDoc());
 
-        var expected = List.of(11L, 13L);
+        var expected = List.of(11L, 13L, -1L);
         assertTrue(values.containsAll(expected));
 
         ireader.close();

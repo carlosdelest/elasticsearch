@@ -106,6 +106,19 @@ class ShardInfoMetricsReader {
                 var avgRASizePerDocAttribute = si.info.getAttribute(RAStorageAccumulator.RA_STORAGE_AVG_KEY);
                 if (avgRASizePerDocAttribute != null) {
                     var avgRASizePerDoc = Long.parseLong(avgRASizePerDocAttribute);
+                    if (avgRASizePerDoc < 0) {
+                        // Due to bug related to ES-8577, we recorded the default raw size (-1, meaning not metered) for documents replayed
+                        // from translog, potentially resulting into a negative RA-S avg per doc. We have to skip such segments here to
+                        // minimize the impact.
+                        logger.warn(
+                            "skipping segment with negative RA-S avg [{}] (live docs: [{}]) for {}",
+                            avgRASizePerDoc,
+                            liveDocCount,
+                            shardId
+                        );
+                        continue;
+                    }
+
                     var raStorage = avgRASizePerDoc * commitLiveDocCount;
                     boolean isExact = commitLiveDocCount == commitTotalDocCount;
                     if (isExact) {

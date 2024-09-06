@@ -234,6 +234,24 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.5))));
     }
 
+    public void testComputeShardInfoWithInvalidRASegment() throws IOException {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = new SegmentInfos(Version.LATEST.major);
+        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, 8L));
+        // This segment has an invalid RA-S avg value (due to ES-9361)
+        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, -1L));
+
+        var indicesService = mock(IndicesService.class);
+        var meterRegistry = new RecordingMeterRegistry();
+        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
+
+        assertThat(shardInfo.docCount(), equalTo(30L));
+        assertThat(shardInfo.sizeInBytes(), equalTo(300L));
+        assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(80L)); // invalid segment is not included
+    }
+
     public void testComputeShardInfoWithPartialRAMultipleSegments() throws IOException {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
 

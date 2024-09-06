@@ -46,9 +46,9 @@ public class RAStorageReporter implements DocumentSizeReporter {
 
     @Override
     public void onParsingCompleted(ParsedDocument parsedDocument) {
-        if (isTimeSeries() == false) {
+        DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
+        if (isTimeSeries() == false && bytesToReport.storedBytes() >= 0) {
             // Store the result in a new, "hidden" field
-            DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
             parsedDocument.rootDoc().add(new NumericDocValuesField(RaStorageMetadataFieldMapper.FIELD_NAME, bytesToReport.storedBytes()));
         }
     }
