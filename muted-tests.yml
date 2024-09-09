@@ -104,9 +104,6 @@ tests:
   method: "testTermsAggregation"
 - class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2453"
-- class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2460"
-  method: "testSearchShardGenerationFilesRetention"
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2327
