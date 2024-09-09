@@ -149,3 +149,6 @@ tests:
   methods:
   - test {meta.CountFunctions ASYNC}
   - "test {meta.CountFunctions SYNC}"
+- class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2726"
+  method: "test {meta.CountFunctions SYNC}"
