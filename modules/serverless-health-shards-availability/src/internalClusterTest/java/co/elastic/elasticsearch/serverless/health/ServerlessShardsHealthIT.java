@@ -286,7 +286,7 @@ public class ServerlessShardsHealthIT extends AbstractStatelessIntegTestCase {
 
         client().admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT)
             .setPersistentSettings(Settings.builder().put(CLUSTER_TOTAL_SHARDS_PER_NODE_SETTING.getKey(), 1))
             .get();
 

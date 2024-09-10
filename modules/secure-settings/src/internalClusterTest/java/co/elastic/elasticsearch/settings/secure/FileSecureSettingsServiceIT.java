@@ -250,7 +250,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         final ClusterStateResponse clusterStateResponse = client().admin()
             .cluster()
-            .state(new ClusterStateRequest().waitForMetadataVersion(metadataVersion.get()))
+            .state(new ClusterStateRequest(TEST_REQUEST_TIMEOUT).waitForMetadataVersion(metadataVersion.get()))
             .actionGet();
         assertThat(clusterStateResponse.getState().custom(ClusterStateSecrets.TYPE), nullValue());
 
@@ -271,7 +271,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
         // secure settings should not be visible in client requests
         final ClusterStateResponse clusterStateResponse = client().admin()
             .cluster()
-            .state(new ClusterStateRequest().waitForMetadataVersion(metadataVersion.get()))
+            .state(new ClusterStateRequest(TEST_REQUEST_TIMEOUT).waitForMetadataVersion(metadataVersion.get()))
             .actionGet();
         assertThat(clusterStateResponse.getState().custom(ClusterStateSecrets.TYPE), nullValue());
 
@@ -325,7 +325,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
     private void assertMasterNode(Client client, String node) {
         assertThat(
-            client.admin().cluster().prepareState().execute().actionGet().getState().nodes().getMasterNode().getName(),
+            client.admin().cluster().prepareState(TEST_REQUEST_TIMEOUT).execute().actionGet().getState().nodes().getMasterNode().getName(),
             equalTo(node)
         );
     }

@@ -217,9 +217,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
             : Settings.builder().put("ingest.geoip.downloader.enabled", false);
         client.admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TimeValue.MINUS_ONE, TimeValue.MINUS_ONE)
             .setPersistentSettings(enabledSettings)
-            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
             .execute(ignoreResult(listener));
     }
 
@@ -239,9 +238,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
             : Settings.builder().put("xpack.profiling.templates.enabled", false);
         client.admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TimeValue.MINUS_ONE, TimeValue.MINUS_ONE)
             .setPersistentSettings(enabledSettings)
-            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
             .execute(ignoreResult(listener));
     }
 
@@ -262,9 +260,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
             : Settings.builder().put("xpack.apm_data.registry.enabled", false);
         client.admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TimeValue.MINUS_ONE, TimeValue.MINUS_ONE)
             .setPersistentSettings(enabledSettings)
-            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
             .execute(ignoreResult(listener));
     }
 
@@ -300,9 +297,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
         client.admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TimeValue.MINUS_ONE, TimeValue.MINUS_ONE)
             .setPersistentSettings(enabledSettings)
-            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
             .execute(ignoreResult(listener));
     }
 

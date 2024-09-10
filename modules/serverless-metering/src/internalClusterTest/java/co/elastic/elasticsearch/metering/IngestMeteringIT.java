@@ -71,7 +71,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     public void cleanup() {
         receivedMetrics().clear();
         assertAcked(
-            clusterAdmin().prepareUpdateSettings()
+            clusterAdmin().prepareUpdateSettings(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT)
                 .setPersistentSettings(Settings.builder().putNull("*"))
                 .setTransientSettings(Settings.builder().putNull("*"))
         );
