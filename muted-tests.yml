@@ -151,6 +151,3 @@ tests:
   methods:
   - "test {meta.CountFunctions SYNC}"
   - "test {meta.CountFunctions ASYNC}"
-- class: "co.elastic.elasticsearch.stateless.CorruptionIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2709"
-  method: "testConcurrentOperations"
