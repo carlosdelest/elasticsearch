@@ -7,7 +7,7 @@ export TESTCONTAINERS_RYUK_DISABLED=true
 source ./.buildkite/java-versions.properties
 
 # Resolve JAVA_HOME
-export JAVA_HOME="/usr/java/${ES_BUILD_JAVA}"
+export JAVA_HOME="/${HOME}/.java/${ES_BUILD_JAVA}"
 
 if [[ "${USE_GITHUB_CREDENTIALS:-}" == "true" ]]; then
   GITHUB_TOKEN=$(vault read -field=token secret/ci/elastic-elasticsearch-serverless/github_api_credentials)
