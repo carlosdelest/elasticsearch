@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.sampling.action;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
+import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.injection.guice.Inject;
@@ -50,6 +51,15 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
         );
         this.shardMetricsReader = new ShardInfoMetricsReader(indicesService, telemetryProvider.getMeterRegistry());
         this.shardMetricsCache = shardMetricsCache;
+        // TODO remove registration under legacy name once fully deployed
+        transportService.registerRequestHandler(
+            GetNodeSamplesAction.LEGACY_NAME,
+            threadPool.executor(ThreadPool.Names.MANAGEMENT),
+            false,
+            false,
+            GetNodeSamplesAction.Request::new,
+            (request, channel, task) -> executeDirect(task, request, new ChannelActionListener<>(channel))
+        );
     }
 
     @Override

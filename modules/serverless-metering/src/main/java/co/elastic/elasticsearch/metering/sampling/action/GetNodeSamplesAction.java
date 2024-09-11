@@ -36,9 +36,10 @@ import java.util.Objects;
  */
 public class GetNodeSamplesAction {
 
-    // FIXME Is it possible to rename this?
-    public static final String NAME = "cluster:monitor/get/metering/shard-info";
-    public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
+    public static final String LEGACY_NAME = "cluster:monitor/get/metering/shard-info";
+    public static final String NAME = "cluster:monitor/get/metering/samples";
+
+    public static final ActionType<Response> INSTANCE = new ActionType<>(LEGACY_NAME);
 
     public static class Request extends ActionRequest {
         private final String cacheToken;
