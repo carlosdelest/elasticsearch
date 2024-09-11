@@ -125,9 +125,6 @@ tests:
 - class: org.elasticsearch.datastreams.logsdb.qa.StandardVersusLogsIndexModeRandomDataChallengeRestIT
   method: testHistogramAggregation
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2602
-- class: co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT
-  method: testCommitsNotDeletedWhileAnUnpromotableIsRecovering
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2441
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessRollingUpgradeIT
   method: testClusterUpgrade
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2619
