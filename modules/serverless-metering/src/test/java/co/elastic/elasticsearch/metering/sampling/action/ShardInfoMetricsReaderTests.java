@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader;
 
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.index.SegmentCommitInfo;
@@ -68,8 +69,9 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, meterRegistry);
 
         when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
 
@@ -90,8 +92,9 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, meterRegistry);
 
         var engine = mock(Engine.class);
         var index1 = createMockIndexService(engine, shardId1, shardId2);
@@ -121,8 +124,9 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var shardInfoCache = new InMemoryShardInfoMetricsCache();
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, meterRegistry);
 
         var engine = mock(Engine.class);
         var index1 = createMockIndexService(engine, shardId1, shardId2);
@@ -162,13 +166,14 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
         var indicesService = mock(IndicesService.class);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
         when(shardInfoCache.getCachedShardMetrics(eq(shardId3), anyLong(), anyLong())).thenReturn(
             Optional.of(new InMemoryShardInfoMetricsCache.CacheEntry("TEST-NODE", new ShardInfoMetrics(10L, 100L, 1L, 1L, 0, 0)))
         );
 
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, meterRegistry);
 
         var engine = mock(Engine.class);
         var index1 = createMockIndexService(engine, shardId1, shardId2);
@@ -200,8 +205,9 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(20L, 50, 10, 20, null));
 
         var indicesService = mock(IndicesService.class);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(120L));
@@ -221,8 +227,9 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
 
         var indicesService = mock(IndicesService.class);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(30L));
@@ -243,8 +250,9 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, -1L));
 
         var indicesService = mock(IndicesService.class);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(30L));
@@ -262,8 +270,9 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
 
         var indicesService = mock(IndicesService.class);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new ShardInfoMetricsReader(indicesService, meterRegistry);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(90L));
@@ -284,7 +293,8 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
 
         var indicesService = mock(IndicesService.class);
-        var shardReader = new ShardInfoMetricsReader(indicesService, MeterRegistry.NOOP);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, MeterRegistry.NOOP);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(120L));
@@ -302,7 +312,8 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
 
         var indicesService = mock(IndicesService.class);
-        var shardReader = new ShardInfoMetricsReader(indicesService, MeterRegistry.NOOP);
+        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
+        var shardReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, MeterRegistry.NOOP);
         var shardStats = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardStats.docCount(), equalTo(30L));

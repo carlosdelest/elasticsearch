@@ -18,6 +18,7 @@
 module org.elasticsearch.stateless.api {
     requires org.elasticsearch.server;
     requires org.apache.lucene.core;
+    requires org.elasticsearch.base;
 
     exports co.elastic.elasticsearch.stateless.api;
 }

@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader;
 
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
@@ -49,13 +50,16 @@ class ShardInfoMetricsReader {
     static final String SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC = "es.metering.shard_info.rastorage.approximated.ratio";
 
     private final IndicesService indicesService;
+    private final ShardSizeStatsReader shardSizeStatsReader;
+
     private final LongCounter shardInfoRequestsTotalCounter;
     private final LongCounter shardInfoCachedTotalCounter;
     private final LongCounter shardInfoErrorsTotalCounter;
     private final DoubleHistogram shardInfoRaStorageApproximatedRatio;
 
-    ShardInfoMetricsReader(IndicesService indicesService, MeterRegistry meterRegistry) {
+    ShardInfoMetricsReader(IndicesService indicesService, ShardSizeStatsReader shardSizeStatsReader, MeterRegistry meterRegistry) {
         this.indicesService = indicesService;
+        this.shardSizeStatsReader = shardSizeStatsReader;
         this.shardInfoRequestsTotalCounter = meterRegistry.registerLongCounter(
             SHARD_INFO_REQUESTS_TOTAL_METRIC,
             "Total number of shard info requests processed",

@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader;
+
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.ChannelActionListener;
@@ -40,6 +42,7 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
         ThreadPool threadPool,
         ActionFilters actionFilters,
         InMemoryShardInfoMetricsCache shardMetricsCache,
+        ShardSizeStatsReader shardSizeStatsReader,
         TelemetryProvider telemetryProvider
     ) {
         super(
@@ -50,7 +53,7 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
             GetNodeSamplesAction.Request::new,
             threadPool.executor(ThreadPool.Names.MANAGEMENT)
         );
-        this.shardMetricsReader = new ShardInfoMetricsReader(indicesService, telemetryProvider.getMeterRegistry());
+        this.shardMetricsReader = new ShardInfoMetricsReader(indicesService, shardSizeStatsReader, telemetryProvider.getMeterRegistry());
         this.shardMetricsCache = shardMetricsCache;
         // TODO remove registration under legacy name once fully deployed
         transportService.registerRequestHandler(
