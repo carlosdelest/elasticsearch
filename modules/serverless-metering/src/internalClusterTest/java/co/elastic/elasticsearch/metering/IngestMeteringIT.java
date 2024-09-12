@@ -21,9 +21,6 @@ import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.ingest.PutPipelineRequest;
-import org.elasticsearch.common.bytes.BytesArray;
-import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
@@ -201,7 +198,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     }
 
     private void createFailPipeline() {
-        final BytesReference pipelineBody = new BytesArray("""
+        putJsonPipeline("fail_pipeline", """
             {
               "processors": [
                 {
@@ -212,11 +209,10 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
               ]
             }
             """);
-        clusterAdmin().putPipeline(new PutPipelineRequest("fail_pipeline", pipelineBody, XContentType.JSON)).actionGet();
     }
 
     private void createNewFieldPipeline() {
-        final BytesReference pipelineBody = new BytesArray("""
+        putJsonPipeline("new_field_pipeline", """
             {
               "processors": [
                 {
@@ -234,7 +230,6 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
               ]
             }
             """);
-        clusterAdmin().putPipeline(new PutPipelineRequest("new_field_pipeline", pipelineBody, XContentType.JSON)).actionGet();
     }
 
     private UsageRecord pollReceivedRAIRecordsAndGetFirst(String indexName) {

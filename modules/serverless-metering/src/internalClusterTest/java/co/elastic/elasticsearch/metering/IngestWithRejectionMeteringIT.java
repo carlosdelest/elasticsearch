@@ -23,9 +23,7 @@ import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.ingest.PutPipelineRequest;
 import org.elasticsearch.action.support.WriteRequest;
-import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
@@ -124,7 +122,24 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         startMasterIndexAndIngestNode();
         startSearchNode();
         ensureStableCluster(2);
-        createPipeline("pipeline");
+        putJsonPipeline("pipeline", """
+            {
+              "processors": [
+                {
+                   "set": {
+                     "field": "my-text-field",
+                     "value": "xxxx"
+                   }
+                 },
+                 {
+                   "set": {
+                     "field": "my-boolean-field",
+                     "value": true
+                   }
+                 }
+              ]
+            }
+            """);
 
         String index = "test2";
         assertAcked(prepareCreate(index));
@@ -191,28 +206,6 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
 
     private static Map<String, String> documentSource() {
         return Collections.singletonMap("key", "value");
-    }
-
-    private void createPipeline(String pipeline) {
-        final BytesReference pipelineBody = new BytesArray("""
-            {
-              "processors": [
-                {
-                   "set": {
-                     "field": "my-text-field",
-                     "value": "xxxx"
-                   }
-                 },
-                 {
-                   "set": {
-                     "field": "my-boolean-field",
-                     "value": true
-                   }
-                 }
-              ]
-            }
-            """);
-        clusterAdmin().putPipeline(new PutPipelineRequest(pipeline, pipelineBody, XContentType.JSON)).actionGet();
     }
 
     private long meterDocument() {
