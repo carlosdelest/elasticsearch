@@ -20,6 +20,9 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForPrimaryUserAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSecondaryUserAction;
+import co.elastic.elasticsearch.metering.activitytracking.ActivityTrackerActionFilter;
+import co.elastic.elasticsearch.metering.activitytracking.DefaultActionTierMapper;
+import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskParams;
@@ -41,8 +44,10 @@ import co.elastic.elasticsearch.metrics.CounterMetricsProvider;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
+import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
+import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.NamedDiff;
@@ -88,6 +93,7 @@ import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ParseField;
 
 import java.io.IOException;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -121,7 +127,7 @@ public class MeteringPlugin extends Plugin
     private List<CounterMetricsProvider> counterMetricsProviders;
     private MeteringUsageRecordPublisher usageRecordPublisher;
     private UsageReportService usageReportService;
-
+    public final SetOnce<List<ActionFilter>> actionFilters = new SetOnce<>();
     private volatile IngestMetricsProvider ingestMetricsCollector;
     private volatile SystemIndices systemIndices;
 
@@ -145,6 +151,11 @@ public class MeteringPlugin extends Plugin
     public void loadExtensions(ExtensionLoader loader) {
         sampledMetricsProviders = loader.loadExtensions(SampledMetricsProvider.class);
         counterMetricsProviders = loader.loadExtensions(CounterMetricsProvider.class);
+    }
+
+    @Override
+    public Collection<ActionFilter> getActionFilters() {
+        return actionFilters.get();
     }
 
     @Override
@@ -182,6 +193,17 @@ public class MeteringPlugin extends Plugin
         if (discoveryNodeRoles.contains(DiscoveryNodeRole.INGEST_ROLE) || discoveryNodeRoles.contains(DiscoveryNodeRole.INDEX_ROLE)) {
             builtInCounterMetrics.add(ingestMetricsCollector);
         }
+
+        TimeValue coolDownPeriod = TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings());
+        var activityTracker = TaskActivityTracker.build(
+            Clock.systemUTC(),
+            coolDownPeriod,
+            hasSearchRole,
+            threadPool.getThreadContext(),
+            new DefaultActionTierMapper(),
+            services.taskManager()
+        );
+        actionFilters.set(List.of(new ActivityTrackerActionFilter(activityTracker)));
 
         TimeValue reportPeriod = UsageReportService.REPORT_PERIOD.get(environment.settings());
 

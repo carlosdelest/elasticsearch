@@ -39,4 +39,5 @@ module org.elasticsearch.metering {
     exports co.elastic.elasticsearch.metering.sampling to org.elasticsearch.server;
     exports co.elastic.elasticsearch.metering.sampling.action to org.elasticsearch.server;
     exports co.elastic.elasticsearch.metering.usagereports.action to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.metering.activitytracking to org.elasticsearch.server;
 }
