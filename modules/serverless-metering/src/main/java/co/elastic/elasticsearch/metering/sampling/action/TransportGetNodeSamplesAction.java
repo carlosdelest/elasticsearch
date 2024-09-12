@@ -32,6 +32,7 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
     private final ShardInfoMetricsReader shardMetricsReader;
     private final InMemoryShardInfoMetricsCache shardMetricsCache;
 
+    @SuppressWarnings("this-escape")
     @Inject
     public TransportGetNodeSamplesAction(
         TransportService transportService,

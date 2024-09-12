@@ -19,6 +19,7 @@ package org.elasticsearch.test.cluster.serverless.remote;
 
 public class ServerlessRemoteClusterSpecBuilder extends AbstractRemoteClusterSpecBuilder<RemoteServerlessElasticsearchCluster> {
 
+    @SuppressWarnings("this-escape")
     public ServerlessRemoteClusterSpecBuilder() {
         this.clusterAccess(new DefaultServerlessClusterAccessProvider());
     }
