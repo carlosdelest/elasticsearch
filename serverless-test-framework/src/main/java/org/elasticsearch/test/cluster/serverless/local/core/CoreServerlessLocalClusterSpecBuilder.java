@@ -53,6 +53,7 @@ public class CoreServerlessLocalClusterSpecBuilder extends AbstractLocalClusterS
         "xpack.security.enabled"
     );
 
+    @SuppressWarnings("this-escape")
     public CoreServerlessLocalClusterSpecBuilder() {
         this.distribution(DistributionType.DEFAULT)
             .settings(new DefaultServerlessSettingsProvider())

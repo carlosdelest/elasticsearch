@@ -62,6 +62,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     private final ClusterService clusterService;
     private final Executor executor;
 
+    @SuppressWarnings("this-escape")
     @Inject
     public TransportCollectClusterSamplesAction(
         TransportService transportService,
@@ -72,6 +73,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
         this(transportService, clusterService, actionFilters, threadPool.executor(ThreadPool.Names.MANAGEMENT));
     }
 
+    @SuppressWarnings("this-escape")
     TransportCollectClusterSamplesAction(
         TransportService transportService,
         ClusterService clusterService,

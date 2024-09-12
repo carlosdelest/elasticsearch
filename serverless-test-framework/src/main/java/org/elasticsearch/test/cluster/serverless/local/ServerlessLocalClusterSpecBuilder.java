@@ -27,6 +27,7 @@ import org.elasticsearch.test.cluster.util.resource.Resource;
 
 public class ServerlessLocalClusterSpecBuilder extends AbstractLocalClusterSpecBuilder<ServerlessElasticsearchCluster> {
 
+    @SuppressWarnings("this-escape")
     public ServerlessLocalClusterSpecBuilder() {
         this.settings(new DefaultServerlessSettingsProvider());
         this.environment(new DefaultEnvironmentProvider());

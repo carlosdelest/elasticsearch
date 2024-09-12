@@ -61,6 +61,7 @@ public class SampledClusterMetricsService {
     private final LongCounter collectionsErrorsCounter;
     private final LongCounter collectionsPartialsCounter;
 
+    @SuppressWarnings("this-escape")
     public SampledClusterMetricsService(ClusterService clusterService, MeterRegistry meterRegistry) {
         this.clusterService = clusterService;
         clusterService.addListener(this::clusterChanged);
