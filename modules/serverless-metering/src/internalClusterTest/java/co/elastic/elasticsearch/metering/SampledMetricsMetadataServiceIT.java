@@ -54,7 +54,6 @@ import static org.hamcrest.Matchers.startsWith;
 public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCase {
 
     private static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
-    private static final int DEFAULT_SEARCH_POWER = 200;
     private static final TimeValue INTERVAL = TimeValue.timeValueSeconds(5);
 
     private static final String indexName = "idx1";
@@ -99,7 +98,6 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
-            .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), DEFAULT_SEARCH_POWER)
             .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
             .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), INTERVAL)
             .build();

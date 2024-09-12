@@ -42,14 +42,12 @@ import static org.hamcrest.Matchers.not;
 
 public class MeteringIndexInfoServiceIndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
-    protected static final int DEFAULT_SEARCH_POWER = 200;
 
     @Override
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
-            .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), DEFAULT_SEARCH_POWER)
             .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
             .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
             .build();
