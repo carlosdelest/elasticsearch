@@ -425,13 +425,21 @@ public class ServerlessServerCli extends ServerCli {
             throw new IllegalStateException("node.processors must not be present, it will be auto calculated");
         }
 
+        double vcpus;
         Path sharesFile = getCgroupFs().resolve("cpu/cpu.shares");
-        if (Files.exists(sharesFile) == false) {
-            throw new IllegalStateException("cgroups v1 cpu.shares must be set in serverless");
+        if (Files.exists(sharesFile)) {
+            int shares = Integer.parseInt(Files.readString(sharesFile).strip());
+            vcpus = shares / 1024.0;
+        } else {
+            Path weightFile = getCgroupFs().resolve("cpu/cpu.weight");
+            if (Files.exists(weightFile)) {
+                int weight = Integer.parseInt(Files.readString(weightFile).strip());
+                vcpus = weight / 100.0;
+            } else {
+                throw new IllegalStateException("cgroups v1 cpu.shares or v2 cpu.weight must be set in serverless");
+            }
         }
 
-        int shares = Integer.parseInt(Files.readString(sharesFile).strip());
-        double vcpus = shares / 1024.0;
         double allocated = vcpus * overcommit;
 
         int available = getAvailableProcessors();
