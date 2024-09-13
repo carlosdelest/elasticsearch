@@ -125,26 +125,11 @@ tests:
 - class: org.elasticsearch.datastreams.logsdb.qa.StandardVersusLogsIndexModeRandomDataChallengeRestIT
   method: testHistogramAggregation
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2602
-- class: org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2620
 - class: co.elastic.packaging.docker.DockerClientYamlTestSuiteIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2693
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=simulate.ingest/10_basic/Test mapping validation from templates}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2700
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {meta.CountFunctions SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2724
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2725
-  methods:
-  - test {meta.CountFunctions ASYNC}
-  - "test {meta.CountFunctions SYNC}"
-- class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2726"
-  methods:
-  - "test {meta.CountFunctions SYNC}"
-  - "test {meta.CountFunctions ASYNC}"
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_processor/Test create processor with missing mandatory fields}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2648
