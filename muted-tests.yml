@@ -133,3 +133,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_processor/Test create processor with missing mandatory fields}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2648
+- class: co.elastic.elasticsearch.metering.IngestWithRejectionMeteringIT
+  method: testDocumentsNotMeteredWhenRejectionAfterPipeline
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2761
