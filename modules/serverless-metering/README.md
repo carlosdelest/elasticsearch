@@ -85,6 +85,9 @@ Code references:
 
 The normalized raw stored size of data (RA-S) is based on the normalized raw size of ingested data (RA-I) computed when parsing the document source, as described above.
 
+**Note:**
+Closed indices are not included when metering RA-S. Closing an index requires Operator privileges and customers cannot do this themselves.
+If doing so on a customer's behalf, be aware that we will stop charging the customer for that index.
 
 #### Calculation of RA-S for timeseries indices
 
@@ -134,6 +137,10 @@ Code references:
 ### IX (Index Size)
 
 IX (index size) is a simpler storage metric, computed by summing the disk size occupied by segments on disk. Being based on the actual disk space occupied, this metric includes the deleted documents still present in segments on disk. The metric is sampled, so eventually when/if the deleted documents are cleaned up (e.g. after merging), the segments will occupy less space on disk, and we will report the new size at the next sample.
+
+**Note:**
+Closed indices are not included when metering IX. Closing an index requires Operator privileges and customers cannot do this themselves.
+If doing so on a customer's behalf, be aware that we will stop charging the customer for that index.
 
 ### Per cluster reporting infrastructure for RA-S and IX usage sample records
 
