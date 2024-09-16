@@ -28,6 +28,7 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
@@ -43,6 +44,7 @@ import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.RemoteTransportException;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,7 +79,7 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
     private final ThreadPool threadPool;
     private final SampledClusterMetricsService clusterMetricsService;
 
-    // Holds a reference to IndexSizeTask. This will have a valid value only on the executor node, otherwise it will be null.
+    // Holds a reference to the task. This will have a valid value only on the executor node, otherwise it will be null.
     private final AtomicReference<SampledClusterMetricsSchedulingTask> executorNodeTask = new AtomicReference<>();
     private final PersistentTasksService persistentTasksService;
     private volatile boolean enabled;
@@ -138,6 +140,26 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
     }
 
     @Override
+    public PersistentTasksCustomMetadata.Assignment getAssignment(
+        SampledClusterMetricsSchedulingTaskParams params,
+        Collection<DiscoveryNode> candidateNodes,
+        ClusterState clusterState
+    ) {
+        // Require the sampling task to run on a search node. This is a requirement to calculate the storage_ram_ratio,
+        // which is part of the SPmin provisioned memory calculation for the search tier.
+        DiscoveryNode discoveryNode = selectLeastLoadedNode(
+            clusterState,
+            candidateNodes,
+            node -> node.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName())
+        );
+        if (discoveryNode == null) {
+            return NO_NODE_FOUND;
+        } else {
+            return new PersistentTasksCustomMetadata.Assignment(discoveryNode.getId(), "");
+        }
+    }
+
+    @Override
     protected void nodeOperation(
         AllocatedPersistentTask task,
         SampledClusterMetricsSchedulingTaskParams params,
@@ -146,7 +168,8 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         SampledClusterMetricsSchedulingTask clusterMetricsSchedulingTask = (SampledClusterMetricsSchedulingTask) task;
         executorNodeTask.set(clusterMetricsSchedulingTask);
         DiscoveryNode node = clusterService.localNode();
-        logger.info("Node [{{}}{{}}] is selected as the current Index Info node.", node.getName(), node.getId());
+        assert node.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName()) : "Sampling task expected to run on search node";
+        logger.info("Node [{{}}{{}}] is selected as the current sampling node.", node.getName(), node.getId());
         if (this.enabled) {
             clusterMetricsSchedulingTask.run();
         }

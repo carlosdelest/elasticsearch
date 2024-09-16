@@ -29,7 +29,6 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulin
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
 import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
 import co.elastic.elasticsearch.metering.sampling.action.GetNodeSamplesAction;
-import co.elastic.elasticsearch.metering.sampling.action.InMemoryShardInfoMetricsCache;
 import co.elastic.elasticsearch.metering.sampling.action.TransportCollectClusterSamplesAction;
 import co.elastic.elasticsearch.metering.sampling.action.TransportGetNodeSamplesAction;
 import co.elastic.elasticsearch.metering.stats.rest.RestGetMeteringStatsAction;
@@ -257,10 +256,6 @@ public class MeteringPlugin extends Plugin
             environment.settings()
         );
         cs.add(clusterMetricsSchedulingTaskExecutor);
-        if (hasSearchRole) {
-            cs.add(new InMemoryShardInfoMetricsCache());
-        }
-
         return cs;
     }
 
@@ -369,22 +364,13 @@ public class MeteringPlugin extends Plugin
             UpdateSampledMetricsMetadataAction.INSTANCE,
             TransportUpdateSampledMetricsMetadataAction.class
         );
-        if (hasSearchRole) {
-            var getMeteringShardInfo = new ActionPlugin.ActionHandler<>(GetNodeSamplesAction.INSTANCE, TransportGetNodeSamplesAction.class);
-            return List.of(
-                getMeteringShardInfo,
-                getMeteringStatsSecondaryUser,
-                getMeteringStatsPrimaryUser,
-                collectMeteringShardInfo,
-                updateSampledMetricsMetadata
-            );
-        } else {
-            return List.of(
-                getMeteringStatsSecondaryUser,
-                getMeteringStatsPrimaryUser,
-                collectMeteringShardInfo,
-                updateSampledMetricsMetadata
-            );
-        }
+        var getMeteringShardInfo = new ActionPlugin.ActionHandler<>(GetNodeSamplesAction.INSTANCE, TransportGetNodeSamplesAction.class);
+        return List.of(
+            getMeteringShardInfo,
+            getMeteringStatsSecondaryUser,
+            getMeteringStatsPrimaryUser,
+            collectMeteringShardInfo,
+            updateSampledMetricsMetadata
+        );
     }
 }

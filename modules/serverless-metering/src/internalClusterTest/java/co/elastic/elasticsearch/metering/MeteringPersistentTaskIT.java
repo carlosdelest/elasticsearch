@@ -19,19 +19,20 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
+import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.tasks.TaskInfo;
 import org.elasticsearch.test.ESIntegTestCase;
-import org.elasticsearch.test.transport.MockTransportService;
 import org.junit.After;
+import org.junit.Before;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -42,12 +43,18 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 
-@ESIntegTestCase.ClusterScope(supportsDedicatedMasters = false, minNumDataNodes = 3)
-public class MeteringPersistentTaskIT extends ESIntegTestCase {
+@ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
+public class MeteringPersistentTaskIT extends AbstractStatelessIntegTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(MockTransportService.TestPlugin.class, MeteringPlugin.class);
+        return CollectionUtils.appendToCopy(super.nodePlugins(), MeteringPlugin.class);
+    }
+
+    @Before
+    public void setupCluster() {
+        startMasterOnlyNode();
+        startSearchNodes(2); // persistent task is assigned to search node
     }
 
     @After
@@ -90,7 +97,7 @@ public class MeteringPersistentTaskIT extends ESIntegTestCase {
             oldTaskId.set(tasks.getTasks().get(0).id());
         });
 
-        internalCluster().stopNode(persistentTaskNode1.getName());
+        assertTrue(internalCluster().stopNode(persistentTaskNode1.getName()));
 
         assertBusy(() -> {
             ListTasksResponse tasks = clusterAdmin().listTasks(new ListTasksRequest().setActions("metering-index-info[c]")).actionGet();
@@ -98,11 +105,13 @@ public class MeteringPersistentTaskIT extends ESIntegTestCase {
             assertFalse(taskIds.contains(oldTaskId.get()));
         });
 
-        // Verifying the PersistentTask runs on a new node
-        var persistentTaskNode2 = getMeteringPersistentTaskAssignedNode();
+        assertBusy(() -> {
+            // Verifying the PersistentTask runs on a new node
+            var persistentTaskNode2 = getMeteringPersistentTaskAssignedNode();
 
-        assertThat(persistentTaskNode2, notNullValue());
-        assertThat(persistentTaskNode2.getName(), not(equalTo(persistentTaskNode1.getName())));
+            assertThat(persistentTaskNode2, notNullValue());
+            assertThat(persistentTaskNode2.getName(), not(equalTo(persistentTaskNode1.getName())));
+        });
     }
 
     private DiscoveryNode getMeteringPersistentTaskAssignedNode() throws Exception {

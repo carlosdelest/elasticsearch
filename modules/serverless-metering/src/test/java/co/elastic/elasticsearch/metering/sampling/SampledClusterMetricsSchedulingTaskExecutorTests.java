@@ -26,6 +26,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.NodesShutdownMetadata;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.node.DiscoveryNodeUtils;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -35,6 +36,7 @@ import org.elasticsearch.features.FeatureService;
 import org.elasticsearch.persistent.PersistentTaskState;
 import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
 import org.elasticsearch.persistent.PersistentTasksService;
+import org.elasticsearch.test.ClusterServiceUtils;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.threadpool.TestThreadPool;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -51,7 +53,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.elasticsearch.persistent.PersistentTasksExecutor.NO_NODE_FOUND;
-import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -100,11 +101,19 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
                 )
             ).collect(Collectors.toSet())
         );
-        clusterService = spy(createClusterService(threadPool, clusterSettings));
+        clusterService = createClusterService(Set.of(DiscoveryNodeRole.SEARCH_ROLE));
         localNodeId = clusterService.localNode().getId();
         persistentTasksService = mock(PersistentTasksService.class);
         clusterMetricsService = mock(SampledClusterMetricsService.class);
         featureService = new FeatureService(List.of(new MeteringFeatures()));
+    }
+
+    private ClusterService createClusterService(Set<DiscoveryNodeRole> localNodeRoles) {
+        return ClusterServiceUtils.createClusterService(
+            threadPool,
+            DiscoveryNodeUtils.builder("node").name("node").roles(localNodeRoles).build(),
+            clusterSettings
+        );
     }
 
     @AfterClass
@@ -194,6 +203,23 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
         PersistentTaskState state = mock(PersistentTaskState.class);
         executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
         verify(task, times(1)).run();
+    }
+
+    public void testRejectTaskOnNoneSearchNode() {
+        clusterService = spy(createClusterService(Set.of(DiscoveryNodeRole.INDEX_ROLE)));
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
+            client,
+            clusterService,
+            persistentTasksService,
+            featureService,
+            threadPool,
+            clusterMetricsService,
+            settings
+        );
+        SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
+        PersistentTaskState state = mock(PersistentTaskState.class);
+        assertThrows(AssertionError.class, () -> executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state));
+        verify(task, never()).run();
     }
 
     public void testAbortOnShutdown() {

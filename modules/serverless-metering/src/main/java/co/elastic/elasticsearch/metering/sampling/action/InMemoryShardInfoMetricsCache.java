@@ -19,7 +19,6 @@ package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
-import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.index.shard.ShardId;
 
 import java.util.Map;
@@ -27,25 +26,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class InMemoryShardInfoMetricsCache extends AbstractLifecycleComponent {
+class InMemoryShardInfoMetricsCache {
 
     record CacheEntry(String token, ShardInfoMetrics shardInfo) {}
 
     // package private for testing
-    Map<ShardId, CacheEntry> shardMetricsCache = new ConcurrentHashMap<>();
-
-    @Override
-    protected void doStart() {
-        shardMetricsCache = new ConcurrentHashMap<>();
-    }
-
-    @Override
-    protected void doStop() {
-        shardMetricsCache = new ConcurrentHashMap<>();
-    }
-
-    @Override
-    protected void doClose() {}
+    final Map<ShardId, CacheEntry> shardMetricsCache = new ConcurrentHashMap<>();
 
     Optional<CacheEntry> getCachedShardMetrics(ShardId shardId, long primaryTerm, long generation) {
         var cacheEntry = shardMetricsCache.get(shardId);

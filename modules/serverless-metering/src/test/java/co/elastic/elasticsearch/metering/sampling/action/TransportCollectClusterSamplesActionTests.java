@@ -25,6 +25,7 @@ import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.TimeValue;
@@ -134,17 +135,13 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
 
-        final Set<DiscoveryNode> searchNodes = clusterService.state()
-            .nodes()
-            .stream()
-            .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
-            .collect(Collectors.toSet());
+        DiscoveryNodes nodes = clusterService.state().nodes();
 
         // check a request was sent to the right number of nodes
-        assertEquals(searchNodes.size(), capturedRequests.size());
+        assertEquals(nodes.size(), capturedRequests.size());
 
         // check requests were sent to the right nodes
-        assertEquals(searchNodes.stream().map(DiscoveryNode::getId).collect(Collectors.toSet()), capturedRequests.keySet());
+        assertEquals(nodes.stream().map(DiscoveryNode::getId).collect(Collectors.toSet()), capturedRequests.keySet());
 
         for (Map.Entry<String, List<CapturingTransport.CapturedRequest>> entry : capturedRequests.entrySet()) {
             // check one request was sent to each node
@@ -171,9 +168,8 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             new ShardId("index2", "index2UUID", 3)
         );
 
-        final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswer = clusterService.state()
-            .nodes()
-            .stream()
+        final DiscoveryNodes nodes = clusterService.state().nodes();
+        final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswer = nodes.stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
             .collect(Collectors.toMap(DiscoveryNode::getId, x -> {
                 var shardCount = randomIntBetween(0, shards.size());
@@ -202,7 +198,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
                     transport.handleRemoteError(requestId, new Exception());
                 } else {
                     totalSuccess++;
-                    var response = nodesShardAnswer.get(nodeId);
+                    var response = nodesShardAnswer.getOrDefault(nodeId, Collections.emptyMap());
                     seenShards.addAll(response.keySet());
                     transport.handleResponse(requestId, new GetNodeSamplesAction.Response(response));
                 }
@@ -214,7 +210,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         assertEquals("total shards", totalShards, response.getShardInfos().size());
         // response.isComplete -> totalFailed == 0;
         assertTrue("if response.isComplete no failed shards", response.isComplete() == false || totalFailed == 0);
-        assertEquals(nodesShardAnswer.size(), totalSuccess + totalFailed);
+        assertEquals(nodes.size(), totalSuccess + totalFailed);
         assertEquals("accumulated exceptions", totalFailed, response.getFailures().size());
     }
 
@@ -231,6 +227,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
+        // only search nodes will answer with shards, index nodes will return an empty map
         final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswer = Map.of(
             searchNodes.get(0).getId(),
             Map.ofEntries(
@@ -259,7 +256,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             var nodeId = entry.getKey();
             for (var capturedRequest : entry.getValue()) {
                 long requestId = capturedRequest.requestId();
-                var response = nodesShardAnswer.get(nodeId);
+                var response = nodesShardAnswer.getOrDefault(nodeId, Collections.emptyMap());
                 transport.handleResponse(requestId, new GetNodeSamplesAction.Response(response));
             }
         }

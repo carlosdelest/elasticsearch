@@ -26,7 +26,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.logging.LogManager;
@@ -40,7 +40,6 @@ import org.elasticsearch.transport.TransportService;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
@@ -130,11 +129,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     ) {
         logger.debug("Executing TransportCollectClusterSamplesAction");
         var clusterState = clusterService.state();
-        // TODO for VCU metering we have to collect samples from index nodes as well
-        final Set<DiscoveryNode> nodes = clusterState.nodes()
-            .stream()
-            .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
-            .collect(Collectors.toSet());
+        DiscoveryNodes nodes = clusterState.nodes();
 
         var persistentTask = SampledClusterMetricsSchedulingTask.findTask(clusterState);
         if (persistentTask == null || persistentTask.isAssigned() == false) {

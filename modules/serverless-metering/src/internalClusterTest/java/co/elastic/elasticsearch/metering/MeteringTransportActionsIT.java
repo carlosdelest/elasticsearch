@@ -20,12 +20,14 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
+import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexNotFoundException;
@@ -36,9 +38,9 @@ import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.junit.After;
+import org.junit.Before;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -54,12 +56,12 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.core.Is.is;
 
-@ESIntegTestCase.ClusterScope(supportsDedicatedMasters = false, minNumDataNodes = 3)
-public class MeteringTransportActionsIT extends ESIntegTestCase {
+@ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
+public class MeteringTransportActionsIT extends AbstractStatelessIntegTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(MockTransportService.TestPlugin.class, MeteringPlugin.class);
+        return CollectionUtils.appendToCopy(super.nodePlugins(), MeteringPlugin.class);
     }
 
     @Override
@@ -68,6 +70,12 @@ public class MeteringTransportActionsIT extends ESIntegTestCase {
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
             .build();
+    }
+
+    @Before
+    public void setupCluster() {
+        startMasterOnlyNode();
+        startSearchNodes(2); // persistent task is assigned to search node
     }
 
     @After
