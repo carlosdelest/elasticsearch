@@ -139,3 +139,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.SampledMetricsMetadataServiceIT
   method: testLatestCommitedTimestampAdvancedWhenMetricRecordsSent
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2762
+- class: co.elastic.elasticsearch.metering.IngestMeteringIT
+  method: testIngestMetricsAreRecordedThroughIngestPipelines
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2763
