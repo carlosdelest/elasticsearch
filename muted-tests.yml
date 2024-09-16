@@ -133,15 +133,3 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_processor/Test create processor with missing mandatory fields}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2648
-- class: co.elastic.elasticsearch.metering.IngestWithRejectionMeteringIT
-  method: testDocumentsNotMeteredWhenRejectionAfterPipeline
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2761
-- class: co.elastic.elasticsearch.metering.SampledMetricsMetadataServiceIT
-  method: testLatestCommitedTimestampAdvancedWhenMetricRecordsSent
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2762
-- class: co.elastic.elasticsearch.metering.IngestMeteringIT
-  method: testIngestMetricsAreRecordedThroughIngestPipelines
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2763
-- class: co.elastic.elasticsearch.metering.MeteringRestTestIT
-  method: testMeteringRecordsCanBeDeduplicated
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2765
