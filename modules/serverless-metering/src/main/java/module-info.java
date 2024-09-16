@@ -30,6 +30,7 @@ module org.elasticsearch.metering {
     requires org.apache.lucene.core;
     requires org.elasticsearch.serverless.constants;
     requires org.elasticsearch.stateless.api;
+    requires org.elasticsearch.xcore;
 
     provides org.elasticsearch.features.FeatureSpecification with MeteringFeatures;
     provides co.elastic.elasticsearch.stateless.api.DocValuesFormatFactory with RAStorageDocValuesFormatFactory;

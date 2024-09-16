@@ -25,6 +25,7 @@ dependencies {
     internalClusterTestImplementation("org.elasticsearch.plugin:ingest-common")
     internalClusterTestImplementation(testArtifact(project(":modules:stateless"), "internalClusterTest"))
     internalClusterTestImplementation("org.elasticsearch.plugin:data-streams")
+    compileOnly(xpackModule("core"))
     compileOnly(project(":libs:serverless-shared-constants"))
     compileOnly(project(":libs:serverless-stateless-api"))
 }

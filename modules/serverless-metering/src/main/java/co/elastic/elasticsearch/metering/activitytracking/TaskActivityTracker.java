@@ -18,12 +18,17 @@
 package co.elastic.elasticsearch.metering.activitytracking;
 
 import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskManager;
+import org.elasticsearch.xpack.core.security.SecurityContext;
+import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
+import org.elasticsearch.xpack.core.security.user.InternalUser;
+import org.elasticsearch.xpack.core.security.user.InternalUsers;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -33,8 +38,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class TaskActivityTracker {
     private static final Logger log = LogManager.getLogger(TaskActivityTracker.class);
-    static final String PRIVILEGE_CATEGORY_KEY = "_security_privilege_category";
-    static final String PRIVILEGE_CATEGORY_VALUE_OPERATOR = "operator";
     public static final Setting<TimeValue> COOL_DOWN_PERIOD = Setting.timeSetting(
         "metering.activity_tracker.cool_down_period",
         TimeValue.timeValueMinutes(15),
@@ -43,11 +46,30 @@ public class TaskActivityTracker {
         Setting.Property.NodeScope
     );
 
+    /**
+     * A subset of the InternalUsers which will not be tracked. Other instances of
+     * InternalUser will be tracked (if isOperator==false and actionTier!=NEITHER).
+     *
+     * All tracked InternalUser instances are listed below:
+     *  InternalUsers.ASYNC_SEARCH_USER,
+     *  InternalUsers.STORAGE_USER,
+     *  InternalUsers.DATA_STREAM_LIFECYCLE_USER,
+     *  InternalUsers.SYNONYMS_USER,
+     *  InternalUsers.LAZY_ROLLOVER_USER
+     */
+    static final Set<InternalUser> INTERNAL_USERS_TO_IGNORE = Set.of(
+        InternalUsers.SYSTEM_USER,
+        InternalUsers.XPACK_USER,
+        InternalUsers.XPACK_SECURITY_USER,
+        InternalUsers.SECURITY_PROFILE_USER
+    );
+
     private final boolean hasSearchRole;
     private final ThreadContext threadContext;
     private final Clock clock;
     private final Duration coolDownPeriod;
     private final ActionTier.Mapper actionTierMapper;
+    private final SecurityContext securityContext;
 
     private volatile Activity search = Activity.EMPTY;
     private volatile Activity index = Activity.EMPTY;
@@ -60,7 +82,8 @@ public class TaskActivityTracker {
         TimeValue coolDownPeriod,
         boolean hasSearchRole,
         ThreadContext threadContext,
-        ActionTier.Mapper actionTierMapper
+        ActionTier.Mapper actionTierMapper,
+        SecurityContext securityContext
     ) {
         // To simplify testing, clock.instant() should be called at most once in every public method
         this.clock = clock;
@@ -68,6 +91,7 @@ public class TaskActivityTracker {
         this.hasSearchRole = hasSearchRole;
         this.threadContext = threadContext;
         this.actionTierMapper = actionTierMapper;
+        this.securityContext = securityContext;
     }
 
     public static TaskActivityTracker build(
@@ -78,7 +102,27 @@ public class TaskActivityTracker {
         ActionTier.Mapper actionTierMapper,
         TaskManager taskManager
     ) {
-        var tracker = new TaskActivityTracker(clock, coolDownPeriod, hasSearchRole, threadContext, actionTierMapper);
+        return build(
+            clock,
+            coolDownPeriod,
+            hasSearchRole,
+            threadContext,
+            actionTierMapper,
+            taskManager,
+            new SecurityContext(Settings.EMPTY, threadContext)
+        );
+    }
+
+    static TaskActivityTracker build(
+        Clock clock,
+        TimeValue coolDownPeriod,
+        boolean hasSearchRole,
+        ThreadContext threadContext,
+        ActionTier.Mapper actionTierMapper,
+        TaskManager taskManager,
+        SecurityContext securityContext
+    ) {
+        var tracker = new TaskActivityTracker(clock, coolDownPeriod, hasSearchRole, threadContext, actionTierMapper, securityContext);
         taskManager.registerRemovedTaskListener(tracker::onTaskFinish);
         return tracker;
     }
@@ -92,15 +136,25 @@ public class TaskActivityTracker {
     }
 
     void onTaskStart(String action, Task task) {
-        var userPrivilege = getUserPrivilege();
-        var actionTier = actionTierMapper.toTier(action);
+        if (log.isDebugEnabled()) {
+            log.debug(
+                "Tracking: {},{},{},{}",
+                isOperator() ? "operator" : "not_operator",
+                getInternalUserName(),
+                actionTierMapper.toTier(action),
+                action
+            );
+        }
 
-        log.debug("Tracking - action: [{}], actionTier: [{}], userPrivilege: [{}]", action, actionTier, userPrivilege);
-        if (isOperator(userPrivilege)) {
-            log.debug("Skip because operator-user, action: " + action);
+        if (isOperator()) {
+            log.debug("Skip because user has operator privilege, action: " + action);
+            return;
+        } else if (isUntrackedInternalUser()) {
+            log.debug("Skip because is internal user, action: " + action);
             return;
         }
 
+        var actionTier = actionTierMapper.toTier(action);
         var now = clock.instant();
         switch (actionTier) {
             case SEARCH -> {
@@ -169,11 +223,22 @@ public class TaskActivityTracker {
         return indexTaskIds.isEmpty() && bothTaskIds.isEmpty();
     }
 
-    private String getUserPrivilege() {
-        return threadContext.getHeader(PRIVILEGE_CATEGORY_KEY);
+    private boolean isUntrackedInternalUser() {
+        if (securityContext.getUser() instanceof InternalUser iu) {
+            return INTERNAL_USERS_TO_IGNORE.contains(iu);
+        }
+        return false;
     }
 
-    private static boolean isOperator(String userPrivilege) {
-        return PRIVILEGE_CATEGORY_VALUE_OPERATOR.equals(userPrivilege);
+    private String getInternalUserName() {
+        return securityContext.getUser() instanceof InternalUser iu ? iu.principal() : null;
+    }
+
+    private String getUserPrivilege() {
+        return threadContext.getHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY);
+    }
+
+    private boolean isOperator() {
+        return AuthenticationField.PRIVILEGE_CATEGORY_VALUE_OPERATOR.equals(getUserPrivilege());
     }
 }

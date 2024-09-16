@@ -173,6 +173,7 @@ public class MeteringPlugin extends Plugin
 
     @Override
     public Collection<?> createComponents(PluginServices services) {
+
         this.systemIndices = services.systemIndices();
         ClusterService clusterService = services.clusterService();
         ThreadPool threadPool = services.threadPool();
@@ -199,7 +200,7 @@ public class MeteringPlugin extends Plugin
             coolDownPeriod,
             hasSearchRole,
             threadPool.getThreadContext(),
-            new DefaultActionTierMapper(),
+            DefaultActionTierMapper.INSTANCE,
             services.taskManager()
         );
         actionFilters.set(List.of(new ActivityTrackerActionFilter(activityTracker)));

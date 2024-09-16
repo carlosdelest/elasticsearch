@@ -45,4 +45,6 @@ public enum ActionTier {
     interface Mapper {
         ActionTier toTier(String action);
     }
+
+    record Rule(String actionPrefix, ActionTier tier) {};
 }
