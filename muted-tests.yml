@@ -139,3 +139,6 @@ tests:
 - class: org.elasticsearch.datastreams.logsdb.qa.StandardVersusLogsIndexModeRandomDataChallengeRestIT
   method: testTermsQuery
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2768
+- class: co.elastic.elasticsearch.metering.Metering1kDocsRestTestIT
+  method: testMeteringRecordsIn1kBatch
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2770
