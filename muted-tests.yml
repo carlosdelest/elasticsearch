@@ -136,3 +136,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.IngestWithRejectionMeteringIT
   method: testDocumentsNotMeteredWhenRejectionAfterPipeline
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2761
+- class: co.elastic.elasticsearch.metering.SampledMetricsMetadataServiceIT
+  method: testLatestCommitedTimestampAdvancedWhenMetricRecordsSent
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2762
