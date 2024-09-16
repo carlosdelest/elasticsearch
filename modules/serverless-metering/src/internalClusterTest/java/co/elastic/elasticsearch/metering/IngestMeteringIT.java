@@ -17,12 +17,16 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.datastreams.DataStreamsPlugin;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.MockScriptEngine;
@@ -38,12 +42,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
 public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
@@ -55,6 +61,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         var list = new ArrayList<>(super.nodePlugins());
         list.add(InternalSettingsPlugin.class);
         list.add(IngestCommonPlugin.class);
+        list.add(DataStreamsPlugin.class);
         list.add(TestScriptPlugin.class);
         return list;
     }
@@ -74,7 +81,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         );
     }
 
-    public void testIngestMetricsAreRecordedThroughBulk() throws InterruptedException, IOException {
+    public void testIngestMetricsAreRecordedThroughBulk() {
         String indexName = "idx1";
         startMasterAndIndexNode();
         startSearchNode();
@@ -92,9 +99,34 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
         assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertThat(usageRecord, transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue()));
     }
 
-    public void testIngestMetricsAreRecordedThroughIngestPipelines() throws InterruptedException, IOException {
+    public void testIngestMetricsAreRecordedForDataStreams() throws Exception {
+        String indexName = "idx1";
+        String dsName = ".ds-" + indexName;
+
+        startMasterAndIndexNode();
+        startSearchNode();
+
+        createDataStream(indexName);
+
+        // size 16*char+int (long size)
+        client().index(
+            new IndexRequest(indexName).source(XContentType.JSON, "@timestamp", 123, "key", "abc").opType(DocWriteRequest.OpType.CREATE)
+        ).actionGet();
+        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
+
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(dsName);
+        assertUsageRecord(dsName, usageRecord, 16 * ASCII_SIZE + NUMBER_SIZE);
+        assertThat(
+            usageRecord,
+            transformedMatch((UsageRecord metric) -> metric.source().metadata().get("datastream"), startsWith(indexName))
+        );
+    }
+
+    public void testIngestMetricsAreRecordedThroughIngestPipelines() {
         String indexName2 = "idx2";
         startMasterIndexAndIngestNode();
         startSearchNode();
@@ -117,9 +149,10 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
         assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertThat(usageRecord, transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue()));
     }
 
-    public void testDocumentFailingInPipelineNotReported() throws InterruptedException, IOException {
+    public void testDocumentFailingInPipelineNotReported() {
         String indexName3 = "idx3";
         startMasterIndexAndIngestNode();
         startSearchNode();
@@ -152,7 +185,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         assertUsageRecord(indexName4, usageRecord, ASCII_SIZE + NUMBER_SIZE);// partial doc size
     }
 
-    public void testUpdatesViaScriptAreNotMetered() throws InterruptedException, IOException {
+    public void testUpdatesViaScriptAreNotMetered() {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName = "index1";
@@ -180,7 +213,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         receivedMetrics().clear();
     }
 
-    private void indexDoc(String indexName) throws InterruptedException {
+    private void indexDoc(String indexName) {
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
@@ -194,7 +227,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         assertThat(metric.id(), startsWith(id));
         assertThat(metric.usage().type(), equalTo("es_raw_data"));
         assertThat(metric.usage().quantity(), equalTo((long) expectedQuantity));
-        assertThat(metric.source().metadata(), equalTo(Map.of("index", indexName)));
+        assertThat(metric.source().metadata(), hasEntry(equalTo("index"), startsWith(indexName)));
     }
 
     private void createFailPipeline() {

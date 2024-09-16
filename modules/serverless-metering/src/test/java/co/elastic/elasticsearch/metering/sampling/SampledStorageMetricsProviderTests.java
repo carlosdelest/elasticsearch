@@ -19,9 +19,8 @@ package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metrics.MetricValue;
 
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.settings.ClusterSettings;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
@@ -37,8 +36,6 @@ import java.util.stream.IntStream;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
-import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING;
-import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static java.util.Map.entry;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -61,10 +58,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class SampledStorageMetricsProviderTests extends ESTestCase {
-    protected final ClusterSettings clusterSettings = new ClusterSettings(
-        Settings.builder().put(SEARCH_POWER_MIN_SETTING.getKey(), 100).put(SEARCH_POWER_MAX_SETTING.getKey(), 200).build(),
-        Set.of(SEARCH_POWER_MIN_SETTING, SEARCH_POWER_MAX_SETTING)
-    );
 
     private ClusterService clusterService;
 
@@ -72,7 +65,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
     public void setUp() throws Exception {
         super.setUp();
         clusterService = mock(ClusterService.class);
-        when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
+        when(clusterService.state()).thenReturn(ClusterState.EMPTY_STATE);
     }
 
     private void setInternalIndexInfoServiceData(

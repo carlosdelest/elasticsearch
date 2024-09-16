@@ -22,6 +22,8 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.cluster.metadata.IndexAbstraction;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
 
@@ -58,15 +60,20 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class IngestMetricsProvider implements CounterMetricsProvider {
     public static final String METRIC_TYPE = "es_raw_data";
 
+    private static final String METADATA_INDEX_KEY = "index";
+    private static final String METADATA_DATASTREAM_KEY = "datastream";
+
     private final Logger logger = LogManager.getLogger(IngestMetricsProvider.class);
     private final Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
     private final String nodeId;
+    private final ClusterService clusterService;
 
-    public IngestMetricsProvider(String nodeId) {
+    public IngestMetricsProvider(String nodeId, ClusterService clusterService) {
         this.nodeId = nodeId;
+        this.clusterService = clusterService;
     }
 
     private record SnapshotEntry(String key, long value) {}
@@ -75,7 +82,9 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
     public MetricValues getMetrics() {
 
         final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
-        final var toReturn = metricsSnapshot.stream().map(e -> metricValue(e.key(), e.value())).toList();
+        final var indicesLookup = clusterService.state().metadata().getIndicesLookup();
+
+        final var toReturn = metricsSnapshot.stream().map(e -> metricValue(nodeId, e.key(), e.value(), indicesLookup)).toList();
         logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
 
         return new MetricValues() {
@@ -120,7 +129,12 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
         }
     }
 
-    private MetricValue metricValue(String index, long value) {
-        return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, Map.of("index", index), value, null);
+    private static MetricValue metricValue(String nodeId, String index, long value, Map<String, IndexAbstraction> indicesLookup) {
+        var indexAbstraction = indicesLookup.get(index);
+        final boolean inDatastream = indexAbstraction != null && indexAbstraction.getParentDataStream() != null;
+        var metadata = inDatastream
+            ? Map.of(METADATA_INDEX_KEY, index, METADATA_DATASTREAM_KEY, indexAbstraction.getParentDataStream().getName())
+            : Map.of(METADATA_INDEX_KEY, index);
+        return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, metadata, value, null);
     }
 }

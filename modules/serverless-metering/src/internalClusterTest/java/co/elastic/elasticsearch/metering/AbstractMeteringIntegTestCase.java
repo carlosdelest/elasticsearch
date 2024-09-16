@@ -28,7 +28,12 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
+import org.elasticsearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
+import org.elasticsearch.action.datastreams.CreateDataStreamAction;
+import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
+import org.elasticsearch.cluster.metadata.Template;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentParserUtils;
 import org.elasticsearch.core.SuppressForbidden;
@@ -48,6 +53,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -141,5 +147,46 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         List<List<UsageRecord>> recordLists = new ArrayList<>();
         receivedMetrics().drainTo(recordLists);
         recordLists.stream().flatMap(List::stream).forEach(usageRecords::add);
+    }
+
+    protected static void createDataStreamAndTemplate(String dataStreamName, String mapping) throws IOException {
+        client().execute(
+            TransportPutComposableIndexTemplateAction.TYPE,
+            new TransportPutComposableIndexTemplateAction.Request(dataStreamName + "_template").indexTemplate(
+                ComposableIndexTemplate.builder()
+                    .indexPatterns(Collections.singletonList(dataStreamName))
+                    .template(new Template(null, new CompressedXContent(mapping), null))
+                    .dataStreamTemplate(new ComposableIndexTemplate.DataStreamTemplate())
+                    .build()
+            )
+        ).actionGet();
+        client().execute(
+            CreateDataStreamAction.INSTANCE,
+            new CreateDataStreamAction.Request(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, dataStreamName)
+        ).actionGet();
+    }
+
+    protected void createDataStream(String indexName) throws IOException {
+        String mapping = mappingWithTimestamp();
+        createDataStreamAndTemplate(indexName, mapping);
+    }
+
+    protected static String emptyMapping() {
+        return """
+            {
+                  "properties": {
+                 }
+            }""";
+    }
+
+    protected static String mappingWithTimestamp() {
+        return """
+            {
+                  "properties": {
+                    "@timestamp": {
+                      "type": "date"
+                    }
+                 }
+            }""";
     }
 }

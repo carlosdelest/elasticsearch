@@ -19,19 +19,31 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metrics.MetricValue;
 
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.test.ESTestCase;
+import org.junit.Before;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class IngestMetricsProviderTests extends ESTestCase {
 
+    private final ClusterService clusterService = mock(ClusterService.class);
+
+    @Before
+    public void setup() {
+        when(clusterService.state()).thenReturn(ClusterState.EMPTY_STATE);
+    }
+
     public void testMetricIdUniqueness() {
-        var ingestMetricsProvider1 = new IngestMetricsProvider("node1");
-        var ingestMetricsProvider2 = new IngestMetricsProvider("node2");
+        var ingestMetricsProvider1 = new IngestMetricsProvider("node1", clusterService);
+        var ingestMetricsProvider2 = new IngestMetricsProvider("node2", clusterService);
 
         ingestMetricsProvider1.addIngestedDocValue("index", 10);
 
@@ -45,7 +57,7 @@ public class IngestMetricsProviderTests extends ESTestCase {
     }
 
     public void testMetricsValueRemainsIfNotCommited() {
-        final var ingestMetricsProvider = new IngestMetricsProvider("node");
+        final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterService);
         final int docSize = randomIntBetween(1, 10);
 
         ingestMetricsProvider.addIngestedDocValue("index1", docSize);
@@ -64,7 +76,7 @@ public class IngestMetricsProviderTests extends ESTestCase {
     }
 
     public void testMetricsValueKeepsCountingUntilCommited() {
-        final var ingestMetricsProvider = new IngestMetricsProvider("node");
+        final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterService);
         final int docSize = randomIntBetween(1, 10);
 
         ingestMetricsProvider.addIngestedDocValue("index1", docSize);
@@ -92,7 +104,7 @@ public class IngestMetricsProviderTests extends ESTestCase {
     }
 
     public void testMetricsValueRestartCountingAfterCommited() {
-        final var ingestMetricsProvider = new IngestMetricsProvider("node");
+        final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterService);
         final long docSize = randomIntBetween(1, 10);
 
         ingestMetricsProvider.addIngestedDocValue("index1", docSize);
@@ -124,7 +136,7 @@ public class IngestMetricsProviderTests extends ESTestCase {
 
     public void testConcurrencyManyWritersOneReaderNoWait() throws InterruptedException {
         final var results = new ConcurrentLinkedQueue<MetricValue>();
-        final var ingestMetricsProvider = new IngestMetricsProvider("node");
+        final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterService);
 
         final int writerThreadsCount = randomIntBetween(4, 10);
         final int writeOpsPerThread = randomIntBetween(100, 2000);
@@ -156,7 +168,7 @@ public class IngestMetricsProviderTests extends ESTestCase {
 
     public void testConcurrencyManyWritersOneReaderWithWait() throws InterruptedException {
         final var results = new ConcurrentLinkedQueue<MetricValue>();
-        final var ingestMetricsProvider = new IngestMetricsProvider("node");
+        final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterService);
 
         final int writerThreadsCount = randomIntBetween(4, 10);
         final int writeOpsPerThread = randomIntBetween(100, 2000);

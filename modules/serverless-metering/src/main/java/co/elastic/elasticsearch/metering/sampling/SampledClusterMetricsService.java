@@ -24,6 +24,7 @@ import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.index.shard.ShardId;
@@ -211,9 +212,10 @@ public class SampledClusterMetricsService {
         static final String IX_METRIC_ID_PREFIX = "shard-size";
         private static final String RA_S_METRIC_TYPE = "es_raw_stored_data";
         static final String RA_S_METRIC_ID_PREFIX = "raw-stored-index-size";
-        private static final String PARTIAL = "partial";
-        private static final String INDEX = "index";
-        private static final String SHARD = "shard";
+        private static final String METADATA_PARTIAL_KEY = "partial";
+        private static final String METADATA_INDEX_KEY = "index";
+        private static final String METADATA_SHARD_KEY = "shard";
+        private static final String METADATA_DATASTREAM_KEY = "datastream";
 
         @Override
         public Optional<MetricValues> getMetrics() {
@@ -230,6 +232,8 @@ public class SampledClusterMetricsService {
                 return Optional.of(SampledMetricsProvider.NO_VALUES);
             }
 
+            final var clusterStateMetadata = clusterService.state().getMetadata();
+
             boolean partial = currentInfo.status().contains(SamplingStatus.PARTIAL);
             List<MetricValue> metrics = new ArrayList<>();
             for (final var shardEntry : currentInfo.shardSamples.entrySet()) {
@@ -241,12 +245,8 @@ public class SampledClusterMetricsService {
                     var indexCreationDate = Instant.ofEpochMilli(shardEntry.getValue().shardInfo().indexCreationDateEpochMilli());
 
                     Map<String, String> metadata = new HashMap<>();
-                    metadata.put(INDEX, indexName);
-                    metadata.put(SHARD, Integer.toString(shardId));
-                    if (partial) {
-                        metadata.put(PARTIAL, Boolean.TRUE.toString());
-                    }
-
+                    metadata.put(METADATA_SHARD_KEY, Integer.toString(shardId));
+                    fillIndexMetadata(metadata, clusterStateMetadata, indexName, partial);
                     metrics.add(
                         new MetricValue(
                             format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()),
@@ -268,16 +268,13 @@ public class SampledClusterMetricsService {
                     )
                 );
             for (final var indexEntry : raStorageInfos.entrySet()) {
-                final var indexName = indexEntry.getKey();
                 final var storedIngestSizeInBytes = indexEntry.getValue().raStorageSize;
-                final var indexCreationDate = indexEntry.getValue().indexCreationDate;
-
                 if (storedIngestSizeInBytes > 0) {
+                    final var indexName = indexEntry.getKey();
+                    final var indexCreationDate = indexEntry.getValue().indexCreationDate;
+
                     Map<String, String> metadata = new HashMap<>();
-                    metadata.put(INDEX, indexName);
-                    if (partial) {
-                        metadata.put(PARTIAL, Boolean.TRUE.toString());
-                    }
+                    fillIndexMetadata(metadata, clusterStateMetadata, indexName, partial);
                     metrics.add(
                         new MetricValue(
                             format("%s:%s", RA_S_METRIC_ID_PREFIX, indexName),
@@ -290,6 +287,24 @@ public class SampledClusterMetricsService {
                 }
             }
             return Optional.of(SampledMetricsProvider.valuesFromCollection(Collections.unmodifiableCollection(metrics)));
+        }
+
+        private void fillIndexMetadata(
+            Map<String, String> usageRecordMetadata,
+            Metadata clusterMetadata,
+            String indexName,
+            boolean partial
+        ) {
+            final var indexAbstraction = clusterMetadata.getIndicesLookup().get(indexName);
+            final boolean inDatastream = indexAbstraction != null && indexAbstraction.getParentDataStream() != null;
+
+            usageRecordMetadata.put(METADATA_INDEX_KEY, indexName);
+            if (partial) {
+                usageRecordMetadata.put(METADATA_PARTIAL_KEY, Boolean.TRUE.toString());
+            }
+            if (inDatastream) {
+                usageRecordMetadata.put(METADATA_DATASTREAM_KEY, indexAbstraction.getParentDataStream().getName());
+            }
         }
 
         private static final class RaStorageInfo {

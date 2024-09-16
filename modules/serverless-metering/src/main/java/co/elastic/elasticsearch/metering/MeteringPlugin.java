@@ -183,7 +183,7 @@ public class MeteringPlugin extends Plugin
         String projectId = PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
-        ingestMetricsCollector = new IngestMetricsProvider(nodeEnvironment.nodeId());
+        ingestMetricsCollector = new IngestMetricsProvider(nodeEnvironment.nodeId(), clusterService);
 
         var clusterMetricsService = new SampledClusterMetricsService(clusterService, services.telemetryProvider().getMeterRegistry());
 

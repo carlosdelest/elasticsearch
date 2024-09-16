@@ -47,18 +47,13 @@ import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeRequest;
-import org.elasticsearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
 import org.elasticsearch.action.bulk.BulkRequest;
-import org.elasticsearch.action.datastreams.CreateDataStreamAction;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.WriteRequest.RefreshPolicy;
 import org.elasticsearch.action.update.UpdateRequest;
-import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
-import org.elasticsearch.cluster.metadata.Template;
 import org.elasticsearch.common.blobstore.BlobContainer;
-import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
@@ -93,6 +88,7 @@ import java.util.function.Function;
 
 import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
 import static org.elasticsearch.index.IndexSettings.INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.anyOf;
@@ -101,8 +97,10 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
 @TestLogging(
@@ -359,6 +357,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
         waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
+        assertThat(usageRecords, everyItem(transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue())));
     }
 
     public void testRAStorageWithTimeSeries() throws Exception {
@@ -374,6 +373,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
         waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
+        assertThat(usageRecords, everyItem(transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue())));
     }
 
     public void testRAStorageWithTimeSeriesDeleteIndex() throws Exception {
@@ -445,6 +445,10 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
         waitAndAssertRAStorageRecords(usageRecords, dsName, EXPECTED_SIZE, 0);
+        assertThat(
+            usageRecords,
+            hasItem(transformedMatch((UsageRecord metric) -> metric.source().metadata().get("datastream"), startsWith(indexName)))
+        );
     }
 
     public void testRaStorageIsReportedAfterCommit() throws Exception {
@@ -462,6 +466,10 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         final List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
         waitAndAssertRAStorageRecords(usageRecords, dsName, EXPECTED_SIZE, 0);
+        assertThat(
+            usageRecords,
+            hasItem(transformedMatch((UsageRecord metric) -> metric.source().metadata().get("datastream"), startsWith(indexName)))
+        );
     }
 
     // this test is confirming that for nontimeseries index we will meter ra-s updates by script in solution's cluster
@@ -737,47 +745,6 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
             // We received at least 3 'new' record with no 'old' index in between
             assertThat(rawStorageRecords, hasSize(greaterThanOrEqualTo(3)));
         }, 1, TimeUnit.MINUTES);
-    }
-
-    private void createDataStream(String indexName) throws IOException {
-        String mapping = mappingWithTimestamp();
-        createDataStreamAndTemplate(indexName, mapping);
-    }
-
-    private static String emptyMapping() {
-        return """
-            {
-                  "properties": {
-                 }
-            }""";
-    }
-
-    private static String mappingWithTimestamp() {
-        return """
-            {
-                  "properties": {
-                    "@timestamp": {
-                      "type": "date"
-                    }
-                 }
-            }""";
-    }
-
-    protected static void createDataStreamAndTemplate(String dataStreamName, String mapping) throws IOException {
-        client().execute(
-            TransportPutComposableIndexTemplateAction.TYPE,
-            new TransportPutComposableIndexTemplateAction.Request(dataStreamName + "_template").indexTemplate(
-                ComposableIndexTemplate.builder()
-                    .indexPatterns(Collections.singletonList(dataStreamName))
-                    .template(new Template(null, new CompressedXContent(mapping), null))
-                    .dataStreamTemplate(new ComposableIndexTemplate.DataStreamTemplate())
-                    .build()
-            )
-        ).actionGet();
-        client().execute(
-            CreateDataStreamAction.INSTANCE,
-            new CreateDataStreamAction.Request(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, dataStreamName)
-        ).actionGet();
     }
 
     private void createTimeSeriesIndex(String indexName) {
