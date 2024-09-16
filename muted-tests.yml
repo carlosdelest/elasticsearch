@@ -142,3 +142,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.IngestMeteringIT
   method: testIngestMetricsAreRecordedThroughIngestPipelines
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2763
+- class: co.elastic.elasticsearch.metering.MeteringRestTestIT
+  method: testMeteringRecordsCanBeDeduplicated
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2765
