@@ -163,3 +163,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.IngestWithRejectionMeteringIT
   method: testDocumentsNotMeteredWhenRejectionInBulk
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2785
+- class: co.elastic.elasticsearch.metering.MeteringRestTestIT
+  method: testMeteringRecordsCanBeDeduplicated
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2765
