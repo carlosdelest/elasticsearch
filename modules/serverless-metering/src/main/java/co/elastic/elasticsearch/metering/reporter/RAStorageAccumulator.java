@@ -37,6 +37,7 @@ public class RAStorageAccumulator implements DocumentSizeAccumulator {
 
     @Override
     public void add(long size) {
+        assert size >= 0 : "size increment must be non-negative";
         counter.addAndGet(size);
         logger.trace(() -> "accumulating size " + size + " total: " + counter);
     }
@@ -52,7 +53,9 @@ public class RAStorageAccumulator implements DocumentSizeAccumulator {
 
         long prevAggregatedSize = previousValue != null ? Long.parseLong(previousValue) : 0;
 
-        long total = prevAggregatedSize + aggregatedSize;
+        // Due to a bug related to ES-8577, we recorded the default raw size (-1, meaning not metered) for documents
+        // replayed from translog. Ignore any negative previous RA-S total here.
+        long total = Math.max(0, prevAggregatedSize) + aggregatedSize;
         logger.trace(
             "CommitUserData new size [{}] (previous [{}], new [{}]), generation [{}]",
             total,

@@ -37,8 +37,8 @@ public class RAStorageReporter implements DocumentSizeReporter {
 
     @Override
     public void onIndexingCompleted(ParsedDocument parsedDocument) {
-        if (isTimeSeries()) {
-            DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
+        DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
+        if (isTimeSeries() && bytesToReport.storedBytes() >= 0) {
             // per index storage
             documentSizeAccumulator.add(bytesToReport.storedBytes());
         }

@@ -200,7 +200,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         assertThat(cached.get(0).getLong(), equalTo(1L));
     }
 
-    public void testComputeShardInfoWithoutRA() throws IOException {
+    public void testComputeShardInfoWithoutRAS() throws IOException {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
 
         var segmentInfos = new SegmentInfos(Version.LATEST.major);
@@ -210,7 +210,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         var indicesService = mock(IndicesService.class);
         var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, mock(), meterRegistry);
+        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(120L));
@@ -222,7 +222,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         assertThat(approximated, empty());
     }
 
-    public void testComputeShardInfoWithFullRAMultipleSegments() throws IOException {
+    public void testComputeShardInfoWithFullRASMultipleSegments() throws IOException {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
 
         var segmentInfos = new SegmentInfos(Version.LATEST.major);
@@ -232,7 +232,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         var indicesService = mock(IndicesService.class);
         var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, mock(), meterRegistry);
+        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(30L));
@@ -244,7 +244,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.5))));
     }
 
-    public void testComputeShardInfoWithInvalidRASegment() throws IOException {
+    public void testComputeShardInfoWithInvalidRASSegment() throws IOException {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
 
         var segmentInfos = new SegmentInfos(Version.LATEST.major);
@@ -255,7 +255,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         var indicesService = mock(IndicesService.class);
         var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, mock(), meterRegistry);
+        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(30L));
@@ -263,7 +263,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(80L)); // invalid segment is not included
     }
 
-    public void testComputeShardInfoWithPartialRAMultipleSegments() throws IOException {
+    public void testComputeShardInfoWithPartialRASMultipleSegments() throws IOException {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
 
         var segmentInfos = new SegmentInfos(Version.LATEST.major);
@@ -275,7 +275,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         var indicesService = mock(IndicesService.class);
         var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
         var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, mock(), meterRegistry);
+        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), meterRegistry);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(90L));
@@ -287,7 +287,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.25))));
     }
 
-    public void testComputeShardInfoWithTimeseriesRAMultipleSegments() throws IOException {
+    public void testComputeShardInfoWithTimeseriesRASMultipleSegments() throws IOException {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
 
         var segmentInfos = new SegmentInfos(Version.LATEST.major);
@@ -297,7 +297,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, mock(), MeterRegistry.NOOP);
+        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), MeterRegistry.NOOP);
         var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardInfo.docCount(), equalTo(120L));
@@ -305,7 +305,20 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(234L));
     }
 
-    public void testComputeShardStatsPerSegmentRAHasPrecedenceOverPerShardRA() throws IOException {
+    public void testComputeShardInfoWithInvalidTimeseriesRAS() throws IOException {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = new SegmentInfos(Version.LATEST.major);
+        // The shard has an invalid RA-S value (due to ES-9361)
+        segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "-100"), false);
+
+        var shardReader = new DefaultShardInfoMetricsReader(mock(), mock(), mock(), MeterRegistry.NOOP);
+        var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
+
+        assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(0L));
+    }
+
+    public void testComputeShardStatsPerSegmentRASHasPrecedenceOverPerShardRAS() throws IOException {
 
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
 
@@ -316,7 +329,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
 
         var indicesService = mock(IndicesService.class);
         var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, mock(), MeterRegistry.NOOP);
+        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), MeterRegistry.NOOP);
         var shardStats = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
 
         assertThat(shardStats.docCount(), equalTo(30L));
@@ -334,7 +347,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
                     mock(Directory.class),
                     Version.LATEST,
                     Version.LATEST,
-                    "",
+                    "name",
                     maxDoc,
                     false,
                     false,

@@ -110,11 +110,50 @@ interface ShardInfoMetricsReader {
 
         private static Long getRAStorageFromUserData(SegmentInfos segmentInfos, ShardId shardId) {
             var raStorageString = segmentInfos.getUserData().get(RAStorageAccumulator.RA_STORAGE_KEY);
-            if (raStorageString != null) {
-                logger.trace("using _rastorage from UserData [{}] for {}", raStorageString, shardId);
-                return Long.parseLong(raStorageString);
+            if (raStorageString == null) {
+                return null;
             }
-            return null;
+            long raStorage = Long.parseLong(raStorageString);
+            if (raStorage < 0) {
+                logger.warn("skipping negative RA-S in UserData [{}] for shard [{}]", raStorageString, shardId);
+                return null;
+            }
+
+            logger.trace("using RA-S from UserData [{}] for shard [{}]", raStorageString, shardId);
+            return raStorage;
+        }
+
+        private static Long getRAStorageFromSegmentAttribute(ShardId shardId, SegmentCommitInfo si, long commitLiveDocs, boolean isExact) {
+            var avgRASizeAttribute = si.info.getAttribute(RAStorageAccumulator.RA_STORAGE_AVG_KEY);
+            if (avgRASizeAttribute == null) {
+                return null;
+            }
+            var avgRASize = Long.parseLong(avgRASizeAttribute);
+            if (avgRASize < 0) {
+                // Due to bug related to ES-8577, we recorded the default raw size (-1, meaning not metered) for documents
+                // replayed from translog, potentially resulting into a negative RA-S avg per doc. We have to skip such
+                // segments here to minimize the impact.
+                logger.warn(
+                    "skipping negative RA-S (avg: [{}], live docs: [{}]) for segment [{}/{}]",
+                    avgRASize,
+                    commitLiveDocs,
+                    shardId,
+                    si.info.name
+                );
+                return null;
+            }
+
+            var raStorage = avgRASize * commitLiveDocs;
+            logger.trace(
+                "using {} RA-S [{}] (avg: [{}], live docs: [{}]) for segment [{}/{}]",
+                isExact ? "exact" : "approximated",
+                raStorage,
+                avgRASize,
+                commitLiveDocs,
+                shardId,
+                si.info.name
+            );
+            return raStorage;
         }
 
         ShardInfoMetrics computeShardInfo(
@@ -128,8 +167,8 @@ interface ShardInfoMetricsReader {
             long liveDocCount = 0;
 
             Long totalRAValue = null;
-            final int segmentsInShard = segmentInfos.size();
-            int approximatedSegmentsInShard = 0;
+            final int segments = segmentInfos.size();
+            int approximatedSegments = 0;
             for (SegmentCommitInfo si : segmentInfos) {
                 try {
                     long commitSize = si.sizeInBytes();
@@ -138,48 +177,12 @@ interface ShardInfoMetricsReader {
                     sizeInBytes += commitSize;
                     liveDocCount += commitLiveDocCount;
 
-                    var avgRASizePerDocAttribute = si.info.getAttribute(RAStorageAccumulator.RA_STORAGE_AVG_KEY);
-                    if (avgRASizePerDocAttribute != null) {
-                        var avgRASizePerDoc = Long.parseLong(avgRASizePerDocAttribute);
-                        if (avgRASizePerDoc < 0) {
-                            // Due to bug related to ES-8577, we recorded the default raw size (-1, meaning not metered) for documents
-                            // replayed
-                            // from translog, potentially resulting into a negative RA-S avg per doc. We have to skip such segments here to
-                            // minimize the impact.
-                            logger.warn(
-                                "skipping segment with negative RA-S avg [{}] (live docs: [{}]) for {}",
-                                avgRASizePerDoc,
-                                liveDocCount,
-                                shardId
-                            );
-                            continue;
-                        }
-
-                        var raStorage = avgRASizePerDoc * commitLiveDocCount;
-                        boolean isExact = commitLiveDocCount == commitTotalDocCount;
-                        if (isExact) {
-                            logger.trace(
-                                "using exact _rastorage [{}] (avg: [{}], live docs: [{}]) for {}",
-                                raStorage,
-                                avgRASizePerDoc,
-                                liveDocCount,
-                                shardId
-                            );
-                        } else {
-                            ++approximatedSegmentsInShard;
-                            logger.trace(
-                                "using approximated _rastorage [{}] (avg: [{}], live docs: [{}], total docs: [{}]) for {}",
-                                raStorage,
-                                avgRASizePerDoc,
-                                liveDocCount,
-                                commitTotalDocCount,
-                                shardId
-                            );
-                        }
-                        if (totalRAValue == null) {
-                            totalRAValue = raStorage;
-                        } else {
-                            totalRAValue += raStorage;
+                    boolean isExact = commitLiveDocCount == commitTotalDocCount;
+                    var raStorage = getRAStorageFromSegmentAttribute(shardId, si, commitLiveDocCount, isExact);
+                    if (raStorage != null) {
+                        totalRAValue = raStorage + (totalRAValue != null ? totalRAValue : 0);
+                        if (isExact == false) {
+                            ++approximatedSegments;
                         }
                     }
                 } catch (IOException err) {
@@ -195,10 +198,8 @@ interface ShardInfoMetricsReader {
             }
 
             if (totalRAValue != null) {
-                // We computed and used RA per-segment
-                double approximatedSegmentsRatio = segmentsInShard == 0
-                    ? 0
-                    : (double) approximatedSegmentsInShard / (double) segmentsInShard;
+                // report ratio of approximated segments per shard in histogram
+                double approximatedSegmentsRatio = segments == 0 ? 0 : (double) approximatedSegments / (double) segments;
                 this.shardInfoRaStorageApproximatedRatio.record(
                     approximatedSegmentsRatio,
                     Map.of("index", shardId.getIndexName(), "shard", Integer.toString(shardId.id()))
@@ -207,7 +208,7 @@ interface ShardInfoMetricsReader {
                 // Try to use the per shard RA value (timeseries indices)
                 totalRAValue = getRAStorageFromUserData(segmentInfos, shardId);
                 if (totalRAValue == null) {
-                    logger.trace("No _rastorage available for {}", shardId);
+                    logger.trace("No RA-S available for shard [{}]", shardId);
                     totalRAValue = 0L;
                 }
             }
