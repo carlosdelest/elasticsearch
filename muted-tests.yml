@@ -157,3 +157,6 @@ tests:
 - class: org.elasticsearch.datastreams.LogsDataStreamRestIT
   method: testLogsDBSnapshotCreateRestoreMount
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2782
+- class: co.elastic.elasticsearch.metering.IngestMeteringIT
+  method: testUpdatesAreMeteredInBulkRawWithPartialDoc
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2784
