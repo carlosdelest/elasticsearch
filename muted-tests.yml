@@ -154,3 +154,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.IndexSizeMeteringIT
   method: testNodeCanStartWithMeteringEnabled
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2778
+- class: org.elasticsearch.datastreams.LogsDataStreamRestIT
+  method: testLogsDBSnapshotCreateRestoreMount
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2782
