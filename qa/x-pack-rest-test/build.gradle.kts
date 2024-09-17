@@ -40,7 +40,7 @@ tasks {
             "ml/jobs_get_stats/Test get job stats after uploading data prompting the creation of some stats",
             // monitoring doesn't exist in serverless
             "monitoring/bulk/*/*",
-            // rollup has many tests failing with "Expected: <1> but: was <0>"
+            // rollup doesn't exist in serverless
             "rollup/*/*",
             // searchable_snapshots doesn't exist in serverless
             "searchable_snapshots/*/*",
