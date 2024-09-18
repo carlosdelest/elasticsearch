@@ -155,3 +155,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.StorageMeteringIT
   method: testRAStorageWithNonTimeSeriesAndDeletesNoMerge
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2796
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=search/600_flattened_ignore_above/flattened ignore_above multi-value field}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2799
