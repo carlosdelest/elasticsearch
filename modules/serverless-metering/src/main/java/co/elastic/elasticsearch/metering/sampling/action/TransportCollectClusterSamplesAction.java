@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
+import co.elastic.elasticsearch.metering.activitytracking.Activity;
+import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
@@ -38,6 +40,7 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +65,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     private final TransportService transportService;
     private final ClusterService clusterService;
     private final Executor executor;
+    private Duration coolDownPeriod;
 
     @SuppressWarnings("this-escape")
     @Inject
@@ -85,6 +89,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.executor = executor;
+        this.coolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
         // TODO remove registration under legacy name once fully deployed
         transportService.registerRequestHandler(
             CollectClusterSamplesAction.LEGACY_NAME,
@@ -189,7 +194,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     }
 
     private static CollectClusterSamplesAction.Response buildEmptyResponse() {
-        return new CollectClusterSamplesAction.Response(0, 0, Map.of(), List.of());
+        return new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, Map.of(), List.of());
     }
 
     private CollectClusterSamplesAction.Response buildResponse(
@@ -207,7 +212,27 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
             .filter(Predicate.not(SingleNodeResponse::isValid))
             .map(SingleNodeResponse::getFailure)
             .toList();
-        return new CollectClusterSamplesAction.Response(searchTierMemory, indexTierMemory, normalizedShards, failures);
+
+        var searchActivities = Arrays.stream(responses)
+            .filter(SingleNodeResponse::isValid)
+            .map(SingleNodeResponse::getResponse)
+            .map(GetNodeSamplesAction.Response::getSearchActivity);
+        Activity searchActivityMerged = Activity.merge(searchActivities, coolDownPeriod);
+
+        var indexActivities = Arrays.stream(responses)
+            .filter(SingleNodeResponse::isValid)
+            .map(SingleNodeResponse::getResponse)
+            .map(GetNodeSamplesAction.Response::getIndexActivity);
+        Activity indexActivityMerged = Activity.merge(indexActivities, coolDownPeriod);
+
+        return new CollectClusterSamplesAction.Response(
+            searchTierMemory,
+            indexTierMemory,
+            searchActivityMerged,
+            indexActivityMerged,
+            normalizedShards,
+            failures
+        );
     }
 
     private void sendRequest(

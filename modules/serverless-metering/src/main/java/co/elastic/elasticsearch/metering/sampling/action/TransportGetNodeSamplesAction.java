@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
+import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader;
 
 import org.elasticsearch.action.ActionListener;
@@ -36,6 +37,7 @@ import org.elasticsearch.transport.TransportService;
 
 public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNodeSamplesAction.Request, GetNodeSamplesAction.Response> {
     private final OsProbe osProbe;
+    private final TaskActivityTracker activityTracker;
     private final ShardInfoMetricsReader shardMetricsReader;
 
     @Inject
@@ -46,7 +48,8 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
         ThreadPool threadPool,
         ActionFilters actionFilters,
         ShardSizeStatsReader shardSizeStatsReader,
-        TelemetryProvider telemetryProvider
+        TelemetryProvider telemetryProvider,
+        TaskActivityTracker activityTracker
     ) {
         this(
             settings,
@@ -56,7 +59,8 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
             actionFilters,
             OsProbe.getInstance(),
             shardSizeStatsReader,
-            telemetryProvider
+            telemetryProvider,
+            activityTracker
         );
     }
 
@@ -69,7 +73,8 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
         ActionFilters actionFilters,
         OsProbe osProbe,
         ShardSizeStatsReader shardSizeStatsReader,
-        TelemetryProvider telemetryProvider
+        TelemetryProvider telemetryProvider,
+        TaskActivityTracker activityTracker
     ) {
         super(
             GetNodeSamplesAction.NAME,
@@ -80,6 +85,7 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
             threadPool.executor(ThreadPool.Names.MANAGEMENT)
         );
         this.osProbe = osProbe;
+        this.activityTracker = activityTracker;
         // only gather shard metrics on search nodes
         this.shardMetricsReader = DiscoveryNode.hasRole(settings, DiscoveryNodeRole.SEARCH_ROLE)
             ? new ShardInfoMetricsReader.DefaultShardInfoMetricsReader(
@@ -104,7 +110,9 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
         try {
             long physicalMemorySize = osProbe.getTotalPhysicalMemorySize();
             var shardSizes = shardMetricsReader.getUpdatedShardInfos(request.getCacheToken());
-            listener.onResponse(new GetNodeSamplesAction.Response(physicalMemorySize, shardSizes));
+            var searchActivity = activityTracker.getSearchSampleActivity();
+            var indexActivity = activityTracker.getIndexSampleActivity();
+            listener.onResponse(new GetNodeSamplesAction.Response(physicalMemorySize, searchActivity, indexActivity, shardSizes));
         } catch (Exception ex) {
             listener.onFailure(ex);
         }

@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
+import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
@@ -82,10 +83,19 @@ public class GetNodeSamplesAction {
 
     public static class Response extends ActionResponse {
         private final long physicalMemorySize;
+        private final Activity searchActivity;
+        private final Activity indexActivity;
         private final Map<ShardId, ShardInfoMetrics> shardInfos;
 
-        public Response(long physicalMemorySize, final Map<ShardId, ShardInfoMetrics> shardSizes) {
+        public Response(
+            long physicalMemorySize,
+            final Activity searchActivity,
+            final Activity indexActivity,
+            final Map<ShardId, ShardInfoMetrics> shardSizes
+        ) {
             this.physicalMemorySize = physicalMemorySize;
+            this.searchActivity = Objects.requireNonNull(searchActivity);
+            this.indexActivity = Objects.requireNonNull(indexActivity);
             this.shardInfos = Objects.requireNonNull(shardSizes);
         }
 
@@ -93,6 +103,13 @@ public class GetNodeSamplesAction {
             this.physicalMemorySize = in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)
                 ? in.readVLong()
                 : 0;
+            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_ACTIVITY_TRACKING_ADDED)) {
+                searchActivity = Activity.readFrom(in);
+                indexActivity = Activity.readFrom(in);
+            } else {
+                searchActivity = Activity.EMPTY;
+                indexActivity = Activity.EMPTY;
+            }
             this.shardInfos = in.readImmutableMap(ShardId::new, ShardInfoMetrics::from);
         }
 
@@ -100,6 +117,10 @@ public class GetNodeSamplesAction {
         public void writeTo(StreamOutput output) throws IOException {
             if (output.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)) {
                 output.writeVLong(physicalMemorySize);
+            }
+            if (output.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_ACTIVITY_TRACKING_ADDED)) {
+                searchActivity.writeTo(output);
+                indexActivity.writeTo(output);
             }
             output.writeMap(shardInfos, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
         }
@@ -110,18 +131,29 @@ public class GetNodeSamplesAction {
                 return true;
             }
             if (o instanceof Response response) {
-                return physicalMemorySize == response.physicalMemorySize && Objects.equals(shardInfos, response.shardInfos);
+                return physicalMemorySize == response.physicalMemorySize
+                    && Objects.equals(searchActivity, response.searchActivity)
+                    && Objects.equals(indexActivity, response.indexActivity)
+                    && Objects.equals(shardInfos, response.shardInfos);
             }
             return false;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(physicalMemorySize, shardInfos);
+            return Objects.hash(physicalMemorySize, searchActivity, indexActivity, shardInfos);
         }
 
         public Map<ShardId, ShardInfoMetrics> getShardInfos() {
             return shardInfos;
+        }
+
+        public Activity getSearchActivity() {
+            return searchActivity;
+        }
+
+        public Activity getIndexActivity() {
+            return indexActivity;
         }
 
         public long getPhysicalMemorySize() {

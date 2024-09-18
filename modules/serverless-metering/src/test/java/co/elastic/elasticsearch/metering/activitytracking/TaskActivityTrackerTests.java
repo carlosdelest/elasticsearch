@@ -85,7 +85,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
         tracker.onTaskStart(action, task1);
         tracker.onTaskFinish(task1);
 
-        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(end1, start1, Instant.EPOCH));
+        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(end1, start1, Instant.EPOCH, Instant.EPOCH));
     }
 
     public void testUntrackedInternalUserHasNoEffect() {
@@ -173,7 +173,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
         tracker.onTaskStart(action, task1);
         tracker.onTaskFinish(task1);
 
-        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(end1, start1, Instant.EPOCH));
+        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(end1, start1, Instant.EPOCH, Instant.EPOCH));
     }
 
     // Test that sync actions which are spaced less than cooldown period apart are put in a single period
@@ -203,7 +203,10 @@ public class TaskActivityTrackerTests extends ESTestCase {
             tracker.onTaskFinish(task);
         }
 
-        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(times.get(times.size() - 1), times.get(0), Instant.EPOCH));
+        assertEquals(
+            pickActivityForAction(actionTested, tracker),
+            new Activity(times.get(times.size() - 1), times.get(0), Instant.EPOCH, Instant.EPOCH)
+        );
     }
 
     // Test that sync actions which are spaced more than cooldown period apart are put in different periods
@@ -235,7 +238,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
         assertEquals(
             pickActivityForAction(actionTested, tracker),
-            new Activity(times.get(times.size() - 1), times.get(times.size() - 2), times.get(times.size() - 3))
+            new Activity(times.get(times.size() - 1), times.get(times.size() - 2), times.get(times.size() - 3), times.get(times.size() - 4))
         );
     }
 
@@ -259,13 +262,13 @@ public class TaskActivityTrackerTests extends ESTestCase {
         tracker.onTaskStart(action, task);
 
         // Each call to sample updates the last timestamp to "now"
-        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(sample1, asyncStart, Instant.EPOCH));
-        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(sample2, asyncStart, Instant.EPOCH));
+        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(sample1, asyncStart, Instant.EPOCH, Instant.EPOCH));
+        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(sample2, asyncStart, Instant.EPOCH, Instant.EPOCH));
 
         tracker.onTaskFinish(task);
 
         // After finish last timestamp is finish time, not "now"
-        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(asyncFinish, asyncStart, Instant.EPOCH));
+        assertEquals(pickActivityForAction(actionTested, tracker), new Activity(asyncFinish, asyncStart, Instant.EPOCH, Instant.EPOCH));
     }
 
     public void testMultipleTierInterleaving() {
@@ -306,27 +309,27 @@ public class TaskActivityTrackerTests extends ESTestCase {
         tracker.onTaskStart(SEARCH_ACTION, searchTask);
         tracker.onTaskStart(INDEX_ACTION, indexTask);
 
-        assertEquals(tracker.getSearchSampleActivity(), new Activity(sampleSearch, searchStart, Instant.EPOCH));
-        assertEquals(tracker.getIndexSampleActivity(), new Activity(sampleIndex, indexStart, Instant.EPOCH));
+        assertEquals(tracker.getSearchSampleActivity(), new Activity(sampleSearch, searchStart, Instant.EPOCH, Instant.EPOCH));
+        assertEquals(tracker.getIndexSampleActivity(), new Activity(sampleIndex, indexStart, Instant.EPOCH, Instant.EPOCH));
 
         tracker.onTaskFinish(searchTask);
         tracker.onTaskFinish(indexTask);
 
-        assertEquals(tracker.getSearchSampleActivity(), new Activity(searchEnd, searchStart, Instant.EPOCH));
-        assertEquals(tracker.getIndexSampleActivity(), new Activity(indexEnd, indexStart, Instant.EPOCH));
+        assertEquals(tracker.getSearchSampleActivity(), new Activity(searchEnd, searchStart, Instant.EPOCH, Instant.EPOCH));
+        assertEquals(tracker.getIndexSampleActivity(), new Activity(indexEnd, indexStart, Instant.EPOCH, Instant.EPOCH));
 
         // Now a both task
         var bothTask = createTask(2, BOTH_ACTION);
         tracker.onTaskStart(BOTH_ACTION, bothTask);
 
-        assertEquals(tracker.getSearchSampleActivity(), new Activity(bothSearchSample, bothStart, searchEnd));
-        assertEquals(tracker.getIndexSampleActivity(), new Activity(bothIndexSample, bothStart, indexEnd));
+        assertEquals(tracker.getSearchSampleActivity(), new Activity(bothSearchSample, bothStart, searchEnd, searchStart));
+        assertEquals(tracker.getIndexSampleActivity(), new Activity(bothIndexSample, bothStart, indexEnd, indexStart));
 
         tracker.onTaskFinish(bothTask);
 
         // Final sample has same value
-        assertEquals(tracker.getSearchSampleActivity(), new Activity(bothEnd, bothStart, searchEnd));
-        assertEquals(tracker.getIndexSampleActivity(), new Activity(bothEnd, bothStart, indexEnd));
+        assertEquals(tracker.getSearchSampleActivity(), new Activity(bothEnd, bothStart, searchEnd, searchStart));
+        assertEquals(tracker.getIndexSampleActivity(), new Activity(bothEnd, bothStart, indexEnd, indexStart));
     }
 
     public void testDontStartNewPeriodIfAsyncRunning() {
@@ -353,7 +356,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
         // a new period should not start because first task is still running
         var activity = testSearchActions ? tracker.getSearchSampleActivity() : tracker.getIndexSampleActivity();
-        assertEquals(activity, new Activity(sample, start1, Instant.EPOCH));
+        assertEquals(activity, new Activity(sample, start1, Instant.EPOCH, Instant.EPOCH));
     }
 
     static Activity pickActivityForAction(String actionTested, TaskActivityTracker tracker) {

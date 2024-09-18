@@ -17,6 +17,9 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
+import co.elastic.elasticsearch.metering.activitytracking.Activity;
+import co.elastic.elasticsearch.metering.activitytracking.ActivityTests;
+import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
@@ -45,6 +48,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -180,10 +184,14 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         final Map<String, Long> searchNodeMemoryAnswers = nodes.stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
             .collect(Collectors.toMap(DiscoveryNode::getId, n -> randomLongBetween(0, 10000)));
-
         final Map<String, Long> indexNodeMemoryAnswers = nodes.stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.INDEX_ROLE))
             .collect(Collectors.toMap(DiscoveryNode::getId, n -> randomLongBetween(0, 10000)));
+
+        final Map<String, Activity> nodeSearchActivity = nodes.stream()
+            .collect(Collectors.toMap(DiscoveryNode::getId, (k) -> ActivityTests.randomActivity()));
+        final Map<String, Activity> nodeIndexActivity = nodes.stream()
+            .collect(Collectors.toMap(DiscoveryNode::getId, (k) -> ActivityTests.randomActivity()));
 
         var request = new CollectClusterSamplesAction.Request();
         PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
@@ -210,7 +218,12 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
                     var memory = searchNodeMemoryAnswers.containsKey(nodeId)
                         ? searchNodeMemoryAnswers.get(nodeId)
                         : indexNodeMemoryAnswers.getOrDefault(nodeId, 0L);
-                    transport.handleResponse(requestId, new GetNodeSamplesAction.Response(memory, shardInfos));
+                    var searchActivity = nodeSearchActivity.get(nodeId);
+                    var indexActivity = nodeIndexActivity.get(nodeId);
+                    transport.handleResponse(
+                        requestId,
+                        new GetNodeSamplesAction.Response(memory, searchActivity, indexActivity, shardInfos)
+                    );
                 }
             }
         }
@@ -228,6 +241,9 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             indexNodeMemoryAnswers.values().stream().mapToLong(Long::longValue).sum(),
             response.getIndexTierMemorySize()
         );
+        var coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
+        assertEquals("search activity", Activity.merge(nodeSearchActivity.values().stream(), coolDown), response.getSearchActivity());
+        assertEquals("index activity", Activity.merge(nodeIndexActivity.values().stream(), coolDown), response.getIndexActivity());
         // response.isComplete -> totalFailed == 0;
         assertTrue("if response.isComplete no failed shards", response.isComplete() == false || totalFailed == 0);
         assertEquals(nodes.size(), totalSuccess + totalFailed);
@@ -277,7 +293,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             for (var capturedRequest : entry.getValue()) {
                 long requestId = capturedRequest.requestId();
                 var response = nodesShardAnswer.getOrDefault(nodeId, Collections.emptyMap());
-                transport.handleResponse(requestId, new GetNodeSamplesAction.Response(0, response));
+                transport.handleResponse(requestId, new GetNodeSamplesAction.Response(0, Activity.EMPTY, Activity.EMPTY, response));
             }
         }
 

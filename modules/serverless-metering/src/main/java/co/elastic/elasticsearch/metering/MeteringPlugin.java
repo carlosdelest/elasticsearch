@@ -142,7 +142,8 @@ public class MeteringPlugin extends Plugin
             HttpMeteringUsageRecordPublisher.METERING_URL,
             HttpMeteringUsageRecordPublisher.BATCH_SIZE,
             SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING,
-            SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING
+            SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING,
+            TaskActivityTracker.COOL_DOWN_PERIOD
         );
     }
 
@@ -194,10 +195,9 @@ public class MeteringPlugin extends Plugin
             builtInCounterMetrics.add(ingestMetricsCollector);
         }
 
-        TimeValue coolDownPeriod = TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings());
         var activityTracker = TaskActivityTracker.build(
             Clock.systemUTC(),
-            coolDownPeriod,
+            TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()),
             hasSearchRole,
             threadPool.getThreadContext(),
             DefaultActionTierMapper.INSTANCE,
@@ -237,6 +237,7 @@ public class MeteringPlugin extends Plugin
         );
 
         List<Object> cs = new ArrayList<>();
+        cs.add(activityTracker);
         cs.add(usageRecordPublisher);
         cs.add(usageReportService);
         cs.add(clusterMetricsService);

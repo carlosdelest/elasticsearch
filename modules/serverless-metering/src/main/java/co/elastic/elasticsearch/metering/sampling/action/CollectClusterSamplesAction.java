@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
+import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
@@ -66,6 +67,8 @@ public class CollectClusterSamplesAction {
     public static class Response extends ActionResponse {
         private final long searchTierMemorySize;
         private final long indexTierMemorySize;
+        private final Activity searchActivity;
+        private final Activity indexActivity;
         private final Map<ShardId, ShardInfoMetrics> shardInfos;
         private final List<Exception> exceptions;
 
@@ -77,6 +80,13 @@ public class CollectClusterSamplesAction {
                 this.searchTierMemorySize = 0;
                 this.indexTierMemorySize = 0;
             }
+            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_ACTIVITY_TRACKING_ADDED)) {
+                searchActivity = Activity.readFrom(in);
+                indexActivity = Activity.readFrom(in);
+            } else {
+                searchActivity = Activity.EMPTY;
+                indexActivity = Activity.EMPTY;
+            }
             this.shardInfos = in.readImmutableMap(ShardId::new, ShardInfoMetrics::from);
             this.exceptions = in.readCollectionAsImmutableList(StreamInput::readException);
         }
@@ -84,11 +94,15 @@ public class CollectClusterSamplesAction {
         public Response(
             long searchTierMemorySize,
             long indexTierMemorySize,
+            final Activity searchActivity,
+            final Activity indexActivity,
             Map<ShardId, ShardInfoMetrics> shardInfos,
             List<Exception> exceptions
         ) {
             this.searchTierMemorySize = searchTierMemorySize;
             this.indexTierMemorySize = indexTierMemorySize;
+            this.searchActivity = searchActivity;
+            this.indexActivity = indexActivity;
             this.shardInfos = shardInfos;
             this.exceptions = exceptions;
         }
@@ -98,6 +112,10 @@ public class CollectClusterSamplesAction {
             if (output.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)) {
                 output.writeVLong(searchTierMemorySize);
                 output.writeVLong(indexTierMemorySize);
+            }
+            if (output.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_ACTIVITY_TRACKING_ADDED)) {
+                searchActivity.writeTo(output);
+                indexActivity.writeTo(output);
             }
             output.writeMap(shardInfos, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
             output.writeGenericList(exceptions, StreamOutput::writeException);
@@ -111,6 +129,8 @@ public class CollectClusterSamplesAction {
             if (o instanceof Response response) {
                 return searchTierMemorySize == response.searchTierMemorySize
                     && indexTierMemorySize == response.indexTierMemorySize
+                    && Objects.equals(searchActivity, response.searchActivity)
+                    && Objects.equals(indexActivity, response.indexActivity)
                     && Objects.equals(shardInfos, response.shardInfos)
                     && Objects.equals(exceptions, response.exceptions);
             }
@@ -119,7 +139,7 @@ public class CollectClusterSamplesAction {
 
         @Override
         public int hashCode() {
-            return Objects.hash(searchTierMemorySize, indexTierMemorySize, shardInfos, exceptions);
+            return Objects.hash(searchTierMemorySize, indexTierMemorySize, searchActivity, indexActivity, shardInfos, exceptions);
         }
 
         public long getIndexTierMemorySize() {
@@ -128,6 +148,14 @@ public class CollectClusterSamplesAction {
 
         public long getSearchTierMemorySize() {
             return searchTierMemorySize;
+        }
+
+        public Activity getSearchActivity() {
+            return searchActivity;
+        }
+
+        public Activity getIndexActivity() {
+            return indexActivity;
         }
 
         public Map<ShardId, ShardInfoMetrics> getShardInfos() {

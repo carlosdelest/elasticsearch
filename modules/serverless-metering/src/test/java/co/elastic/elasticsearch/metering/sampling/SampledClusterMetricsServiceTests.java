@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.MockedClusterStateTestUtils;
+import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledShardInfos;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
@@ -78,7 +79,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Map.of(), List.of()));
+            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, Map.of(), List.of()));
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
@@ -119,7 +120,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo, List.of()));
+            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, shardsInfo, List.of()));
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
@@ -167,7 +168,16 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo, List.of(new Exception("Partial failure"))));
+            listener.onResponse(
+                new CollectClusterSamplesAction.Response(
+                    0,
+                    0,
+                    Activity.EMPTY,
+                    Activity.EMPTY,
+                    shardsInfo,
+                    List.of(new Exception("Partial failure"))
+                )
+            );
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
@@ -597,7 +607,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo, List.of()));
+            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, shardsInfo, List.of()));
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
@@ -677,9 +687,9 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
             var currentRequest = requestNumber.addAndGet(1);
             if (currentRequest == 1) {
-                listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo, List.of()));
+                listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, shardsInfo, List.of()));
             } else {
-                listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo2, List.of()));
+                listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, shardsInfo2, List.of()));
             }
             return null;
         }
