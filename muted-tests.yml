@@ -152,3 +152,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2767
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2795
+- class: co.elastic.elasticsearch.metering.StorageMeteringIT
+  method: testRAStorageWithNonTimeSeriesAndDeletesNoMerge
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2796
