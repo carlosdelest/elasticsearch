@@ -172,3 +172,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.IngestWithRejectionMeteringIT
   method: testDocumentsNotMeteredWhenRejectionAfterPipeline
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2789
+- class: co.elastic.elasticsearch.metering.IngestMeteringIT
+  method: testIngestMetricsAreRecordedThroughIngestPipelines
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2791
