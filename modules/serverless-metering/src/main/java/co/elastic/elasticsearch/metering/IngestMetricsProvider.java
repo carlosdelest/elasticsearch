@@ -22,6 +22,8 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
@@ -34,6 +36,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
 
 /**
  * Responsible for the ingest document size collection.
@@ -70,16 +74,36 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
     private final String nodeId;
     private final ClusterService clusterService;
+    private ClusterStateListener initializationListener;
 
     public IngestMetricsProvider(String nodeId, ClusterService clusterService) {
         this.nodeId = nodeId;
         this.clusterService = clusterService;
+        this.initializationListener = this::init;
+        clusterService.addListener(initializationListener);
+    }
+
+    private boolean isInitialized() {
+        return initializationListener == null; // successfully initialized once the listener is removed
+    }
+
+    private void init(ClusterChangedEvent clusterChangedEvent) {
+        if (clusterChangedEvent.state().blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
+            ClusterStateListener listener = initializationListener;
+            if (listener != null) {
+                initializationListener = null;
+                clusterService.removeListener(listener);
+            }
+        }
     }
 
     private record SnapshotEntry(String key, long value) {}
 
     @Override
     public MetricValues getMetrics() {
+        if (isInitialized() == false) {
+            return CounterMetricsProvider.NO_VALUES;
+        }
 
         final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
         final var indicesLookup = clusterService.state().metadata().getIndicesLookup();

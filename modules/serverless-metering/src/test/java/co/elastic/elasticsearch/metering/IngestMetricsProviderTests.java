@@ -19,7 +19,9 @@ package co.elastic.elasticsearch.metering;
 
 import co.elastic.elasticsearch.metrics.MetricValue;
 
+import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
@@ -29,6 +31,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +43,11 @@ public class IngestMetricsProviderTests extends ESTestCase {
     @Before
     public void setup() {
         when(clusterService.state()).thenReturn(ClusterState.EMPTY_STATE);
+        doAnswer(x -> {
+            ClusterStateListener listener = x.getArgument(0);
+            listener.clusterChanged(new ClusterChangedEvent("test", ClusterState.EMPTY_STATE, ClusterState.EMPTY_STATE));
+            return null;
+        }).when(clusterService).addListener(any(ClusterStateListener.class));
     }
 
     public void testMetricIdUniqueness() {
