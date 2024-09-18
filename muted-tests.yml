@@ -145,3 +145,5 @@ tests:
 - class: org.elasticsearch.datastreams.LogsDataStreamRestIT
   method: testLogsDBSnapshotCreateRestoreMount
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2782
+- class: org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2794
