@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -80,18 +81,26 @@ public class GetNodeSamplesAction {
     }
 
     public static class Response extends ActionResponse {
+        private final long physicalMemorySize;
         private final Map<ShardId, ShardInfoMetrics> shardInfos;
 
-        public Response(final Map<ShardId, ShardInfoMetrics> shardSizes) {
+        public Response(long physicalMemorySize, final Map<ShardId, ShardInfoMetrics> shardSizes) {
+            this.physicalMemorySize = physicalMemorySize;
             this.shardInfos = Objects.requireNonNull(shardSizes);
         }
 
         public Response(StreamInput in) throws IOException {
+            this.physicalMemorySize = in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)
+                ? in.readVLong()
+                : 0;
             this.shardInfos = in.readImmutableMap(ShardId::new, ShardInfoMetrics::from);
         }
 
         @Override
         public void writeTo(StreamOutput output) throws IOException {
+            if (output.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)) {
+                output.writeVLong(physicalMemorySize);
+            }
             output.writeMap(shardInfos, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
         }
 
@@ -101,18 +110,22 @@ public class GetNodeSamplesAction {
                 return true;
             }
             if (o instanceof Response response) {
-                return Objects.equals(shardInfos, response.shardInfos);
+                return physicalMemorySize == response.physicalMemorySize && Objects.equals(shardInfos, response.shardInfos);
             }
             return false;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(shardInfos);
+            return Objects.hash(physicalMemorySize, shardInfos);
         }
 
         public Map<ShardId, ShardInfoMetrics> getShardInfos() {
             return shardInfos;
+        }
+
+        public long getPhysicalMemorySize() {
+            return physicalMemorySize;
         }
     }
 }

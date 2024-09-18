@@ -78,7 +78,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(Map.of(), List.of()));
+            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Map.of(), List.of()));
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
@@ -119,7 +119,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(shardsInfo, List.of()));
+            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo, List.of()));
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
@@ -167,7 +167,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(shardsInfo, List.of(new Exception("Partial failure"))));
+            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo, List.of(new Exception("Partial failure"))));
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
@@ -597,7 +597,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(shardsInfo, List.of()));
+            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo, List.of()));
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
@@ -677,9 +677,9 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
             var currentRequest = requestNumber.addAndGet(1);
             if (currentRequest == 1) {
-                listener.onResponse(new CollectClusterSamplesAction.Response(shardsInfo, List.of()));
+                listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo, List.of()));
             } else {
-                listener.onResponse(new CollectClusterSamplesAction.Response(shardsInfo2, List.of()));
+                listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, shardsInfo2, List.of()));
             }
             return null;
         }

@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -63,21 +64,41 @@ public class CollectClusterSamplesAction {
     }
 
     public static class Response extends ActionResponse {
+        private final long searchTierMemorySize;
+        private final long indexTierMemorySize;
         private final Map<ShardId, ShardInfoMetrics> shardInfos;
         private final List<Exception> exceptions;
 
         public Response(StreamInput in) throws IOException {
+            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)) {
+                this.searchTierMemorySize = in.readVLong();
+                this.indexTierMemorySize = in.readVLong();
+            } else {
+                this.searchTierMemorySize = 0;
+                this.indexTierMemorySize = 0;
+            }
             this.shardInfos = in.readImmutableMap(ShardId::new, ShardInfoMetrics::from);
             this.exceptions = in.readCollectionAsImmutableList(StreamInput::readException);
         }
 
-        public Response(Map<ShardId, ShardInfoMetrics> shardInfos, List<Exception> exceptions) {
+        public Response(
+            long searchTierMemorySize,
+            long indexTierMemorySize,
+            Map<ShardId, ShardInfoMetrics> shardInfos,
+            List<Exception> exceptions
+        ) {
+            this.searchTierMemorySize = searchTierMemorySize;
+            this.indexTierMemorySize = indexTierMemorySize;
             this.shardInfos = shardInfos;
             this.exceptions = exceptions;
         }
 
         @Override
         public void writeTo(StreamOutput output) throws IOException {
+            if (output.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)) {
+                output.writeVLong(searchTierMemorySize);
+                output.writeVLong(indexTierMemorySize);
+            }
             output.writeMap(shardInfos, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
             output.writeGenericList(exceptions, StreamOutput::writeException);
         }
@@ -88,14 +109,25 @@ public class CollectClusterSamplesAction {
                 return true;
             }
             if (o instanceof Response response) {
-                return Objects.equals(shardInfos, response.shardInfos) && Objects.equals(exceptions, response.exceptions);
+                return searchTierMemorySize == response.searchTierMemorySize
+                    && indexTierMemorySize == response.indexTierMemorySize
+                    && Objects.equals(shardInfos, response.shardInfos)
+                    && Objects.equals(exceptions, response.exceptions);
             }
             return false;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(shardInfos, exceptions);
+            return Objects.hash(searchTierMemorySize, indexTierMemorySize, shardInfos, exceptions);
+        }
+
+        public long getIndexTierMemorySize() {
+            return indexTierMemorySize;
+        }
+
+        public long getSearchTierMemorySize() {
+            return searchTierMemorySize;
         }
 
         public Map<ShardId, ShardInfoMetrics> getShardInfos() {

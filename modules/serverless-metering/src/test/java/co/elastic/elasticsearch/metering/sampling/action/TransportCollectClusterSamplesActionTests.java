@@ -159,7 +159,6 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
 
     public void testResultAggregation() throws ExecutionException, InterruptedException {
         createMockClusterStateWithPersistentTask(clusterService);
-
         var shards = List.of(
             new ShardId("index1", "index1UUID", 1),
             new ShardId("index1", "index1UUID", 2),
@@ -169,7 +168,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         );
 
         final DiscoveryNodes nodes = clusterService.state().nodes();
-        final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswer = nodes.stream()
+        final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswers = nodes.stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
             .collect(Collectors.toMap(DiscoveryNode::getId, x -> {
                 var shardCount = randomIntBetween(0, shards.size());
@@ -177,6 +176,14 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
                 return nodeShards.stream()
                     .collect(Collectors.toMap(Function.identity(), TransportCollectClusterSamplesActionTests::createMeteringShardInfo));
             }));
+
+        final Map<String, Long> searchNodeMemoryAnswers = nodes.stream()
+            .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
+            .collect(Collectors.toMap(DiscoveryNode::getId, n -> randomLongBetween(0, 10000)));
+
+        final Map<String, Long> indexNodeMemoryAnswers = nodes.stream()
+            .filter(e -> e.getRoles().contains(DiscoveryNodeRole.INDEX_ROLE))
+            .collect(Collectors.toMap(DiscoveryNode::getId, n -> randomLongBetween(0, 10000)));
 
         var request = new CollectClusterSamplesAction.Request();
         PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
@@ -198,9 +205,12 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
                     transport.handleRemoteError(requestId, new Exception());
                 } else {
                     totalSuccess++;
-                    var response = nodesShardAnswer.getOrDefault(nodeId, Collections.emptyMap());
-                    seenShards.addAll(response.keySet());
-                    transport.handleResponse(requestId, new GetNodeSamplesAction.Response(response));
+                    var shardInfos = nodesShardAnswers.getOrDefault(nodeId, Collections.emptyMap());
+                    seenShards.addAll(shardInfos.keySet());
+                    var memory = searchNodeMemoryAnswers.containsKey(nodeId)
+                        ? searchNodeMemoryAnswers.get(nodeId)
+                        : indexNodeMemoryAnswers.getOrDefault(nodeId, 0L);
+                    transport.handleResponse(requestId, new GetNodeSamplesAction.Response(memory, shardInfos));
                 }
             }
         }
@@ -208,6 +218,16 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         var totalShards = seenShards.size();
         var response = listener.get();
         assertEquals("total shards", totalShards, response.getShardInfos().size());
+        assertEquals(
+            "search tier memory",
+            searchNodeMemoryAnswers.values().stream().mapToLong(Long::longValue).sum(),
+            response.getSearchTierMemorySize()
+        );
+        assertEquals(
+            "index tier memory",
+            indexNodeMemoryAnswers.values().stream().mapToLong(Long::longValue).sum(),
+            response.getIndexTierMemorySize()
+        );
         // response.isComplete -> totalFailed == 0;
         assertTrue("if response.isComplete no failed shards", response.isComplete() == false || totalFailed == 0);
         assertEquals(nodes.size(), totalSuccess + totalFailed);
@@ -257,7 +277,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             for (var capturedRequest : entry.getValue()) {
                 long requestId = capturedRequest.requestId();
                 var response = nodesShardAnswer.getOrDefault(nodeId, Collections.emptyMap());
-                transport.handleResponse(requestId, new GetNodeSamplesAction.Response(response));
+                transport.handleResponse(requestId, new GetNodeSamplesAction.Response(0, response));
             }
         }
 

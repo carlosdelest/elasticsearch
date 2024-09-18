@@ -26,6 +26,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.injection.guice.Inject;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -154,6 +156,8 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
         // Since we will not concurrently update individual entries (each node will update a single indexed reference) we do not need
         // a AtomicReferenceArray
         final SingleNodeResponse[] responses = new SingleNodeResponse[expectedOps];
+        final AtomicLong searchTierMemory = new AtomicLong();
+        final AtomicLong indexTierMemory = new AtomicLong();
 
         int i = 0;
         for (DiscoveryNode node : nodes) {
@@ -164,24 +168,35 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
             sendRequest(node, shardInfoRequest, ActionListener.wrap(response -> {
                 logger.debug("received GetNodeSamplesAction response from [{}]", node.getId());
                 responses[nodeIndex] = new SingleNodeResponse(response);
+
+                if (node.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName())) {
+                    searchTierMemory.addAndGet(response.getPhysicalMemorySize());
+                } else if (node.hasRole(DiscoveryNodeRole.INDEX_ROLE.roleName())) {
+                    indexTierMemory.addAndGet(response.getPhysicalMemorySize());
+                }
+
                 if (expectedOps == counterOps.incrementAndGet()) {
-                    ActionListener.completeWith(listener, () -> buildResponse(responses));
+                    ActionListener.completeWith(listener, () -> buildResponse(searchTierMemory.get(), indexTierMemory.get(), responses));
                 }
             }, ex -> {
                 logger.warn("error while sending GetNodeSamplesAction.Request to [{}]: {}", node.getId(), ex);
                 responses[nodeIndex] = new SingleNodeResponse(ex);
                 if (expectedOps == counterOps.incrementAndGet()) {
-                    ActionListener.completeWith(listener, () -> buildResponse(responses));
+                    ActionListener.completeWith(listener, () -> buildResponse(searchTierMemory.get(), indexTierMemory.get(), responses));
                 }
             }));
         }
     }
 
     private static CollectClusterSamplesAction.Response buildEmptyResponse() {
-        return new CollectClusterSamplesAction.Response(Map.of(), List.of());
+        return new CollectClusterSamplesAction.Response(0, 0, Map.of(), List.of());
     }
 
-    private CollectClusterSamplesAction.Response buildResponse(SingleNodeResponse[] responses) {
+    private CollectClusterSamplesAction.Response buildResponse(
+        long searchTierMemory,
+        long indexTierMemory,
+        SingleNodeResponse[] responses
+    ) {
         var normalizedShards = Arrays.stream(responses)
             .filter(SingleNodeResponse::isValid)
             .map(SingleNodeResponse::getResponse)
@@ -192,7 +207,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
             .filter(Predicate.not(SingleNodeResponse::isValid))
             .map(SingleNodeResponse::getFailure)
             .toList();
-        return new CollectClusterSamplesAction.Response(normalizedShards, failures);
+        return new CollectClusterSamplesAction.Response(searchTierMemory, indexTierMemory, normalizedShards, failures);
     }
 
     private void sendRequest(
