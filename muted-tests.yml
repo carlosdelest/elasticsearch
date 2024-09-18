@@ -150,3 +150,5 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessRollingUpgradeIT
   method: testClusterUpgrade
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2767
+- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2795
