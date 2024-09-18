@@ -168,7 +168,6 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         SampledClusterMetricsSchedulingTask clusterMetricsSchedulingTask = (SampledClusterMetricsSchedulingTask) task;
         executorNodeTask.set(clusterMetricsSchedulingTask);
         DiscoveryNode node = clusterService.localNode();
-        assert node.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName()) : "Sampling task expected to run on search node";
         logger.info("Node [{{}}{{}}] is selected as the current sampling node.", node.getName(), node.getId());
         if (this.enabled) {
             clusterMetricsSchedulingTask.run();

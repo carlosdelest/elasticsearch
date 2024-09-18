@@ -57,7 +57,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -203,23 +202,6 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
         PersistentTaskState state = mock(PersistentTaskState.class);
         executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
         verify(task, times(1)).run();
-    }
-
-    public void testRejectTaskOnNoneSearchNode() {
-        clusterService = spy(createClusterService(Set.of(DiscoveryNodeRole.INDEX_ROLE)));
-        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
-            client,
-            clusterService,
-            persistentTasksService,
-            featureService,
-            threadPool,
-            clusterMetricsService,
-            settings
-        );
-        SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
-        PersistentTaskState state = mock(PersistentTaskState.class);
-        assertThrows(AssertionError.class, () -> executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state));
-        verify(task, never()).run();
     }
 
     public void testAbortOnShutdown() {
