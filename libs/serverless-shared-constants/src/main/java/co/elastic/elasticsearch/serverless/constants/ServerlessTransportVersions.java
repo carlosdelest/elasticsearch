@@ -37,6 +37,7 @@ public class ServerlessTransportVersions {
     public static final TransportVersion SHARD_INFO_INDEX_CREATION_DATE_ADDED = def(8_733_02_0);
     public static final TransportVersion METERING_SAMPLE_MEMORY = def(8_741_01_0);
     public static final TransportVersion METERING_ACTIVITY_TRACKING_ADDED = def(8_741_02_0);
+    public static final TransportVersion CLUSTER_STATE_VERSION_IN_PUBLISH_MEMORY_METRICS_REQUEST = def(8_741_03_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
