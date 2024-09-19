@@ -56,14 +56,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.TASK_ALLOCATION_ID;
 import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.createMockClusterState;
 import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask;
+import static java.util.Collections.emptyMap;
+import static java.util.function.Function.identity;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
+import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
@@ -171,83 +174,86 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             new ShardId("index2", "index2UUID", 3)
         );
 
-        final DiscoveryNodes nodes = clusterService.state().nodes();
-        final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswers = nodes.stream()
+        var nodes = clusterService.state().nodes();
+        var nodeIds = nodes.stream().map(DiscoveryNode::getId).collect(Collectors.toSet());
+        var successNodeIds = rarely() ? randomSubsetOf(nodeIds) : nodeIds;
+
+        var nodesShardAnswers = nodes.stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
             .collect(Collectors.toMap(DiscoveryNode::getId, x -> {
                 var shardCount = randomIntBetween(0, shards.size());
                 var nodeShards = randomSubsetOf(shardCount, shards);
                 return nodeShards.stream()
-                    .collect(Collectors.toMap(Function.identity(), TransportCollectClusterSamplesActionTests::createMeteringShardInfo));
+                    .collect(Collectors.toMap(identity(), TransportCollectClusterSamplesActionTests::createMeteringShardInfo));
             }));
 
-        final Map<String, Long> searchNodeMemoryAnswers = nodes.stream()
+        var searchNodeMemory = nodes.stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
             .collect(Collectors.toMap(DiscoveryNode::getId, n -> randomLongBetween(0, 10000)));
-        final Map<String, Long> indexNodeMemoryAnswers = nodes.stream()
+        var indexNodeMemory = nodes.stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.INDEX_ROLE))
             .collect(Collectors.toMap(DiscoveryNode::getId, n -> randomLongBetween(0, 10000)));
 
-        final Map<String, Activity> nodeSearchActivity = nodes.stream()
-            .collect(Collectors.toMap(DiscoveryNode::getId, (k) -> ActivityTests.randomActivity()));
-        final Map<String, Activity> nodeIndexActivity = nodes.stream()
-            .collect(Collectors.toMap(DiscoveryNode::getId, (k) -> ActivityTests.randomActivity()));
+        var nodeSearchActivity = nodeIds.stream().collect(Collectors.toMap(identity(), (k) -> ActivityTests.randomActivity()));
+        var nodeIndexActivity = nodeIds.stream().collect(Collectors.toMap(identity(), (k) -> ActivityTests.randomActivity()));
 
         var request = new CollectClusterSamplesAction.Request();
-        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
+        var listener = new PlainActionFuture<CollectClusterSamplesAction.Response>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
         Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
 
-        Set<ShardId> seenShards = new HashSet<>();
         int totalSuccess = 0;
-        int totalFailed = 0;
+        Set<ShardId> seenShards = new HashSet<>();
         for (Map.Entry<String, List<CapturingTransport.CapturedRequest>> entry : capturedRequests.entrySet()) {
             var nodeId = entry.getKey();
             for (var capturedRequest : entry.getValue()) {
                 long requestId = capturedRequest.requestId();
-                if (rarely()) {
+                if (successNodeIds.contains(nodeId) == false) {
                     // simulate node failure
-                    totalFailed++;
                     transport.handleRemoteError(requestId, new Exception());
-                } else {
-                    totalSuccess++;
-                    var shardInfos = nodesShardAnswers.getOrDefault(nodeId, Collections.emptyMap());
-                    seenShards.addAll(shardInfos.keySet());
-                    var memory = searchNodeMemoryAnswers.containsKey(nodeId)
-                        ? searchNodeMemoryAnswers.get(nodeId)
-                        : indexNodeMemoryAnswers.getOrDefault(nodeId, 0L);
-                    var searchActivity = nodeSearchActivity.get(nodeId);
-                    var indexActivity = nodeIndexActivity.get(nodeId);
-                    transport.handleResponse(
-                        requestId,
-                        new GetNodeSamplesAction.Response(memory, searchActivity, indexActivity, shardInfos)
-                    );
+                    continue;
                 }
+                totalSuccess++;
+                var shardInfos = nodesShardAnswers.getOrDefault(nodeId, emptyMap());
+                seenShards.addAll(shardInfos.keySet());
+                var memory = searchNodeMemory.containsKey(nodeId) ? searchNodeMemory.get(nodeId) : indexNodeMemory.getOrDefault(nodeId, 0L);
+                var searchActivity = nodeSearchActivity.get(nodeId);
+                var indexActivity = nodeIndexActivity.get(nodeId);
+                transport.handleResponse(requestId, new GetNodeSamplesAction.Response(memory, searchActivity, indexActivity, shardInfos));
             }
         }
 
         var totalShards = seenShards.size();
         var response = listener.get();
-        assertEquals("total shards", totalShards, response.getShardInfos().size());
+
+        assertThat(response.isComplete(), is(nodeIds.size() == successNodeIds.size()));
+        assertThat(totalSuccess, is(successNodeIds.size()));
+        assertThat(response.getFailures(), hasSize(nodes.size() - successNodeIds.size()));
+
+        assertThat(response.getShardInfos(), aMapWithSize(totalShards));
+
+        // only retain answers of successful nodes
+        searchNodeMemory.keySet().retainAll(successNodeIds);
+        indexNodeMemory.keySet().retainAll(successNodeIds);
+        nodeSearchActivity.keySet().retainAll(successNodeIds);
+        nodeIndexActivity.keySet().retainAll(successNodeIds);
+
         assertEquals(
             "search tier memory",
-            searchNodeMemoryAnswers.values().stream().mapToLong(Long::longValue).sum(),
+            searchNodeMemory.values().stream().mapToLong(Long::longValue).sum(),
             response.getSearchTierMemorySize()
         );
         assertEquals(
             "index tier memory",
-            indexNodeMemoryAnswers.values().stream().mapToLong(Long::longValue).sum(),
+            indexNodeMemory.values().stream().mapToLong(Long::longValue).sum(),
             response.getIndexTierMemorySize()
         );
+
         var coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
         assertEquals("search activity", Activity.merge(nodeSearchActivity.values().stream(), coolDown), response.getSearchActivity());
         assertEquals("index activity", Activity.merge(nodeIndexActivity.values().stream(), coolDown), response.getIndexActivity());
-        // response.isComplete -> totalFailed == 0;
-        assertTrue("if response.isComplete no failed shards", response.isComplete() == false || totalFailed == 0);
-        assertEquals(nodes.size(), totalSuccess + totalFailed);
-        assertEquals("accumulated exceptions", totalFailed, response.getFailures().size());
     }
 
     public void testMostRecentUsedInResultAggregation() throws ExecutionException, InterruptedException {
@@ -292,7 +298,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             var nodeId = entry.getKey();
             for (var capturedRequest : entry.getValue()) {
                 long requestId = capturedRequest.requestId();
-                var response = nodesShardAnswer.getOrDefault(nodeId, Collections.emptyMap());
+                var response = nodesShardAnswer.getOrDefault(nodeId, emptyMap());
                 transport.handleResponse(requestId, new GetNodeSamplesAction.Response(0, Activity.EMPTY, Activity.EMPTY, response));
             }
         }
