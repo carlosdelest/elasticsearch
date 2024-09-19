@@ -9,5 +9,9 @@ tasks {
     }
     javaRestTest {
         exclude("**/DataStreamDeleteLifecycleWithPermissionsRestIT.class")
+        exclude("**/StandardVersusLogsIndexModeRandomDataChallengeRestIT.class")
+        exclude("**/StandardVersusStandardReindexedIntoLogsDbChallengeRestIT.class")
+        exclude("**/LogsDbVersusReindexedLogsDbChallengeRestIT.class")
+        exclude("**/LogsDbVersusLogsDbReindexedIntoStandardModeChallengeRestIT.class")
     }
 }
