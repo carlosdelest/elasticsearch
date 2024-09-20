@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
@@ -36,6 +37,7 @@ import java.util.stream.IntStream;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import static java.util.Map.entry;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -66,6 +68,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         super.setUp();
         clusterService = mock(ClusterService.class);
         when(clusterService.state()).thenReturn(ClusterState.EMPTY_STATE);
+        when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
     }
 
     private void setInternalIndexInfoServiceData(
@@ -80,7 +83,9 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         Map<SampledClusterMetricsService.ShardKey, SampledClusterMetricsService.ShardSample> data,
         Set<SampledClusterMetricsService.SamplingStatus> flags
     ) {
-        indexInfoService.collectedShardInfo.set(new SampledClusterMetricsService.SampledClusterMetrics(data, flags));
+        indexInfoService.collectedMetrics.set(
+            new SampledClusterMetricsService.SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, data, flags)
+        );
         indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
     }
 

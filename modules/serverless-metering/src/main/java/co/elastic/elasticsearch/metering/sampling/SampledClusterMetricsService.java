@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.activitytracking.Activity;
+import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
@@ -26,13 +28,13 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.core.Strings;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.telemetry.metric.LongCounter;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,6 +48,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static co.elastic.elasticsearch.metering.sampling.utils.PersistentTaskUtils.findPersistentTaskNodeId;
 import static org.elasticsearch.core.Strings.format;
@@ -58,6 +61,7 @@ public class SampledClusterMetricsService {
     static final String NODE_INFO_COLLECTIONS_PARTIALS_TOTAL = "es.metering.node_info.collections.partial.total";
 
     private final ClusterService clusterService;
+    private final Duration coolDown;
     private final LongCounter collectionsTotalCounter;
     private final LongCounter collectionsErrorsCounter;
     private final LongCounter collectionsPartialsCounter;
@@ -66,6 +70,7 @@ public class SampledClusterMetricsService {
     public SampledClusterMetricsService(ClusterService clusterService, MeterRegistry meterRegistry) {
         this.clusterService = clusterService;
         clusterService.addListener(this::clusterChanged);
+        this.coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
 
         this.collectionsTotalCounter = meterRegistry.registerLongCounter(
             NODE_INFO_COLLECTIONS_TOTAL,
@@ -110,13 +115,32 @@ public class SampledClusterMetricsService {
         static final ShardSample EMPTY = new ShardSample(null, ShardInfoMetrics.EMPTY);
     }
 
-    record SampledClusterMetrics(Map<ShardKey, ShardSample> shardSamples, Set<SamplingStatus> status) implements SampledShardInfos {
-        static final SampledClusterMetrics EMPTY = new SampledClusterMetrics(Map.of(), Set.of(SamplingStatus.STALE));
+    record SampledClusterMetrics(
+        SampledTierMetrics searchTierMetrics,
+        SampledTierMetrics indexTierMetrics,
+        Map<ShardKey, ShardSample> shardSamples,
+        Set<SamplingStatus> status
+    ) implements SampledShardInfos {
+
+        static final SampledClusterMetrics EMPTY = new SampledClusterMetrics(
+            SampledTierMetrics.EMPTY,
+            SampledTierMetrics.EMPTY,
+            Map.of(),
+            Set.of(SamplingStatus.STALE)
+        );
 
         public ShardInfoMetrics get(ShardId shardId) {
             var shardInfo = shardSamples.get(ShardKey.fromShardId(shardId));
             return Objects.requireNonNullElse(shardInfo, ShardSample.EMPTY).shardInfo;
         }
+
+        SampledClusterMetrics withStatus(Set<SamplingStatus> newStatus) {
+            return new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, shardSamples, newStatus);
+        }
+    }
+
+    record SampledTierMetrics(long memorySize, Activity activity) {
+        static final SampledTierMetrics EMPTY = new SampledTierMetrics(0, Activity.EMPTY);
     }
 
     enum PersistentTaskNodeStatus {
@@ -125,7 +149,7 @@ public class SampledClusterMetricsService {
         ANOTHER_NODE
     }
 
-    final AtomicReference<SampledClusterMetrics> collectedShardInfo = new AtomicReference<>(SampledClusterMetrics.EMPTY);
+    final AtomicReference<SampledClusterMetrics> collectedMetrics = new AtomicReference<>(SampledClusterMetrics.EMPTY);
     volatile PersistentTaskNodeStatus persistentTaskNodeStatus = PersistentTaskNodeStatus.NO_NODE;
 
     /**
@@ -147,7 +171,7 @@ public class SampledClusterMetricsService {
         }
 
         if (persistentTaskNodeStatus != PersistentTaskNodeStatus.THIS_NODE && wasPersistentTaskNode) {
-            collectedShardInfo.set(SampledClusterMetrics.EMPTY);
+            collectedMetrics.set(SampledClusterMetrics.EMPTY);
         }
     }
 
@@ -169,12 +193,17 @@ public class SampledClusterMetricsService {
                     status.add(SamplingStatus.PARTIAL);
                 }
 
-                // Create a new MeteringShardInfo from diffs.
-                collectedShardInfo.getAndUpdate(
-                    current -> mergeShardInfos(removeStaleEntries(current.shardSamples()), response.getShardInfos(), status)
+                // Update sample metrics, replacing memory, merging activity, and building new MeteringShardInfo from diffs
+                collectedMetrics.getAndUpdate(
+                    current -> new SampledClusterMetrics(
+                        mergeTierMetrics(current.searchTierMetrics(), response.getSearchTierMemorySize(), response.getSearchActivity()),
+                        mergeTierMetrics(current.indexTierMetrics(), response.getIndexTierMemorySize(), response.getIndexActivity()),
+                        mergeShardInfos(removeStaleEntries(current.shardSamples()), response.getShardInfos()),
+                        status
+                    )
                 );
                 logger.debug(
-                    () -> Strings.format(
+                    () -> format(
                         "collected new metering shard info for shards [%s]",
                         response.getShardInfos().keySet().stream().map(ShardId::toString).collect(Collectors.joining(","))
                     )
@@ -183,14 +212,18 @@ public class SampledClusterMetricsService {
 
             @Override
             public void onFailure(Exception e) {
-                var previousSizes = collectedShardInfo.get();
-                var status = EnumSet.copyOf(previousSizes.status());
+                var previous = collectedMetrics.get();
+                var status = EnumSet.copyOf(previous.status());
                 status.add(SamplingStatus.STALE);
-                collectedShardInfo.set(new SampledClusterMetrics(previousSizes.shardSamples(), status));
+                collectedMetrics.set(previous.withStatus(status));
                 logger.error("failed to collect metering shard info", e);
                 collectionsErrorsCounter.increment();
             }
         });
+    }
+
+    private SampledTierMetrics mergeTierMetrics(SampledTierMetrics current, long newMemory, Activity newActivity) {
+        return new SampledTierMetrics(newMemory, Activity.merge(Stream.of(current.activity(), newActivity), coolDown));
     }
 
     private Map<ShardKey, ShardSample> removeStaleEntries(Map<ShardKey, ShardSample> shardInfoKeyShardInfoValueMap) {
@@ -219,7 +252,7 @@ public class SampledClusterMetricsService {
 
         @Override
         public Optional<MetricValues> getMetrics() {
-            var currentInfo = collectedShardInfo.get();
+            var currentInfo = collectedMetrics.get();
 
             if (persistentTaskNodeStatus == PersistentTaskNodeStatus.NO_NODE
                 || (currentInfo == SampledClusterMetrics.EMPTY && persistentTaskNodeStatus == PersistentTaskNodeStatus.THIS_NODE)) {
@@ -338,11 +371,7 @@ public class SampledClusterMetricsService {
         return new SampledStorageMetricsProvider();
     }
 
-    private static SampledClusterMetrics mergeShardInfos(
-        Map<ShardKey, ShardSample> current,
-        Map<ShardId, ShardInfoMetrics> updated,
-        Set<SamplingStatus> status
-    ) {
+    private static Map<ShardKey, ShardSample> mergeShardInfos(Map<ShardKey, ShardSample> current, Map<ShardId, ShardInfoMetrics> updated) {
         HashMap<ShardKey, ShardSample> map = new HashMap<>(current);
         for (var newEntry : updated.entrySet()) {
             var shardKey = ShardKey.fromShardId(newEntry.getKey());
@@ -374,10 +403,22 @@ public class SampledClusterMetricsService {
                 }
             });
         }
-        return new SampledClusterMetrics(map, status);
+        return map;
     }
 
     public SampledShardInfos getMeteringShardInfo() {
-        return collectedShardInfo.get();
+        return collectedMetrics.get();
+    }
+
+    public SampledTierMetrics getSearchTierMetrics() {
+        var sampledClusterMetrics = collectedMetrics.get();
+        assert sampledClusterMetrics != null;
+        return sampledClusterMetrics.searchTierMetrics();
+    }
+
+    public SampledTierMetrics getIndexTierMetrics() {
+        var sampledClusterMetrics = collectedMetrics.get();
+        assert sampledClusterMetrics != null;
+        return sampledClusterMetrics.indexTierMetrics();
     }
 }

@@ -19,7 +19,10 @@ package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.MockedClusterStateTestUtils;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
+import co.elastic.elasticsearch.metering.activitytracking.ActivityTests;
+import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledShardInfos;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
 import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
@@ -32,6 +35,7 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.TestShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.telemetry.InstrumentType;
 import org.elasticsearch.telemetry.Measurement;
@@ -42,6 +46,7 @@ import org.hamcrest.Matcher;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +54,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import static java.util.Map.entry;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
@@ -74,6 +80,8 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
+        var initialSearchMetrics = service.getSearchTierMetrics();
+        var initialIndexMetrics = service.getIndexTierMetrics();
 
         var client = mock(Client.class);
         doAnswer(answer -> {
@@ -86,12 +94,18 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         service.updateSamples(client);
 
         var firstRoundShardInfo = service.getMeteringShardInfo();
+        var firstSearchMetrics = service.getSearchTierMetrics();
+        var firstIndexMetrics = service.getIndexTierMetrics();
 
         assertThat(initialShardInfo, not(nullValue()));
         assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
+        assertThat(initialSearchMetrics, equalTo(SampledTierMetrics.EMPTY));
+        assertThat(initialIndexMetrics, equalTo(SampledTierMetrics.EMPTY));
 
         assertThat(firstRoundShardInfo, not(nullValue()));
         assertThat(firstRoundShardInfo, containsShardInfos(anEmptyMap()));
+        assertThat(firstSearchMetrics, equalTo(SampledTierMetrics.EMPTY));
+        assertThat(firstIndexMetrics, equalTo(SampledTierMetrics.EMPTY));
 
         final List<Measurement> measurements = Measurement.combine(
             meterRegistry.getRecorder()
@@ -110,26 +124,43 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             entry(shard2Id, new ShardInfoMetrics(12L, 120L, 1, 2, 22L, 0L)),
             entry(shard3Id, new ShardInfoMetrics(13L, 130L, 1, 1, 23L, 0L))
         );
+        var searchMetrics = randomSampledTierMetrics();
+        var indexMetrics = randomSampledTierMetrics();
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
+        var initialSearchMetrics = service.getSearchTierMetrics();
+        var initialIndexMetrics = service.getIndexTierMetrics();
 
         var client = mock(Client.class);
         doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, shardsInfo, List.of()));
+            listener.onResponse(
+                new CollectClusterSamplesAction.Response(
+                    searchMetrics.memorySize(),
+                    indexMetrics.memorySize(),
+                    searchMetrics.activity(),
+                    indexMetrics.activity(),
+                    shardsInfo,
+                    List.of()
+                )
+            );
             return null;
         }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
         service.updateSamples(client);
 
         var firstRoundShardInfo = service.getMeteringShardInfo();
+        var firstSearchMetrics = service.getSearchTierMetrics();
+        var firstIndexMetrics = service.getIndexTierMetrics();
 
         assertThat(initialShardInfo, not(nullValue()));
         assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
+        assertThat(initialSearchMetrics, equalTo(SampledTierMetrics.EMPTY));
+        assertThat(initialIndexMetrics, equalTo(SampledTierMetrics.EMPTY));
 
         assertThat(firstRoundShardInfo, not(nullValue()));
         assertThat(
@@ -140,6 +171,8 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
                 entry(shard3Id, withSizeInBytes(13L))
             )
         );
+        assertThat(firstSearchMetrics, equalTo(searchMetrics));
+        assertThat(firstIndexMetrics, equalTo(indexMetrics));
 
         final List<Measurement> measurements = Measurement.combine(
             meterRegistry.getRecorder()
@@ -158,11 +191,15 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             entry(shard2Id, new ShardInfoMetrics(12L, 120L, 1, 2, 22L, 0L)),
             entry(shard3Id, new ShardInfoMetrics(13L, 130L, 1, 1, 23L, 0L))
         );
+        var searchMetrics = randomSampledTierMetrics();
+        var indexMetrics = randomSampledTierMetrics();
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
+        var initialSearchMetrics = service.getSearchTierMetrics();
+        var initialIndexMetrics = service.getIndexTierMetrics();
 
         var client = mock(Client.class);
         doAnswer(answer -> {
@@ -170,10 +207,10 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
             listener.onResponse(
                 new CollectClusterSamplesAction.Response(
-                    0,
-                    0,
-                    Activity.EMPTY,
-                    Activity.EMPTY,
+                    searchMetrics.memorySize(),
+                    indexMetrics.memorySize(),
+                    searchMetrics.activity(),
+                    indexMetrics.activity(),
                     shardsInfo,
                     List.of(new Exception("Partial failure"))
                 )
@@ -184,9 +221,13 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         service.updateSamples(client);
 
         var firstRoundShardInfo = service.getMeteringShardInfo();
+        var firstSearchMetrics = service.getSearchTierMetrics();
+        var firstIndexMetrics = service.getIndexTierMetrics();
 
         assertThat(initialShardInfo, not(nullValue()));
         assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
+        assertThat(initialSearchMetrics, equalTo(SampledTierMetrics.EMPTY));
+        assertThat(initialIndexMetrics, equalTo(SampledTierMetrics.EMPTY));
 
         assertThat(firstRoundShardInfo, not(nullValue()));
         assertThat(
@@ -197,6 +238,8 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
                 entry(shard3Id, withSizeInBytes(13L))
             )
         );
+        assertThat(firstSearchMetrics, equalTo(searchMetrics));
+        assertThat(firstIndexMetrics, equalTo(indexMetrics));
 
         final List<Measurement> collections = Measurement.combine(
             meterRegistry.getRecorder()
@@ -225,6 +268,8 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
+        var initialSearchMetrics = service.getSearchTierMetrics();
+        var initialIndexMetrics = service.getIndexTierMetrics();
 
         var client = mock(Client.class);
         doAnswer(answer -> {
@@ -237,12 +282,18 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         service.updateSamples(client);
 
         var firstRoundShardInfo = service.getMeteringShardInfo();
+        var firstSearchMetrics = service.getSearchTierMetrics();
+        var firstIndexMetrics = service.getIndexTierMetrics();
 
         assertThat(initialShardInfo, not(nullValue()));
         assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
+        assertThat(initialSearchMetrics, equalTo(SampledTierMetrics.EMPTY));
+        assertThat(initialIndexMetrics, equalTo(SampledTierMetrics.EMPTY));
 
         assertThat(firstRoundShardInfo, not(nullValue()));
         assertThat(firstRoundShardInfo, containsShardInfos(anEmptyMap()));
+        assertThat(firstSearchMetrics, equalTo(SampledTierMetrics.EMPTY));
+        assertThat(firstIndexMetrics, equalTo(SampledTierMetrics.EMPTY));
 
         final List<Measurement> collections = Measurement.combine(
             meterRegistry.getRecorder()
@@ -271,24 +322,37 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             entry(shard2Id, new ShardInfoMetrics(22L, 120L, 1, 3, 0, 0L)),
             entry(shard3Id, new ShardInfoMetrics(23L, 130L, 1, 2, 0, 0L))
         );
+        var searchMetrics1 = randomSampledTierMetrics();
+        var indexMetrics1 = randomSampledTierMetrics();
+        var searchMetrics2 = randomSampledTierMetrics();
+        var indexMetrics2 = randomSampledTierMetrics();
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, meterRegistry);
         var initialShardInfo = service.getMeteringShardInfo();
+        var initialSearchMetrics = service.getSearchTierMetrics();
+        var initialIndexMetrics = service.getIndexTierMetrics();
 
         var client = mock(Client.class);
-        doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
-            .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
+        doAnswer(
+            new TestCollectClusterSamplesActionAnswer(searchMetrics1, indexMetrics1, searchMetrics2, indexMetrics2, shardsInfo, shardsInfo2)
+        ).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
         service.updateSamples(client);
         var firstRoundShardInfo = service.getMeteringShardInfo();
+        var firstSearchMetrics = service.getSearchTierMetrics();
+        var firstIndexMetrics = service.getIndexTierMetrics();
 
         service.updateSamples(client);
         var secondRoundShardInfo = service.getMeteringShardInfo();
+        var secondSearchMetrics = service.getSearchTierMetrics();
+        var secondIndexMetrics = service.getIndexTierMetrics();
 
         assertThat(initialShardInfo, not(nullValue()));
         assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
+        assertThat(initialSearchMetrics, equalTo(SampledTierMetrics.EMPTY));
+        assertThat(initialIndexMetrics, equalTo(SampledTierMetrics.EMPTY));
 
         assertThat(firstRoundShardInfo, not(nullValue()));
         assertThat(
@@ -299,6 +363,8 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
                 entry(shard3Id, withSizeInBytes(13L))
             )
         );
+        assertThat(firstSearchMetrics, equalTo(searchMetrics1));
+        assertThat(firstIndexMetrics, equalTo(indexMetrics1));
 
         assertThat(
             secondRoundShardInfo,
@@ -306,6 +372,26 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
                 entry(shard1Id, withSizeInBytes(11L)),
                 entry(shard2Id, withSizeInBytes(22L)),
                 entry(shard3Id, withSizeInBytes(23L))
+            )
+        );
+
+        var coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
+        assertThat(
+            secondSearchMetrics,
+            equalTo(
+                new SampledTierMetrics(
+                    searchMetrics2.memorySize(),
+                    Activity.merge(Stream.of(searchMetrics1.activity(), searchMetrics2.activity()), coolDown)
+                )
+            )
+        );
+        assertThat(
+            secondIndexMetrics,
+            equalTo(
+                new SampledTierMetrics(
+                    indexMetrics2.memorySize(),
+                    Activity.merge(Stream.of(indexMetrics1.activity(), indexMetrics2.activity()), coolDown)
+                )
             )
         );
 
@@ -435,6 +521,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
         when(clusterState.routingTable()).thenReturn(routingTable);
         when(clusterService.state()).thenReturn(clusterState);
+        when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
         return clusterService;
     }
 
@@ -673,10 +760,36 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
     private static class TestCollectClusterSamplesActionAnswer implements Answer<Object> {
         private final AtomicInteger requestNumber = new AtomicInteger();
+        private final SampledTierMetrics searchMetrics1;
+        private final SampledTierMetrics indexMetrics1;
+        private final SampledTierMetrics searchMetrics2;
+        private final SampledTierMetrics indexMetrics2;
         private final Map<ShardId, ShardInfoMetrics> shardsInfo;
         private final Map<ShardId, ShardInfoMetrics> shardsInfo2;
 
         TestCollectClusterSamplesActionAnswer(Map<ShardId, ShardInfoMetrics> shardsInfo, Map<ShardId, ShardInfoMetrics> shardsInfo2) {
+            this(
+                SampledTierMetrics.EMPTY,
+                SampledTierMetrics.EMPTY,
+                SampledTierMetrics.EMPTY,
+                SampledTierMetrics.EMPTY,
+                shardsInfo,
+                shardsInfo2
+            );
+        }
+
+        TestCollectClusterSamplesActionAnswer(
+            SampledTierMetrics searchMetrics1,
+            SampledTierMetrics indexMetrics1,
+            SampledTierMetrics searchMetrics2,
+            SampledTierMetrics indexMetrics2,
+            Map<ShardId, ShardInfoMetrics> shardsInfo,
+            Map<ShardId, ShardInfoMetrics> shardsInfo2
+        ) {
+            this.searchMetrics1 = searchMetrics1;
+            this.indexMetrics1 = indexMetrics1;
+            this.searchMetrics2 = searchMetrics2;
+            this.indexMetrics2 = indexMetrics2;
             this.shardsInfo = shardsInfo;
             this.shardsInfo2 = shardsInfo2;
         }
@@ -687,11 +800,33 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
             var currentRequest = requestNumber.addAndGet(1);
             if (currentRequest == 1) {
-                listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, shardsInfo, List.of()));
+                listener.onResponse(
+                    new CollectClusterSamplesAction.Response(
+                        searchMetrics1.memorySize(),
+                        indexMetrics1.memorySize(),
+                        searchMetrics1.activity(),
+                        indexMetrics1.activity(),
+                        shardsInfo,
+                        List.of()
+                    )
+                );
             } else {
-                listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, shardsInfo2, List.of()));
+                listener.onResponse(
+                    new CollectClusterSamplesAction.Response(
+                        searchMetrics2.memorySize(),
+                        indexMetrics2.memorySize(),
+                        searchMetrics2.activity(),
+                        indexMetrics2.activity(),
+                        shardsInfo2,
+                        List.of()
+                    )
+                );
             }
             return null;
         }
+    }
+
+    private static SampledTierMetrics randomSampledTierMetrics() {
+        return new SampledTierMetrics(randomNonNegativeLong(), ActivityTests.randomActivity());
     }
 }
