@@ -165,4 +165,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2808
 - class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
+- class: "org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2554"
 
