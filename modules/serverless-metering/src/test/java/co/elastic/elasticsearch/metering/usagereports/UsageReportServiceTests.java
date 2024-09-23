@@ -61,6 +61,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -118,13 +119,19 @@ public class UsageReportServiceTests extends ESTestCase {
     private static class TestSample implements SampledMetricsProvider {
         private final String id;
         private final Map<String, String> metadata;
+        private final Map<String, String> usageMetadata;
         private final Instant creationDate;
 
         private long value;
 
         private TestSample(String id, Map<String, String> metadata, Instant creationDate) {
+            this(id, metadata, null, creationDate);
+        }
+
+        private TestSample(String id, Map<String, String> metadata, Map<String, String> usageMetadata, Instant creationDate) {
             this.id = id;
             this.metadata = metadata;
+            this.usageMetadata = usageMetadata;
             this.creationDate = creationDate;
         }
 
@@ -135,7 +142,9 @@ public class UsageReportServiceTests extends ESTestCase {
         @Override
         public Optional<MetricValues> getMetrics() {
             return Optional.of(
-                SampledMetricsProvider.valuesFromCollection(List.of(new MetricValue(id, "test", metadata, value, creationDate)))
+                SampledMetricsProvider.valuesFromCollection(
+                    List.of(new MetricValue(id, "test", metadata, usageMetadata, value, creationDate))
+                )
             );
         }
     }
@@ -178,6 +187,23 @@ public class UsageReportServiceTests extends ESTestCase {
     }
 
     private static void checkRecords(List<UsageRecord> records, Map<String, Long> counterRecords, Map<String, Long> sampledRecords) {
+        checkRecords(records, counterRecords, sampledRecords, false);
+    }
+
+    private static void checkRecordsWithUsageMeta(
+        List<UsageRecord> records,
+        Map<String, Long> counterRecords,
+        Map<String, Long> sampledRecords
+    ) {
+        checkRecords(records, counterRecords, sampledRecords, true);
+    }
+
+    private static void checkRecords(
+        List<UsageRecord> records,
+        Map<String, Long> counterRecords,
+        Map<String, Long> sampledRecords,
+        boolean hasUsageMetadata
+    ) {
         assertThat(
             records,
             everyItem(
@@ -212,7 +238,11 @@ public class UsageReportServiceTests extends ESTestCase {
                             e -> allOf(
                                 transformedMatch(r -> r.usage().type(), equalTo("test")),
                                 transformedMatch(r -> r.usage().quantity(), equalTo(e.getValue())),
-                                transformedMatch(r -> r.source().metadata(), equalTo(Map.of("id", e.getKey())))
+                                transformedMatch(r -> r.source().metadata(), equalTo(Map.of("id", e.getKey()))),
+                                transformedMatch(
+                                    r -> r.usage().metadata(),
+                                    (hasUsageMetadata ? equalTo(Map.of("usage-meta", e.getKey())) : nullValue())
+                                )
                             )
                         )
                 ).toList()
@@ -225,8 +255,8 @@ public class UsageReportServiceTests extends ESTestCase {
 
         var counter1 = new TestCounter("counter1", Map.of("id", "counter1"));
         var counter2 = new TestCounter("counter2", Map.of("id", "counter2"));
-        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Instant.EPOCH);
-        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"), Instant.EPOCH);
+        var sampled1 = new TestSample("sampled1", Map.of("id", "sampled1"), Map.of("usage-meta", "sampled1"), Instant.EPOCH);
+        var sampled2 = new TestSample("sampled2", Map.of("id", "sampled2"), Map.of("usage-meta", "sampled2"), Instant.EPOCH);
 
         var reportPeriodDuration = Duration.ofNanos(REPORT_PERIOD.getNanos());
 
@@ -261,7 +291,7 @@ public class UsageReportServiceTests extends ESTestCase {
             service.start();
 
             var reported = pollRecords(records, 4, TimeValue.timeValueSeconds(10), deterministicTaskQueue);
-            checkRecords(reported, Map.of("counter1", 15L, "counter2", 20L), Map.of("sampled1", 50L, "sampled2", 60L));
+            checkRecordsWithUsageMeta(reported, Map.of("counter1", 15L, "counter2", 20L), Map.of("sampled1", 50L, "sampled2", 60L));
 
             service.stop();
         }

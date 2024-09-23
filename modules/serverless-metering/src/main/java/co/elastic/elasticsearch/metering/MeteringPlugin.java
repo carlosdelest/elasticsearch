@@ -209,6 +209,7 @@ public class MeteringPlugin extends Plugin
 
         builtInCounterMetrics.addAll(counterMetricsProviders);
         builtInSampledMetrics.add(clusterMetricsService.createSampledStorageMetricsProvider());
+        builtInSampledMetrics.add(clusterMetricsService.createSampledVCUMetricsProvider());
         builtInSampledMetrics.addAll(sampledMetricsProviders);
 
         if (projectId.isEmpty()) {

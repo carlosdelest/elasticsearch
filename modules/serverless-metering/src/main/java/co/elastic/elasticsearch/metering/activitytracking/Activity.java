@@ -47,6 +47,10 @@ public record Activity(
         return new Activity(now, now, lastActivityRecentPeriod, firstActivityRecentPeriod);
     }
 
+    public boolean isActive(Instant now, Duration coolDown) {
+        return lastActivityRecentPeriod.plus(coolDown).isAfter(now);
+    }
+
     record Period(Instant last, Instant first) {
         public static Period EMPTY = new Period(Instant.EPOCH, Instant.EPOCH);
     }

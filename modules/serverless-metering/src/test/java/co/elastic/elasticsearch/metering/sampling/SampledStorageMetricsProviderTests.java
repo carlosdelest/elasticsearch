@@ -35,9 +35,9 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
-import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
-import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
+import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
+import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
 import static java.util.Map.entry;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -128,13 +128,13 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             .orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent);
 
         assertThat(metric1.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
-        assertThat(metric1.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
+        assertThat(metric1.sourceMetadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
         assertThat(metric1.value(), is(11L));
         assertThat(metric1.meteredObjectCreationTime(), notNullValue());
         assertTrue(metric1.meteredObjectCreationTime().isAfter(Instant.EPOCH));
 
         assertThat(metric2.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
-        assertThat(metric2.metadata(), equalTo(Map.of("index", indexName)));
+        assertThat(metric2.sourceMetadata(), equalTo(Map.of("index", indexName)));
         assertThat(metric2.value(), is(11L));
     }
 
@@ -166,7 +166,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var metric = (MetricValue) metrics.toArray()[0];
         assertThat(metric.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
         assertThat(metric.type(), equalTo("es_indexed_data"));
-        assertThat(metric.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
+        assertThat(metric.sourceMetadata(), equalTo(Map.of("index", indexName, "shard", "" + shardIdInt)));
 
         assertThat(metric.value(), is(11L));
     }
@@ -199,7 +199,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var metric = (MetricValue) metrics.toArray()[0];
         assertThat(metric.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
         assertThat(metric.type(), equalTo("es_raw_stored_data"));
-        assertThat(metric.metadata(), equalTo(Map.of("index", indexName)));
+        assertThat(metric.sourceMetadata(), equalTo(Map.of("index", indexName)));
 
         assertThat(metric.value(), is(11L));
     }
@@ -265,14 +265,14 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         int shard = 0;
         for (MetricValue metric : indexedDataMetrics) {
             assertThat(metric.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shard));
-            assertThat(metric.metadata(), equalTo(Map.of("index", indexName, "shard", "" + shard)));
+            assertThat(metric.sourceMetadata(), equalTo(Map.of("index", indexName, "shard", "" + shard)));
             assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
             shard++;
         }
 
         for (MetricValue metric : rawStoredDataMetrics) {
             assertThat(metric.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
-            assertThat(metric.metadata(), equalTo(Map.of("index", indexName)));
+            assertThat(metric.sourceMetadata(), equalTo(Map.of("index", indexName)));
             assertThat(metric.value(), is(60L));
             shard++;
         }
@@ -316,9 +316,9 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
 
         for (MetricValue metric : indexedDataMetrics) {
             assertThat(metric.id(), startsWith(IX_METRIC_ID_PREFIX + ":" + baseIndexName));
-            assertThat(metric.metadata(), aMapWithSize(2));
-            assertThat(metric.metadata(), hasEntry(is("index"), startsWith(baseIndexName)));
-            assertThat(metric.metadata(), hasEntry(is("shard"), not(emptyOrNullString())));
+            assertThat(metric.sourceMetadata(), aMapWithSize(2));
+            assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
+            assertThat(metric.sourceMetadata(), hasEntry(is("shard"), not(emptyOrNullString())));
             assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
         }
 
@@ -326,7 +326,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             rawStoredDataMetrics.stream().map(MetricValue::id).toList(),
             containsInAnyOrder(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 0, RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 1)
         );
-        var metadataList = rawStoredDataMetrics.stream().map(MetricValue::metadata).toList();
+        var metadataList = rawStoredDataMetrics.stream().map(MetricValue::sourceMetadata).toList();
         assertThat(metadataList, everyItem(aMapWithSize(1)));
         assertThat(metadataList, everyItem(hasEntry(is("index"), startsWith(baseIndexName))));
         assertThat(rawStoredDataMetrics.stream().map(MetricValue::value).toList(), everyItem(is(145L)));
@@ -370,16 +370,16 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
 
         for (MetricValue metric : indexedDataMetrics) {
             assertThat(metric.id(), startsWith(IX_METRIC_ID_PREFIX + ":" + baseIndexName));
-            assertThat(metric.metadata(), aMapWithSize(2));
-            assertThat(metric.metadata(), hasEntry(is("index"), startsWith(baseIndexName)));
-            assertThat(metric.metadata(), hasEntry(is("shard"), not(emptyOrNullString())));
+            assertThat(metric.sourceMetadata(), aMapWithSize(2));
+            assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
+            assertThat(metric.sourceMetadata(), hasEntry(is("shard"), not(emptyOrNullString())));
             assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
         }
 
         for (MetricValue metric : rawStoredDataMetrics) {
             assertThat(metric.id(), startsWith(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName));
-            assertThat(metric.metadata(), aMapWithSize(1));
-            assertThat(metric.metadata(), hasEntry(is("index"), startsWith(baseIndexName)));
+            assertThat(metric.sourceMetadata(), aMapWithSize(1));
+            assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
             assertThat(metric.value(), is(60L));
         }
     }
@@ -418,8 +418,8 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 either(startsWith(IX_METRIC_ID_PREFIX + ":" + indexName)).or(startsWith(RA_S_METRIC_ID_PREFIX + ":" + indexName))
             );
             assertThat(metric.type(), is(either(equalTo("es_indexed_data")).or(equalTo("es_raw_stored_data"))));
-            assertThat(metric.metadata(), hasEntry("index", indexName));
-            assertThat(metric.metadata(), hasPartial);
+            assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
+            assertThat(metric.sourceMetadata(), hasPartial);
 
             var isFailed = metric.id().endsWith(":" + failedIndex);
             if (isFailed) {

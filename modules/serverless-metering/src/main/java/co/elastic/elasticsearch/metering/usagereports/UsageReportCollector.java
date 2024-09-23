@@ -29,6 +29,7 @@ import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -293,7 +294,7 @@ class UsageReportCollector {
 
         counterMetricValuesList.forEach(counterMetricValues -> {
             for (var v : counterMetricValues) {
-                records.add(getRecordForCount(v.id(), v.type(), v.value(), v.metadata(), now));
+                records.add(getRecordForCount(v.id(), v.type(), v.value(), v.sourceMetadata(), now));
             }
         });
 
@@ -420,7 +421,7 @@ class UsageReportCollector {
         List<UsageRecord> records
     ) {
         for (var v : currentSampledMetricValues) {
-            records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), sampleTimestamp));
+            records.add(getRecordForSample(v.id(), v.type(), v.value(), v.sourceMetadata(), v.usageMetadata(), sampleTimestamp));
         }
     }
 
@@ -444,7 +445,7 @@ class UsageReportCollector {
                         latestCommittedTimestamp,
                         sampleTimestamp
                     );
-                    records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), timestamp));
+                    records.add(getRecordForSample(v.id(), v.type(), v.value(), v.sourceMetadata(), v.usageMetadata(), timestamp));
                 }
             }
         }
@@ -468,7 +469,7 @@ class UsageReportCollector {
                 // - the metric id was not available before, but it is now (e.g. node not reachable during a previous collect (PARTIAL))
                 // In all these cases, the metric refers to data that was either not existing or not available. Therefore, we do not
                 // interpolate (not even with a constant value), as this might lead to over-billing.
-                records.add(getRecordForSample(v.id(), v.type(), v.value(), v.metadata(), sampleTimestamp));
+                records.add(getRecordForSample(v.id(), v.type(), v.value(), v.sourceMetadata(), v.usageMetadata(), sampleTimestamp));
             } else {
                 for (var timestamp : timestampsToSend) {
                     var previousValue = previousMetricValue.value();
@@ -491,7 +492,7 @@ class UsageReportCollector {
                         latestCommittedTimestamp,
                         sampleTimestamp
                     );
-                    records.add(getRecordForSample(v.id(), v.type(), value, v.metadata(), timestamp));
+                    records.add(getRecordForSample(v.id(), v.type(), value, v.sourceMetadata(), v.usageMetadata(), timestamp));
                 }
             }
         }
@@ -510,11 +511,18 @@ class UsageReportCollector {
         );
     }
 
-    private UsageRecord getRecordForSample(String metric, String type, long value, Map<String, String> metadata, Instant sampleTimestamp) {
+    private UsageRecord getRecordForSample(
+        String metric,
+        String type,
+        long value,
+        Map<String, String> metadata,
+        @Nullable Map<String, String> usageMetadata,
+        Instant sampleTimestamp
+    ) {
         return new UsageRecord(
             generateId(metric, sampleTimestamp),
             sampleTimestamp,
-            new UsageMetrics(type, null, value, reportPeriod, null, null),
+            new UsageMetrics(type, null, value, reportPeriod, null, usageMetadata),
             new UsageSource(sourceId, projectId, metadata)
         );
     }
