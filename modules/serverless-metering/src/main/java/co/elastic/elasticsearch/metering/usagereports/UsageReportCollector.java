@@ -349,7 +349,6 @@ class UsageReportCollector {
             }
         }
 
-        boolean canAdvanceSampledMetricsTimeCursor = false;
         List<MetricValue> currentSampledMetricValues = new ArrayList<>();
         if (timestampsToSend.isEmpty() == false) {
             for (SampledMetricsProvider sampledMetricsProvider : sampledMetricsProviders) {
@@ -357,13 +356,20 @@ class UsageReportCollector {
                     var sampledMetricValues = sampledMetricsProvider.getMetrics();
                     if (sampledMetricValues.isEmpty()) {
                         log.info("[{}] is not ready for collect yet", sampledMetricsProvider.getClass().getName());
+                        // we can only advance the committed sample timestamp if all providers are ready
+                        // if not, we have to skip ALL sampled metric providers
+                        currentSampledMetricValues.clear();
                         break;
                     } else {
-                        for (var v : sampledMetricValues.get()) {
+                        SampledMetricsProvider.MetricValues metricValues = sampledMetricValues.get();
+                        if (metricValues.iterator().hasNext() == false) {
+                            // we can only advance the committed sample timestamp if all providers have data to return
+                            // if not and some provider returns NO_VALUES, we have to skip ALL sampled metric providers
+                            currentSampledMetricValues.clear();
+                            break;
+                        }
+                        for (var v : metricValues) {
                             currentSampledMetricValues.add(v);
-                            // we will only receive samples on the node hosting the MeteringIndexInfoTask
-                            // if MetricValues is empty (or if there's no timestamps to send) we must not advance the committed timestamp
-                            canAdvanceSampledMetricsTimeCursor = true;
                         }
                     }
                 } catch (Exception e) {
@@ -371,7 +377,9 @@ class UsageReportCollector {
                         Strings.format("Exception thrown collecting sampled metrics from %s", sampledMetricsProvider.getClass().getName()),
                         e
                     );
-                    canAdvanceSampledMetricsTimeCursor = false;
+                    // we can only advance the committed sample timestamp if all providers have data to return
+                    // if not, we have to skip ALL sampled metric providers
+                    currentSampledMetricValues.clear();
                 }
             }
 
@@ -392,7 +400,7 @@ class UsageReportCollector {
             for (var metricValues : counterMetricValuesList) {
                 metricValues.commit();
             }
-            if (canAdvanceSampledMetricsTimeCursor) {
+            if (currentSampledMetricValues.isEmpty() == false) {
                 var committed = sampledMetricsTimeCursor.commitUpTo(sampleTimestamp);
                 if (committed) {
                     lastSampledMetricValues = currentSampledMetricValues.stream()
