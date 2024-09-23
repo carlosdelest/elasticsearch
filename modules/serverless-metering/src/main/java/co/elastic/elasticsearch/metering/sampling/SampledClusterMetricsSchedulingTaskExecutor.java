@@ -63,7 +63,7 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         Setting.Property.NodeScope
     );
 
-    public static TimeValue MINIMUM_METERING_INFO_UPDATE_PERIOD = TimeValue.timeValueSeconds(5);
+    public static TimeValue MINIMUM_METERING_INFO_UPDATE_PERIOD = TimeValue.timeValueSeconds(1);
 
     public static final Setting<TimeValue> POLL_INTERVAL_SETTING = Setting.timeSetting(
         "metering.index-info-task.poll.interval",

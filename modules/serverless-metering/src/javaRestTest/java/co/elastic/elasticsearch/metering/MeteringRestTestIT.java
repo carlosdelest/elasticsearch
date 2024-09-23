@@ -54,8 +54,6 @@ public class MeteringRestTestIT extends ESRestTestCase {
 
     private static final Logger logger = LogManager.getLogger(MeteringRestTestIT.class);
 
-    static int REPORT_PERIOD = 5;
-
     @ClassRule
     public static UsageApiTestServer usageApiTestServer = new UsageApiTestServer();
 
@@ -69,7 +67,10 @@ public class MeteringRestTestIT extends ESRestTestCase {
         .setting("xpack.ml.enabled", "false")
         .setting("metering.project_id", "testProjectId")
         .setting("metering.url", "http://localhost:" + usageApiTestServer.getAddress().getPort())
-        .setting("metering.report_period", REPORT_PERIOD + "s") // speed things up a bit
+        // speed things up a bit
+        .setting("metering.report_period", "5s")
+        .setting("metering.index-info-task.poll.interval", "1s")
+        .setting("serverless.autoscaling.search_metrics.push_interval", "500ms")
         .build();
 
     @Override

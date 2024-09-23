@@ -18,7 +18,7 @@
 package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
-import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsProvider;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
@@ -47,7 +47,7 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
         IndicesService indicesService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        ShardSizeStatsReader shardSizeStatsReader,
+        ShardSizeStatsProvider shardSizeStatsProvider,
         TelemetryProvider telemetryProvider,
         TaskActivityTracker activityTracker
     ) {
@@ -58,7 +58,7 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
             threadPool,
             actionFilters,
             OsProbe.getInstance(),
-            shardSizeStatsReader,
+            shardSizeStatsProvider,
             telemetryProvider,
             activityTracker
         );
@@ -72,7 +72,7 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
         ThreadPool threadPool,
         ActionFilters actionFilters,
         OsProbe osProbe,
-        ShardSizeStatsReader shardSizeStatsReader,
+        ShardSizeStatsProvider shardSizeStatsProvider,
         TelemetryProvider telemetryProvider,
         TaskActivityTracker activityTracker
     ) {
@@ -90,7 +90,7 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
         this.shardMetricsReader = DiscoveryNode.hasRole(settings, DiscoveryNodeRole.SEARCH_ROLE)
             ? new ShardInfoMetricsReader.DefaultShardInfoMetricsReader(
                 indicesService,
-                shardSizeStatsReader,
+                shardSizeStatsProvider,
                 telemetryProvider.getMeterRegistry()
             )
             : new ShardInfoMetricsReader.NoOpReader();

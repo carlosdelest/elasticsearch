@@ -26,47 +26,86 @@ import org.elasticsearch.common.io.stream.Writeable;
 import java.io.IOException;
 
 public record ShardInfoMetrics(
-    long sizeInBytes,
     long docCount,
+    long interactiveSizeInBytes,
+    long nonInteractiveSizeInBytes,
+    long rawStoredSizeInBytes,
     long primaryTerm,
     long generation,
-    long storedIngestSizeInBytes,
     long indexCreationDateEpochMilli
 ) implements Writeable {
 
-    public static final ShardInfoMetrics EMPTY = new ShardInfoMetrics(0, 0, 0, 0, 0, 0);
+    public static final ShardInfoMetrics EMPTY = new ShardInfoMetrics(0, 0, 0L, 0, 0, 0, 0);
 
     public ShardInfoMetrics {
-        assert sizeInBytes >= 0 : "size must be non negative";
+        assert interactiveSizeInBytes >= 0 : "interactiveSizeInBytes must be non negative";
+        assert nonInteractiveSizeInBytes >= 0 : "nonInteractiveSizeInBytes must be non negative";
+        assert rawStoredSizeInBytes >= 0 : "rawStoredSizeInBytes must be non negative";
+    }
+
+    public long totalSizeInBytes() {
+        return interactiveSizeInBytes + nonInteractiveSizeInBytes;
     }
 
     public static ShardInfoMetrics from(StreamInput in) throws IOException {
-        var sizeInBytes = in.readVLong();
-        long docCount = in.readVLong();
-        var primaryTerm = in.readVLong();
-        var generation = in.readVLong();
-        final long storedIngestSizeInBytes;
-        long indexCreationDateEpochMilli = 0;
-        if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_INDEX_CREATION_DATE_ADDED)) {
-            storedIngestSizeInBytes = in.readVLong();
-            indexCreationDateEpochMilli = in.readVLong();
+        if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_INTERACTIVE_SIZE)) {
+            return new ShardInfoMetrics(
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong()
+            );
         } else {
-            storedIngestSizeInBytes = in.readOptionalVLong();
+            long interactiveSizeInBytes = 0; // we don't know about interactive data yet
+            long nonInteractiveSizeInBytes = in.readVLong();
+            long docCount = in.readVLong();
+            var primaryTerm = in.readVLong();
+            var generation = in.readVLong();
+            final long storedIngestSizeInBytes;
+            long indexCreationDateEpochMilli = 0;
+            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_INDEX_CREATION_DATE_ADDED)) {
+                storedIngestSizeInBytes = in.readVLong();
+                indexCreationDateEpochMilli = in.readVLong();
+            } else {
+                storedIngestSizeInBytes = in.readOptionalVLong();
+            }
+            return new ShardInfoMetrics(
+                docCount,
+                interactiveSizeInBytes,
+                nonInteractiveSizeInBytes,
+                storedIngestSizeInBytes,
+                primaryTerm,
+                generation,
+                indexCreationDateEpochMilli
+            );
         }
-        return new ShardInfoMetrics(sizeInBytes, docCount, primaryTerm, generation, storedIngestSizeInBytes, indexCreationDateEpochMilli);
+
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(sizeInBytes);
-        out.writeVLong(docCount);
-        out.writeVLong(primaryTerm);
-        out.writeVLong(generation);
-        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_INDEX_CREATION_DATE_ADDED)) {
-            out.writeVLong(storedIngestSizeInBytes);
+        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_INTERACTIVE_SIZE)) {
+            out.writeVLong(docCount);
+            out.writeVLong(interactiveSizeInBytes);
+            out.writeVLong(nonInteractiveSizeInBytes);
+            out.writeVLong(rawStoredSizeInBytes);
+            out.writeVLong(primaryTerm);
+            out.writeVLong(generation);
             out.writeVLong(indexCreationDateEpochMilli);
         } else {
-            out.writeOptionalVLong(storedIngestSizeInBytes);
+            out.writeVLong(totalSizeInBytes());
+            out.writeVLong(docCount);
+            out.writeVLong(primaryTerm);
+            out.writeVLong(generation);
+            if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_INDEX_CREATION_DATE_ADDED)) {
+                out.writeVLong(rawStoredSizeInBytes);
+                out.writeVLong(indexCreationDateEpochMilli);
+            } else {
+                out.writeOptionalVLong(rawStoredSizeInBytes);
+            }
         }
     }
 

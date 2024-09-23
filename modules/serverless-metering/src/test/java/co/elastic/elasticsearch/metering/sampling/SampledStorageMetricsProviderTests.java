@@ -103,7 +103,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(11L, 110L, 1, 1, 11L, Instant.now().toEpochMilli())
+                    new ShardInfoMetrics(110L, 11L, 0L, 11L, 1, 1, Instant.now().toEpochMilli())
                 )
             )
         );
@@ -148,7 +148,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(11L, 110L, 1, 1, 0, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, creationDate.toEpochMilli())
                 )
             )
         );
@@ -181,7 +181,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(0, 110L, 1, 1, 11L, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(110L, 0, 0L, 11L, 1, 1, creationDate.toEpochMilli())
                 )
             )
         );
@@ -214,7 +214,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(0, 110L, 1, 1, 0, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(110L, 0, 0L, 0, 1, 1, creationDate.toEpochMilli())
                 )
             )
         );
@@ -241,7 +241,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shardId,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(size, 110L, 1, 1, hasIngestSize ? size : 0L, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(110L, size, 0L, hasIngestSize ? size : 0L, 1, 1, creationDate.toEpochMilli())
                 )
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
@@ -292,7 +292,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                     shardId,
                     new SampledClusterMetricsService.ShardSample(
                         "myIndexUUID",
-                        new ShardInfoMetrics(size, 110L, 1, 1, hasIngestSize ? size : 0L, creationDate.toEpochMilli())
+                        new ShardInfoMetrics(110L, size, 0L, hasIngestSize ? size : 0L, 1, 1, creationDate.toEpochMilli())
                     )
                 );
             }
@@ -346,7 +346,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                     shardId,
                     new SampledClusterMetricsService.ShardSample(
                         "myIndexUUID",
-                        new ShardInfoMetrics(size, 110L, 1, 1, hasIngestSize ? size : 0, creationDate.toEpochMilli())
+                        new ShardInfoMetrics(110L, size, 0L, hasIngestSize ? size : 0, 1, 1, creationDate.toEpochMilli())
                     )
                 );
             }
@@ -395,7 +395,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shardId,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(size, 110L, 1, 1, size, creationDate.toEpochMilli())
+                    new ShardInfoMetrics(110L, size, 0L, size, 1, 1, creationDate.toEpochMilli())
                 )
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));

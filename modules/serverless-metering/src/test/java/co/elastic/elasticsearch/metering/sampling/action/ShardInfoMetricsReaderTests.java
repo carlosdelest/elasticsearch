@@ -19,7 +19,8 @@ package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 import co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader;
-import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsProvider;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader.ShardSize;
 
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.index.SegmentCommitInfo;
@@ -38,71 +39,80 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.telemetry.InstrumentType;
 import org.elasticsearch.telemetry.Measurement;
 import org.elasticsearch.telemetry.RecordingMeterRegistry;
-import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
+import org.hamcrest.FeatureMatcher;
+import org.hamcrest.Matcher;
 
-import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
 import static co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
-import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
+import static co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader.SHARD_INFO_CACHED_TOTAL_METRIC;
+import static co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC;
+import static co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_NEWER_GEN_TOTAL_METRIC;
+import static co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader.SHARD_INFO_SHARDS_TOTAL_METRIC;
+import static co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader.SHARD_INFO_UNAVAILABLE_TOTAL_METRIC;
+import static java.util.Collections.emptyIterator;
+import static org.elasticsearch.telemetry.InstrumentType.DOUBLE_HISTOGRAM;
+import static org.elasticsearch.telemetry.InstrumentType.LONG_COUNTER;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.oneOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.hamcrest.MockitoHamcrest.argThat;
 
 public class ShardInfoMetricsReaderTests extends ESTestCase {
 
-    public void testEmptySetWhenNoIndices() throws IOException {
+    private static int GEN_1 = 1;
+    private static int GEN_2 = 2;
 
-        var indicesService = mock(IndicesService.class);
-        var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, shardInfoCache, meterRegistry);
+    private static ShardSize EMPTY_SHARD_SIZE_OLD_PRIMARY = new ShardSize(0, 0, 0, 0);
+    private static ShardSize EMPTY_SHARD_SIZE_GEN_1 = new ShardSize(0, 0, 1, GEN_1);
+    private static ShardInfoMetrics EMPTY_SHARD_INFO_GEN_1 = new ShardInfoMetrics(0, 0, 0L, 0, 1, GEN_1, 0);
 
-        when(indicesService.iterator()).thenReturn(Collections.emptyIterator());
+    private IndicesService indicesService = mock();
+    private ShardSizeStatsProvider shardSizeStatsProvider = mock();
+    private InMemoryShardInfoMetricsCache shardInfoCache = spy(new InMemoryShardInfoMetricsCache());
+    private RecordingMeterRegistry meterRegistry = new RecordingMeterRegistry();
+    private DefaultShardInfoMetricsReader shardReader = new DefaultShardInfoMetricsReader(
+        indicesService,
+        shardSizeStatsProvider,
+        shardInfoCache,
+        meterRegistry
+    );
+
+    public void testEmptySetWhenNoIndices() {
+        when(indicesService.iterator()).thenReturn(emptyIterator());
 
         var shardSizes = shardReader.getUpdatedShardInfos("TEST-NODE");
-
         assertThat(shardSizes.keySet(), empty());
-        final List<Measurement> measurements = Measurement.combine(
-            meterRegistry.getRecorder()
-                .getMeasurements(InstrumentType.LONG_COUNTER, DefaultShardInfoMetricsReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
-        );
-        assertThat(measurements, empty());
+
+        assertThat(getMeasurements(LONG_COUNTER, SHARD_INFO_SHARDS_TOTAL_METRIC), empty());
     }
 
-    public void testMultipleIndicesReportAllShards() throws IOException {
+    public void testMultipleIndicesReportAllShards() {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
         ShardId shardId2 = new ShardId("index1", "index1UUID", 2);
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
-        var indicesService = mock(IndicesService.class);
-        var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, shardInfoCache, meterRegistry);
+        when(shardSizeStatsProvider.getShardSize(any())).thenReturn(EMPTY_SHARD_SIZE_GEN_1);
 
-        var engine = mock(Engine.class);
-        var index1 = createMockIndexService(engine, shardId1, shardId2);
-        var index2 = createMockIndexService(engine, shardId3);
+        var index1 = createMockIndexService(Map.of(shardId1, segmentInfos(GEN_1), shardId2, segmentInfos(GEN_1)));
+        var index2 = createMockIndexService(Map.of(shardId3, segmentInfos(GEN_2)));
 
-        when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
-        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(11L));
+        when(indicesService.iterator()).thenReturn(List.of(index1, index2).iterator());
 
         var shardInfoMap = shardReader.getUpdatedShardInfos("TEST-NODE");
 
@@ -110,287 +120,267 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         verify(shardInfoCache, times(3)).updateCachedShardMetrics(any(), eq("TEST-NODE"), any());
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
-        final List<Measurement> measurements = Measurement.combine(
-            meterRegistry.getRecorder()
-                .getMeasurements(InstrumentType.LONG_COUNTER, DefaultShardInfoMetricsReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
-        );
-        assertThat(measurements, hasSize(1));
-        assertThat(measurements.get(0).getLong(), equalTo(3L));
+
+        assertThat(getMeasurements(LONG_COUNTER, SHARD_INFO_SHARDS_TOTAL_METRIC), contains(measurement(is(3L))));
+        // shard3 has progressed to generation 2
+        assertThat(getMeasurements(LONG_COUNTER, SHARD_INFO_RA_STORAGE_NEWER_GEN_TOTAL_METRIC), contains(measurement(is(1L))));
     }
 
-    public void testCacheUpdatedWhenIndexDeleted() throws IOException {
+    public void testSkipUnavailableShards() {
+        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+        ShardId shardId2 = new ShardId("index1", "index1UUID", 2);
+        ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
+        ShardId shardId4 = new ShardId("index2", "index2UUID", 2);
+
+        when(shardSizeStatsProvider.getShardSize(argThat(oneOf(shardId1, shardId2)))).thenReturn(EMPTY_SHARD_SIZE_GEN_1);
+        // no shard size available for shardId3, shardId4 skipped due to old primary
+        when(shardSizeStatsProvider.getShardSize(shardId4)).thenReturn(EMPTY_SHARD_SIZE_OLD_PRIMARY);
+
+        var index1 = createMockIndexService(Map.of(shardId1, segmentInfos(GEN_1), shardId2, segmentInfos(GEN_1)));
+        var index2 = createMockIndexService(Map.of(shardId3, segmentInfos(GEN_1), shardId4, segmentInfos(GEN_1)));
+
+        // shardId2 turned unavailable
+        when(index1.getShard(shardId2.id()).getEngineOrNull()).thenReturn(null);
+
+        when(indicesService.iterator()).thenReturn(List.of(index1, index2).iterator());
+
+        var shardInfoMap = shardReader.getUpdatedShardInfos("TEST-NODE");
+
+        assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1)); // other shards are unavailable
+
+        assertThat(getMeasurements(LONG_COUNTER, SHARD_INFO_SHARDS_TOTAL_METRIC), contains(measurement(is(4L))));
+        assertThat(getMeasurements(LONG_COUNTER, SHARD_INFO_UNAVAILABLE_TOTAL_METRIC), contains(measurement(is(3L))));
+    }
+
+    public void testCacheUpdatedWhenIndexDeleted() {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
         ShardId shardId2 = new ShardId("index1", "index1UUID", 2);
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
-        var indicesService = mock(IndicesService.class);
-        var shardInfoCache = new InMemoryShardInfoMetricsCache();
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, shardInfoCache, meterRegistry);
+        // irrelevant for this test
+        when(shardSizeStatsProvider.getShardSize(any(ShardId.class))).thenReturn(EMPTY_SHARD_SIZE_GEN_1);
 
-        var engine = mock(Engine.class);
-        var index1 = createMockIndexService(engine, shardId1, shardId2);
-        var index2 = createMockIndexService(engine, shardId3);
+        var index1 = createMockIndexService(Map.of(shardId1, segmentInfos(GEN_1), shardId2, segmentInfos(GEN_1)));
+        var index2 = createMockIndexService(Map.of(shardId3, segmentInfos(GEN_1)));
 
-        when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
-        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
+        when(indicesService.iterator()).thenReturn(List.of(index1, index2).iterator());
 
         var shardInfoMap = shardReader.getUpdatedShardInfos("TEST-NODE");
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
         assertThat(shardInfoCache.shardMetricsCache.keySet(), containsInAnyOrder(shardId1, shardId2, shardId3));
 
-        index2 = createMockIndexService(engine, shardId3);
+        // pretend index1 was deleted (not included in iterator anymore)
         when(indicesService.iterator()).thenReturn(Iterators.single(index2));
 
         shardInfoMap = shardReader.getUpdatedShardInfos("TEST-NODE");
         assertThat(shardInfoMap.keySet(), empty());
+        // shards of index1 got dropped from the cache
         assertThat(shardInfoCache.shardMetricsCache.keySet(), contains(shardId3));
 
-        final List<Measurement> requests = Measurement.combine(
-            meterRegistry.getRecorder()
-                .getMeasurements(InstrumentType.LONG_COUNTER, DefaultShardInfoMetricsReader.SHARD_INFO_REQUESTS_TOTAL_METRIC)
-        );
-        assertThat(requests, hasSize(1));
-        assertThat(requests.get(0).getLong(), equalTo(4L));
-
-        final List<Measurement> cached = Measurement.combine(
-            meterRegistry.getRecorder()
-                .getMeasurements(InstrumentType.LONG_COUNTER, DefaultShardInfoMetricsReader.SHARD_INFO_CACHED_TOTAL_METRIC)
-        );
-        assertThat(cached, hasSize(1));
-        assertThat(cached.get(0).getLong(), equalTo(1L));
+        assertThat(getMeasurements(LONG_COUNTER, SHARD_INFO_SHARDS_TOTAL_METRIC), contains(measurement(is(4L))));
+        assertThat(getMeasurements(LONG_COUNTER, SHARD_INFO_CACHED_TOTAL_METRIC), contains(measurement(is(1L))));
     }
 
-    public void testNotReturningUnchangedDataInDiff() throws IOException {
+    public void testNotReturningUnchangedDataInDiff() {
         ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
         ShardId shardId2 = new ShardId("index1", "index1UUID", 2);
         ShardId shardId3 = new ShardId("index2", "index2UUID", 1);
 
-        var indicesService = mock(IndicesService.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var shardInfoCache = mock(InMemoryShardInfoMetricsCache.class);
-        when(shardInfoCache.getCachedShardMetrics(eq(shardId3), anyLong(), anyLong())).thenReturn(
-            Optional.of(new InMemoryShardInfoMetricsCache.CacheEntry("TEST-NODE", new ShardInfoMetrics(10L, 100L, 1L, 1L, 0, 0)))
-        );
+        when(shardSizeStatsProvider.getShardSize(any(ShardId.class))).thenReturn(EMPTY_SHARD_SIZE_GEN_1);
+        shardInfoCache.updateCachedShardMetrics(shardId3, "TEST-NODE", EMPTY_SHARD_INFO_GEN_1);
 
-        var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, shardInfoCache, meterRegistry);
+        var index1 = createMockIndexService(Map.of(shardId1, segmentInfos(GEN_1), shardId2, segmentInfos(GEN_1)));
+        var index2 = createMockIndexService(Map.of(shardId3, segmentInfos(GEN_1)));
 
-        var engine = mock(Engine.class);
-        var index1 = createMockIndexService(engine, shardId1, shardId2);
-        var index2 = createMockIndexService(engine, shardId3);
-
-        when(indicesService.iterator()).thenReturn(Iterators.concat(Iterators.single(index1), Iterators.single(index2)));
-        when(engine.getLastCommittedSegmentInfos()).thenReturn(createMockSegmentInfos(10L));
+        when(indicesService.iterator()).thenReturn(List.of(index1, index2).iterator());
 
         var shardInfoMap = shardReader.getUpdatedShardInfos("TEST-NODE");
 
         verify(shardInfoCache, times(3)).getCachedShardMetrics(any(), anyLong(), anyLong());
         // updateCachedShardInfo is not invoked when both generation and requestToken are up-to-date
-        verify(shardInfoCache, times(2)).updateCachedShardMetrics(any(), eq("TEST-NODE"), any());
+        // we get 2 new updates in addition to the one when setting up the test
+        verify(shardInfoCache, times(3)).updateCachedShardMetrics(any(), eq("TEST-NODE"), any());
 
         assertThat(shardInfoMap.keySet(), containsInAnyOrder(shardId1, shardId2));
 
-        final List<Measurement> cached = Measurement.combine(
-            meterRegistry.getRecorder()
-                .getMeasurements(InstrumentType.LONG_COUNTER, DefaultShardInfoMetricsReader.SHARD_INFO_CACHED_TOTAL_METRIC)
+        assertThat(getMeasurements(LONG_COUNTER, SHARD_INFO_CACHED_TOTAL_METRIC), contains(measurement(is(1L))));
+    }
+
+    public void testComputeShardInfoWithoutRAS() {
+        ShardId shardId = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = segmentInfos(GEN_1, segmentCommitInfo(100, 0, 0, null), segmentCommitInfo(50, 10, 20, null));
+
+        ShardSize shardSize = new ShardSize(10L, 20L, 1, GEN_1);
+
+        var timestampMillis = randomNonNegativeLong();
+        var shardInfo = shardReader.computeShardInfo(shardId, shardSize, timestampMillis, segmentInfos);
+        assertThat(shardInfo, equalTo(new ShardInfoMetrics(120L, 10L, 20L, 0, 1L, GEN_1, timestampMillis)));
+
+        assertThat(getMeasurements(DOUBLE_HISTOGRAM, SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC), empty());
+    }
+
+    public void testComputeShardInfoWithFullRASMultipleSegments() {
+        ShardId shardId = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = segmentInfos(GEN_1, segmentCommitInfo(10, 0, 0, 8L), segmentCommitInfo(50, 10, 20, 6L));
+
+        ShardSize shardSize = new ShardSize(180L, 120L, 1, GEN_1);
+
+        var timestampMillis = randomNonNegativeLong();
+        var shardInfo = shardReader.computeShardInfo(shardId, shardSize, timestampMillis, segmentInfos);
+        assertThat(shardInfo, equalTo(new ShardInfoMetrics(30L, 180L, 120L, 8 * 10L + 20 * 6L, 1L, GEN_1, timestampMillis)));
+
+        assertThat(getMeasurements(DOUBLE_HISTOGRAM, SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC), contains(measurement(is((0.5)))));
+    }
+
+    public void testComputeShardInfoWithInvalidRASSegment() {
+        ShardId shardId = new ShardId("index1", "index1UUID", 1);
+
+        var segmentInfos = segmentInfos(
+            GEN_1,
+            segmentCommitInfo(10, 0, 0, 8L),
+            // This segment has an invalid RA-S avg value (due to ES-9361)
+            segmentCommitInfo(50, 10, 20, -1L)
         );
-        assertThat(cached, hasSize(1));
-        assertThat(cached.get(0).getLong(), equalTo(1L));
+
+        ShardSize shardSize = new ShardSize(180L, 120L, 1, GEN_1);
+
+        var timestampMillis = randomNonNegativeLong();
+        var shardInfo = shardReader.computeShardInfo(shardId, shardSize, timestampMillis, segmentInfos);
+        // invalid segment is not included in the RA-S calculation
+        assertThat(shardInfo, equalTo(new ShardInfoMetrics(30L, 180L, 120L, 8 * 10L, 1L, GEN_1, timestampMillis)));
     }
 
-    public void testComputeShardInfoWithoutRAS() throws IOException {
-        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+    public void testComputeShardInfoWithPartialRASMultipleSegments() {
+        ShardId shardId = new ShardId("index1", "index1UUID", 1);
 
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        segmentInfos.add(new TestSegmentCommitInfo(10L, 100, 0, 0, null));
-        segmentInfos.add(new TestSegmentCommitInfo(20L, 50, 10, 20, null));
+        var segmentInfos = segmentInfos(
+            GEN_1,
+            segmentCommitInfo(10, 0, 0, 8L),
+            segmentCommitInfo(10, 0, 0, null),
+            segmentCommitInfo(50, 0, 0, 11L),
+            segmentCommitInfo(50, 10, 20, 6L)
+        );
 
-        var indicesService = mock(IndicesService.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), meterRegistry);
-        var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
+        ShardSize shardSize = new ShardSize(400L, 200L, 1, GEN_1);
 
-        assertThat(shardInfo.docCount(), equalTo(120L));
-        assertThat(shardInfo.sizeInBytes(), equalTo(30L));
-        assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(0L));
+        var timestampMillis = randomNonNegativeLong();
+        var shardInfo = shardReader.computeShardInfo(shardId, shardSize, timestampMillis, segmentInfos);
+        assertThat(shardInfo, equalTo(new ShardInfoMetrics(90L, 400L, 200L, 80L + 550L + 120L, 1L, GEN_1, timestampMillis)));
 
-        final List<Measurement> approximated = meterRegistry.getRecorder()
-            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, DefaultShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
-        assertThat(approximated, empty());
+        assertThat(getMeasurements(DOUBLE_HISTOGRAM, SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC), contains(measurement(is(0.25))));
     }
 
-    public void testComputeShardInfoWithFullRASMultipleSegments() throws IOException {
-        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+    public void testComputeShardInfoWithTimeseriesRASMultipleSegments() {
+        ShardId shardId = new ShardId("index1", "index1UUID", 1);
 
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, 8L));
-        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
+        var segmentInfos = segmentInfos(
+            GEN_1,
+            Map.of(RA_STORAGE_KEY, "234"),
+            segmentCommitInfo(100, 0, 0, null),
+            segmentCommitInfo(50, 10, 20, null)
+        );
 
-        var indicesService = mock(IndicesService.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), meterRegistry);
-        var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
+        ShardSize shardSize = new ShardSize(15L, 15L, 1, GEN_1);
 
-        assertThat(shardInfo.docCount(), equalTo(30L));
-        assertThat(shardInfo.sizeInBytes(), equalTo(300L));
-        assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(80L + 120L));
-
-        final List<Measurement> approximated = meterRegistry.getRecorder()
-            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, DefaultShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
-        assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.5))));
+        var timestampMillis = randomNonNegativeLong();
+        var shardInfo = shardReader.computeShardInfo(shardId, shardSize, timestampMillis, segmentInfos);
+        assertThat(shardInfo, equalTo(new ShardInfoMetrics(120L, 15L, 15L, 234L, 1L, GEN_1, timestampMillis)));
     }
 
-    public void testComputeShardInfoWithInvalidRASSegment() throws IOException {
-        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+    public void testComputeShardInfoWithInvalidTimeseriesRAS() {
+        ShardId shardId = new ShardId("index1", "index1UUID", 1);
 
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, 8L));
-        // This segment has an invalid RA-S avg value (due to ES-9361)
-        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, -1L));
-
-        var indicesService = mock(IndicesService.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), meterRegistry);
-        var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
-
-        assertThat(shardInfo.docCount(), equalTo(30L));
-        assertThat(shardInfo.sizeInBytes(), equalTo(300L));
-        assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(80L)); // invalid segment is not included
-    }
-
-    public void testComputeShardInfoWithPartialRASMultipleSegments() throws IOException {
-        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
-
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, 8L));
-        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, null));
-        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 0, 0, 11L));
-        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
-
-        var indicesService = mock(IndicesService.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var meterRegistry = new RecordingMeterRegistry();
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), meterRegistry);
-        var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
-
-        assertThat(shardInfo.docCount(), equalTo(90L));
-        assertThat(shardInfo.sizeInBytes(), equalTo(600L));
-        assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(80L + 550L + 120L));
-
-        final List<Measurement> approximated = meterRegistry.getRecorder()
-            .getMeasurements(InstrumentType.DOUBLE_HISTOGRAM, DefaultShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC);
-        assertThat(approximated, contains(transformedMatch(Measurement::getDouble, equalTo(0.25))));
-    }
-
-    public void testComputeShardInfoWithTimeseriesRASMultipleSegments() throws IOException {
-        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
-
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        segmentInfos.add(new TestSegmentCommitInfo(10L, 100, 0, 0, null));
-        segmentInfos.add(new TestSegmentCommitInfo(20L, 50, 10, 20, null));
-        segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
-
-        var indicesService = mock(IndicesService.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), MeterRegistry.NOOP);
-        var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
-
-        assertThat(shardInfo.docCount(), equalTo(120L));
-        assertThat(shardInfo.sizeInBytes(), equalTo(30L));
-        assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(234L));
-    }
-
-    public void testComputeShardInfoWithInvalidTimeseriesRAS() throws IOException {
-        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
-
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
         // The shard has an invalid RA-S value (due to ES-9361)
-        segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "-100"), false);
+        var segmentInfos = segmentInfos(GEN_1, Map.of(RA_STORAGE_KEY, "-100"));
 
-        var shardReader = new DefaultShardInfoMetricsReader(mock(), mock(), mock(), MeterRegistry.NOOP);
-        var shardInfo = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
+        // shard size is irrelevant for this test
+        var shardInfo = shardReader.computeShardInfo(shardId, EMPTY_SHARD_SIZE_GEN_1, 0, segmentInfos);
 
-        assertThat(shardInfo.storedIngestSizeInBytes(), equalTo(0L));
+        assertThat(shardInfo.rawStoredSizeInBytes(), equalTo(0L));
     }
 
-    public void testComputeShardStatsPerSegmentRASHasPrecedenceOverPerShardRAS() throws IOException {
+    public void testComputeShardStatsPerSegmentRASHasPrecedenceOverPerShardRAS() {
+        ShardId shardId = new ShardId("index1", "index1UUID", 1);
 
-        ShardId shardId1 = new ShardId("index1", "index1UUID", 1);
+        var segmentInfos = segmentInfos(
+            GEN_1,
+            Map.of(RA_STORAGE_KEY, "234"),
+            segmentCommitInfo(10, 0, 0, null),
+            segmentCommitInfo(50, 10, 20, 6L)
+        );
 
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        segmentInfos.add(new TestSegmentCommitInfo(100L, 10, 0, 0, null));
-        segmentInfos.add(new TestSegmentCommitInfo(200L, 50, 10, 20, 6L));
-        segmentInfos.setUserData(Map.of(RA_STORAGE_KEY, "234"), false);
+        ShardSize shardSize = new ShardSize(180L, 120L, 1, GEN_1);
 
-        var indicesService = mock(IndicesService.class);
-        var shardSizeStatsReader = mock(ShardSizeStatsReader.class);
-        var shardReader = new DefaultShardInfoMetricsReader(indicesService, shardSizeStatsReader, mock(), MeterRegistry.NOOP);
-        var shardStats = shardReader.computeShardInfo(shardId1, 1, 1, 0, segmentInfos);
-
-        assertThat(shardStats.docCount(), equalTo(30L));
-        assertThat(shardStats.sizeInBytes(), equalTo(300L));
-        assertThat(shardStats.storedIngestSizeInBytes(), equalTo(120L));
+        var timestampMillis = randomNonNegativeLong();
+        var shardInfo = shardReader.computeShardInfo(shardId, shardSize, timestampMillis, segmentInfos);
+        assertThat(shardInfo, equalTo(new ShardInfoMetrics(30L, 180L, 120L, 120L, 1L, GEN_1, timestampMillis)));
     }
 
-    private static class TestSegmentCommitInfo extends SegmentCommitInfo {
-
-        private final long size;
-
-        TestSegmentCommitInfo(long size, int maxDoc, int delCount, int softDelCount, Long segmentRASize) {
-            super(
-                new SegmentInfo(
-                    mock(Directory.class),
-                    Version.LATEST,
-                    Version.LATEST,
-                    "name",
-                    maxDoc,
-                    false,
-                    false,
-                    mock(Codec.class),
-                    Map.of(),
-                    new byte[16],
-                    segmentRASize != null ? Map.of(RA_STORAGE_AVG_KEY, Long.toString(segmentRASize)) : Map.of(),
-                    Sort.INDEXORDER
-                ),
-                delCount,
-                softDelCount,
-                0,
-                0,
-                0,
-                null
-            );
-            this.size = size;
-        }
-
-        @Override
-        public long sizeInBytes() {
-            return size;
-        }
+    private static SegmentCommitInfo segmentCommitInfo(int maxDoc, int delCount, int softDelCount, Long segmentRASize) {
+        var segmentInfo = new SegmentInfo(
+            mock(Directory.class),
+            Version.LATEST,
+            Version.LATEST,
+            "name",
+            maxDoc,
+            false,
+            false,
+            mock(Codec.class),
+            Map.of(),
+            new byte[16],
+            segmentRASize != null ? Map.of(RA_STORAGE_AVG_KEY, Long.toString(segmentRASize)) : Map.of(),
+            Sort.INDEXORDER
+        );
+        return new SegmentCommitInfo(segmentInfo, delCount, softDelCount, 0, 0, 0, null);
     }
 
-    private static SegmentInfos createMockSegmentInfos(long size) {
-        var segmentInfos = new SegmentInfos(Version.LATEST.major);
-        var segmentInfo = new TestSegmentCommitInfo(size, 100, 0, 0, null);
-        segmentInfos.add(segmentInfo);
+    private static SegmentInfos segmentInfos(long generation, SegmentCommitInfo... commitInfos) {
+        return segmentInfos(generation, null, commitInfos);
+    }
+
+    private static SegmentInfos segmentInfos(long generation, Map<String, String> userData, SegmentCommitInfo... commitInfos) {
+        SegmentInfos segmentInfos = new SegmentInfos(Version.LATEST.major);
+        segmentInfos.setNextWriteGeneration(generation);
+        segmentInfos.setUserData(userData, false);
+        segmentInfos.addAll(Arrays.asList(commitInfos));
         return segmentInfos;
     }
 
-    private static IndexService createMockIndexService(Engine engine, ShardId... shardIds) {
+    private static IndexService createMockIndexService(Map<ShardId, SegmentInfos> shards) {
         var index = mock(IndexService.class);
-        when(index.iterator()).thenReturn(Arrays.stream(shardIds).map(shardId -> {
-            var shard1 = mock(IndexShard.class);
-            when(shard1.getEngineOrNull()).thenReturn(engine);
-            when(shard1.shardId()).thenReturn(shardId);
-            return shard1;
-        }).iterator());
+        List<IndexShard> indexShards = shards.entrySet().stream().map(entries -> {
+            var shard = mock(IndexShard.class);
+            var engine = mock(Engine.class);
+            when(index.getShard(entries.getKey().id())).thenReturn(shard);
+            when(shard.getOperationPrimaryTerm()).thenReturn(1L);
+            when(shard.getEngineOrNull()).thenReturn(engine);
+            when(shard.shardId()).thenReturn(entries.getKey());
+            when(engine.getLastCommittedSegmentInfos()).thenReturn(entries.getValue());
+            return shard;
+        }).toList();
+        when(index.iterator()).thenAnswer(inv -> indexShards.iterator());
         var metadata = mock(IndexMetadata.class);
         when(metadata.getCreationDate()).thenReturn(0L);
         when(index.getMetadata()).thenReturn(metadata);
         return index;
+    }
+
+    private List<Measurement> getMeasurements(InstrumentType type, String name) {
+        return Measurement.combine(meterRegistry.getRecorder().getMeasurements(type, name));
+    }
+
+    private static Matcher<Measurement> measurement(Matcher<Number> valueMatcher) {
+        return new FeatureMatcher<>(valueMatcher, "a measurement of", "value") {
+            @Override
+            protected Number featureValueOf(Measurement measurement) {
+                if (measurement.isDouble()) {
+                    return measurement.getDouble();
+                } else {
+                    return measurement.getLong();
+                }
+            }
+        };
     }
 }

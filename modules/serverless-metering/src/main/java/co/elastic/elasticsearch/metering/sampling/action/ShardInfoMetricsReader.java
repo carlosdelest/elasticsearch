@@ -19,11 +19,11 @@ package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
-import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsProvider;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader.ShardSize;
 
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.util.StringHelper;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.shard.IndexShard;
@@ -35,7 +35,6 @@ import org.elasticsearch.telemetry.metric.DoubleHistogram;
 import org.elasticsearch.telemetry.metric.LongCounter;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,7 +42,7 @@ import java.util.Map;
 import java.util.Set;
 
 interface ShardInfoMetricsReader {
-    Map<ShardId, ShardInfoMetrics> getUpdatedShardInfos(String requestCacheToken) throws IOException;
+    Map<ShardId, ShardInfoMetrics> getUpdatedShardInfos(String requestCacheToken);
 
     class NoOpReader implements ShardInfoMetricsReader {
         @Override
@@ -55,50 +54,58 @@ interface ShardInfoMetricsReader {
     class DefaultShardInfoMetricsReader implements ShardInfoMetricsReader {
         private static final Logger logger = LogManager.getLogger(ShardInfoMetricsReader.class);
 
-        static final String SHARD_INFO_REQUESTS_TOTAL_METRIC = "es.metering.shard_info.requests.total";
+        static final String SHARD_INFO_SHARDS_TOTAL_METRIC = "es.metering.shard_info.shards.total";
         static final String SHARD_INFO_CACHED_TOTAL_METRIC = "es.metering.shard_info.cached.total";
-        static final String SHARD_INFO_ERRORS_TOTAL_METRIC = "es.metering.shard_info.error.total";
+        static final String SHARD_INFO_UNAVAILABLE_TOTAL_METRIC = "es.metering.shard_info.unavailable.total";
+        static final String SHARD_INFO_RA_STORAGE_NEWER_GEN_TOTAL_METRIC = "es.metering.shard_info.computed.total";
         static final String SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC = "es.metering.shard_info.rastorage.approximated.ratio";
 
         private final IndicesService indicesService;
-        private final ShardSizeStatsReader shardSizeStatsReader;
+        private final ShardSizeStatsProvider shardSizeStatsProvider;
         private final InMemoryShardInfoMetricsCache shardMetricsCache;
 
-        private final LongCounter shardInfoRequestsTotalCounter;
+        private final LongCounter shardInfoShardsTotalCounter;
         private final LongCounter shardInfoCachedTotalCounter;
-        private final LongCounter shardInfoErrorsTotalCounter;
+        private final LongCounter shardInfoUnavailableTotalCounter;
+        private final LongCounter shardInfoRaStorageNewerGenTotalCounter;
         private final DoubleHistogram shardInfoRaStorageApproximatedRatio;
 
         DefaultShardInfoMetricsReader(
             IndicesService indicesService,
-            ShardSizeStatsReader shardSizeStatsReader,
+            ShardSizeStatsProvider shardSizeStatsProvider,
             MeterRegistry meterRegistry
         ) {
-            this(indicesService, shardSizeStatsReader, new InMemoryShardInfoMetricsCache(), meterRegistry);
+            this(indicesService, shardSizeStatsProvider, new InMemoryShardInfoMetricsCache(), meterRegistry);
         }
 
         DefaultShardInfoMetricsReader(
             IndicesService indicesService,
-            ShardSizeStatsReader shardSizeStatsReader,
+            ShardSizeStatsProvider shardSizeStatsProvider,
             InMemoryShardInfoMetricsCache shardMetricsCache,
             MeterRegistry meterRegistry
         ) {
             this.indicesService = indicesService;
-            this.shardSizeStatsReader = shardSizeStatsReader;
+            this.shardSizeStatsProvider = shardSizeStatsProvider;
             this.shardMetricsCache = shardMetricsCache;
-            this.shardInfoRequestsTotalCounter = meterRegistry.registerLongCounter(
-                SHARD_INFO_REQUESTS_TOTAL_METRIC,
-                "Total number of shard info requests processed",
+
+            this.shardInfoShardsTotalCounter = meterRegistry.registerLongCounter(
+                SHARD_INFO_SHARDS_TOTAL_METRIC,
+                "Total number of shard infos processed",
                 "unit"
             );
             this.shardInfoCachedTotalCounter = meterRegistry.registerLongCounter(
                 SHARD_INFO_CACHED_TOTAL_METRIC,
-                "Total number of shard info requests resulting in a cache hit",
+                "Total number of shard infos resulting in a cache hit",
                 "unit"
             );
-            this.shardInfoErrorsTotalCounter = meterRegistry.registerLongCounter(
-                SHARD_INFO_ERRORS_TOTAL_METRIC,
-                "Total number of errors computing shard infos",
+            this.shardInfoUnavailableTotalCounter = meterRegistry.registerLongCounter(
+                SHARD_INFO_UNAVAILABLE_TOTAL_METRIC,
+                "Total number of shard infos skipped due to shard unavailability",
+                "unit"
+            );
+            this.shardInfoRaStorageNewerGenTotalCounter = meterRegistry.registerLongCounter(
+                SHARD_INFO_RA_STORAGE_NEWER_GEN_TOTAL_METRIC,
+                "Total number of shard infos with RA-S on a newer generation",
                 "unit"
             );
             this.shardInfoRaStorageApproximatedRatio = meterRegistry.registerDoubleHistogram(
@@ -156,44 +163,25 @@ interface ShardInfoMetricsReader {
             return raStorage;
         }
 
-        ShardInfoMetrics computeShardInfo(
-            ShardId shardId,
-            long primaryTerm,
-            long generation,
-            long indexCreationDate,
-            SegmentInfos segmentInfos
-        ) throws IOException {
-            long sizeInBytes = 0;
+        ShardInfoMetrics computeShardInfo(ShardId shardId, ShardSize shardSize, long indexCreationDate, SegmentInfos segmentInfos) {
+            // TODO: Moving liveDocCount into ShardSize would allow to skip this entirely if a project doesn't track RA-S.
             long liveDocCount = 0;
-
             Long totalRAValue = null;
             final int segments = segmentInfos.size();
             int approximatedSegments = 0;
-            for (SegmentCommitInfo si : segmentInfos) {
-                try {
-                    long commitSize = si.sizeInBytes();
-                    long commitTotalDocCount = si.info.maxDoc();
-                    long commitLiveDocCount = commitTotalDocCount - si.getDelCount() - si.getSoftDelCount();
-                    sizeInBytes += commitSize;
-                    liveDocCount += commitLiveDocCount;
 
-                    boolean isExact = commitLiveDocCount == commitTotalDocCount;
-                    var raStorage = getRAStorageFromSegmentAttribute(shardId, si, commitLiveDocCount, isExact);
-                    if (raStorage != null) {
-                        totalRAValue = raStorage + (totalRAValue != null ? totalRAValue : 0);
-                        if (isExact == false) {
-                            ++approximatedSegments;
-                        }
+            for (SegmentCommitInfo si : segmentInfos) {
+                long commitTotalDocCount = si.info.maxDoc();
+                long commitLiveDocCount = commitTotalDocCount - si.getDelCount() - si.getSoftDelCount();
+                liveDocCount += commitLiveDocCount;
+
+                boolean isExact = commitLiveDocCount == commitTotalDocCount;
+                var raStorage = getRAStorageFromSegmentAttribute(shardId, si, commitLiveDocCount, isExact);
+                if (raStorage != null) {
+                    totalRAValue = raStorage + (totalRAValue != null ? totalRAValue : 0);
+                    if (isExact == false) {
+                        ++approximatedSegments;
                     }
-                } catch (IOException err) {
-                    shardInfoErrorsTotalCounter.increment();
-                    logger.warn(
-                        "Failed to read file size for shard: [{}], commitId: [{}], err: [{}]",
-                        shardId,
-                        StringHelper.idToString(si.getId()),
-                        err
-                    );
-                    throw err;
                 }
             }
 
@@ -212,42 +200,52 @@ interface ShardInfoMetricsReader {
                     totalRAValue = 0L;
                 }
             }
-
-            return new ShardInfoMetrics(sizeInBytes, liveDocCount, primaryTerm, generation, totalRAValue, indexCreationDate);
+            return new ShardInfoMetrics(
+                liveDocCount,
+                shardSize.interactiveSizeInBytes(),
+                shardSize.nonInteractiveSizeInBytes(),
+                totalRAValue,
+                shardSize.primaryTerm(),
+                shardSize.generation(),
+                indexCreationDate
+            );
         }
 
         @Override
-        public Map<ShardId, ShardInfoMetrics> getUpdatedShardInfos(String requestCacheToken) throws IOException {
+        public Map<ShardId, ShardInfoMetrics> getUpdatedShardInfos(String requestCacheToken) {
+            assert requestCacheToken != null : "cacheToken required";
             Map<ShardId, ShardInfoMetrics> shardsWithNewInfo = new HashMap<>();
             Set<ShardId> activeShards = new HashSet<>();
             for (final IndexService indexService : indicesService) {
                 for (final IndexShard shard : indexService) {
-                    Engine engine = shard.getEngineOrNull();
-                    if (engine == null || shard.isSystem()) {
+                    if (shard.isSystem()) {
                         continue;
                     }
-                    shardInfoRequestsTotalCounter.increment();
+                    shardInfoShardsTotalCounter.increment();
+
                     ShardId shardId = shard.shardId();
+                    // get pre-calculated shard size provided by SearchShardSizeCollector
+                    ShardSize shardSize = shardSizeStatsProvider.getShardSize(shardId);
+                    if (shardSize == null || shard.getOperationPrimaryTerm() != shardSize.primaryTerm()) {
+                        // The shard is currently not yet available or a new primary was promoted since gathering the latest shard sizes.
+                        // From a metering perspective it seems ok to not provide an update for this shard at this point.
+                        shardInfoUnavailableTotalCounter.increment();
+                        continue;
+                    }
+
                     activeShards.add(shardId);
-
-                    SegmentInfos segmentInfos = engine.getLastCommittedSegmentInfos();
-                    long primaryTerm = shard.getOperationPrimaryTerm();
-                    long generation = segmentInfos.getGeneration();
-
+                    // Caching is based on the latest published primary term and generation of SearchShardSizeCollector
+                    // Note that the cached total RA-S value might be slightly ahead on a newer generation as it is calculated adhoc
+                    // with a possible delay of up to the publishing frequency of SearchShardSizeCollector.
+                    long primaryTerm = shardSize.primaryTerm();
+                    long generation = shardSize.generation();
                     var cachedShardInfo = shardMetricsCache.getCachedShardMetrics(shardId, primaryTerm, generation);
-
                     if (cachedShardInfo.isPresent()) {
                         // Cached information is up-to-date
                         var shardInfo = cachedShardInfo.get().shardInfo();
                         var token = cachedShardInfo.get().token();
                         shardInfoCachedTotalCounter.increment();
-                        logger.debug(
-                            "cached shard size for [{}] at [{}:{}] is [{}]",
-                            shardId,
-                            primaryTerm,
-                            generation,
-                            shardInfo.sizeInBytes()
-                        );
+                        logger.debug("cached shard info for [{}]: [{}]", shardId, shardInfo);
 
                         // If requester changed from the last time, include this shard info in the response and update the cache entry with
                         // the new request token
@@ -258,12 +256,24 @@ interface ShardInfoMetricsReader {
 
                     } else {
                         // Cached information is outdated or missing: re-compute shard stats, include in response, and update cache entry
-                        var indexCreationDate = indexService.getMetadata().getCreationDate();
-                        var shardInfo = computeShardInfo(shardId, primaryTerm, generation, indexCreationDate, segmentInfos);
-                        shardsWithNewInfo.put(shardId, shardInfo);
-                        if (requestCacheToken != null) {
-                            shardMetricsCache.updateCachedShardMetrics(shardId, requestCacheToken, shardInfo);
+                        Engine engine = shard.getEngineOrNull();
+                        if (engine == null) {
+                            // The shard just became unavailable (we got a valid, cached shard size).
+                            // It's ok to not provide an update for this shard during this collection.
+                            activeShards.remove(shardId);
+                            shardInfoUnavailableTotalCounter.increment();
+                            continue;
                         }
+                        var segmentInfos = engine.getLastCommittedSegmentInfos();
+                        // Total RA-S is an approximation, using a slightly newer generation than the pre-calculated shard size is ok.
+                        // However, track this using an APM metric which is to be looked at relative to #shards - #unavailable - #cached
+                        if (segmentInfos.getGeneration() != shardSize.generation()) {
+                            shardInfoRaStorageNewerGenTotalCounter.increment();
+                        }
+                        var indexCreationDate = indexService.getMetadata().getCreationDate();
+                        var shardInfo = computeShardInfo(shardId, shardSize, indexCreationDate, segmentInfos);
+                        shardsWithNewInfo.put(shardId, shardInfo);
+                        shardMetricsCache.updateCachedShardMetrics(shardId, requestCacheToken, shardInfo);
                     }
                 }
             }

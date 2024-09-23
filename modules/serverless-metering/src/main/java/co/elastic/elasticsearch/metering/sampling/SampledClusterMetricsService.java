@@ -270,7 +270,7 @@ public class SampledClusterMetricsService {
             boolean partial = currentInfo.status().contains(SamplingStatus.PARTIAL);
             List<MetricValue> metrics = new ArrayList<>();
             for (final var shardEntry : currentInfo.shardSamples.entrySet()) {
-                long size = shardEntry.getValue().shardInfo().sizeInBytes();
+                long size = shardEntry.getValue().shardInfo().totalSizeInBytes();
                 // Do not generate records with size 0
                 if (size > 0) {
                     int shardId = shardEntry.getKey().shardId();
@@ -345,7 +345,7 @@ public class SampledClusterMetricsService {
             private long raStorageSize;
 
             void accumulate(Map.Entry<ShardKey, ShardSample> t) {
-                raStorageSize += t.getValue().shardInfo().storedIngestSizeInBytes();
+                raStorageSize += t.getValue().shardInfo().rawStoredSizeInBytes();
                 indexCreationDate = getEarlierValidCreationDate(
                     indexCreationDate,
                     Instant.ofEpochMilli(t.getValue().shardInfo.indexCreationDateEpochMilli())

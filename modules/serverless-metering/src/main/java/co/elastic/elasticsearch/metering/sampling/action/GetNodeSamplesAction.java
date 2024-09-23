@@ -53,6 +53,7 @@ public class GetNodeSamplesAction {
          */
         public Request(String cacheToken) {
             this.cacheToken = cacheToken;
+            assert cacheToken != null : "cacheToken required to get node samples";
         }
 
         public Request(StreamInput in) throws IOException {

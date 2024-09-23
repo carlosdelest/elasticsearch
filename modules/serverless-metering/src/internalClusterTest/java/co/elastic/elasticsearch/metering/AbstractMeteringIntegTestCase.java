@@ -17,12 +17,14 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.UsageReportService;
 import co.elastic.elasticsearch.metering.usagereports.publisher.HttpClientThreadFilter;
 import co.elastic.elasticsearch.metering.usagereports.publisher.HttpMeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
+import co.elastic.elasticsearch.stateless.autoscaling.search.SearchShardSizeCollector;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
 import com.sun.net.httpserver.HttpExchange;
@@ -64,6 +66,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessIntegTestCase {
 
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
+    public static final TimeValue REPORT_PERIOD = TimeValue.timeValueSeconds(5);
 
     private final BlockingQueue<List<UsageRecord>> received = new LinkedBlockingQueue<>();
     private HttpServer server;
@@ -113,7 +116,10 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
         return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
             .put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
-            .put(UsageReportService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
+            // speed things up a bit
+            .put(UsageReportService.REPORT_PERIOD.getKey(), "5s")
+            .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), "1s")
+            .put(SearchShardSizeCollector.PUSH_INTERVAL_SETTING.getKey(), "500ms")
             .put("xpack.searchable.snapshot.shared_cache.size", "16MB")
             .put("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
             .build();

@@ -56,7 +56,6 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
 
     private static final Logger logger = LogManager.getLogger(MeteringRestTestIT.class);
 
-    static int REPORT_PERIOD = 5;
     String indexName = "test_index_1";
 
     @ClassRule
@@ -70,11 +69,13 @@ public class Metering1kDocsRestTestIT extends ESRestTestCase {
         .name("javaRestTest")
         .user("admin-user", "x-pack-test-password")
         .setting("xpack.ml.enabled", "false")
+        .setting("serverless.project_type", randomFrom("SECURITY", "OBSERVABILITY"))
         .setting("metering.project_id", "testProjectId")
         .setting("metering.url", "http://localhost:" + usageApiTestServer.getAddress().getPort())
-        .setting("metering.report_period", REPORT_PERIOD + "s") // speed things up a bit
-        .setting("metering.index-info-task.poll.interval", REPORT_PERIOD + "s")
-        .setting("serverless.project_type", randomFrom("SECURITY", "OBSERVABILITY"))
+        // speed things up a bit
+        .setting("metering.report_period", "5s")
+        .setting("metering.index-info-task.poll.interval", "1s")
+        .setting("serverless.autoscaling.search_metrics.push_interval", "500ms")
         .build();
 
     @Override

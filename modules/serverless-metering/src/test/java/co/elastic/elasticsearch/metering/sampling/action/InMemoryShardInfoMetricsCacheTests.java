@@ -37,21 +37,21 @@ public class InMemoryShardInfoMetricsCacheTests extends ESTestCase {
         var shardSizeService = new InMemoryShardInfoMetricsCache();
         var shard1QueryResult = shardSizeService.getCachedShardMetrics(shardId1, 1, 1);
 
-        var shard1Info2 = new ShardInfoMetrics(10L, 100L, 1, 1, 11L, 0);
+        var shard1Info2 = new ShardInfoMetrics(100L, 10L, 0L, 11L, 1, 1, 0);
         shardSizeService.updateCachedShardMetrics(shardId1, testNodeToken, shard1Info2);
         var secondShard1QueryResult = shardSizeService.getCachedShardMetrics(shardId1, 1, 1);
 
-        var shard1Info3 = new ShardInfoMetrics(11L, 110L, 1, 1, 12L, 0);
+        var shard1Info3 = new ShardInfoMetrics(110L, 11L, 0L, 12L, 1, 1, 0);
         shardSizeService.updateCachedShardMetrics(shardId1, testNodeToken, shard1Info3);
         var thirdShard1QueryResult = shardSizeService.getCachedShardMetrics(shardId1, 1, 1);
 
         var shard2QueryResult = shardSizeService.getCachedShardMetrics(shardId2, 1, 1);
 
-        var shard2Info2 = new ShardInfoMetrics(20L, 200L, 1, 1, 21L, 0);
+        var shard2Info2 = new ShardInfoMetrics(200L, 20L, 0L, 21L, 1, 1, 0);
         shardSizeService.updateCachedShardMetrics(shardId2, testNodeToken, shard2Info2);
         var secondShard2QueryResult = shardSizeService.getCachedShardMetrics(shardId2, 1, 1);
 
-        var shard2Info3 = new ShardInfoMetrics(21L, 210L, 1, 1, 22L, 0);
+        var shard2Info3 = new ShardInfoMetrics(210L, 21L, 0L, 22L, 1, 1, 0);
         shardSizeService.updateCachedShardMetrics(shardId2, testNodeToken, shard2Info3);
         var thirdShard2QueryResult = shardSizeService.getCachedShardMetrics(shardId2, 1, 1);
 
@@ -73,14 +73,14 @@ public class InMemoryShardInfoMetricsCacheTests extends ESTestCase {
         var shardSizeService = new InMemoryShardInfoMetricsCache();
         var firstQueryResult = shardSizeService.getCachedShardMetrics(shardId, 1, 1);
 
-        var shardInfo = new ShardInfoMetrics(10L, 100L, 1, 1, 20L, 0);
+        var shardInfo = new ShardInfoMetrics(100L, 10L, 0L, 20L, 1, 1, 0);
         shardSizeService.updateCachedShardMetrics(shardId, testNodeToken, shardInfo);
         var secondQueryResult = shardSizeService.getCachedShardMetrics(shardId, 1, 1);
 
         var differentPrimaryQueryResult = shardSizeService.getCachedShardMetrics(shardId, 2, 1);
         var differentGenerationQueryResult = shardSizeService.getCachedShardMetrics(shardId, 1, 2);
 
-        var updatedShardInfo = new ShardInfoMetrics(11L, 110L, 2, 2, 21L, 0);
+        var updatedShardInfo = new ShardInfoMetrics(110L, 11L, 0L, 21L, 2, 2, 0);
         shardSizeService.updateCachedShardMetrics(shardId, testNodeToken, updatedShardInfo);
         var updatedQueryResult = shardSizeService.getCachedShardMetrics(shardId, 2, 2);
 
@@ -99,11 +99,11 @@ public class InMemoryShardInfoMetricsCacheTests extends ESTestCase {
         final String testNodeToken2 = "TEST-NODE2";
 
         var shardSizeService = new InMemoryShardInfoMetricsCache();
-        var shardInfo = new ShardInfoMetrics(10L, 100L, 1, 1, 0, 0);
+        var shardInfo = new ShardInfoMetrics(100L, 10L, 0L, 0, 1, 1, 0);
         shardSizeService.updateCachedShardMetrics(shardId, testNodeToken1, shardInfo);
         var queryResult = shardSizeService.getCachedShardMetrics(shardId, 1, 1);
 
-        var updatedShardInfo = new ShardInfoMetrics(11L, 110L, 2, 2, 0, 0);
+        var updatedShardInfo = new ShardInfoMetrics(110L, 11L, 0L, 0, 2, 2, 0);
         shardSizeService.updateCachedShardMetrics(shardId, testNodeToken2, updatedShardInfo);
         var updatedQueryResult = shardSizeService.getCachedShardMetrics(shardId, 2, 2);
 

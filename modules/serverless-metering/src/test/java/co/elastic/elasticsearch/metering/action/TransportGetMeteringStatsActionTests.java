@@ -446,8 +446,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(10L, 100L, 0, 0, 10L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(20L, 200L, 0, 0, 20L, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 10L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 20L, 0, 0, EPOCH.toEpochMilli()));
 
         createMockClusterState(
             clusterService,
@@ -483,8 +483,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(10L, 100L, 0, 0, 11L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(20L, 200L, 0, 0, 22L, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 11L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 22L, 0, 0, EPOCH.toEpochMilli()));
 
         createMockClusterState(
             clusterService,
@@ -520,8 +520,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(10L, 100L, 0, 0, 11L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(20L, 200L, 0, 0, 22L, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 11L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 22L, 0, 0, EPOCH.toEpochMilli()));
 
         createMockClusterState(clusterService, 3, 2, b -> {
             b.routingTable(
@@ -577,10 +577,10 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId4 = new ShardId(index4, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(10L, 100L, 0, 0, 10L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(20L, 200L, 0, 0, 20L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId3)).thenReturn(new ShardInfoMetrics(30L, 300L, 0, 0, 30L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId4)).thenReturn(new ShardInfoMetrics(40L, 400L, 0, 0, 40L, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 10L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 20L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId3)).thenReturn(new ShardInfoMetrics(300L, 30L, 0L, 30L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId4)).thenReturn(new ShardInfoMetrics(400L, 40L, 0L, 40L, 0, 0, EPOCH.toEpochMilli()));
 
         var query = new String[] { "foo*", "bar*" };
 
@@ -643,10 +643,10 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var dsShardId = new ShardId(dataStreamIndex, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(10L, 100L, 0, 0, 10L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(20L, 200L, 0, 0, 20L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId3)).thenReturn(new ShardInfoMetrics(30L, 300L, 0, 0, 30L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(dsShardId)).thenReturn(new ShardInfoMetrics(40L, 400L, 0, 0, 40L, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 10L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 20L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId3)).thenReturn(new ShardInfoMetrics(300L, 30L, 0L, 30L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(dsShardId)).thenReturn(new ShardInfoMetrics(400L, 40L, 0L, 40L, 0, 0, EPOCH.toEpochMilli()));
 
         var query = new String[] { "foo*" };
 
@@ -721,8 +721,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(10L, 100L, 0, 0, 11L, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(20L, 200L, 0, 0, 22L, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 11L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 22L, 0, 0, EPOCH.toEpochMilli()));
 
         createMockClusterState(
             clusterService,
@@ -807,7 +807,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         SampledShardInfos mockShardsInfo = mock();
         when(mockShardsInfo.get(any())).thenReturn(ShardInfoMetrics.EMPTY);
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(10L, 100L, 0, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 0, 0, 0, EPOCH.toEpochMilli()));
 
         createMockClusterState(
             clusterService,

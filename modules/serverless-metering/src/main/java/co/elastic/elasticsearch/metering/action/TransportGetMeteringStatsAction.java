@@ -296,16 +296,11 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
     @Deprecated
     long getSizeToDisplay(ShardId shardId, ShardInfoMetrics shardInfo) {
         if (meterRaStorage) {
-            logger.trace(
-                "display _rastorage [{}] for [{}:{}]",
-                shardInfo.storedIngestSizeInBytes(),
-                shardId.getIndexName(),
-                shardId.getId()
-            );
-            return shardInfo.storedIngestSizeInBytes();
+            logger.trace("display _rastorage [{}] for [{}:{}]", shardInfo.rawStoredSizeInBytes(), shardId.getIndexName(), shardId.getId());
+            return shardInfo.rawStoredSizeInBytes();
         }
-        logger.trace("display IX [{}] for [{}:{}]", shardInfo.sizeInBytes(), shardId.getIndexName(), shardId.getId());
-        return shardInfo.sizeInBytes();
+        logger.trace("display IX [{}] for [{}:{}]", shardInfo.totalSizeInBytes(), shardId.getIndexName(), shardId.getId());
+        return shardInfo.totalSizeInBytes();
     }
 
     GetMeteringStatsAction.Response createResponse(
