@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.metering.stats.rest;
 
 import org.elasticsearch.client.Request;
-import org.elasticsearch.client.RestClient;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Settings;
@@ -32,7 +31,7 @@ import static org.hamcrest.Matchers.equalTo;
 
 abstract class MeteringStatsRestTestCase extends ESRestTestCase {
 
-    static int createAndLoadIndex(String indexName, Settings settings) throws IOException {
+    int createAndLoadIndex(String indexName, Settings settings) throws IOException {
         if (randomBoolean()) {
             settings = Settings.builder().put(settings).put(IndexMetadata.SETTING_INDEX_HIDDEN, true).build();
         }
@@ -54,16 +53,8 @@ abstract class MeteringStatsRestTestCase extends ESRestTestCase {
         return numDocs;
     }
 
-    static void ensureGreen(RestClient client, String index) throws IOException {
-        ensureHealth(client, index, (request) -> {
-            request.addParameter("wait_for_status", "green");
-            request.addParameter("wait_for_no_relocating_shards", "true");
-            request.addParameter("level", "shards");
-        });
-    }
-
     @SuppressWarnings("unchecked")
-    static int createAndLoadDatastreamWithRollover(
+    int createAndLoadDatastreamWithRollover(
         String datastreamName,
         Map<String, Integer> indexNameToNumDocsMap,
         Map<String, String> datastreamIndexToDatastreamMap
