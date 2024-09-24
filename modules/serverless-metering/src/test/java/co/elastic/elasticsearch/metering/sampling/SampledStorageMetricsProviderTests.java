@@ -447,11 +447,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.ANOTHER_NODE;
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
-
-        assertThat(metrics, hasSize(0));
+        assertThat(metricValues, isEmpty());
     }
 
     public void testThisNodeIsPersistentTaskNodeButNotReady() {

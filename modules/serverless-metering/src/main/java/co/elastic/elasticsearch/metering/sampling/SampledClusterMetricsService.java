@@ -237,15 +237,8 @@ public class SampledClusterMetricsService {
         Function<SampledClusterMetrics, SampledMetricsProvider.MetricValues> function
     ) {
         var currentInfo = collectedMetrics.get();
-        var currentStatus = persistentTaskNodeStatus;
-
-        if (currentStatus == PersistentTaskNodeStatus.NO_NODE
-            || (currentStatus == PersistentTaskNodeStatus.THIS_NODE && currentInfo == SampledClusterMetrics.EMPTY)) {
-            return Optional.empty(); // We are not ready to return metrics yet
-        }
-
-        if (currentStatus == PersistentTaskNodeStatus.ANOTHER_NODE || currentInfo == SampledClusterMetrics.EMPTY) {
-            return Optional.of(SampledMetricsProvider.NO_VALUES); // We have nothing to report
+        if (persistentTaskNodeStatus != PersistentTaskNodeStatus.THIS_NODE || currentInfo == SampledClusterMetrics.EMPTY) {
+            return Optional.empty(); // not the PersistentTask node or not ready to report yet
         }
         return Optional.ofNullable(function.apply(currentInfo));
     }

@@ -224,9 +224,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         metricsService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.ANOTHER_NODE;
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent));
-
-        assertThat(metrics, hasSize(0));
+        assertThat(metricValues, isEmpty());
     }
 
     public void testThisNodeIsPersistentTaskNodeButNotReady() {

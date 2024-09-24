@@ -361,17 +361,9 @@ class UsageReportCollector {
                         // if not, we have to skip ALL sampled metric providers
                         currentSampledMetricValues.clear();
                         break;
-                    } else {
-                        SampledMetricsProvider.MetricValues metricValues = sampledMetricValues.get();
-                        if (metricValues.iterator().hasNext() == false) {
-                            // we can only advance the committed sample timestamp if all providers have data to return
-                            // if not and some provider returns NO_VALUES, we have to skip ALL sampled metric providers
-                            currentSampledMetricValues.clear();
-                            break;
-                        }
-                        for (var v : metricValues) {
-                            currentSampledMetricValues.add(v);
-                        }
+                    }
+                    for (var v : sampledMetricValues.get()) {
+                        currentSampledMetricValues.add(v);
                     }
                 } catch (Exception e) {
                     log.error(

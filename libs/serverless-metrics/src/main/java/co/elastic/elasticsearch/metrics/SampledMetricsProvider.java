@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.metrics;
 
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.Optional;
 
 /**
@@ -27,19 +26,6 @@ import java.util.Optional;
 public interface SampledMetricsProvider {
 
     interface MetricValues extends Iterable<MetricValue> {}
-
-    MetricValues NO_VALUES = () -> new Iterator<>() {
-        @Override
-        public boolean hasNext() {
-            return false;
-        }
-
-        @Override
-        public MetricValue next() {
-            assert false; // This should never be called
-            return null;
-        }
-    };
 
     static MetricValues valuesFromCollection(Collection<MetricValue> metricValues) {
         return metricValues::iterator;
