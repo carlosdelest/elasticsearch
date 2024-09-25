@@ -15,6 +15,7 @@ steps:
           - sleep ${PROD_CANARY_GATE_WAIT_PERIOD:-86400}
 
       - label: ":pipeline: Trigger Elasticsearch observability checks in Production"
+        # For now, deploying using the 'all' deployment type algo in production-canary
         if: build.env("ENVIRONMENT") == "production-canary"
         depends_on: production_bake_period
         soft_fail: true
@@ -36,3 +37,4 @@ steps:
             CHECK_ALERTS: true
             CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
             CHECK_ALERTS_TRANSIENT_LOOKBACK: 24h
+            DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}

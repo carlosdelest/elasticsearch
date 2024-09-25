@@ -37,6 +37,7 @@ steps:
           - echo "Waiting for 60m for indicative health metrics"
           - sleep ${QA_GATE_WAIT_PERIOD:-3600}
 
+      # For now, deploying using the 'all' deployment type algo in staging 
       - label: ":pipeline: Trigger Elasticsearch observability checks in Staging"
         depends_on: bake_period
         trigger: serverless-quality-gates
@@ -58,3 +59,4 @@ steps:
             CHECK_ELASTICSEARCH_CLUSTER_HEALTH_RATE: true
             CHECK_ALERTS: true
             CHECK_ALERTS_TRANSIENT_LOOKBACK: 60m
+            DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}
