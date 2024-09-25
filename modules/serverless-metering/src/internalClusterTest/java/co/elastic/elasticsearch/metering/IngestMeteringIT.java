@@ -34,7 +34,6 @@ import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.xcontent.XContentType;
-import org.junit.After;
 import org.junit.Before;
 
 import java.io.IOException;
@@ -45,7 +44,6 @@ import java.util.List;
 
 import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
@@ -69,16 +67,6 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     @Before
     public void init() {
         createNewFieldPipeline();
-    }
-
-    @After
-    public void cleanup() {
-        receivedMetrics().clear();
-        assertAcked(
-            clusterAdmin().prepareUpdateSettings(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT)
-                .setPersistentSettings(Settings.builder().putNull("*"))
-                .setTransientSettings(Settings.builder().putNull("*"))
-        );
     }
 
     public void testIngestMetricsAreRecordedThroughBulk() {

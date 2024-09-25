@@ -17,7 +17,6 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
@@ -25,7 +24,6 @@ import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.xcontent.XContentType;
 
@@ -48,7 +46,6 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), ProjectType.ELASTICSEARCH_GENERAL_PURPOSE)
-            .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
             .build();
     }
 

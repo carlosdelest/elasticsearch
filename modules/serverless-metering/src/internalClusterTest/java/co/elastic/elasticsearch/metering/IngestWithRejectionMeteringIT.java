@@ -33,7 +33,6 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.XContentTestUtils;
-import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.xcontent.XContentType;
 import org.mockito.Mockito;
 
@@ -49,10 +48,6 @@ import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcke
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 
-@TestLogging(
-    value = "co.elastic.elasticsearch.metering:TRACE",
-    reason = "This test benefits from the trace messages in the metering module."
-)
 public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase {
 
     private static final int ITEMS_IN_BULK = 100;
@@ -68,7 +63,6 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     protected Collection<Class<? extends Plugin>> nodePlugins() {
         var list = new ArrayList<Class<? extends Plugin>>();
         list.addAll(super.nodePlugins());

@@ -15,20 +15,18 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.usagereports;
 
+import co.elastic.elasticsearch.metering.AbstractMeteringIntegTestCase;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
-import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.xcontent.XContentType;
-import org.junit.After;
 import org.junit.Before;
 
 import java.time.Duration;
@@ -51,11 +49,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
-public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCase {
-
-    private static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
-    private static final TimeValue INTERVAL = TimeValue.timeValueSeconds(5);
-
+public class UsageReportIT extends AbstractMeteringIntegTestCase {
     private static final String indexName = "idx1";
 
     @Before
@@ -84,22 +78,11 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
         });
     }
 
-    @After
-    public void cleanUp() {
-        updateClusterSettings(
-            Settings.builder()
-                .putNull(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey())
-                .putNull(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey())
-        );
-    }
-
     @Override
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
         return Settings.builder()
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
-            .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
             .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
-            .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), INTERVAL)
             .build();
     }
 
@@ -253,12 +236,12 @@ public class SampledMetricsMetadataServiceIT extends AbstractMeteringIntegTestCa
             for (var timestamp : timestamps) {
                 if (prevTimestamp != null) {
                     var difference = Duration.between(prevTimestamp, timestamp);
-                    assertThat(difference.toMillis(), equalTo(INTERVAL.getMillis()));
+                    assertThat(difference.toMillis(), equalTo(REPORT_PERIOD.getMillis()));
                 }
                 prevTimestamp = timestamp;
             }
             // And no missing timestamp
-            assertThat(timestamps, hasItem(afterStopMetadata.getCommittedTimestamp().plusMillis(INTERVAL.getMillis())));
+            assertThat(timestamps, hasItem(afterStopMetadata.getCommittedTimestamp().plusMillis(REPORT_PERIOD.getMillis())));
         } else {
             logger.info(
                 "Different persistent task node, dropping. Last committed: [{}], timestamps: [{}]",

@@ -64,9 +64,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
 @ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
 public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessIntegTestCase {
-
+    protected static final TimeValue REPORT_PERIOD = TimeValue.timeValueSeconds(3);
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
-    public static final TimeValue REPORT_PERIOD = TimeValue.timeValueSeconds(5);
 
     private final BlockingQueue<List<UsageRecord>> received = new LinkedBlockingQueue<>();
     private HttpServer server;
@@ -117,7 +116,7 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
             .put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
             // speed things up a bit
-            .put(UsageReportService.REPORT_PERIOD.getKey(), "5s")
+            .put(UsageReportService.REPORT_PERIOD.getKey(), REPORT_PERIOD.toString())
             .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), "1s")
             .put(SearchShardSizeCollector.PUSH_INTERVAL_SETTING.getKey(), "500ms")
             .put("xpack.searchable.snapshot.shared_cache.size", "16MB")

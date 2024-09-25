@@ -69,7 +69,6 @@ import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.test.InternalSettingsPlugin;
-import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.xcontent.XContentType;
 import org.hamcrest.Matcher;
 import org.junit.After;
@@ -89,7 +88,6 @@ import java.util.function.Function;
 import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
 import static org.elasticsearch.index.IndexSettings.INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.both;
@@ -103,10 +101,6 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
-@TestLogging(
-    reason = "development",
-    value = "co.elastic.elasticsearch.metering.sampling:TRACE,co.elastic.elasticsearch.metering.reporter.RAStorageReporter:TRACE"
-)
 public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     private static final int ASCII_SIZE = 1;
@@ -256,7 +250,6 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
             .put(super.nodeSettings(nodeOrdinal, otherSettings))
             .put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), ProjectType.OBSERVABILITY)
             .put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false)
-            .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(5))
             .build();
     }
 
@@ -269,12 +262,6 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     @After
     public void cleanup() {
-        receivedMetrics().clear();
-        assertAcked(
-            clusterAdmin().prepareUpdateSettings(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT)
-                .setPersistentSettings(Settings.builder().putNull("*"))
-                .setTransientSettings(Settings.builder().putNull("*"))
-        );
         CustomMergePolicyStatelessPlugin.disableCustomMergePolicy();
     }
 

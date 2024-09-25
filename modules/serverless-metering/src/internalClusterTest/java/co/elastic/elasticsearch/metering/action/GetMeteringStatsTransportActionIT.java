@@ -15,9 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
+import co.elastic.elasticsearch.metering.MeteringPlugin;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
@@ -37,7 +37,6 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.ThreadPool;
-import org.junit.After;
 import org.junit.Before;
 
 import java.util.Collection;
@@ -57,7 +56,7 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.core.Is.is;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
-public class MeteringTransportActionsIT extends AbstractStatelessIntegTestCase {
+public class GetMeteringStatsTransportActionIT extends AbstractStatelessIntegTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
@@ -78,22 +77,8 @@ public class MeteringTransportActionsIT extends AbstractStatelessIntegTestCase {
         startSearchNodes(2); // persistent task is assigned to search node
     }
 
-    @After
-    public void cleanUp() {
-        updateClusterSettings(
-            Settings.builder()
-                .putNull(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey())
-                .putNull(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey())
-        );
-    }
-
     public void testActionRetriedUntilTaskNodeAssigned() throws Exception {
         var getMeteringStatsHandled = new AtomicInteger();
-
-        updateClusterSettings(
-            Settings.builder()
-                .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), TimeValue.timeValueSeconds(30))
-        );
 
         var masterNode = clusterService().state().nodes().getMasterNode();
         var transportService = MockTransportService.getInstance(masterNode.getName());

@@ -15,10 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering;
+package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
+import co.elastic.elasticsearch.metering.MeteringPlugin;
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
@@ -29,7 +28,6 @@ import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.tasks.TaskInfo;
 import org.elasticsearch.test.ESIntegTestCase;
-import org.junit.After;
 import org.junit.Before;
 
 import java.util.Collection;
@@ -44,7 +42,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
-public class MeteringPersistentTaskIT extends AbstractStatelessIntegTestCase {
+public class SampledClusterMetricsSchedulingTaskIT extends AbstractStatelessIntegTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
@@ -55,15 +53,6 @@ public class MeteringPersistentTaskIT extends AbstractStatelessIntegTestCase {
     public void setupCluster() {
         startMasterOnlyNode();
         startSearchNodes(2); // persistent task is assigned to search node
-    }
-
-    @After
-    public void cleanUp() {
-        updateClusterSettings(
-            Settings.builder()
-                .putNull(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey())
-                .putNull(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey())
-        );
     }
 
     public void testTaskRemovedAfterCancellation() throws Exception {
