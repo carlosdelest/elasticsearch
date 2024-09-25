@@ -26,14 +26,8 @@ import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
-import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.xcontent.XContentHelper;
-import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
-import org.elasticsearch.test.rest.ESRestTestCase;
-import org.junit.ClassRule;
-import org.junit.Rule;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -46,42 +40,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
-import static org.elasticsearch.test.cluster.serverless.local.DefaultServerlessLocalConfigProvider.node;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 
-public class MeteringRestTestIT extends ESRestTestCase {
-
+public class MeteringRestTestIT extends AbstractMeteringRestTestIT {
     private static final Logger logger = LogManager.getLogger(MeteringRestTestIT.class);
-
-    @ClassRule
-    public static UsageApiTestServer usageApiTestServer = new UsageApiTestServer();
-
-    @Rule
-    public ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
-        .withNode(node("index2", "index"))// first node created by default
-        .withNode(node("index3", "index"))
-        .withNode(node("search2", "search"))// first node created by default
-        .name("javaRestTest")
-        .user("admin-user", "x-pack-test-password")
-        .setting("xpack.ml.enabled", "false")
-        .setting("metering.project_id", "testProjectId")
-        .setting("metering.url", "http://localhost:" + usageApiTestServer.getAddress().getPort())
-        // speed things up a bit
-        .setting("metering.report_period", "5s")
-        .setting("metering.index-info-task.poll.interval", "1s")
-        .setting("serverless.autoscaling.search_metrics.push_interval", "500ms")
-        .build();
 
     @Override
     protected Settings restClientSettings() {
-        String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
-        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
-    }
-
-    @Override
-    protected String getTestRestCluster() {
-        return cluster.getHttpAddresses();
+        return restAdminSettings();
     }
 
     public void testMeteringRecordsCanBeDeduplicated() throws Exception {
@@ -91,7 +58,6 @@ public class MeteringRestTestIT extends ESRestTestCase {
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 3)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2)
             .build();
-        String indexName = "test_index_1";
         createIndex(indexName, settings);
 
         // ingest more docs so that each shard has some
