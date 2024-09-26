@@ -153,3 +153,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2847
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2849
+- class: co.elastic.elasticsearch.serverless.rest.ServerlessRestControllerTests
+  method: testApiVersionWithV7RestCompatibilityHeader
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2850
