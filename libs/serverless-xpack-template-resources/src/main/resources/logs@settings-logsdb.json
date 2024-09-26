@@ -2,6 +2,7 @@
   "template": {
     "settings": {
       "index": {
+        "mode": "logsdb",
         "codec": "best_compression",
         "mapping": {
           "ignore_malformed": true,
