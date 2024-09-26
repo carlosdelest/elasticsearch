@@ -148,3 +148,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.datastream.ServerlessDataStreamLifecycleIT
   method: testILMPolicesAreNotInstalled
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2841
+- class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
+  method: testConfigureStoredSource
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2847
