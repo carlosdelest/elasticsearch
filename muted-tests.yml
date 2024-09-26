@@ -151,3 +151,5 @@ tests:
 - class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
   method: testConfigureStoredSource
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2847
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2849
