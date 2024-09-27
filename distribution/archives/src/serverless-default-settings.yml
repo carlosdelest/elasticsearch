@@ -8,9 +8,6 @@ cluster.routing.allocation.node_concurrent_recoveries: 6
 # also raise this for same reason, though we accept that translog replay may take a short while, requiring mainly
 # CPU/IO.
 cluster.routing.allocation.node_initial_primaries_recoveries: 6
-# The default value of 1.0 for the following setting could occasionally cause long desired balance computations
-# on large clusters.
-cluster.routing.allocation.balance.threshold: 5.0
 # increase to 5K in serverless. This is not unheard of on frozen, so should work. Also, stats is not available to
 # users so we have some control. Finally, if this does not work, we would likely like to investigate it.
 cluster.max_shards_per_node: 5000
