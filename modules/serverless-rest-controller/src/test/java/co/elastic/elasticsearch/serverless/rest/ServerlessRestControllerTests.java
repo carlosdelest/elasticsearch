@@ -60,11 +60,10 @@ public class ServerlessRestControllerTests extends ESTestCase {
     private static final String SERVERLESS_INITIAL_VERSION = ServerlessRestController.VERSION_20231031;
 
     public static final String ACCEPT_HEADER = "Accept";
-    public static final String ACCEPT_JSON_RESTV8 = "application/json; compatible-with=8";
-    public static final String ACCEPT_YAML_RESTV8 = "application/yaml; compatible-with=8";
-
-    public static final String ACCEPT_JSON_RESTV7 = "application/json; compatible-with=7";
-    public static final String ACCEPT_YAML_RESTV7 = "application/yaml; compatible-with=7";
+    public static final String ACCEPT_JSON_RESTV8 = "application/vnd.elasticsearch+json;compatible-with=8";
+    public static final String ACCEPT_YAML_RESTV8 = "application/vnd.elasticsearch+yaml;compatible-with=8";
+    public static final String ACCEPT_JSON_RESTV9 = "application/vnd.elasticsearch+json;compatible-with=9";
+    public static final String ACCEPT_YAML_RESTV9 = "application/vnd.elasticsearch+yaml;compatible-with=9";
 
     private ThreadContext threadContext;
     private NoOpNodeClient client;
@@ -106,8 +105,10 @@ public class ServerlessRestControllerTests extends ESTestCase {
         assertThat(responseHeaders.get(ServerlessRestController.VERSION_HEADER_NAME), contains(SERVERLESS_INITIAL_VERSION));
     }
 
-    public void testApiVersionWithV8RestCompatibilityHeader() throws Exception {
-        var responseHeaders = processApiVersionRequest(Map.of(ACCEPT_HEADER, List.of(randomFrom(ACCEPT_JSON_RESTV8, ACCEPT_YAML_RESTV8))));
+    public void testApiVersionWithSupportedRestCompatibilityHeader() throws Exception {
+        var responseHeaders = processApiVersionRequest(
+            Map.of(ACCEPT_HEADER, List.of(randomFrom(ACCEPT_JSON_RESTV8, ACCEPT_YAML_RESTV8, ACCEPT_JSON_RESTV9, ACCEPT_YAML_RESTV9)))
+        );
         assertThat(responseHeaders, not(hasKey(ServerlessRestController.VERSION_HEADER_NAME)));
     }
 
@@ -166,13 +167,6 @@ public class ServerlessRestControllerTests extends ESTestCase {
             Matchers.either(is("The header [Elastic-Api-Version] may only be specified once. Found: [" + v1 + "],[" + v2 + "]"))
                 .or(is("The header [Elastic-Api-Version] may only be specified once. Found: [" + v2 + "],[" + v1 + "]"))
         );
-    }
-
-    public void testApiVersionWithV7RestCompatibilityHeader() throws Exception {
-        final String errorMessage = expectBadApiVersionRequest(
-            Map.of(ACCEPT_HEADER, List.of(randomFrom(ACCEPT_JSON_RESTV7, ACCEPT_YAML_RESTV7)))
-        );
-        assertThat(errorMessage, equalTo("[compatible-with] [7] is not supported on Serverless Elasticsearch"));
     }
 
     public void testRejectedHttpParametersForNonOperator() throws Exception {
