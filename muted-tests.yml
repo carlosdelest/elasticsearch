@@ -156,3 +156,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.objectstore.S3ObjectStoreTests
   method: testUploadIndicesDataWithRetries
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2867
+- class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceTests
+  method: testUploadWarmingSingleRegion
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2868
