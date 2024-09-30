@@ -14,6 +14,10 @@ JSON=$(echo "$ANNOTATION" | sed 's/^<details><summary>Automation Data<\/summary>
 REPO_OWNER=$(echo "$JSON" | jq -r '.ownerForSubmodule')
 COMMIT=$(echo "$JSON" | jq -r '.elasticsearchCommit')
 
+if [[ -z "$COMMIT" || "$COMMIT" == "null" ]]; then
+  exit 0
+fi
+
 cd elasticsearch
 git remote add fork "git@github.com:$REPO_OWNER/elasticsearch.git"
 git fetch fork "$COMMIT"
