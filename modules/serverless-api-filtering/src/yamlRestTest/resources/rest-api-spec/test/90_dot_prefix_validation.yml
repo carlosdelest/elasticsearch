@@ -136,3 +136,16 @@
   - match: { status: 400 }
   - match: { error.root_cause.0.type: "illegal_argument_exception" }
   - match: { error.root_cause.0.reason: "Index [.data-*] name beginning with a dot (.) is not allowed" }
+
+---
+"Allow non-restricted names":
+  - do:
+      indices.put_index_template:
+        name: my-template
+        body:
+          index_patterns: [.ml-state-9000]
+          priority: 1
+
+  - do:
+      indices.delete_index_template:
+        name: my-template
