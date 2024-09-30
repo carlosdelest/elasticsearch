@@ -26,7 +26,7 @@ fi
 if [ -z "${PREVIOUS_PROMOTED_COMMIT}" ]; then
   echo "--- Determining current prod version"
   SERVICE_VERSION_YAML=$(curl -H "Authorization: Bearer ${GITHUB_TOKEN}" https://raw.githubusercontent.com/elastic/serverless-gitops/main/services/elasticsearch/versions.yaml)
-  PREVIOUS_PROMOTED_COMMIT=$(echo "${SERVICE_VERSION_YAML}" | yq e '.services.elasticsearch.versions.production-noncanary' -)
+  PREVIOUS_PROMOTED_COMMIT=$(echo "${SERVICE_VERSION_YAML}" | yq e '.services.elasticsearch.versions.production-noncanary-ds-1' -)
 fi
 echo "Promoting from commit '$PREVIOUS_PROMOTED_COMMIT' to commit '${PROMOTED_COMMIT}'"
 
