@@ -69,7 +69,7 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
     static final String USAGE_API_REQUESTS_SIZE = "es.metering.usage_api.request.size";
     static final String STATUS_CODE_KEY = "es_metering_status_code";
 
-    public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "https://usage-api.elastic-system/api/v1/usage", s -> {
+    public static final Setting<URI> METERING_URL = new Setting<>("metering.url", "https://usage-api.usage-api/api/v1/usage", s -> {
         try {
             return new URI(s);
         } catch (URISyntaxException e) {
