@@ -533,6 +533,7 @@ spec:
     spec:
       repository: elastic/elasticsearch-serverless
       pipeline_file: .buildkite/pipeline.es-pr-check.yml
+      skip_intermediate_builds: false
       provider_settings:
         trigger_mode: none # This one will be triggered by external automation
       teams:
