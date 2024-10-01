@@ -205,11 +205,9 @@ public class MeteringPlugin extends Plugin
         );
         actionFilters.set(List.of(new ActivityTrackerActionFilter(activityTracker)));
 
-        TimeValue reportPeriod = UsageReportService.REPORT_PERIOD.get(environment.settings());
-
         builtInCounterMetrics.addAll(counterMetricsProviders);
         builtInSampledMetrics.add(clusterMetricsService.createSampledStorageMetricsProvider());
-        builtInSampledMetrics.add(clusterMetricsService.createSampledVCUMetricsProvider());
+        builtInSampledMetrics.add(clusterMetricsService.createSampledVCUMetricsProvider(nodeEnvironment));
         builtInSampledMetrics.addAll(sampledMetricsProviders);
 
         if (projectId.isEmpty()) {
@@ -222,6 +220,7 @@ public class MeteringPlugin extends Plugin
             );
         }
 
+        TimeValue reportPeriod = UsageReportService.REPORT_PERIOD.get(environment.settings());
         usageReportService = new UsageReportService(
             nodeEnvironment.nodeId(),
             projectId,

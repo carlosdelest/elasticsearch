@@ -111,6 +111,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 )
             )
         );
+
         var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();

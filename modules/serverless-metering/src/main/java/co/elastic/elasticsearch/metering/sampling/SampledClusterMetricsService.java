@@ -26,6 +26,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -63,6 +64,7 @@ public class SampledClusterMetricsService {
     @SuppressWarnings("this-escape")
     public SampledClusterMetricsService(ClusterService clusterService, MeterRegistry meterRegistry) {
         this.clusterService = clusterService;
+
         clusterService.addListener(this::clusterChanged);
         this.coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
 
@@ -131,6 +133,7 @@ public class SampledClusterMetricsService {
         SampledClusterMetrics withStatus(Set<SamplingStatus> newStatus) {
             return new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, shardSamples, newStatus);
         }
+
     }
 
     record SampledTierMetrics(long memorySize, Activity activity) {
@@ -247,9 +250,13 @@ public class SampledClusterMetricsService {
         return new SampledStorageMetricsProvider(this, clusterService);
     }
 
-    public SampledVCUMetricsProvider createSampledVCUMetricsProvider() {
+    public SampledVCUMetricsProvider createSampledVCUMetricsProvider(NodeEnvironment nodeEnvironment) {
         var coolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
-        return new SampledVCUMetricsProvider(this, coolDownPeriod);
+        var spMinProvisionedMemoryProvider = SampledVCUMetricsProvider.SPMinProvisionedMemoryProvider.build(
+            clusterService,
+            nodeEnvironment
+        );
+        return new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryProvider);
     }
 
     private static Map<ShardKey, ShardSample> mergeShardInfos(Map<ShardKey, ShardSample> current, Map<ShardId, ShardInfoMetrics> updated) {

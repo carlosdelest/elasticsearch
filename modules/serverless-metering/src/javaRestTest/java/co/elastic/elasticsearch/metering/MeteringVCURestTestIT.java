@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.extractValue;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.nullValue;
 
 public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
@@ -53,10 +54,12 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
             var search = metrics.search().stream().filter(r -> r.creationTime().isAfter(afterIndexCreate)).toList();
             assertFalse(search.isEmpty());
             search.forEach(this::assertNonActive);
+            search.forEach(this::assertSPMinProvisionedMemoryZero);
 
             var index = metrics.index().stream().filter(r -> r.creationTime().isAfter(afterIndexCreate)).toList();
             assertFalse(index.isEmpty());
             index.forEach(this::assertNonActive);
+            index.forEach(this::assertSPMinProvisionedMemoryNotPresent);
         }, 30, TimeUnit.SECONDS);
 
         // Insert a doc, which is tracked as an index activity.
@@ -74,11 +77,13 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
             var index = metrics.index().stream().filter(VcuRecord::active).toList();
             assertFalse(index.isEmpty());
             index.forEach(r -> assertActive(r, beforeBulk, afterBulk));
+            index.forEach(this::assertSPMinProvisionedMemoryNotPresent);
 
             // All search records should still be inactive
             var search = metrics.search().stream().toList();
             assertFalse(search.isEmpty());
             search.forEach(this::assertNonActive);
+            search.forEach(this::assertSPMinProvisionedMemoryNonZero);
         }, 30, TimeUnit.SECONDS);
 
         // Run _search, which is tracked as search activity.
@@ -96,11 +101,13 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
             var search = metrics.search().stream().filter(VcuRecord::active).toList();
             assertFalse(search.isEmpty());
             search.forEach(r -> assertActive(r, beforeSearch, afterSearch));
+            search.forEach(this::assertSPMinProvisionedMemoryNonZero);
 
             // Index tier is still active, but latest timestamp is from previous activity.
             var index = metrics.index().stream().filter(VcuRecord::active).toList();
             assertFalse(index.isEmpty());
             index.forEach(r -> assertActive(r, beforeBulk, afterBulk));
+            index.forEach(this::assertSPMinProvisionedMemoryNotPresent);
         }, 30, TimeUnit.SECONDS);
 
         // Run refresh request
@@ -116,9 +123,11 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
 
             assertFalse(metrics.search().isEmpty());
             metrics.search().forEach(r -> assertActive(r, beforeRefresh, afterRefresh));
+            metrics.search().forEach(this::assertSPMinProvisionedMemoryNonZero);
 
             assertFalse(metrics.index().isEmpty());
             metrics.index().forEach(r -> assertActive(r, beforeRefresh, afterRefresh));
+            metrics.index().forEach(this::assertSPMinProvisionedMemoryNotPresent);
         }, 30, TimeUnit.SECONDS);
     }
 
@@ -137,17 +146,20 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
         long quantity,
         boolean active,
         String applicationTier,
-        Instant latestActivityTimestamp
+        Instant latestActivityTimestamp,
+        Long spMinProvisionedMemory
     ) {
         static VcuRecord fromRecord(Map<?, ?> record) {
             var latestActivity = (String) extractValue("usage.metadata.latest_activity_timestamp", record);
+            var spMinProvisionedMemory = (String) extractValue("usage.metadata.sp_min_provisioned_memory", record);
             return new VcuRecord(
                 Instant.parse((String) extractValue("creation_timestamp", record)),
                 (String) extractValue("usage.type", record),
                 (long) extractValue("usage.quantity", record),
                 Boolean.parseBoolean((String) extractValue("usage.metadata.active", record)),
                 (String) extractValue("usage.metadata.application_tier", record),
-                latestActivity == null ? null : Instant.parse(latestActivity)
+                latestActivity == null ? null : Instant.parse(latestActivity),
+                spMinProvisionedMemory == null ? null : Long.parseLong(spMinProvisionedMemory)
             );
         }
     };
@@ -167,6 +179,18 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
         assertThat(record.type(), equalTo("es_vcu"));
         assertThat(record.quantity(), equalTo(memory));
         assertThat(record.applicationTier(), equalTo(tier));
+    }
+
+    private void assertSPMinProvisionedMemoryNotPresent(VcuRecord record) {
+        assertThat(record.spMinProvisionedMemory(), nullValue());
+    }
+
+    private void assertSPMinProvisionedMemoryZero(VcuRecord record) {
+        assertThat(record.spMinProvisionedMemory(), equalTo(0L));
+    }
+
+    private void assertSPMinProvisionedMemoryNonZero(VcuRecord record) {
+        assertThat(record.spMinProvisionedMemory(), greaterThan(0L));
     }
 
     private void assertAlwaysSetFields(Metrics metrics, ExpectedMemory expectedMemory) {
