@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
@@ -53,7 +54,7 @@ class SampledVCUMetricsProvider implements SampledMetricsProvider {
                 buildMetricValue(sample.searchTierMetrics(), "search", activityCoolDownPeriod, partial),
                 buildMetricValue(sample.indexTierMetrics(), "index", activityCoolDownPeriod, partial)
             );
-            return SampledMetricsProvider.valuesFromCollection(metrics);
+            return SampledMetricsProvider.metricValues(metrics, DefaultSampledMetricsBackfillStrategy.INSTANCE);
         });
     }
 

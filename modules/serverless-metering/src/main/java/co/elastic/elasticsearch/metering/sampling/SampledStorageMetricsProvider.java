@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
@@ -25,7 +26,6 @@ import org.elasticsearch.cluster.service.ClusterService;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -113,7 +113,7 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
                 );
             }
         }
-        return SampledMetricsProvider.valuesFromCollection(Collections.unmodifiableCollection(metrics));
+        return SampledMetricsProvider.metricValues(metrics, DefaultSampledMetricsBackfillStrategy.INSTANCE);
     }
 
     private void fillIndexMetadata(Map<String, String> usageRecordMetadata, Metadata clusterMetadata, String indexName, boolean partial) {

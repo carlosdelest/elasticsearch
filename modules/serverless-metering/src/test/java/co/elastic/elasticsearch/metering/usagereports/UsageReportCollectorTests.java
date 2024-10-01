@@ -17,27 +17,27 @@
 
 package co.elastic.elasticsearch.metering.usagereports;
 
+import co.elastic.elasticsearch.metering.usagereports.SampledMetricsTimeCursor.Timestamps;
 import co.elastic.elasticsearch.metering.usagereports.publisher.MeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.usagereports.publisher.UsageMetrics;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
+import co.elastic.elasticsearch.metering.usagereports.publisher.UsageSource;
+import co.elastic.elasticsearch.metrics.CounterMetricsProvider;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
+import co.elastic.elasticsearch.metrics.SampledMetricsProvider.BackfillSink;
+import co.elastic.elasticsearch.metrics.SampledMetricsProvider.BackfillStrategy;
 
-import org.elasticsearch.common.UUIDs;
+import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.common.util.concurrent.DeterministicTaskQueue;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.telemetry.InstrumentType;
 import org.elasticsearch.telemetry.Measurement;
 import org.elasticsearch.telemetry.RecordingMeterRegistry;
-import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
-import org.elasticsearch.test.LambdaMatchers;
-import org.elasticsearch.threadpool.TestThreadPool;
-import org.elasticsearch.threadpool.ThreadPool;
-import org.junit.After;
-import org.junit.Before;
-import org.mockito.Mockito;
+import org.hamcrest.FeatureMatcher;
+import org.hamcrest.Matcher;
 
-import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -46,781 +46,467 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
+import java.util.function.Consumer;
 
+import static co.elastic.elasticsearch.metering.usagereports.SampledMetricsTimeCursor.generateSampleTimestamps;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.MAX_BACKFILL_LOOKBACK;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.MAX_CONSTANT_BACKFILL;
 import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.MAX_JITTER_FACTOR;
-import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_BACKFILL_DROPPED_TOTAL;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_BACKFILL_TOTAL;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_RETRIED_TOTAL;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_SENT_TOTAL;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_TOTAL;
+import static co.elastic.elasticsearch.metrics.SampledMetricsProvider.metricValues;
+import static org.elasticsearch.telemetry.InstrumentType.LONG_COUNTER;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
-import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.hamcrest.Matchers.hasItem;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
-import static org.hamcrest.Matchers.startsWith;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 public class UsageReportCollectorTests extends ESTestCase {
 
-    private TestThreadPool threadPool;
+    static final TimeValue REPORT_PERIOD = TimeValue.timeValueMinutes(5);
+    static final Duration REPORT_PERIOD_DURATION = Duration.ofSeconds(REPORT_PERIOD.seconds());
+    static final Duration MAX_JITTER = Duration.ofNanos((long) Math.ceil(REPORT_PERIOD_DURATION.toNanos() * MAX_JITTER_FACTOR));
 
-    @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        threadPool = new TestThreadPool(getClass().getName());
-    }
+    static final String PROJECT_ID = "projectId";
+    static final String NODE_ID = "nodeId";
 
-    @After
-    public void tearDown() throws Exception {
-        ThreadPool.terminate(threadPool, 30, TimeUnit.SECONDS);
-        threadPool = null;
-        super.tearDown();
-    }
+    static final MetricValue SAMPLE1 = new MetricValue("sample1", "sample", Map.of(), 1L, Instant.EPOCH);
+    static final MetricValue SAMPLE2 = new MetricValue("sample2", "sample", Map.of(), 2L, Instant.EPOCH);
+    static final MetricValue SAMPLE3 = new MetricValue("sample3", "sample", Map.of(), 3L, Instant.EPOCH);
+    static final MetricValue COUNTER = new MetricValue("counter", "counter", Map.of(), 100L, Instant.EPOCH);
 
-    private static class TestRecordingMetricsProvider implements SampledMetricsProvider, MeteringUsageRecordPublisher {
+    private final DeterministicTaskQueue deterministicTaskQueue = new DeterministicTaskQueue();
+    private final Clock clock = mock(Clock.class, x -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis()));
+    private final MeteringUsageRecordPublisher publisher = mock();
+    private final RecordingMeterRegistry meterRegistry = new RecordingMeterRegistry();
 
-        private final Supplier<String> metricIdProvider;
-        private final Instant meteredObjectCreationDate;
-
-        private record TestRecordedMetric(long value, String id) {}
-
-        AtomicReference<TestRecordedMetric> currentRecordedMetric = new AtomicReference<>();
-        AtomicInteger invocations = new AtomicInteger();
-
-        private volatile boolean failCollecting;
-        private volatile boolean failReporting;
-        private Set<Instant> lastRecordTimestamps = Set.of();
-
-        TestRecordingMetricsProvider(Supplier<String> metricIdProvider, Instant meteredObjectCreationDate) {
-            this.metricIdProvider = metricIdProvider;
-            this.meteredObjectCreationDate = meteredObjectCreationDate;
-        }
-
-        TestRecordingMetricsProvider() {
-            this(randomConstantIdProvider(), Instant.EPOCH);
-        }
-
-        public static Supplier<String> randomConstantIdProvider() {
-            return new Supplier<>() {
-                private final String metricId = UUIDs.randomBase64UUID();
-
-                @Override
-                public String get() {
-                    return metricId;
-                }
-            };
-        }
-
-        public void setFailCollecting(boolean b) {
-            failCollecting = b;
-        }
-
-        public void setFailReporting(boolean b) {
-            failReporting = b;
-        }
-
-        @Override
-        public Optional<MetricValues> getMetrics() {
-            invocations.incrementAndGet();
-            if (failCollecting) {
-                throw new RuntimeException("Metrics collection failure");
-            }
-            return Optional.of(SampledMetricsProvider.valuesFromCollection(List.of(generateAndRecordSingleMetric())));
-        }
-
-        private MetricValue generateAndRecordSingleMetric() {
-            var newRecord = new TestRecordedMetric(randomLong(), metricIdProvider.get());
-
-            // assert last metrics where taken by `report`
-            var lastRecord = currentRecordedMetric.getAndSet(newRecord);
-            assertNull("There should not be a pending recorded metric", lastRecord);
-
-            // store and return new metrics
-            return new MetricValue(newRecord.id(), "type1", Map.of(), newRecord.value, meteredObjectCreationDate);
-        }
-
-        @Override
-        public void sendRecords(List<UsageRecord> records) throws IOException {
-            // read last metric and clear it
-            var lastRecordedMetric = currentRecordedMetric.getAndSet(null);
-            assertNotNull("There should be a pending recorded metric", lastRecordedMetric);
-
-            // compare with last record
-            assertThat(
-                "UsageReportCollector UsageRecord should match the last recorded metric",
-                records,
-                hasItem(
-                    allOf(
-                        transformedMatch(UsageRecord::id, startsWith(lastRecordedMetric.id)),
-                        LambdaMatchers.<UsageRecord, Long>transformedMatch(x -> x.usage().quantity(), equalTo(lastRecordedMetric.value))
-                    )
-                )
-            );
-
-            lastRecordTimestamps = records.stream().map(UsageRecord::usageTimestamp).collect(Collectors.toSet());
-
-            if (failReporting) {
-                throw new IOException("Report sending failure");
-            }
-        }
-
-        @Override
-        public void close() {}
-    }
-
-    public void testReportGatheringAlwaysRunsOrderly() {
-
-        var recorder = new TestRecordingMetricsProvider();
-        var reportPeriod = TimeValue.timeValueMinutes(5);
-        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
-
-        var clock = Mockito.mock(Clock.class);
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-        var threadPool = deterministicTaskQueue.getThreadPool();
-
-        Instant lower = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
-        Instant end = lower.plus(Duration.ofHours(48));
-
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(recorder),
-            new InMemorySampledMetricsTimeCursor(lower.minus(reportPeriodDuration)),
-            recorder,
-            threadPool,
-            threadPool.generic(),
-            reportPeriod,
-            clock,
-            MeterRegistry.NOOP
-        );
-
-        when(clock.instant()).thenReturn(Instant.EPOCH);
-        usageReportCollector.start();
-
-        while (lower.isBefore(end)) {
-            deterministicTaskQueue.advanceTime();
-            Instant now = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
-            when(clock.instant()).thenReturn(now);
-            assertThat(now, both(greaterThanOrEqualTo(lower)).and(lessThan(lower.plus(reportPeriodDuration))));
-
-            deterministicTaskQueue.runAllRunnableTasks();
-            assertThat(recorder.invocations.get(), equalTo(1));
-
-            lower = lower.plus(reportPeriodDuration);
-            recorder.invocations.set(0);
-        }
-
-        deterministicTaskQueue.advanceTime();
-        Instant now = Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
-        // mock start & completion time so that resulting runtime exceeds report period
-        Duration maxJitter = Duration.ofNanos((long) Math.ceil(reportPeriodDuration.toNanos() * MAX_JITTER_FACTOR));
-        when(clock.instant()).thenReturn(now, now.plus(reportPeriodDuration).plus(maxJitter));
-
-        // we expect a 2nd run to be instantly scheduled
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(2));
-
-        usageReportCollector.cancel();
-    }
-
-    public void testCancelIdempotent() {
-
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(),
-            new InMemorySampledMetricsTimeCursor(),
-            MeteringUsageRecordPublisher.NOOP_REPORTER,
-            threadPool,
-            threadPool.generic(),
-            TimeValue.timeValueSeconds(1),
-            Clock.systemUTC(),
-            MeterRegistry.NOOP
-        );
-
-        usageReportCollector.start();
-
-        boolean cancelledOnce = usageReportCollector.cancel();
-        boolean cancelledTwice = usageReportCollector.cancel();
-
-        // Calling cancel a first time should report cancelled=true. Calling a second time should report cancelled=false
-        // and have no other effect (no errors - do not throw)
-        assertTrue("Gathering should have been cancelled", cancelledOnce);
-        assertFalse("Calling cancel on an already cancelled UsageReportCollector should have no effect", cancelledTwice);
-    }
-
-    public void testCancelCancels() {
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(),
-            new InMemorySampledMetricsTimeCursor(),
-            MeteringUsageRecordPublisher.NOOP_REPORTER,
+    private UsageReportCollector startCollector(
+        List<CounterMetricsProvider> counters,
+        List<SampledMetricsProvider> samplers,
+        SampledMetricsTimeCursor timestampCursor
+    ) {
+        UsageReportCollector collector = new UsageReportCollector(
+            NODE_ID,
+            PROJECT_ID,
+            counters,
+            samplers,
+            timestampCursor,
+            publisher,
             deterministicTaskQueue.getThreadPool(),
             deterministicTaskQueue.getThreadPool().generic(),
-            TimeValue.timeValueMinutes(1),
-            Clock.systemUTC(),
-            MeterRegistry.NOOP
+            REPORT_PERIOD,
+            clock,
+            meterRegistry
         );
-
-        usageReportCollector.start();
-
-        assertThat(
-            "A first gatherReports task should have been scheduled",
-            deterministicTaskQueue,
-            both(transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(true))).and(
-                transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
-            )
-        );
-
-        deterministicTaskQueue.advanceTime();
-
-        assertThat(
-            "There should be a gatherReports task ready to run",
-            deterministicTaskQueue,
-            both(transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(true))).and(
-                transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(false))
-            )
-        );
-
-        deterministicTaskQueue.runRandomTask();
-
-        assertThat(
-            "A second gatherReports task should have been scheduled",
-            deterministicTaskQueue,
-            both(transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(true))).and(
-                transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
-            )
-        );
-
-        var cancelled = usageReportCollector.cancel();
-
-        assertTrue("Gathering should have been cancelled", cancelled);
-
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runRandomTask();
-
-        assertThat(
-            "There should be no gatherReports task scheduled",
-            deterministicTaskQueue,
-            both(transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(false))).and(
-                transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
-            )
-        );
+        collector.start();
+        return collector;
     }
 
-    public void testFailingSampledCollectorDoesNotAdvanceTimestamp() {
-        var recorder = new TestRecordingMetricsProvider();
-        var reportPeriod = TimeValue.timeValueMinutes(5);
-        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
+    private SampledMetricsTimeCursor inMemoryTimeCursor(Instant instant) {
+        return new InMemorySampledMetricsTimeCursor(instant);
+    }
 
-        var initialTimestamp = Instant.EPOCH.minus(reportPeriodDuration);
-        var firstTimestamp = Instant.EPOCH;
-
-        var clock = Mockito.mock(Clock.class);
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-        var threadPool = deterministicTaskQueue.getThreadPool();
-
-        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
-        var cursor = new InMemorySampledMetricsTimeCursor(initialTimestamp);
-
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(recorder),
-            cursor,
-            recorder,
-            threadPool,
-            threadPool.generic(),
-            reportPeriod,
-            clock,
-            MeterRegistry.NOOP
-        );
-
-        when(clock.instant()).thenAnswer(x -> now.get());
-        usageReportCollector.start();
-
-        assertThat(cursor.getLatestCommittedTimestamp(), isPresentWith(initialTimestamp));
-
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(1));
-        assertThat(cursor.getLatestCommittedTimestamp(), isPresentWith(firstTimestamp));
-        deterministicTaskQueue.advanceTime();
-
-        recorder.invocations.set(0);
-        // mock collection failure
-        recorder.setFailCollecting(true);
-
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(1));
-        // We did not advance the cursor
-        assertThat(cursor.getLatestCommittedTimestamp(), isPresentWith(firstTimestamp));
-
-        usageReportCollector.cancel();
+    private SampledMetricsTimeCursor inMemoryTimeCursor() {
+        return inMemoryTimeCursor(previousSampleTime(clock.instant()));
     }
 
     public void testTimeToNextRun() {
-        var reportPeriodDuration = Duration.ofMinutes(5);
+        final var now = Instant.EPOCH;
+        final var late = nextSampleTime(now).plus(2, ChronoUnit.MINUTES);
+        final var nextSampleTimestamp = nextSampleTime(now);
 
-        var now = Instant.EPOCH;
-        var nextSampleTimestamp = Instant.EPOCH.plus(reportPeriodDuration);
-        var timeToNextRun = UsageReportCollector.timeToNextRun(true, now, nextSampleTimestamp, reportPeriodDuration);
-
+        var timeToNextRun = UsageReportCollector.timeToNextRun(true, now, nextSampleTimestamp, REPORT_PERIOD_DURATION);
         assertThat(
             "During normal execution next run should be around next period (within jitter)",
-            timeToNextRun.getMillis(),
-            both(greaterThanOrEqualTo((long) (reportPeriodDuration.toMillis() * 0.7))).and(
-                lessThanOrEqualTo((long) (reportPeriodDuration.toMillis() * 1.3))
-            )
+            timeToNextRun,
+            withinJitterInterval(REPORT_PERIOD_DURATION)
         );
 
-        now = Instant.EPOCH.plus(reportPeriodDuration).plus(2, ChronoUnit.MINUTES);
-        nextSampleTimestamp = Instant.EPOCH.plus(reportPeriodDuration);
-        timeToNextRun = UsageReportCollector.timeToNextRun(true, now, nextSampleTimestamp, reportPeriodDuration);
+        timeToNextRun = UsageReportCollector.timeToNextRun(true, late, nextSampleTimestamp, REPORT_PERIOD_DURATION);
+        assertThat("When late, the next run should be scheduled immediately", timeToNextRun, equalTo(TimeValue.ZERO));
 
-        assertThat("When late, the next run should be scheduled immediately", timeToNextRun.getMillis(), equalTo(0L));
-
-        now = Instant.EPOCH.plus(2, ChronoUnit.MINUTES);
-        nextSampleTimestamp = Instant.EPOCH.plus(reportPeriodDuration);
-        timeToNextRun = UsageReportCollector.timeToNextRun(false, now, nextSampleTimestamp, reportPeriodDuration);
-
+        timeToNextRun = UsageReportCollector.timeToNextRun(false, now, nextSampleTimestamp, REPORT_PERIOD_DURATION);
         assertThat(
             "When retrying, next run should be around period / 10 (within jitter)",
-            timeToNextRun.getMillis(),
-            both(greaterThanOrEqualTo((long) (reportPeriodDuration.dividedBy(10).toMillis() * 0.7))).and(
-                lessThanOrEqualTo((long) (reportPeriodDuration.dividedBy(10).toMillis() * 1.3))
-            )
+            timeToNextRun,
+            withinJitterInterval(REPORT_PERIOD_DURATION.dividedBy(10))
         );
 
-        now = Instant.EPOCH.plusMillis(1000);
-        nextSampleTimestamp = Instant.EPOCH;
-        timeToNextRun = UsageReportCollector.timeToNextRun(false, now, nextSampleTimestamp, reportPeriodDuration);
-
+        timeToNextRun = UsageReportCollector.timeToNextRun(false, late, nextSampleTimestamp, REPORT_PERIOD_DURATION);
         assertThat(
             "When retrying, next run should be around period / 10 (within jitter) even when late",
-            timeToNextRun.getMillis(),
-            both(greaterThanOrEqualTo((long) (reportPeriodDuration.dividedBy(10).toMillis() * 0.7))).and(
-                lessThanOrEqualTo((long) (reportPeriodDuration.dividedBy(10).toMillis() * 1.3))
-            )
+            timeToNextRun,
+            withinJitterInterval(REPORT_PERIOD_DURATION.dividedBy(10))
         );
     }
 
-    public void testRetryScheduledWhenReportSendingFails() {
-        var recorder = new TestRecordingMetricsProvider();
-        var reportPeriod = TimeValue.timeValueMinutes(5);
-        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
-        var firstTimestamp = Instant.EPOCH;
-        var secondTimestamp = firstTimestamp.plus(reportPeriodDuration);
-        var thirdTimestamp = secondTimestamp.plus(reportPeriodDuration);
+    public void testReportCollectionAlwaysRunsOrderly() throws Exception {
+        var backfillStrategy = mock(BackfillStrategy.class);
 
-        var clock = Mockito.mock(Clock.class);
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-        var threadPool = deterministicTaskQueue.getThreadPool();
+        var sampleProvider = mockedSampleProvider(backfillStrategy, SAMPLE1);
+        var counterProvider = mockedCounterProvider(COUNTER);
+        var timestampCursor = inMemoryTimeCursor();
+        startCollector(List.of(counterProvider), List.of(sampleProvider), timestampCursor);
 
-        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+        Instant sampleTime = clock.instant();
+        Instant end = sampleTime.plus(Duration.ofHours(48));
+        int counterCommits = 0;
 
-        var meterRegistry = new RecordingMeterRegistry();
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(recorder),
-            new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
-            recorder,
-            threadPool,
-            threadPool.generic(),
-            reportPeriod,
-            clock,
-            meterRegistry
+        while (sampleTime.isBefore(end)) {
+            var now = advanceTimeAndRunCollection(sampleTime);
+
+            verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now), usageRecord(SAMPLE1, sampleTime)));
+            verifyNoMoreInteractions(publisher);
+
+            verify(counterProvider.getMetrics(), times(++counterCommits)).commit();
+            assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(sampleTime));
+
+            sampleTime = nextSampleTime(sampleTime);
+        }
+
+        // mock start & completion time so that resulting runtime exceeds next sample period
+        var timeOfSlowRun = advanceTimeAndRunCollection(
+            now -> when(clock.instant()).thenReturn(now, now.plus(REPORT_PERIOD_DURATION).plus(MAX_JITTER))
         );
+        assertThat(clock.instant(), is(timeOfSlowRun.plus(REPORT_PERIOD_DURATION).plus(MAX_JITTER)));
 
-        when(clock.instant()).thenAnswer(x -> now.get());
-        usageReportCollector.start();
+        // we expect a 2nd run to be instantly scheduled
+        verify(publisher).sendRecords(List.of(usageRecord(COUNTER, timeOfSlowRun), usageRecord(SAMPLE1, sampleTime)));
+        verify(publisher).sendRecords(List.of(usageRecord(COUNTER, clock.instant()), usageRecord(SAMPLE1, nextSampleTime(sampleTime))));
+        verifyNoMoreInteractions(publisher);
 
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(1));
-        assertThat(recorder.lastRecordTimestamps, contains(firstTimestamp));
-        deterministicTaskQueue.advanceTime();
+        verify(counterProvider.getMetrics(), times(counterCommits + 2)).commit();
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(nextSampleTime(sampleTime)));
 
-        recorder.invocations.set(0);
-        // mock transmission failure
-        recorder.setFailReporting(true);
-
-        // we expect a 2nd run to be scheduled within a shorter timeframe
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(1));
-        assertThat(recorder.lastRecordTimestamps, contains(secondTimestamp));
-
-        var firstAttemptTime = now.get();
-        deterministicTaskQueue.advanceTime();
-        var nextAttemptTime = now.get();
-
-        var expectedRetryInterval = reportPeriodDuration.dividedBy(10);
-        assertThat(
-            Duration.between(firstAttemptTime, nextAttemptTime).toMillis(),
-            both(greaterThanOrEqualTo((long) (expectedRetryInterval.toMillis() * 0.7))).and(
-                lessThanOrEqualTo((long) (expectedRetryInterval.toMillis() * 1.3))
-            )
-        );
-
-        // Advance to include the next timestamp, still failing
-        var lastAttemptTime = firstAttemptTime.plus(reportPeriodDuration).plus(2, ChronoUnit.MINUTES);
-        deterministicTaskQueue.runTasksUpToTimeInOrder(lastAttemptTime.toEpochMilli());
-        deterministicTaskQueue.advanceTime();
-        nextAttemptTime = now.get();
-        assertThat(
-            Duration.between(lastAttemptTime, nextAttemptTime).toMillis(),
-            lessThanOrEqualTo((long) (expectedRetryInterval.toMillis() * 1.3))
-        );
-
-        // We are now trying to transmit 2 time frames
-        assertThat(recorder.lastRecordTimestamps, containsInAnyOrder(secondTimestamp, thirdTimestamp));
-
-        final List<Measurement> runs = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, UsageReportCollector.METERING_REPORTS_TOTAL)
-        );
-        final List<Measurement> retried = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, UsageReportCollector.METERING_REPORTS_RETRIED_TOTAL)
-        );
-        final List<Measurement> sent = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, UsageReportCollector.METERING_REPORTS_SENT_TOTAL)
-        );
-        final List<Measurement> backfilled = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, UsageReportCollector.METERING_REPORTS_BACKFILL_TOTAL)
-        );
-        final List<Measurement> dropped = Measurement.combine(
-            meterRegistry.getRecorder()
-                .getMeasurements(InstrumentType.LONG_COUNTER, UsageReportCollector.METERING_REPORTS_BACKFILL_DROPPED_TOTAL)
-        );
-
-        assertThat(runs, contains(transformedMatch(Measurement::getLong, greaterThan(1L))));
-        assertThat(retried, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
-        assertThat(sent, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
-        assertThat(backfilled, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
-        assertThat(dropped, empty());
-
-        usageReportCollector.cancel();
+        verifyNoInteractions(backfillStrategy);
     }
 
-    public void testNoBackfillingWhenMetricNotFoundInLocalStatus() {
-        var recorder = new TestRecordingMetricsProvider(() -> "id" + randomAlphaOfLength(10), Instant.EPOCH);
-        var reportPeriod = TimeValue.timeValueMinutes(5);
-        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
-        var firstTimestamp = Instant.EPOCH;
+    public void testUnavailableSampleProvider() throws Exception {
+        var sampleTime = clock.instant();
+        var committedTime = previousSampleTime(sampleTime);
+        var timestampCursor = inMemoryTimeCursor(committedTime);
 
-        var clock = Mockito.mock(Clock.class);
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-        var threadPool = deterministicTaskQueue.getThreadPool();
+        var sampleProvider1 = mock(SampledMetricsProvider.class);
+        when(sampleProvider1.getMetrics()).thenThrow(new RuntimeException("getMetrics() failed"));
+        var sampleProvider2 = mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1);
+        startCollector(List.of(mockedCounterProvider(COUNTER)), shuffledList(List.of(sampleProvider1, sampleProvider2)), timestampCursor);
 
-        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+        // due to failing sample provider 1 we are not going to advance the sample timestamp
+        var now = advanceTimeAndRunCollection(sampleTime);
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(committedTime));
+        verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now))); // no samples of sample provider 2 included
 
-        var timeCursor = new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration));
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(recorder),
-            timeCursor,
-            recorder,
-            threadPool,
-            threadPool.generic(),
-            reportPeriod,
-            clock,
-            MeterRegistry.NOOP
-        );
+        // update sample provider 1 to return unready (empty instead)
+        reset(sampleProvider1);
+        when(sampleProvider1.getMetrics()).thenReturn(Optional.empty());
 
-        when(clock.instant()).thenAnswer(x -> now.get());
-        usageReportCollector.start();
-
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(1));
-        assertThat(recorder.lastRecordTimestamps, contains(firstTimestamp));
-        deterministicTaskQueue.advanceTime();
-
-        recorder.invocations.set(0);
-        // mock transmission failure to "pack up" more timeframes to re-send
-        recorder.setFailReporting(true);
-
-        // we expect a 2nd run to be scheduled within a shorter timeframe
-        deterministicTaskQueue.runAllRunnableTasks();
-        var firstAttemptTime = now.get();
-        deterministicTaskQueue.advanceTime();
-
-        // Advance to include multiple timeframes, still failing
-        var lastAttemptTime = firstAttemptTime.plus(reportPeriodDuration).plus(13, ChronoUnit.MINUTES);
-        deterministicTaskQueue.runTasksUpToTimeInOrder(lastAttemptTime.toEpochMilli());
-        deterministicTaskQueue.advanceTime();
-
-        // But since we have new metrics (metrics with new id), we transmit only the last (current) timeframe
-        var lastTimestamp = SampleTimestampUtils.calculateSampleTimestamp(lastAttemptTime, reportPeriodDuration);
-        assertThat(recorder.lastRecordTimestamps, contains(lastTimestamp));
-
-        usageReportCollector.cancel();
+        // due to unready sample provider 1 we are not going to advance the sample timestamp again
+        now = advanceTimeAndRunCollection(nextSampleTime(sampleTime));
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(committedTime));
+        verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now))); // no samples of sample provider 2 included
     }
 
-    public void testBackfillingOnlyForMetricFoundInLocalStatus() {
-        var reportPeriod = TimeValue.timeValueMinutes(5);
-        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
-        var firstTimestamp = Instant.EPOCH;
-        var secondTimestamp = firstTimestamp.plus(reportPeriodDuration);
+    public void testAdvanceSampleTimestampWithoutSamples() {
+        var sampleProvider = mockedSampleProvider(BackfillStrategy.NOOP); // ready, but no samples returned
+        var counterProviders = randomBoolean() ? List.of(mockedCounterProvider(COUNTER)) : List.<CounterMetricsProvider>of();
+        var timestampCursor = inMemoryTimeCursor();
+        startCollector(counterProviders, List.of(sampleProvider), timestampCursor);
 
-        var clock = Mockito.mock(Clock.class);
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-        var threadPool = deterministicTaskQueue.getThreadPool();
+        var sampleTime = clock.instant();
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(previousSampleTime(sampleTime)));
+        advanceTimeAndRunCollection(sampleTime);
+        // despite no reported samples, the cursor should advance
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(sampleTime));
+    }
 
-        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
+    public void testSkipSampleProvidersIfTimestampCursorNotReady() throws Exception {
+        var sampleProvider = mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1);
+        var counterProvider = mockedCounterProvider(COUNTER);
+        var timestampCursor = mock(SampledMetricsTimeCursor.class);
+        startCollector(List.of(counterProvider), List.of(sampleProvider), timestampCursor);
 
-        List<MetricValue> producedMetricValues = new ArrayList<>();
-        List<UsageRecord> sentRecords = new ArrayList<>();
+        when(timestampCursor.getLatestCommittedTimestamp()).thenReturn(Optional.empty());
+        when(timestampCursor.generateSampleTimestamps(any(), any())).thenReturn(Timestamps.EMPTY);
 
-        var timeCursor = new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration));
-        var meterRegistry = new RecordingMeterRegistry();
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(() -> Optional.of(producedMetricValues::iterator)),
-            timeCursor,
-            new MeteringUsageRecordPublisher() {
-                @Override
-                public void sendRecords(List<UsageRecord> records) {
-                    sentRecords.clear();
-                    sentRecords.addAll(records);
-                }
+        var now = advanceTimeAndRunCollection(clock.instant());
 
-                @Override
-                public void close() {}
-            },
-            threadPool,
-            threadPool.generic(),
-            reportPeriod,
-            clock,
-            meterRegistry
+        verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now)));
+        verifyNoMoreInteractions(publisher);
+
+        verify(counterProvider.getMetrics()).commit();
+        verify(timestampCursor, never()).commitUpTo(any());
+        verifyNoInteractions(sampleProvider);
+    }
+
+    public void testPublishingFailure() throws Exception {
+        var sampleProvider = mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1);
+        var counterProvider = mockedCounterProvider(COUNTER);
+        var timestampCursor = inMemoryTimeCursor();
+        startCollector(List.of(counterProvider), List.of(sampleProvider), timestampCursor);
+
+        doThrow(new RuntimeException("publishing failed")).when(publisher).sendRecords(anyList());
+
+        var sampleTime = clock.instant();
+        var committedTime = previousSampleTime(sampleTime);
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(committedTime));
+
+        long attempts = 0;
+        Instant lastAttemptTime = null;
+
+        while (lastAttemptTime == null || sampleTimestamp(lastAttemptTime).equals(sampleTime)) {
+            var attemptTime = advanceTimeAndRunCollection(t -> {});
+            if (lastAttemptTime != null) {
+                assertThat("timely retry expected", attemptTime, withinRetryPeriod(lastAttemptTime));
+            }
+            // the cursor was still not advanced
+            assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(committedTime));
+            // counter metrics are not committed
+            verify(counterProvider.getMetrics(), never()).commit();
+
+            lastAttemptTime = attemptTime;
+            attempts++;
+        }
+
+        // Validate observability metrics
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_TOTAL), contains(measurement(is(attempts))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_RETRIED_TOTAL), contains(measurement(is(attempts - 1))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), contains(measurement(is(1L))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), empty());
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), empty());
+    }
+
+    public void testCommitSampleTimestampFailure() throws Exception {
+        var sampleProvider = mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1);
+        var counterProvider = mockedCounterProvider(COUNTER);
+        var timestampCursor = mock(SampledMetricsTimeCursor.class);
+        startCollector(List.of(counterProvider), List.of(sampleProvider), timestampCursor);
+
+        var sampleTime = clock.instant();
+        var committedTime = previousSampleTime(sampleTime);
+
+        when(timestampCursor.getLatestCommittedTimestamp()).thenReturn(Optional.of(committedTime));
+        when(timestampCursor.commitUpTo(any())).thenReturn(false); // new sample timestamp can't be commited
+        when(timestampCursor.generateSampleTimestamps(any(), any())).then(
+            i -> generateSampleTimestamps(i.getArgument(0), committedTime, REPORT_PERIOD)
         );
 
-        when(clock.instant()).thenAnswer(x -> now.get());
-        usageReportCollector.start();
-        Instant creationDate = Instant.now();
-        producedMetricValues.add(new MetricValue("id-index1", "type1", Map.of(), 50L, creationDate));
+        int attempts = 0;
+        Instant lastAttemptTime = null;
 
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(sentRecords, hasSize(1));
-        assertThat(sentRecords, contains(transformedMatch(UsageRecord::usageTimestamp, equalTo(firstTimestamp))));
-        deterministicTaskQueue.advanceTime();
+        while (lastAttemptTime == null || sampleTimestamp(lastAttemptTime).equals(sampleTime)) {
+            var attemptTime = advanceTimeAndRunCollection(t -> {});
+            if (lastAttemptTime != null) {
+                assertThat("timely retry expected", attemptTime, withinRetryPeriod(lastAttemptTime));
+            }
+            // counter metrics are not affected
+            verify(counterProvider.getMetrics(), times(++attempts)).commit();
 
-        sentRecords.clear();
-        producedMetricValues.clear();
-        producedMetricValues.add(new MetricValue("id-index1", "type1", Map.of(), 60L, creationDate));
-        // Add a previously unknown metric
-        producedMetricValues.add(new MetricValue("id-index2", "type1", Map.of(), 70L, creationDate));
+            lastAttemptTime = attemptTime;
+        }
 
-        // Simulate a retry by manually rolling back the cursor
-        timeCursor.commitUpTo(firstTimestamp.minus(reportPeriodDuration));
-        deterministicTaskQueue.runAllRunnableTasks();
-
-        assertThat(sentRecords, hasSize(3));
-        var index1Records = sentRecords.stream().filter(x -> x.id().startsWith("id-index1")).toList();
-        var index2Records = sentRecords.stream().filter(x -> x.id().startsWith("id-index2")).toList();
-
-        // We have 2 interpolated records for the previously seen metric
-        assertThat(
-            index1Records,
-            containsInAnyOrder(
-                both(transformedMatch(UsageRecord::usageTimestamp, equalTo(firstTimestamp))).and(
-                    transformedMatch(x -> x.usage().quantity(), equalTo(55L))
-                ),
-                both(transformedMatch(UsageRecord::usageTimestamp, equalTo(secondTimestamp))).and(
-                    transformedMatch(x -> x.usage().quantity(), equalTo(60L))
-                )
-            )
-        );
-        // We only have one record, the most recent one, for the "new" metric
-        assertThat(
-            index2Records,
-            contains(
-                both(transformedMatch(UsageRecord::usageTimestamp, equalTo(secondTimestamp))).and(
-                    transformedMatch(x -> x.usage().quantity(), equalTo(70L))
-                )
-            )
-        );
-
-        usageReportCollector.cancel();
+        // Validate observability metrics
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_TOTAL), contains(measurement(is((long) attempts))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_RETRIED_TOTAL), contains(measurement(is(attempts - 1L))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), contains(measurement(is(1L))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), contains(measurement(is((long) attempts))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), empty());
     }
 
     /**
-     * On a node change, we will have no local status. Test that we are backfilling a few (2) samples anyway, to account for common
+     * On a node change, we will have no local state. Test that we are backfilling a few (2) samples anyway, to account for common
      * scenarios in which this happens (scaling and rolling upgrade).
      */
-    public void testConstantLimitedBackfillingWhenNoLocalStatus() {
-        var reportPeriod = TimeValue.timeValueMinutes(5);
-        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
-        var currentTimestamp = Instant.EPOCH;
-        var startTime = Instant.EPOCH.minus(reportPeriodDuration.multipliedBy(10));
-        var recorder = new TestRecordingMetricsProvider(TestRecordingMetricsProvider.randomConstantIdProvider(), startTime);
+    public void testConstantBackfillIfNoPreviousSamples() throws Exception {
 
-        var clock = Mockito.mock(Clock.class);
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-        var threadPool = deterministicTaskQueue.getThreadPool();
+        var backfillStrategy = mock(BackfillStrategy.class);
+        doAnswer(v -> {
+            BackfillSink sink = v.getArgument(2);
+            sink.add(v.getArgument(0), v.getArgument(1));
+            return null;
+        }).when(backfillStrategy).constant(any(), any(), any());
 
-        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
-        var meterRegistry = new RecordingMeterRegistry();
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(recorder),
-            new InMemorySampledMetricsTimeCursor(startTime),
-            recorder,
-            threadPool,
-            threadPool.generic(),
-            reportPeriod,
-            clock,
-            meterRegistry
+        var lag = randomIntBetween(1, 10);
+        var backfills = Math.min(lag, MAX_CONSTANT_BACKFILL); // backfills are capped
+        var dropped = lag - backfills;
+
+        var sampleTime = clock.instant();
+        // revert commit time to trigger backfill
+        var timestampCursor = inMemoryTimeCursor();
+        timestampCursor.commitUpTo(sampleTime.minus(REPORT_PERIOD_DURATION.multipliedBy(1 + lag)));
+
+        startCollector(List.of(), List.of(mockedSampleProvider(backfillStrategy, SAMPLE1)), timestampCursor);
+
+        advanceTimeAndRunCollection(sampleTime);
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(sampleTime));
+        verify(backfillStrategy, times(backfills)).constant(any(), any(), any());
+        verify(backfillStrategy, never()).interpolate(any(), any(), any(), any(), any(), any());
+
+        var expectedRecords = Iterators.toList(
+            Iterators.forRange(0, 1 + backfills, i -> usageRecord(SAMPLE1, sampleTime.minus(REPORT_PERIOD_DURATION.multipliedBy(i))))
         );
+        verify(publisher).sendRecords(expectedRecords);
 
-        when(clock.instant()).thenAnswer(x -> now.get());
-        usageReportCollector.start();
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), contains(measurement(is(1L))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), contains(measurement(is(1L))));
+        if (dropped > 0) {
+            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), contains(measurement(is((long) dropped))));
+        } else {
+            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), empty());
+        }
+    }
 
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(1));
-        assertThat(
-            recorder.lastRecordTimestamps,
-            containsInAnyOrder(
-                currentTimestamp,
-                currentTimestamp.minus(reportPeriodDuration),
-                currentTimestamp.minus(reportPeriodDuration.multipliedBy(2))
+    public void testInterpolatedBackfillUsingPreviousSamples() throws Exception {
+        var backfillStrategy = mock(BackfillStrategy.class);
+        doAnswer(v -> {
+            BackfillSink sink = v.getArgument(5);
+            sink.add(v.getArgument(1), v.getArgument(4));
+            return null;
+        }).when(backfillStrategy).interpolate(any(), any(), any(), any(), any(), any());
+
+        var sampleProvider = mockedSampleProvider(backfillStrategy, SAMPLE1, SAMPLE2);
+        var timestampCursor = inMemoryTimeCursor();
+        startCollector(List.of(), List.of(sampleProvider), timestampCursor);
+
+        var initTime = clock.instant();
+        advanceTimeAndRunCollection(initTime); // one collection to build up local state
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(initTime));
+
+        var sampleTime = nextSampleTime(initTime);
+
+        // revert commit time by number of lag periods to trigger backfill
+        var lag = randomIntBetween(1, (int) MAX_BACKFILL_LOOKBACK.dividedBy(REPORT_PERIOD_DURATION) * 2);
+        timestampCursor.commitUpTo(sampleTime.minus(REPORT_PERIOD_DURATION.multipliedBy(1 + lag)));
+
+        // report an additional new sample (SAMPLE3)
+        when(sampleProvider.getMetrics()).thenReturn(Optional.of(metricValues(List.of(SAMPLE1, SAMPLE2, SAMPLE3), backfillStrategy)));
+
+        advanceTimeAndRunCollection(sampleTime);
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(sampleTime));
+
+        var backfills = Math.min(lag, (int) MAX_BACKFILL_LOOKBACK.dividedBy(REPORT_PERIOD_DURATION) - 1); // backfills are capped
+        var dropped = (lag - backfills);
+        verify(backfillStrategy, times(backfills * 2)).interpolate(any(), any(), any(), any(), any(), any());
+        verify(backfillStrategy, never()).constant(any(), any(), any());
+
+        var expectedRecords = Iterators.toList(
+            Iterators.concat(
+                Iterators.forRange(0, 1 + backfills, i -> usageRecord(SAMPLE1, sampleTime.minus(REPORT_PERIOD_DURATION.multipliedBy(i)))),
+                Iterators.forRange(0, 1 + backfills, i -> usageRecord(SAMPLE2, sampleTime.minus(REPORT_PERIOD_DURATION.multipliedBy(i)))),
+                Iterators.single(usageRecord(SAMPLE3, sampleTime)) // not backfilled, SAMPLE3 is new and no previous state is recorded
             )
         );
+        verify(publisher).sendRecords(expectedRecords);
 
-        usageReportCollector.cancel();
-    }
-
-    public void testConstantBackfillingOnlyAfterCreationDate() {
-        var recorder = new TestRecordingMetricsProvider(
-            TestRecordingMetricsProvider.randomConstantIdProvider(),
-            Instant.EPOCH.minus(1, ChronoUnit.MINUTES)
-        );
-
-        var reportPeriod = TimeValue.timeValueMinutes(5);
-        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
-        var currentTimestamp = Instant.EPOCH;
-
-        var clock = Mockito.mock(Clock.class);
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-        var threadPool = deterministicTaskQueue.getThreadPool();
-
-        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
-        var meterRegistry = new RecordingMeterRegistry();
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(recorder),
-            new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration.multipliedBy(10))),
-            recorder,
-            threadPool,
-            threadPool.generic(),
-            reportPeriod,
-            clock,
-            meterRegistry
-        );
-
-        when(clock.instant()).thenAnswer(x -> now.get());
-        usageReportCollector.start();
-
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(1));
-
-        // Only 1 sample this time, as the others are before the creation time
-        assertThat(recorder.lastRecordTimestamps, contains(currentTimestamp));
-
-        usageReportCollector.cancel();
-    }
-
-    public void testBackfillingLimited() {
-        var recorder = new TestRecordingMetricsProvider();
-        var reportPeriod = TimeValue.timeValueMinutes(5);
-        var reportPeriodDuration = Duration.ofSeconds(reportPeriod.seconds());
-        var firstTimestamp = Instant.EPOCH;
-
-        var clock = Mockito.mock(Clock.class);
-        var deterministicTaskQueue = new DeterministicTaskQueue();
-        var threadPool = deterministicTaskQueue.getThreadPool();
-
-        final Supplier<Instant> now = () -> Instant.ofEpochMilli(deterministicTaskQueue.getCurrentTimeMillis());
-
-        var meterRegistry = new RecordingMeterRegistry();
-        var usageReportCollector = new UsageReportCollector(
-            "nodeId",
-            "projectId",
-            List.of(),
-            List.of(recorder),
-            new InMemorySampledMetricsTimeCursor(now.get().minus(reportPeriodDuration)),
-            recorder,
-            threadPool,
-            threadPool.generic(),
-            reportPeriod,
-            clock,
-            meterRegistry
-        );
-
-        when(clock.instant()).thenAnswer(x -> now.get());
-        usageReportCollector.start();
-
-        deterministicTaskQueue.advanceTime();
-        deterministicTaskQueue.runAllRunnableTasks();
-        assertThat(recorder.invocations.get(), equalTo(1));
-        assertThat(recorder.lastRecordTimestamps, contains(firstTimestamp));
-        deterministicTaskQueue.advanceTime();
-
-        recorder.invocations.set(0);
-        // mock transmission failure to "pack up" more timeframes to re-send
-        recorder.setFailReporting(true);
-
-        // Advance to collect N + 1 frames
-        var runUpTo = firstTimestamp.plus(reportPeriodDuration.multipliedBy(usageReportCollector.maxPeriodsLookback + 2)).toEpochMilli();
-        while (deterministicTaskQueue.getCurrentTimeMillis() < runUpTo) {
-            deterministicTaskQueue.runAllRunnableTasks();
-            deterministicTaskQueue.advanceTime();
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), contains(measurement(is(2L))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), contains(measurement(is(1L))));
+        if (dropped > 0) {
+            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), contains(measurement(is((long) dropped))));
+        } else {
+            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), empty());
         }
-
-        // Check we actually try to transmit only N frames
-        assertThat(recorder.lastRecordTimestamps, hasSize(usageReportCollector.maxPeriodsLookback));
-
-        final List<Measurement> backfilled = Measurement.combine(
-            meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, UsageReportCollector.METERING_REPORTS_BACKFILL_TOTAL)
-        );
-        final List<Measurement> dropped = Measurement.combine(
-            meterRegistry.getRecorder()
-                .getMeasurements(InstrumentType.LONG_COUNTER, UsageReportCollector.METERING_REPORTS_BACKFILL_DROPPED_TOTAL)
-        );
-        assertThat(backfilled, contains(transformedMatch(Measurement::getLong, greaterThan(2000L))));
-        assertThat(dropped, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
-
-        usageReportCollector.cancel();
     }
+
+    private Instant advanceTimeAndRunCollection(Instant sampleTime) {
+        return advanceTimeAndRunCollection(
+            time -> assertThat(time, both(greaterThanOrEqualTo(sampleTime)).and(lessThan(nextSampleTime(sampleTime))))
+        );
+    }
+
+    private Instant advanceTimeAndRunCollection(Consumer<Instant> timeConsumer) {
+        deterministicTaskQueue.advanceTime();
+        Instant now = clock.instant();
+        timeConsumer.accept(now);
+        deterministicTaskQueue.runAllRunnableTasks();
+        return now;
+    }
+
+    private SampledMetricsProvider mockedSampleProvider(BackfillStrategy backfillStrategy, MetricValue... values) {
+        var sampleProvider = mock(SampledMetricsProvider.class);
+        when(sampleProvider.getMetrics()).thenReturn(Optional.of(metricValues(List.of(values), backfillStrategy)));
+        return sampleProvider;
+    }
+
+    private CounterMetricsProvider mockedCounterProvider(MetricValue... values) {
+        var counterProvider = mock(CounterMetricsProvider.class);
+        var mockedValues = mock(CounterMetricsProvider.MetricValues.class);
+        when(counterProvider.getMetrics()).thenReturn(mockedValues);
+        when(mockedValues.iterator()).thenAnswer(v -> Iterators.forArray(values));
+        return counterProvider;
+    }
+
+    private static UsageRecord usageRecord(MetricValue value, Instant timestamp) {
+        return new UsageRecord(
+            value.id() + "-" + timestamp.truncatedTo(ChronoUnit.SECONDS),
+            timestamp,
+            new UsageMetrics(value.type(), null, value.value(), REPORT_PERIOD, null, value.usageMetadata()),
+            new UsageSource("es-" + NODE_ID, PROJECT_ID, value.sourceMetadata())
+        );
+    }
+
+    private static Instant sampleTimestamp(Instant instant) {
+        return SampleTimestampUtils.calculateSampleTimestamp(instant, REPORT_PERIOD_DURATION);
+    }
+
+    private static Instant previousSampleTime(Instant sampleTime) {
+        assertThat("Sample timestamp expected", sampleTime, is(sampleTimestamp(sampleTime)));
+        return sampleTime.minus(REPORT_PERIOD_DURATION);
+    }
+
+    private static Instant nextSampleTime(Instant sampleTime) {
+        assertThat("Sample timestamp expected", sampleTime, is(sampleTimestamp(sampleTime)));
+        return sampleTime.plus(REPORT_PERIOD_DURATION);
+    }
+
+    private static Matcher<Instant> withinRetryPeriod(Instant previous) {
+        return new FeatureMatcher<>(is(withinJitterInterval(REPORT_PERIOD_DURATION.dividedBy(10))), "elapsed time", "time") {
+            @Override
+            protected TimeValue featureValueOf(Instant actual) {
+                return TimeValue.timeValueMillis(Duration.between(previous, actual).toMillis());
+            }
+        };
+    }
+
+    private static Matcher<TimeValue> withinJitterInterval(Duration period) {
+        var min = TimeValue.timeValueMillis((long) Math.floor(period.toMillis() * (1 - MAX_JITTER_FACTOR)));
+        var max = TimeValue.timeValueMillis((long) Math.ceil(period.toMillis() * (1 + MAX_JITTER_FACTOR)));
+        return both(greaterThanOrEqualTo(min)).and(lessThanOrEqualTo(max));
+    }
+
+    private List<Measurement> getMeasurements(InstrumentType type, String... names) {
+        List<Measurement> measurements = new ArrayList<>();
+        for (String name : names) {
+            measurements.addAll(meterRegistry.getRecorder().getMeasurements(type, name));
+        }
+        return Measurement.combine(measurements);
+    }
+
+    private static Matcher<Measurement> measurement(Matcher<Long> valueMatcher) {
+        return new FeatureMatcher<>(valueMatcher, "a measurement of", "value") {
+            @Override
+            protected Long featureValueOf(Measurement measurement) {
+                return measurement.getLong();
+            }
+        };
+    }
+
 }

@@ -22,26 +22,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
 class SampleTimestampUtils {
-    static long interpolateValueForTimestamp(
-        Instant currentTimestamp,
-        long currentValue,
-        Instant previousTimestamp,
-        long previousValue,
-        Instant pointTimestamp
-    ) {
-        assert previousTimestamp.isAfter(currentTimestamp) == false;
-        assert pointTimestamp.isAfter(currentTimestamp) == false;
-        assert pointTimestamp.isBefore(previousTimestamp) == false;
-        var timeSpan = Duration.between(currentTimestamp, previousTimestamp).toMillis();
-        var valueSpan = currentValue - previousValue;
-        var timeDelta = Duration.between(pointTimestamp, previousTimestamp).toMillis();
-        if (timeDelta == 0) {
-            return previousValue;
-        }
-        // Use an inverted ratio to keep values in the long range and avoid underflow/overflow/rounding errors
-        var invertedRatio = timeSpan / timeDelta;
-        return previousValue + valueSpan / invertedRatio;
-    }
 
     static Instant calculateSampleTimestamp(Instant now, Duration reportPeriod) {
         // this essentially calculates 'now' mod the reportPeriod, relative to hour timeslots

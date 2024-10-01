@@ -23,7 +23,6 @@ import java.time.Duration;
 import java.time.Instant;
 
 import static co.elastic.elasticsearch.metering.usagereports.SampleTimestampUtils.calculateSampleTimestamp;
-import static co.elastic.elasticsearch.metering.usagereports.SampleTimestampUtils.interpolateValueForTimestamp;
 import static org.hamcrest.Matchers.equalTo;
 
 public class SampleTimestampUtilsTests extends ESTestCase {
@@ -51,46 +50,5 @@ public class SampleTimestampUtilsTests extends ESTestCase {
         );
 
         expectThrows(AssertionError.class, () -> calculateSampleTimestamp(Instant.parse("2023-01-01T00:00:00Z"), Duration.ofHours(2)));
-    }
-
-    public void testInterpolateValueForTimestamp() {
-        var currentValue = randomLongBetween(0, 10_000_000_000_000L);
-        var previousValue = randomLongBetween(0, 10_000_000_000_000L);
-
-        assertThat(
-            "Timestamp on lower bound returns lower value",
-            interpolateValueForTimestamp(
-                Instant.parse("2023-01-01T00:10:00Z"),
-                currentValue,
-                Instant.parse("2023-01-01T00:00:00Z"),
-                previousValue,
-                Instant.parse("2023-01-01T00:00:00Z")
-            ),
-            equalTo(previousValue)
-        );
-
-        assertThat(
-            "Timestamp on upper bound returns upper value",
-            interpolateValueForTimestamp(
-                Instant.parse("2023-01-01T00:10:00Z"),
-                currentValue,
-                Instant.parse("2023-01-01T00:00:00Z"),
-                previousValue,
-                Instant.parse("2023-01-01T00:10:00Z")
-            ),
-            equalTo(currentValue)
-        );
-
-        assertThat(
-            "Timestamp on in the middle returns value in the middle",
-            interpolateValueForTimestamp(
-                Instant.parse("2023-01-01T00:10:00Z"),
-                currentValue,
-                Instant.parse("2023-01-01T00:00:00Z"),
-                previousValue,
-                Instant.parse("2023-01-01T00:05:00Z")
-            ),
-            equalTo(previousValue + (currentValue - previousValue) / 2)
-        );
     }
 }

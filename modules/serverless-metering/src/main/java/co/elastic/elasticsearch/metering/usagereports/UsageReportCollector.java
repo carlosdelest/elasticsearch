@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.usagereports;
 
+import co.elastic.elasticsearch.metering.usagereports.SampledMetricsTimeCursor.Timestamps;
 import co.elastic.elasticsearch.metering.usagereports.publisher.MeteringUsageRecordPublisher;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageMetrics;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
@@ -27,9 +28,7 @@ import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
-import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -44,15 +43,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static co.elastic.elasticsearch.metering.usagereports.SampleTimestampUtils.calculateSampleTimestamp;
-import static co.elastic.elasticsearch.metering.usagereports.SampleTimestampUtils.interpolateValueForTimestamp;
 
 /**
  * Periodically collects counter and sampled metrics from metrics providers to produce a usage report.
@@ -64,8 +62,8 @@ import static co.elastic.elasticsearch.metering.usagereports.SampleTimestampUtil
 class UsageReportCollector {
     private static final Logger log = LogManager.getLogger(UsageReportCollector.class);
     static final double MAX_JITTER_FACTOR = 0.25;
-    private static final Duration MAX_BACKFILL_LOOKBACK = Duration.ofHours(24);
-    static final int MAX_BACKFILL_WITHOUT_HISTORY = 3; // current timestamp + 2 previous
+    static final Duration MAX_BACKFILL_LOOKBACK = Duration.ofHours(24);
+    static final int MAX_CONSTANT_BACKFILL = 2;
 
     static final String METERING_REPORTS_TOTAL = "es.metering.reporting.runs.total";
     static final String METERING_REPORTS_DELAYED_TOTAL = "es.metering.reporting.runs.delayed.total";
@@ -183,16 +181,14 @@ class UsageReportCollector {
         log.trace("Scheduled first task");
     }
 
-    boolean cancel() {
+    void cancel() {
         // don't need to synchronize anything, cancel is idempotent
-        boolean cancelled = cancel == false;
         cancel = true;
         var run = nextRun;
         if (run != null) {
             run.cancel();  // try to optimistically stop the scheduled next run
             nextRun = null;
         }
-        return cancelled;
     }
 
     private void gatherAndSendReports(Instant sampleTimestamp) {
@@ -212,7 +208,10 @@ class UsageReportCollector {
         if (cancel == false) {
             try {
                 final Instant nextSampleTimestamp = sampleTimestamp.plus(reportPeriodDuration);
-                var isRetry = (reportsSent == false && completedAt.isBefore(nextSampleTimestamp));
+                var timeToNextRun = timeToNextRun(reportsSent, completedAt, nextSampleTimestamp, reportPeriodDuration);
+
+                // next run is a retry if we do not proceed to the next sample period
+                var isRetry = completedAt.plusMillis(timeToNextRun.getMillis()).isBefore(nextSampleTimestamp);
                 final Instant nextSampleTimestampToGather;
                 if (isRetry) {
                     nextSampleTimestampToGather = sampleTimestamp;
@@ -221,7 +220,6 @@ class UsageReportCollector {
                     nextSampleTimestampToGather = nextSampleTimestamp;
                 }
 
-                var timeToNextRun = timeToNextRun(reportsSent, completedAt, nextSampleTimestampToGather, reportPeriodDuration);
                 // schedule the next run
                 nextRun = threadPool.schedule(() -> gatherAndSendReports(nextSampleTimestampToGather), timeToNextRun, executor);
                 log.trace(
@@ -280,7 +278,7 @@ class UsageReportCollector {
             reportsSentTotalCounter.increment();
             return true;
         } catch (Exception e) {
-            log.warn("Exception thrown reporting metrics", e);
+            log.warn("Exception when publishing usage records", e);
         }
         return false;
     }
@@ -299,107 +297,50 @@ class UsageReportCollector {
         });
 
         var timestamps = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod);
-        var periodsLimit = lastSampledMetricValues == null ? MAX_BACKFILL_WITHOUT_HISTORY : maxPeriodsLookback;
-        var timestampsToSend = Iterators.toList(Iterators.limit(timestamps, periodsLimit));
 
-        reportsTimeframesToBackfill.record(timestampsToSend.size() - 1);
-        if (timestampsToSend.size() > 1) {
-            var backfillDuration = Duration.between(timestamps.last(), sampleTimestamp);
-            var periodsToSend = backfillDuration.dividedBy(reportPeriodDuration);
-            assert periodsToSend > 0;
-            reportsBackfillTotalCounter.increment();
-            if (lastSampledMetricValues == null) {
-                if (periodsToSend > periodsLimit) {
-                    log.warn(
-                        "Partially backfilling [{}-{}] with constant value(s) -- missing the necessary state to calculate backfill "
-                            + "samples. We will drop [{}] sample(s).",
-                        timestampsToSend.get(timestampsToSend.size() - 1),
-                        timestampsToSend.get(0),
-                        periodsToSend - periodsLimit
-                    );
-                    reportsBackfillDroppedCounter.incrementBy(periodsToSend - periodsLimit);
-                } else {
-                    log.warn(
-                        "Backfilling [{}-{}] with [{}] constant sample(s)",
-                        timestampsToSend.get(timestampsToSend.size() - 1),
-                        timestampsToSend.get(0),
-                        periodsToSend
-                    );
-                }
-            } else {
-                if (periodsToSend > periodsLimit) {
-                    log.warn(
-                        "Partially backfilling [{}-{}] -- the backfill window [{}-{}] is greater than the maximum lookback [{}]. "
-                            + "We will drop [{}] sample(s).",
-                        timestampsToSend.get(timestampsToSend.size() - 1),
-                        timestampsToSend.get(0),
-                        timestamps.last(),
-                        sampleTimestamp,
-                        MAX_BACKFILL_LOOKBACK,
-                        periodsToSend - periodsLimit
-                    );
-                    reportsBackfillDroppedCounter.incrementBy(periodsToSend - periodsLimit);
-                } else {
-                    log.info(
-                        "Backfilling [{}-{}] with [{}] sample(s)",
-                        timestampsToSend.get(timestampsToSend.size() - 1),
-                        timestampsToSend.get(0),
-                        periodsToSend
-                    );
-                }
-            }
-        }
-
-        List<MetricValue> currentSampledMetricValues = new ArrayList<>();
-        if (timestampsToSend.isEmpty() == false) {
+        Map<String, MetricValue> sampledMetricValuesById = Collections.emptyMap();
+        List<SampledMetricsProvider.MetricValues> sampledMetricValuesList = Collections.emptyList();
+        if (timestamps.size() > 0) {
+            sampledMetricValuesList = new ArrayList<>(sampledMetricsProviders.size());
             for (SampledMetricsProvider sampledMetricsProvider : sampledMetricsProviders) {
                 try {
                     var sampledMetricValues = sampledMetricsProvider.getMetrics();
                     if (sampledMetricValues.isEmpty()) {
                         log.info("[{}] is not ready for collect yet", sampledMetricsProvider.getClass().getName());
-                        // we can only advance the committed sample timestamp if all providers are ready
-                        // if not, we have to skip ALL sampled metric providers
-                        currentSampledMetricValues.clear();
+                        // Only process sampled metric values if all providers are ready and successfully returned values
+                        // Otherwise we cannot advance the committed sample timestamp.
+                        sampledMetricValuesList.clear();
                         break;
                     }
-                    for (var v : sampledMetricValues.get()) {
-                        currentSampledMetricValues.add(v);
-                    }
+                    sampledMetricValuesList.add(sampledMetricValues.get());
                 } catch (Exception e) {
-                    log.error(
-                        Strings.format("Exception thrown collecting sampled metrics from %s", sampledMetricsProvider.getClass().getName()),
-                        e
-                    );
-                    // we can only advance the committed sample timestamp if all providers have data to return
-                    // if not, we have to skip ALL sampled metric providers
-                    currentSampledMetricValues.clear();
+                    log.error(Strings.format("Failed to get sample metrics from %s", sampledMetricsProvider.getClass().getName()), e);
+                    // Only process sampled metric values if all providers are ready and successfully returned values
+                    // Otherwise we cannot advance the committed sample timestamp.
+                    sampledMetricValuesList.clear();
+                    break;
                 }
             }
-
-            if (timestampsToSend.size() <= 1) {
-                buildRecordsWithoutBackfill(sampleTimestamp, currentSampledMetricValues, records);
-            } else if (lastSampledMetricValues == null) {
-                buildRecordsWithConstantBackfill(sampleTimestamp, timestampsToSend, currentSampledMetricValues, timestamps.last(), records);
-            } else {
-                buildRecordsWithLinearBackfill(sampleTimestamp, timestampsToSend, currentSampledMetricValues, timestamps.last(), records);
-            }
+            sampledMetricValuesById = timestamps.size() == 1
+                ? appendSampleRecords(sampleTimestamp, sampledMetricValuesList, records)
+                : appendSampleRecordsWithBackfill(timestamps, sampledMetricValuesList, records);
         }
 
         if (records.isEmpty()) {
-            log.info("No usage record generated during this metrics collection");
-            return true;
+            log.info("No usage record generated during this metrics collection [{}]", timestamps);
         }
-        if (sendReport(records)) {
-            for (var metricValues : counterMetricValuesList) {
-                metricValues.commit();
-            }
-            if (currentSampledMetricValues.isEmpty() == false) {
+        // Note: success does not necessarily mean counters or samples were reported.
+        if (records.isEmpty() || sendReport(records)) {
+            // Commit the counter metrics on success.
+            counterMetricValuesList.forEach(CounterMetricsProvider.MetricValues::commit);
+
+            // Advance the committed sample timestamp if all providers returned a success for getMetrics().
+            if (sampledMetricValuesList.isEmpty() == false) {
                 var committed = sampledMetricsTimeCursor.commitUpTo(sampleTimestamp);
                 if (committed) {
-                    lastSampledMetricValues = currentSampledMetricValues.stream()
-                        .collect(Collectors.toUnmodifiableMap(MetricValue::id, Function.identity()));
+                    lastSampledMetricValues = sampledMetricValuesById;
                 }
-                log.info("Updating committed timestamp to [{}], success: [{}]", sampleTimestamp, committed);
+                log.info("Updated committed timestamp to [{}], success: [{}]", sampleTimestamp, committed);
                 return committed;
             }
             return true;
@@ -407,87 +348,88 @@ class UsageReportCollector {
         return false;
     }
 
-    private void buildRecordsWithoutBackfill(
+    private Map<String, MetricValue> appendSampleRecords(
         Instant sampleTimestamp,
-        List<MetricValue> currentSampledMetricValues,
+        List<SampledMetricsProvider.MetricValues> sampledMetricValuesList,
         List<UsageRecord> records
     ) {
-        for (var v : currentSampledMetricValues) {
-            records.add(getRecordForSample(v.id(), v.type(), v.value(), v.sourceMetadata(), v.usageMetadata(), sampleTimestamp));
+        reportsTimeframesToBackfill.record(0);
+        Map<String, MetricValue> samplesById = new HashMap<>();
+        for (var sampledMetricValues : sampledMetricValuesList) {
+            for (var sample : sampledMetricValues) {
+                samplesById.put(sample.id(), sample);
+                records.add(createRecordForSample(sample, sample.value(), sample.usageMetadata(), sampleTimestamp));
+            }
         }
+        return samplesById;
     }
 
-    // interpolate with a polynomial of degree zero (constant, or "sample-and-hold")
-    private void buildRecordsWithConstantBackfill(
-        Instant sampleTimestamp,
-        List<Instant> timestampsToSend,
-        List<MetricValue> currentSampledMetricValues,
-        Instant latestCommittedTimestamp,
+    private Map<String, MetricValue> appendSampleRecordsWithBackfill(
+        Timestamps timestamps,
+        List<SampledMetricsProvider.MetricValues> sampledMetricValuesList,
         List<UsageRecord> records
     ) {
-        for (var v : currentSampledMetricValues) {
-            for (var timestamp : timestampsToSend) {
-                if (v.meteredObjectCreationTime() == null || timestamp.isAfter(v.meteredObjectCreationTime())) {
-                    log.debug(
-                        "Backfilling metric [{}] of type [{}] with constant value [{}] for time [{}] (prev: [{}], current: [{}])",
-                        v.id(),
-                        v.type(),
-                        v.value(),
-                        timestamp,
-                        latestCommittedTimestamp,
-                        sampleTimestamp
-                    );
-                    records.add(getRecordForSample(v.id(), v.type(), v.value(), v.sourceMetadata(), v.usageMetadata(), timestamp));
+        var backfills = timestamps.limit(lastSampledMetricValues == null ? 1 + MAX_CONSTANT_BACKFILL : maxPeriodsLookback);
+
+        reportsBackfillTotalCounter.increment();
+        reportsTimeframesToBackfill.record(backfills.size() - 1); // first is not a backfill
+
+        var type = lastSampledMetricValues == null ? "constant" : "interpolated";
+        if (timestamps.size() > backfills.size()) {
+            reportsBackfillDroppedCounter.incrementBy(timestamps.size() - backfills.size());
+            log.warn(
+                "Partially backfilling {} of {} periods [{}] with {} samples [last success: {}]",
+                backfills.size() - 1,
+                timestamps.size() - 1,
+                backfills,
+                type,
+                timestamps.until()
+            );
+        } else {
+            log.warn("Backfilling [{}] periods [{}] with {} samples", timestamps.size() - 1, backfills, type);
+        }
+
+        Map<String, MetricValue> samplesById = new HashMap<>();
+        SampledMetricsProvider.BackfillSink sink = (sample, value, metadata, timestamp) -> {
+            log.debug(
+                "Backfilling metric [{}] of type [{}] with value [{}] for [{}] in [{}]",
+                sample.id(),
+                sample.type(),
+                sample.value(),
+                timestamp,
+                timestamps
+            );
+            records.add(createRecordForSample(sample, value, metadata, timestamp));
+        };
+
+        for (var sampledMetricValues : sampledMetricValuesList) {
+            var backfillStrategy = sampledMetricValues.backfillStrategy();
+            for (var sample : sampledMetricValues) {
+                samplesById.put(sample.id(), sample);
+                backfills.reset();
+                records.add(createRecordForSample(sample, sample.value(), sample.usageMetadata(), backfills.next())); // not a backfill
+
+                while (backfills.hasNext()) {
+                    Instant timestamp = backfills.next();
+                    if (lastSampledMetricValues == null) {
+                        backfillStrategy.constant(sample, timestamp, sink);
+                        continue;
+                    }
+                    // This node has sent sampled metrics before; if it does not have values for this metric id, it means that this
+                    // sampled metric was not "seen" by this node before. This can be because:
+                    // - the metric id is new (e.g. new index/shard)
+                    // - the metric id refers to something that was not available before, but it is now (e.g. shard recovered)
+                    // - the metric id was not available before, but is now e.g. node not reachable during a previous collect (PARTIAL)
+                    // In above cases, the metric refers to data that was either not existing or not available. Therefore, we do not
+                    // interpolate if a previous sample is unavailable, as this might lead to over-billing.
+                    MetricValue previousSample = lastSampledMetricValues.get(sample.id());
+                    if (previousSample != null) {
+                        backfillStrategy.interpolate(timestamps.current(), sample, timestamps.until(), previousSample, timestamp, sink);
+                    }
                 }
             }
         }
-    }
-
-    // interpolate with a polynomial of degree one (linear interpolation)
-    private void buildRecordsWithLinearBackfill(
-        Instant sampleTimestamp,
-        List<Instant> timestampsToSend,
-        List<MetricValue> currentSampledMetricValues,
-        Instant latestCommittedTimestamp,
-        List<UsageRecord> records
-    ) {
-        for (var v : currentSampledMetricValues) {
-            var previousMetricValue = lastSampledMetricValues.get(v.id());
-            if (previousMetricValue == null) {
-                // This node has sent sampled metrics before; if it does not have values for this metric id, it means that this sampled
-                // metric was not "seen" by this node before. This can be because:
-                // - the metric id is new (e.g. new index/shard)
-                // - the metric id refers to something that was not available before, but it is now (e.g. shard recovered)
-                // - the metric id was not available before, but it is now (e.g. node not reachable during a previous collect (PARTIAL))
-                // In all these cases, the metric refers to data that was either not existing or not available. Therefore, we do not
-                // interpolate (not even with a constant value), as this might lead to over-billing.
-                records.add(getRecordForSample(v.id(), v.type(), v.value(), v.sourceMetadata(), v.usageMetadata(), sampleTimestamp));
-            } else {
-                for (var timestamp : timestampsToSend) {
-                    var previousValue = previousMetricValue.value();
-                    long value = interpolateValueForTimestamp(
-                        sampleTimestamp,
-                        v.value(),
-                        latestCommittedTimestamp,
-                        previousValue,
-                        timestamp
-                    );
-                    log.debug(
-                        "Backfilling metric [{}] of type [{}] with value [{}] (prev: [{}], current [{}]) "
-                            + "for time [{}] (prev: [{}], current: [{}])",
-                        v.id(),
-                        v.type(),
-                        value,
-                        previousValue,
-                        v.value(),
-                        timestamp,
-                        latestCommittedTimestamp,
-                        sampleTimestamp
-                    );
-                    records.add(getRecordForSample(v.id(), v.type(), value, v.sourceMetadata(), v.usageMetadata(), timestamp));
-                }
-            }
-        }
+        return samplesById;
     }
 
     private static String generateId(String key, Instant time) {
@@ -503,19 +445,18 @@ class UsageReportCollector {
         );
     }
 
-    private UsageRecord getRecordForSample(
-        String metric,
-        String type,
-        long value,
-        Map<String, String> metadata,
-        @Nullable Map<String, String> usageMetadata,
+    private UsageRecord createRecordForSample(
+        MetricValue metricValue,
+        long usageValue,
+        Map<String, String> usageMetadata,
         Instant sampleTimestamp
     ) {
         return new UsageRecord(
-            generateId(metric, sampleTimestamp),
+            generateId(metricValue.id(), sampleTimestamp),
             sampleTimestamp,
-            new UsageMetrics(type, null, value, reportPeriod, null, usageMetadata),
-            new UsageSource(sourceId, projectId, metadata)
+            new UsageMetrics(metricValue.type(), null, usageValue, reportPeriod, null, usageMetadata),
+            new UsageSource(sourceId, projectId, metricValue.sourceMetadata())
         );
     }
+
 }

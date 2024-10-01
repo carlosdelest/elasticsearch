@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;
@@ -34,12 +35,14 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static co.elastic.elasticsearch.metering.TestUtils.hasBackfillStrategy;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
 import static java.util.Map.entry;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -52,6 +55,7 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.isA;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -112,6 +116,8 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+
         Collection<MetricValue> metrics = iterableToList(
             metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );
@@ -157,10 +163,11 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+
         Collection<MetricValue> metrics = iterableToList(
             metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );
-
         assertThat(metrics, hasSize(1));
 
         var metric = (MetricValue) metrics.toArray()[0];
@@ -190,10 +197,11 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+
         Collection<MetricValue> metrics = iterableToList(
             metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );
-
         assertThat(metrics, hasSize(1));
 
         var metric = (MetricValue) metrics.toArray()[0];
@@ -223,10 +231,11 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+
         Collection<MetricValue> metrics = iterableToList(
             metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );
-
         assertThat(metrics, empty());
     }
 
@@ -251,6 +260,8 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+
         Collection<MetricValue> metrics = iterableToList(
             metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );
@@ -303,6 +314,8 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+
         Collection<MetricValue> metrics = iterableToList(
             metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );
@@ -357,6 +370,8 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+
         Collection<MetricValue> metrics = iterableToList(
             metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );
@@ -406,6 +421,8 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider();
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+
         Collection<MetricValue> metrics = iterableToList(
             metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
         );

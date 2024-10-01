@@ -17,7 +17,9 @@
 
 package co.elastic.elasticsearch.metrics;
 
-import java.util.Collection;
+import java.time.Instant;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -25,10 +27,64 @@ import java.util.Optional;
  */
 public interface SampledMetricsProvider {
 
-    interface MetricValues extends Iterable<MetricValue> {}
+    /** Sink to append backfill usage records. */
+    interface BackfillSink {
+        default void add(MetricValue sample, Instant timestamp) {
+            add(sample, sample.value(), sample.usageMetadata(), timestamp);
+        }
 
-    static MetricValues valuesFromCollection(Collection<MetricValue> metricValues) {
-        return metricValues::iterator;
+        void add(MetricValue sample, long usageValue, Map<String, String> usageMetadata, Instant timestamp);
+    }
+
+    /** Strategy for backfilling usage records for sampled metrics. */
+    interface BackfillStrategy {
+        BackfillStrategy NOOP = new BackfillStrategy() {
+            @Override
+            public void constant(MetricValue sample, Instant timestamp, BackfillSink sink) {}
+
+            @Override
+            public void interpolate(
+                Instant curTimestamp,
+                MetricValue curSample,
+                Instant prevTimestamp,
+                MetricValue prevSample,
+                Instant timestamp,
+                BackfillSink sink
+            ) {}
+        };
+
+        /** Constant backfill is used for a very limited period if previous samples are not available. */
+        void constant(MetricValue sample, Instant timestamp, BackfillSink sink);
+
+        /** Linear interpolation is used to backfill usage records for extended periods based on a previous and the current sample. */
+        void interpolate(
+            Instant currentTimestamp,
+            MetricValue currentSample,
+            Instant previousTimestamp,
+            MetricValue previousSample,
+            Instant timestamp,
+            BackfillSink sink
+        );
+    }
+
+    interface MetricValues extends Iterable<MetricValue> {
+        default BackfillStrategy backfillStrategy() {
+            return BackfillStrategy.NOOP;
+        }
+    }
+
+    static MetricValues metricValues(Iterable<MetricValue> iterable, BackfillStrategy backfillStrategy) {
+        return new MetricValues() {
+            @Override
+            public BackfillStrategy backfillStrategy() {
+                return backfillStrategy;
+            }
+
+            @Override
+            public Iterator<MetricValue> iterator() {
+                return iterable.iterator();
+            }
+        };
     }
 
     /**

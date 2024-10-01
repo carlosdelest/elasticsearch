@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
+import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;
@@ -33,6 +34,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
+import static co.elastic.elasticsearch.metering.TestUtils.hasBackfillStrategy;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
@@ -40,9 +42,11 @@ import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvid
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_APPLICATION_TIER;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_LATEST_ACTIVITY_TIME;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.isA;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -97,8 +101,9 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         var sampledVCUMetricsProvider = metricsService.createSampledVCUMetricsProvider();
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent));
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
 
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent));
         assertThat(metrics, hasSize(2));
 
         var metric1 = metrics.stream()
@@ -155,8 +160,9 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         var sampledVCUMetricsProvider = metricsService.createSampledVCUMetricsProvider();
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
-        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent));
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
 
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent));
         assertThat(metrics, hasSize(2));
 
         var metric1 = metrics.stream()

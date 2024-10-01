@@ -17,13 +17,16 @@
 
 package co.elastic.elasticsearch.metering.usagereports;
 
+import co.elastic.elasticsearch.metering.usagereports.SampledMetricsTimeCursor.Timestamps;
+
 import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
+import java.time.temporal.ChronoUnit;
+import java.util.NoSuchElementException;
 
 import static co.elastic.elasticsearch.metering.usagereports.SampledMetricsTimeCursor.generateSampleTimestamps;
 import static org.hamcrest.Matchers.equalTo;
@@ -32,35 +35,71 @@ import static org.hamcrest.Matchers.is;
 
 public class SampledMetricsTimeCursorTests extends ESTestCase {
 
-    public void testGenerateSampleTimestamps() {
-        var now = Instant.now();
-        TimeValue period = TimeValue.timeValueMinutes(5);
-        var timestamps = generateSampleTimestamps(now, Instant.MIN, period);
-        List<Instant> timestampList = Iterators.toList(Iterators.limit(timestamps, 12));
+    static final TimeValue PERIOD = TimeValue.timeValueMinutes(5);
+    static final Duration PERIOD_DURATION = Duration.ofMinutes(5);
 
-        assertThat(timestampList, hasSize(12));
-        assertThat(timestampList.get(0), equalTo(now));
-        assertThat(timestampList.get(11), equalTo(now.minus(Duration.ofMinutes(55))));
-        assertThat(timestamps.last(), equalTo(Instant.MIN));
-
-        timestamps = generateSampleTimestamps(now, now, period);
+    public void testEmptyTimestamps() {
+        var current = Instant.now().truncatedTo(ChronoUnit.MINUTES);
+        var timestamps = randomBoolean() ? Timestamps.EMPTY : generateSampleTimestamps(current, current, PERIOD);
 
         assertThat(timestamps.hasNext(), is(false));
+        assertThat(timestamps.size(), is(0));
+        assertThat(timestamps.limit(randomNonNegativeInt()), is(Timestamps.EMPTY));
 
-        timestamps = generateSampleTimestamps(now, now.minus(Duration.ofMinutes(5)), period);
-        timestampList = Iterators.toList(Iterators.limit(timestamps, 12));
+        expectThrows(NoSuchElementException.class, timestamps::current);
+        expectThrows(NoSuchElementException.class, timestamps::until);
+        expectThrows(NoSuchElementException.class, timestamps::next);
+    }
 
-        assertThat(timestampList, hasSize(1));
-        assertThat(timestampList.get(0), equalTo(now));
-        assertThat(timestamps.last(), equalTo(now.minus(Duration.ofMinutes(5))));
+    public void testSingleTimestamps() {
+        var current = Instant.now().truncatedTo(ChronoUnit.MINUTES);
+        var timestamps = randomBoolean()
+            ? Timestamps.single(current)
+            : generateSampleTimestamps(current, current.minus(PERIOD_DURATION), PERIOD);
 
-        timestamps = generateSampleTimestamps(now, now.minus(Duration.ofMinutes(11)), period);
-        timestampList = Iterators.toList(Iterators.limit(timestamps, 12));
+        assertThat(timestamps.size(), is(1));
+        assertThat(timestamps.limit(0), is(Timestamps.EMPTY));
+        assertThat(timestamps.limit(1 + randomNonNegativeInt()), is(timestamps));
 
-        assertThat(timestampList, hasSize(3));
-        assertThat(timestampList.get(0), equalTo(now));
-        assertThat(timestampList.get(1), equalTo(now.minus(Duration.ofMinutes(5))));
-        assertThat(timestampList.get(2), equalTo(now.minus(Duration.ofMinutes(10))));
-        assertThat(timestamps.last(), equalTo(now.minus(Duration.ofMinutes(11))));
+        assertThat(timestamps.current(), is(current));
+        assertThat(timestamps.until(), is(current));
+        assertThat(timestamps.hasNext(), is(true));
+        assertThat(timestamps.next(), is(current));
+        assertThat(timestamps.hasNext(), is(false));
+
+        timestamps.reset();
+        assertThat(timestamps.hasNext(), is(true));
+        assertThat(timestamps.next(), is(current));
+
+        expectThrows(NoSuchElementException.class, timestamps::next);
+    }
+
+    public void testGenerateSampleTimestamps() {
+        var current = Instant.now().truncatedTo(ChronoUnit.MINUTES);
+
+        var timestamps = generateSampleTimestamps(current, current.minus(Duration.ofHours(1)), PERIOD);
+        assertThat(timestamps.current(), is(current));
+        assertThat(timestamps.until(), is(current.minus(Duration.ofHours(1))));
+        assertThat(timestamps.size(), is(12));
+        assertThat(timestamps.limit(0), is(Timestamps.EMPTY));
+        assertThat(timestamps.limit(12 + randomNonNegativeInt()), is(timestamps));
+
+        var timestampList = Iterators.toList(timestamps);
+        assertThat(timestampList, hasSize(12));
+        assertThat(timestampList.get(0), is(timestamps.current()));
+        assertThat(timestampList.get(1), is(timestamps.current().minus(PERIOD_DURATION)));
+        assertThat(timestampList.get(11), is(timestamps.until().plus(PERIOD_DURATION)));
+
+        assertThat(timestamps.hasNext(), is(false));
+        timestamps.reset();
+        assertThat(timestampList, equalTo(Iterators.toList(timestamps)));
+
+        var limitedTimestamps = timestamps.limit(6);
+        assertThat(limitedTimestamps.current(), is(current));
+        assertThat(limitedTimestamps.until(), is(current.minus(Duration.ofMinutes(30))));
+        assertThat(limitedTimestamps.size(), is(6));
+        assertThat(limitedTimestamps.limit(6 + randomNonNegativeInt()), is(limitedTimestamps));
+
+        assertThat(timestampList.subList(0, 6), equalTo(Iterators.toList(limitedTimestamps)));
     }
 }
