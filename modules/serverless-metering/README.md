@@ -15,11 +15,12 @@ The metrics metered can be categorized into two types:
 
 **This plugin currently computes and reports three different metrics:**
 
-| Metric name    | Description                | Metric type | Usage type name    | Reporting granularity | Project types                               |
-|----------------|----------------------------|-------------|--------------------|-----------------------|---------------------------------------------|
-| **RA-I**ngest  | raw ingested data in bytes | counter     | `es_raw_data`        | per node and index    | general (unused*), O11y, Security           |
-| **RA-S**torage | raw stored data in bytes   | sample      | `es_raw_stored_data` | per cluster and index | O11y, Security                              |
-| **IX**         | index size in bytes        | sample      | `es_indexed_data`    | per cluster and shard | general, O11y (unused*), Security (unused*) |
+| Metric name    | Description                           | Metric type | Usage type name      | Reporting granularity     | Project types                               |
+|----------------|---------------------------------------|-------------|----------------------|---------------------------|---------------------------------------------|
+| **RA-I**ngest  | raw ingested data in bytes            | counter     | `es_raw_data`        | per node and index        | general (unused*), O11y, Security           |
+| **RA-S**torage | raw stored data in bytes              | sample      | `es_raw_stored_data` | per cluster and index     | O11y, Security                              |
+| **IX**         | index size in bytes                   | sample      | `es_indexed_data`    | per cluster and shard     | general, O11y (unused*), Security (unused*) |
+| **VCU**        | virtual compute units in bytes of RAM | sample      | `es_vcu`             | per tier (search / index) | general, O11y (unused*), Security (unused*) |
 
 (*) Important: this table highlights what is computed and reported by the metering plugin; this may be different from what is actually consumed by the [metering pipeline](https://github.com/elastic/platform-billing/blob/main/teams/billing/services/serverless_onboarding.md#stages--responsibilities) and used for billing. For detailed and up-to-date documentation from a billing perspective, see the higher level business documentation: [PRD - Serverless monitoring](https://docs.google.com/document/d/1ILQHCrMSWFB403fJHI45jarolcOC4l6zlDoZbqKK0HA/edit#heading=h.7zjfkrex9jtg).
 
@@ -130,47 +131,6 @@ Notice that this happens at commit time: the `DocValuesConsumer` reads the field
 
 For reporting, total RA-S of a shard can then be calculated by summing the approximate live RA-S of each segment, which is the product of the count of live documents in the segment and the average RA-S per document of that segment. If no deletions are present in a segment, e.g.  every time after merging segments, the calculated RA-S of that segment will be precise (again).
 
-Code references:
-* [`RAStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAStorageReporter.java): Writes RA-S as additional, hidden field to each document
-* [`RAStorageDocValuesFormatFactory`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/codec/RAStorageDocValuesFormatFactory.java): Creates the `DocValuesConsumer` responsible for calculating the average RA-S per document of a segment
-
-### IX (Index Size)
-
-IX (index size) is a simpler storage metric, computed by summing the disk size occupied by segments on disk. Being based on the actual disk space occupied, this metric includes the deleted documents still present in segments on disk. The metric is sampled, so eventually when/if the deleted documents are cleaned up (e.g. after merging), the segments will occupy less space on disk, and we will report the new size at the next sample.
-
-**Note:**
-Closed indices are not included when metering IX. Closing an index requires Operator privileges and customers cannot do this themselves.
-If doing so on a customer's behalf, be aware that we will stop charging the customer for that index.
-
-### Per cluster reporting infrastructure for RA-S and IX usage sample records
-
-Differently from RA-I, RA-S and IX are reported _per cluster_.  \
-Each cluster has an “Index Info” node, designated by means of a persistent task. This persistent task periodically triggers a service (`MeteringIndexInfoService`) to collect updated metering shard infos from all search nodes in the cluster.\
-Each node responds with per-shard information on IX and RA-S (plus other information, like doc count), computed by iterating over all indices/shards/segments on that node and summing up the stats we find in the (latest) segment commit info (for details, see the previous sections). Notice that we just access the latest segment commit info; no reader is opened on the segment in this phase.
-
-The `MeteringIndexInfoService` running on the persistent task node builds and stores a consolidated view of metering shard infos of all responses. `MeteringIndexInfoService` considers only the most up to date generations and handles corner cases such as indices being deleted or potentially even re-generated with the same name.
-
-Like for RA-I, a separate service (`UsageReportCollector`) schedules a periodic function (with a default interval of 5 minutes) via a dedicated threadpool scheduler to collect metrics from all registered metrics providers; in the case of RA-S and IX, the sampled metrics provider exposed by `MeteringIndexInfoService` generates per-index billing usage records for both storage metrics by aggregating the most up-to-date per-shard info. Records for empty indices without any live documents are omitted. The sample records are then associated with the current reporting period (aka sampling period), which is "snapped" (or aligned) to multiples of the sampling period boundaries within the hour.
-
-Because of its architecture/technology combination, the billing pipeline is not able to detect missing samples and is not able to adjust for them, resulting in potentially incorrect computations.
-The billing pipeline operates using a "billing period" of 1h; the reporting (sampling) period must be set so the billing period is divisible by the sampling period, without reminder. In other words, there must be an integer number of sampling periods within a billing period. With the default sampling period of 5 minutes, this number is 12. The billing pipeline averages all samples in its billing period, but it only considers samples individually; therefore it performs a "live average": it divides each sample by the number of expected samples in the billing period to obtain a contribution to the final value and sums them.
-
-For this reason, `UsageReportCollector` keeps a “cursor” in cluster state which refers to the last successfully transmitted sampling period. Upon successful publication, the cursor is updated with the last sampling timestamp. The persistent task node also retains in memory the most recently published sampling records.\
-If `UsageReportCollector` detects that some previous sampling intervals have been missed (e.g. due to delays or failures due to unavailability of the usage API), it backfills sample records using linear interpolation between the latest successfully published samples and the most up-to-date samples.\
-If there are no previous samples at all (e.g. after changing the persistent task node), we do a limited backfilling: only 2 additional timeframes, using constant interpolation. This covers a couple of common scenarios in which this happens (scaling and rolling upgrade).\
-If no previous sample for a particular index exists, backfilling for that index is skipped (we just transmit the new available data); a missing sample for a single index means that either the index is new or a shard/node was not available.\
-In any case, at most 24h of data is backfilled.
-
-The same reporting infrastructure is used to report both RA-S and IX usage records. However, for historic reasons, IX usage samples are reported per shard instead of per index.
-
-Notes:
-
-* Each node keeps a cache of the metering info to return to the persistent task node
-    * When queried, the node recalculates only the information that needs to be updated, based on the generation.
-    * If metering infos of a shard on a particular node haven’t changed, that information  is omitted from the response when being queried by the persistent task node (i.e. we only answer with the diff).
-* `MeteringIndexInfoService` runs on every node of the cluster, but it effectively do something (generate and send records) only on the persistent task node; however, the persistent task can be re-allocated to a different node at any time (e.g. during a rolling upgrade), so any node needs to be ready to start collecting and sending usage metrics.
-* UsageReportCollector also runs on every node; on search nodes, it will collect and forward metrics from the (single active) sampled storage metrics provider for RA-S/IX running on the persistent task node. On index nodes, it will collect and forward metrics from the ingest counter metrics provider for RA-I.
-
 RA-S usage sample records look as follows:
 
 ```json
@@ -191,6 +151,18 @@ RA-S usage sample records look as follows:
     }
 }
 ```
+
+Code references:
+* [`RAStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAStorageReporter.java): Writes RA-S as additional, hidden field to each document
+* [`RAStorageDocValuesFormatFactory`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/codec/RAStorageDocValuesFormatFactory.java): Creates the `DocValuesConsumer` responsible for calculating the average RA-S per document of a segment
+
+### IX (Index Size)
+
+IX (index size) is a simpler storage metric, computed by summing the disk size occupied by segments on disk. Being based on the actual disk space occupied, this metric includes the deleted documents still present in segments on disk. The metric is sampled, so eventually when/if the deleted documents are cleaned up (e.g. after merging), the segments will occupy less space on disk, and we will report the new size at the next sample.
+
+**Note:**
+Closed indices are not included when metering IX. Closing an index requires Operator privileges and customers cannot do this themselves.
+If doing so on a customer's behalf, be aware that we will stop charging the customer for that index.
 
 IX usage sample records look as follows:
 
@@ -214,12 +186,86 @@ IX usage sample records look as follows:
 }
 ```
 
+### VCU (virtual compute units) in bytes of RAM
+
+The VCU calculation for serverless is memory based. VCU usage records of type `es_vcu` report the provisioned amount of memory in bytes per tier (search, index) which is the sum of the provisioned memory of nodes in the respective tier.
+
+Additionally, tier activity is reported to be able to charge differently for periods of inactivity. Activity is captured on each node and only non-operator activity is considered.
+While some actions activate only the assigned tier of a node, other, more general actions (such as a refresh or settings update) activate both tiers. Once activated, a tier remains active for at least the cooldown period of 15 minutes.
+The cluster sampling infrastructure then builds a cluster wide consolidated per tier view of current activity, for details see the next section below.
+
+`es_vcu` contain the following additional usage metadata in `usage.metadata`:
+- `application_tier`: the tier (`search` or `index`)
+- `active`: if the tier is active during the current sampling period
+- `latest_activity_timestamp`: the timestamp (ISO-8601 formatted) of the last activity of that tier
+- `sp_min_provisioned_memory`: (search tier only) SP min provisioned RAM (bytes).\
+  Note: In certain error cases SP min provisioned RAM cannot be calculated and won't be added. very likely, the search tier is not operational in that case. This is actively monitored.
+
+VCU usage sample records look as follows:
+
+```json
+{
+    "id": "vcu:{tier}-{sampling timestamp}",
+    "usage_timestamp": {sampling timestamp},
+    "usage": {
+        "type": "es_vcu",
+        "period_seconds": {reporting period},
+        "quantity": {VCU in bytes of RAM},
+        "metadata": {
+          "application_tier": "{search/index}",
+          "active": "{true/false}",
+          "latest_activity_timestamp": "{latest activity timestamp}",
+          "sp_min_provisioned_memory": "{SP min provisioned RAM in bytes (search tier only)}"
+        }
+    },
+    "source": {
+        "id": "es-{node id}",
+        "instance_group_id": "{project id}"
+    }
+}
+```
+
+Code references:
+* [`TaskActivityTracker`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/activitytracking/TaskActivityTracker.java): tracks activity per tier by means of an action filter ([`ActivityTrackerActionFilter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/activitytracking/ActivityTrackerActionFilter.java).
+* [`SampledVCUMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledVCUMetricsProvider.java): provides per tier VCU samples
+
+### Per cluster reporting infrastructure for RA-S and IX usage sample records
+
+Differently from RA-I, sampled metrics such as RA-S, IX but also VCU are reported _per cluster_.  \
+Each cluster has a dedicated “sampling” node, designated by means of a persistent task. This persistent task periodically triggers a service (`SampledClusterMetricsService`) to collect updated samples from all nodes in the cluster such as memory or activity (per application tier).\
+Additionally, search nodes provide per-shard information on IX and RA-S (plus other information, like doc count), computed by iterating over all indices/shards/segments on that node and summing up the stats we find in the (latest) segment commit info (for details, see the previous sections). Notice that we just access the latest segment commit info; no reader is opened on the segment in this phase.\
+
+The `SampledClusterMetricsService` running on the persistent task node builds and stores a consolidated view of samples returned by nodes.
+Regarding shard info metrics, `SampledClusterMetricsService` considers only the most up to date generations and handles corner cases such as indices being deleted or potentially even re-generated with the same name.
+
+Like for RA-I, a separate service (`UsageReportCollector`) schedules a periodic function (with a default interval of 5 minutes) via a dedicated threadpool scheduler to collect metrics from all registered metrics providers; in the case of RA-S and IX, the sampled metrics provider exposed by `SampledClusterMetricsService` generates per-index billing usage records for both storage metrics by aggregating the most up-to-date per-shard info. Records for empty indices without any live documents are omitted. The sample records are then associated with the current reporting period (aka sampling period), which is "snapped" (or aligned) to multiples of the sampling period boundaries within the hour.
+
+Because of its architecture/technology combination, the billing pipeline is not able to detect missing samples and is not able to adjust for them, resulting in potentially incorrect computations.
+The billing pipeline operates using a "billing period" of 1h; the reporting (sampling) period must be set so the billing period is divisible by the sampling period, without remainder. In other words, there must be an integer number of sampling periods within a billing period. With the default sampling period of 5 minutes, this number is 12. The billing pipeline averages all samples in its billing period, but it only considers samples individually; therefore it performs a "live average": it divides each sample by the number of expected samples in the billing period to obtain a contribution to the final value and sums them.
+
+For this reason, `UsageReportCollector` keeps a “cursor” in cluster state which refers to the last successfully transmitted sampling period. Upon successful publication, the cursor is updated with the last sampling timestamp. The persistent task node also retains in memory the most recently published sampling records.\
+If `UsageReportCollector` detects that some previous sampling intervals have been missed (e.g. due to delays or failures due to unavailability of the usage API), it backfills sample records using linear interpolation between the latest successfully published samples and the most up-to-date samples.\
+If there are no previous samples at all (e.g. after changing the persistent task node), we do a limited backfilling: only 2 additional timeframes, using constant interpolation. This covers a couple of common scenarios in which this happens (scaling and rolling upgrade).\
+If no previous sample for a particular index exists, backfilling for that index is skipped (we just transmit the new available data); a missing sample for a single index means that either the index is new or a shard/node was not available.\
+In any case, at most 24h of data is backfilled.
+
+Besides VCU usage records, the same reporting infrastructure is used to report both RA-S and IX. However, for historic reasons, IX usage samples are reported per shard instead of per index.
+
+Notes:
+
+* Each node keeps a cache of the metering info to return to the persistent task node
+    * When queried, the node recalculates only the information that needs to be updated, based on the generation.
+    * If metering infos of a shard on a particular node haven’t changed, that information  is omitted from the response when being queried by the persistent task node (i.e. we only answer with the diff).
+* `SampledClusterMetricsService` runs on every node of the cluster, but it effectively do something (generate and send records) only on the persistent task node; however, the persistent task can be re-allocated to a different node at any time (e.g. during a rolling upgrade), so any node needs to be ready to start collecting and sending usage metrics.
+* UsageReportCollector also runs on every node; on search nodes, it will collect and forward metrics from the (single active) sampled storage metrics provider for RA-S/IX running on the persistent task node. On index nodes, it will collect and forward metrics from the ingest counter metrics provider for RA-I.
+
 Code references:
 
-* [`MeteringIndexInfoTask`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/MeteringIndexInfoTask.java): periodically polls metering updates via MeteringIndexInfoService
-* [`MeteringIndexInfoService`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/action/MeteringIndexInfoService.java): maintains consolidated view of latest shard metering infos
-* [`StorageInfoMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/action/MeteringIndexInfoService.java#L189): provides per index RA-S usage samples using above
-* [`UsageReportCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/usagereports/UsageReportCollector.java): periodically collects the RA-S usage samples and backfills samples if necessary
+* [`SampledClusterMetricsSchedulingTask`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledClusterMetricsSchedulingTask.java): periodically polls metering updates via SampledClusterMetricsService
+* [`SampledClusterMetricsService`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledClusterMetricsSchedulingTask.java): maintains consolidated view of latest sampled metrics, such as shard or tier samples.
+* [`SampledStorageMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledStorageMetricsProvider.java): provides per index RA-S and per shard IX usage samples using above
+* [`SampledVCUMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledVCUMetricsProvider.java): provides per tier VCU samples
+* [`UsageReportCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/usagereports/UsageReportCollector.java): periodically collects and publishes usage records from available sampled metrics providers, backfilling samples if necessary
 
 
 ## Metering stats API
