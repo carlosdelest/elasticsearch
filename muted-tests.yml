@@ -153,3 +153,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceTests
   method: testUploadWarmingSingleRegion
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2868
+- class: co.elastic.elasticsearch.stateless.StatelessRealTimeGetIT
+  method: testDataVisibility
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2880
