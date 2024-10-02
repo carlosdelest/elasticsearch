@@ -156,3 +156,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessRealTimeGetIT
   method: testDataVisibility
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2880
+- class: co.elastic.elasticsearch.stateless.recovery.RecoveryCommitRegistrationIT
+  method: testSearchShardCloseDuringCommitRegistration
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2882
