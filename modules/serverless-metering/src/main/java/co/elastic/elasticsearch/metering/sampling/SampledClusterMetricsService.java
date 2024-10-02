@@ -31,9 +31,12 @@ import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.telemetry.metric.LongCounter;
+import org.elasticsearch.telemetry.metric.LongWithAttributes;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
@@ -54,6 +57,8 @@ public class SampledClusterMetricsService {
     static final String NODE_INFO_COLLECTIONS_TOTAL = "es.metering.node_info.collections.total";
     static final String NODE_INFO_COLLECTIONS_ERRORS_TOTAL = "es.metering.node_info.collections.error.total";
     static final String NODE_INFO_COLLECTIONS_PARTIALS_TOTAL = "es.metering.node_info.collections.partial.total";
+    static final String NODE_INFO_TIER_SEARCH_ACTIVITY_TIME = "es.metering.node_info.tier.search.activity.time";
+    static final String NODE_INFO_TIER_INDEX_ACTIVITY_TIME = "es.metering.node_info.tier.index.activity.time";
 
     private final ClusterService clusterService;
     private final Duration coolDown;
@@ -82,6 +87,18 @@ public class SampledClusterMetricsService {
             NODE_INFO_COLLECTIONS_PARTIALS_TOTAL,
             "The number of scatter operations that resulted in partial information (error/no response from one or more nodes)",
             "unit"
+        );
+        meterRegistry.registerLongsGauge(
+            NODE_INFO_TIER_SEARCH_ACTIVITY_TIME,
+            "The seconds since search tier last became active or inactive. Value is positive if active, and negative if inactive",
+            "sec",
+            () -> this.withSamplesIfReady(sample -> makeActivityMeter(sample.searchTierMetrics())).stream().toList()
+        );
+        meterRegistry.registerLongsGauge(
+            NODE_INFO_TIER_INDEX_ACTIVITY_TIME,
+            "The seconds since index tier last became active or inactive. Value is positive if active, and negative if inactive",
+            "sec",
+            () -> this.withSamplesIfReady(sample -> makeActivityMeter(sample.indexTierMetrics())).stream().toList()
         );
     }
 
@@ -236,9 +253,7 @@ public class SampledClusterMetricsService {
             .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public Optional<SampledMetricsProvider.MetricValues> withSamplesIfReady(
-        Function<SampledClusterMetrics, SampledMetricsProvider.MetricValues> function
-    ) {
+    public <T> Optional<T> withSamplesIfReady(Function<SampledClusterMetrics, T> function) {
         var currentInfo = collectedMetrics.get();
         if (persistentTaskNodeStatus != PersistentTaskNodeStatus.THIS_NODE || currentInfo == SampledClusterMetrics.EMPTY) {
             return Optional.empty(); // not the PersistentTask node or not ready to report yet
@@ -308,5 +323,24 @@ public class SampledClusterMetricsService {
         var sampledClusterMetrics = collectedMetrics.get();
         assert sampledClusterMetrics != null;
         return sampledClusterMetrics.indexTierMetrics();
+    }
+
+    private LongWithAttributes makeActivityMeter(SampledTierMetrics metrics) {
+        var now = Instant.now();
+        var activity = metrics.activity();
+
+        assert activity.lastActivityRecentPeriod().isBefore(now);
+        var isActive = activity.isActive(now, coolDown);
+
+        if (activity.isEmpty()) {
+            // Special case to avoid returning large values for Activity.EMPTY
+            return null;
+        } else if (isActive) {
+            long secondsActive = activity.firstActivityRecentPeriod().until(now, ChronoUnit.SECONDS);
+            return new LongWithAttributes(secondsActive);
+        } else {
+            long secondsInactive = activity.lastActivityRecentPeriod().until(now, ChronoUnit.SECONDS);
+            return new LongWithAttributes(-secondsInactive);
+        }
     }
 }

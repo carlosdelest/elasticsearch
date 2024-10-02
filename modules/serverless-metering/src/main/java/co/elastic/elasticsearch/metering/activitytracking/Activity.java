@@ -51,6 +51,10 @@ public record Activity(
         return lastActivityRecentPeriod.plus(coolDown).isAfter(now);
     }
 
+    public boolean isEmpty() {
+        return this.equals(EMPTY);
+    }
+
     record Period(Instant last, Instant first) {
         public static Period EMPTY = new Period(Instant.EPOCH, Instant.EPOCH);
     }

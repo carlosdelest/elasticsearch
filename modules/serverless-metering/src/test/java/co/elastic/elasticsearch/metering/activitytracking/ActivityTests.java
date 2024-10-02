@@ -29,7 +29,7 @@ import java.util.stream.Stream;
 
 public class ActivityTests extends ESTestCase {
 
-    private static final Duration COOL_DOWN = Duration.ofMinutes(15);
+    public static final Duration COOL_DOWN = Duration.ofMinutes(15);
 
     public void testExtendToNow() {
         Instant first = Instant.now();
@@ -153,18 +153,17 @@ public class ActivityTests extends ESTestCase {
     static class TimeSequenceHelper {
         Instant current;
 
-        List<Instant> times = new ArrayList<>();
-
         TimeSequenceHelper(Instant start) {
             current = start;
-            times.add(start);
         }
 
         public Instant addOffset(Duration offset) {
-            var next = current.plus(offset);
-            current = next;
-            times.add(current);
-            return next;
+            current = current.plus(offset);
+            return current;
+        }
+
+        public Instant subtractOffset(Duration offset) {
+            return addOffset(offset.negated());
         }
 
         public Instant addRand() {
@@ -178,18 +177,40 @@ public class ActivityTests extends ESTestCase {
         public Instant addRandLessThanCoolDown() {
             return addOffset(randomDurationUnderCoolDown());
         }
+
+        public Instant subtractRand() {
+            return subtractOffset(randomDuration(Duration.ofMinutes(1), Duration.ofMinutes(100)));
+        }
+
+        public Instant subtractRandMoreThanCoolDown() {
+            return subtractOffset(randomDurationOverCoolDown());
+        }
     }
 
     public static Activity randomActivity() {
-        int numPeriods = randomIntBetween(0, 2);
-        if (numPeriods == 0) {
-            return Activity.EMPTY;
-        }
-        var times = new TimeSequenceHelper(Instant.now());
-        var first1 = times.current;
-        var last1 = times.addRand();
-        var first2 = times.addRandMoreThanCoolDown();
-        var last2 = times.addRand();
-        return numPeriods == 1 ? new Activity(last2, first2, Instant.EPOCH, Instant.EPOCH) : new Activity(last2, first2, last1, first1);
+        return rarely() ? Activity.EMPTY : randomActivityNotEmpty();
+    }
+
+    public static Activity randomActivityNotEmpty() {
+        return randomBoolean() ? randomActivityNotActive() : randomActivityActive(Duration.ZERO);
+    }
+
+    public static Activity randomActivityNotActive() {
+        return randomActivity(randomDurationOverCoolDown());
+    }
+
+    public static Activity randomActivityActive(Duration minTimeStillActive) {
+        var timeToLastActivity = randomDuration(Duration.ofMillis(1), COOL_DOWN.minus(minTimeStillActive));
+        return randomActivity(timeToLastActivity);
+    }
+
+    public static Activity randomActivity(Duration timeToLastActivity) {
+        var now = Instant.now();
+        var times = new TimeSequenceHelper(now);
+        var last2 = times.subtractOffset(timeToLastActivity);
+        var first2 = times.subtractRand();
+        var last1 = times.subtractRandMoreThanCoolDown();
+        var first1 = times.subtractRand();
+        return randomBoolean() ? new Activity(last2, first2, Instant.EPOCH, Instant.EPOCH) : new Activity(last2, first2, last1, first1);
     }
 }

@@ -47,6 +47,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -61,8 +62,10 @@ import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anEmptyMap;
+import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.either;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.is;
@@ -721,6 +724,99 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         assertThat(afterNodeChangeShardInfo, containsShardInfos(anEmptyMap()));
     }
 
+    public void testActivityMetrics() {
+        var clusterService = createMockClusterService(Set::of);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+
+        var searchActivity = randomBoolean()
+            ? ActivityTests.randomActivityActive(Duration.ofMinutes(1))
+            : ActivityTests.randomActivityNotActive();
+        var indexActivity = randomBoolean()
+            ? ActivityTests.randomActivityActive(Duration.ofMinutes(1))
+            : ActivityTests.randomActivityNotActive();
+
+        // Update sample to non-empty Activity
+        var client = mock(Client.class);
+        doAnswer(answer -> {
+            @SuppressWarnings("unchecked")
+            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
+            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, searchActivity, indexActivity, Map.of(), List.of()));
+            return null;
+        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
+        service.updateSamples(client);
+
+        meterRegistry.getRecorder().collect();
+        var searchMetrics = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_GAUGE, SampledClusterMetricsService.NODE_INFO_TIER_SEARCH_ACTIVITY_TIME);
+        var indexMetrics = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_GAUGE, SampledClusterMetricsService.NODE_INFO_TIER_INDEX_ACTIVITY_TIME);
+        assertThat(searchMetrics.size(), equalTo(1));
+        assertThat(indexMetrics.size(), equalTo(1));
+        assertActivityMetrics(searchActivity, searchMetrics.getFirst());
+        assertActivityMetrics(indexActivity, indexMetrics.getFirst());
+    }
+
+    public void testActivityMetricsEmpty() {
+        var clusterService = createMockClusterService(Set::of);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+
+        // No metrics returned initially when activity is empty
+        meterRegistry.getRecorder().collect();
+        var searchMetrics1 = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_GAUGE, SampledClusterMetricsService.NODE_INFO_TIER_SEARCH_ACTIVITY_TIME);
+        var indexMetrics1 = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_GAUGE, SampledClusterMetricsService.NODE_INFO_TIER_INDEX_ACTIVITY_TIME);
+        assertThat(searchMetrics1, empty());
+        assertThat(indexMetrics1, empty());
+
+        // Update sample to non-empty Activity
+        var client = mock(Client.class);
+        doAnswer(answer -> {
+            @SuppressWarnings("unchecked")
+            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
+            listener.onResponse(
+                new CollectClusterSamplesAction.Response(
+                    0,
+                    0,
+                    ActivityTests.randomActivityNotEmpty(),
+                    ActivityTests.randomActivityNotEmpty(),
+                    Map.of(),
+                    List.of()
+                )
+            );
+            return null;
+        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
+        service.updateSamples(client);
+
+        // Checks metrics now show activity
+        meterRegistry.getRecorder().collect();
+        var searchMetrics2 = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_GAUGE, SampledClusterMetricsService.NODE_INFO_TIER_SEARCH_ACTIVITY_TIME);
+        var indexMetrics2 = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_GAUGE, SampledClusterMetricsService.NODE_INFO_TIER_INDEX_ACTIVITY_TIME);
+        assertThat(searchMetrics2, not(empty()));
+        assertThat(indexMetrics2, not(empty()));
+
+        // Change persistent task node
+        var previousState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(MockedClusterStateTestUtils.LOCAL_NODE_ID);
+        var currentState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(
+            previousState,
+            MockedClusterStateTestUtils.NON_LOCAL_NODE_ID
+        );
+        service.clusterChanged(new ClusterChangedEvent("TEST", currentState, previousState));
+
+        // Check no new activity
+        meterRegistry.getRecorder().collect();
+        var searchMetrics3 = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_GAUGE, SampledClusterMetricsService.NODE_INFO_TIER_SEARCH_ACTIVITY_TIME);
+        var indexMetrics3 = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_GAUGE, SampledClusterMetricsService.NODE_INFO_TIER_INDEX_ACTIVITY_TIME);
+        assertThat(searchMetrics3, equalTo(searchMetrics2));
+        assertThat(indexMetrics3, equalTo(indexMetrics2));
+    }
+
     @SafeVarargs
     private Matcher<SampledShardInfos> containsShardInfos(Map.Entry<ShardId, Matcher<ShardSample>>... entryMatchers) {
         List<Matcher<Map<? extends ShardKey, ? extends ShardSample>>> matchers = new ArrayList<>(entryMatchers.length + 1);
@@ -828,5 +924,16 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
     private static SampledTierMetrics randomSampledTierMetrics() {
         return new SampledTierMetrics(randomNonNegativeLong(), ActivityTests.randomActivity());
+    }
+
+    private void assertActivityMetrics(Activity activity, Measurement measurement) {
+        var now = Instant.now();
+        var sinceFirstInPeriod = Duration.between(activity.firstActivityRecentPeriod(), now).getSeconds();
+        var sinceLastInPeriod = Duration.between(activity.lastActivityRecentPeriod(), now).getSeconds();
+        if (activity.isActive(now, ActivityTests.COOL_DOWN)) {
+            assertThat((double) measurement.getLong(), is(closeTo(sinceFirstInPeriod, 1)));
+        } else {
+            assertThat((double) measurement.getLong(), is(closeTo(-sinceLastInPeriod, 1)));
+        }
     }
 }
