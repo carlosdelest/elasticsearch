@@ -157,3 +157,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.recovery.RecoveryCommitRegistrationIT
   method: testSearchShardCloseDuringCommitRegistration
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2882
+- class: co.elastic.elasticsearch.stateless.lucene.ReopeningIndexInputTests
+  method: testRandomReads
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2884
