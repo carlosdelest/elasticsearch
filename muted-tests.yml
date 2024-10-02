@@ -29,18 +29,12 @@ tests:
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2013"
   method: "testSettingsApplied"
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2120"
-  method: "test {yaml=logsdb/10_settings/create logs index}"
-- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2190"
   method: "test {yaml=health/10_basic/cluster health basic test}"
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2223"
   methods:
   - "testSearchMetricsArePublishedEventually"
-- class: "org.elasticsearch.datastreams.logsdb.LogsIndexModeEnabledRestTestIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2251"
-  method: "testCreateDataStream"
 - class: "org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2266"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT"
@@ -143,9 +137,6 @@ tests:
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2825
-- class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
-  method: testConfigureStoredSource
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2847
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2849
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceTests
