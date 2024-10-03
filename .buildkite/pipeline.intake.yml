@@ -27,7 +27,6 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-64"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
       buildDirectory: /dev/shm/bk
       zones: us-central1-a,us-central1-b,us-central1-c
     env:
@@ -46,7 +45,6 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
     notify:
       - github_commit_status:
           context: "elasticsearch-serverless/third party tests"
@@ -60,7 +58,6 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
 
   - label: ":serverless: Run synthetics tests against Serverless dev env (elasticsearch:${BUILDKITE_COMMIT:0:12})"
     if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//)
@@ -107,4 +104,3 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-4"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250

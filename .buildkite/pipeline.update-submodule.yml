@@ -5,7 +5,6 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-64"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
       buildDirectory: /dev/shm/bk
       zones: us-central1-a,us-central1-b,us-central1-c
     env:
@@ -16,7 +15,6 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
   - wait
 
   - label: ":git: Update elasticsearch submodule commit"
@@ -28,4 +26,3 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250

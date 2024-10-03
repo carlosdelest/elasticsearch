@@ -23,7 +23,6 @@ steps:
           provider: "gcp"
           machineType: "n1-standard-16"
           image: family/elasticsearch-ubuntu-2022
-          diskSizeGb: 250
 
       - label: ":kibana: Kibana serverless tests"
         trigger: appex-qa-serverless-kibana-ftr-tests # https://buildkite.com/elastic/appex-qa-serverless-kibana-ftr-tests
