@@ -39,6 +39,7 @@ public class ServerlessTransportVersions {
     public static final TransportVersion METERING_ACTIVITY_TRACKING_ADDED = def(8_741_02_0);
     public static final TransportVersion CLUSTER_STATE_VERSION_IN_PUBLISH_MEMORY_METRICS_REQUEST = def(8_741_03_0);
     public static final TransportVersion SHARD_INFO_INTERACTIVE_SIZE = def(8_746_01_0);
+    public static final TransportVersion COMPOUND_COMMITS_WITH_HEADER_SIZE_AND_REPLICATED_RANGES = def(8_757_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
