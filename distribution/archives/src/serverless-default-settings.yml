@@ -64,6 +64,11 @@ discovery.initial_state_timeout: 10m
 # one connection per thread, it's ok if we set it to a larger value.
 s3.client.default.max_connections: 150
 
+# In serverless we want to set this higher than the coordinating limit (10%) to
+# attempt to move forward with indexing data if the we have received it.
+# Autoscaling should kick in and increase resources if nodes are overloaded
+indexing_pressure.memory.primary.limit: 15%
+
 # Only allow certain scripted metric aggregations necessary for our solutions.
 # Generally, scripted metric aggs can become resource intensive enough to bring down a cluster.
 search.aggs.only_allowed_metric_scripts: true
