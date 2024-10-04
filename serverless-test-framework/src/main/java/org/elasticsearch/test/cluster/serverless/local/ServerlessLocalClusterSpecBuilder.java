@@ -29,6 +29,7 @@ public class ServerlessLocalClusterSpecBuilder extends AbstractLocalClusterSpecB
 
     @SuppressWarnings("this-escape")
     public ServerlessLocalClusterSpecBuilder() {
+        this.apply(c -> c.systemProperty("tests.testfeatures.enabled", "true"));
         this.settings(new DefaultServerlessSettingsProvider());
         this.environment(new DefaultEnvironmentProvider());
         this.apply(new DefaultServerlessLocalConfigProvider());
