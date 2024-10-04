@@ -81,9 +81,6 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2409"
   method: "testShardReadLoadCausesMinimumAndZeroSearchLoad"
-- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2413"
-  method: "test {yaml=logsdb/20_source_mapping/disabled _source is not supported #2}"
 - class: "co.elastic.elasticsearch.qa.sso.ServerlessSsoIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2420"
   method: "testSamlAuthenticationAndAccess"
@@ -135,10 +132,11 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2808
 - class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2825
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2849
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceTests
   method: testUploadWarmingSingleRegion
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2868
+- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
+  method: "test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2899"
