@@ -199,6 +199,7 @@ The cluster sampling infrastructure then builds a cluster wide consolidated per 
 - `active`: if the tier is active during the current sampling period
 - `latest_activity_timestamp`: the timestamp (ISO-8601 formatted) of the last activity of that tier
 - `sp_min_provisioned_memory`: (search tier only) SP min provisioned RAM (bytes).\
+- `sp_min`: (search tier only) minimum search power configured for the project.\
   Note: In certain error cases SP min provisioned RAM cannot be calculated and won't be added. very likely, the search tier is not operational in that case. This is actively monitored.
 
 VCU usage sample records look as follows:
@@ -215,7 +216,8 @@ VCU usage sample records look as follows:
           "application_tier": "{search/index}",
           "active": "{true/false}",
           "latest_activity_timestamp": "{latest activity timestamp}",
-          "sp_min_provisioned_memory": "{SP min provisioned RAM in bytes (search tier only)}"
+          "sp_min_provisioned_memory": "{SP min provisioned RAM in bytes (search tier only)}",
+          "sp_min": "{minimum search power configured for the project (search tier only)}"
         }
     },
     "source": {

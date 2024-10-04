@@ -53,15 +53,16 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     static final String USAGE_METADATA_ACTIVE = "active";
     static final String USAGE_METADATA_LATEST_ACTIVITY_TIME = "latest_activity_timestamp";
     static final String USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY = "sp_min_provisioned_memory";
+    static final String USAGE_METADATA_SP_MIN = "sp_min";
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
-    private final Function<SampledClusterMetrics, Long> spMinProvisionedMemoryProvider;
+    private final Function<SampledClusterMetrics, SPMinInfo> spMinProvisionedMemoryProvider;
     private final Duration activityCoolDownPeriod;
 
     SampledVCUMetricsProvider(
         SampledClusterMetricsService sampledClusterMetricsService,
         Duration activityCoolDownPeriod,
-        Function<SampledClusterMetrics, Long> spMinProvisionedMemoryProvider
+        Function<SampledClusterMetrics, SPMinInfo> spMinProvisionedMemoryProvider
     ) {
         this.sampledClusterMetricsService = sampledClusterMetricsService;
         this.activityCoolDownPeriod = activityCoolDownPeriod;
@@ -87,7 +88,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     }
 
     private static MetricValue buildMetricValue(
-        Long spMinProvisionedMemory,
+        SPMinInfo spMinInfo,
         SampledClusterMetricsService.SampledTierMetrics tierMetrics,
         String tier,
         Duration coolDown,
@@ -102,8 +103,9 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
         if (lastActivityTime.equals(Instant.EPOCH) == false) {
             usageMetadata.put(USAGE_METADATA_LATEST_ACTIVITY_TIME, lastActivityTime.toString());
         }
-        if (spMinProvisionedMemory != null) {
-            usageMetadata.put(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY, Long.toString(spMinProvisionedMemory));
+        if (spMinInfo != null) {
+            usageMetadata.put(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY, Long.toString(spMinInfo.provisionedMemory));
+            usageMetadata.put(USAGE_METADATA_SP_MIN, Long.toString(spMinInfo.spMin));
         }
         return new MetricValue(
             format("%s:%s", VCU_METRIC_ID_PREFIX, tier),
@@ -115,7 +117,9 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
         );
     }
 
-    static class SPMinProvisionedMemoryProvider implements Function<SampledClusterMetrics, Long> {
+    record SPMinInfo(long provisionedMemory, long spMin) {};
+
+    static class SPMinProvisionedMemoryProvider implements Function<SampledClusterMetrics, SPMinInfo> {
         /**
          * The minimum allowed search power.
          * Defined in:
@@ -134,7 +138,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             clusterService.getClusterSettings().initializeAndWatch(SEARCH_POWER_MIN_SETTING, v -> this.searchPowerMin = v);
         }
 
-        public static Function<SampledClusterMetrics, Long> build(ClusterService clusterService, NodeEnvironment nodeEnvironment) {
+        public static Function<SampledClusterMetrics, SPMinInfo> build(ClusterService clusterService, NodeEnvironment nodeEnvironment) {
             return build(
                 clusterService,
                 () -> new FsService(clusterService.getSettings(), nodeEnvironment).stats().getTotal().getTotal().getBytes(),
@@ -142,7 +146,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             );
         }
 
-        static Function<SampledClusterMetrics, Long> build(
+        static Function<SampledClusterMetrics, SPMinInfo> build(
             ClusterService clusterService,
             Supplier<Long> storageSupplier,
             Supplier<Long> ramSupplier
@@ -168,7 +172,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             return new SPMinProvisionedMemoryProvider(clusterService, provisionedStorage, provisionedRAM);
         }
 
-        private static Function<SampledClusterMetrics, Long> errorProvider(String message) {
+        private static Function<SampledClusterMetrics, SPMinInfo> errorProvider(String message) {
             return current -> {
                 logger.error(message);
                 return null;
@@ -176,7 +180,8 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
         }
 
         @Override
-        public Long apply(SampledClusterMetrics currentInfo) {
+        public SPMinInfo apply(SampledClusterMetrics currentInfo) {
+            long spMin = searchPowerMin;
             long boostedDataSetSize = 0;
             long totalDataSetSize = 0;
             for (var sample : currentInfo.shardSamples().values()) {
@@ -186,10 +191,11 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             }
 
             double storageRamRatio = provisionedStorage / (double) provisionedRAM;
-            double basePower = Math.max(MINIMUM_SEARCH_POWER, 0.05 * searchPowerMin);
-            double boostPower = searchPowerMin - basePower;
+            double basePower = Math.max(MINIMUM_SEARCH_POWER, 0.05 * spMin);
+            double boostPower = spMin - basePower;
             double cacheSize = boostedDataSetSize * boostPower + totalDataSetSize * basePower;
-            return (long) (cacheSize / storageRamRatio);
+            long provisionedMemory = (long) (cacheSize / storageRamRatio);
+            return new SPMinInfo(provisionedMemory, spMin);
         }
     }
 }

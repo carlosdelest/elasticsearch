@@ -36,6 +36,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -44,14 +45,17 @@ import static co.elastic.elasticsearch.metering.TestUtils.hasBackfillStrategy;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
+import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.SPMinInfo;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.SPMinProvisionedMemoryProvider;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_ACTIVE;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_APPLICATION_TIER;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_LATEST_ACTIVITY_TIME;
+import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.isA;
@@ -61,6 +65,7 @@ import static org.mockito.Mockito.when;
 
 public class SampledVCUMetricsProviderTests extends ESTestCase {
 
+    private static final long DEFAULT_SP_MIN = 100;
     private ClusterService clusterService;
 
     @Before
@@ -131,7 +136,9 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
                     USAGE_METADATA_ACTIVE,
                     "false",
                     USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
-                    String.valueOf(spMinProvisionedMemory)
+                    String.valueOf(spMinProvisionedMemory),
+                    USAGE_METADATA_SP_MIN,
+                    String.valueOf(DEFAULT_SP_MIN)
                 )
             )
         );
@@ -209,7 +216,9 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
                     USAGE_METADATA_LATEST_ACTIVITY_TIME,
                     searchActivity.lastActivityRecentPeriod().toString(),
                     USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
-                    String.valueOf(spMinProvisionedMemory)
+                    String.valueOf(spMinProvisionedMemory),
+                    USAGE_METADATA_SP_MIN,
+                    String.valueOf(DEFAULT_SP_MIN)
                 )
             )
         );
@@ -233,6 +242,44 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         );
         assertThat(metric2.value(), is(indexTierMemorySize));
         assertThat(metric1.meteredObjectCreationTime(), nullValue());
+    }
+
+    public void testDifferentSpMinValues() {
+        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        setMetricsServiceData(
+            metricsService,
+            SampledClusterMetricsServiceTests.randomSampledTierMetrics(),
+            SampledClusterMetricsServiceTests.randomSampledTierMetrics()
+        );
+
+        long firstSpMin = randomIntBetween(0, 100);
+        long secondSpMin = randomIntBetween(0, 100);
+        var spMinProvider = buildSpMinTestProvider(List.of(new SPMinInfo(1, firstSpMin), new SPMinInfo(2, secondSpMin)));
+        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(metricsService, Duration.ofMinutes(15), spMinProvider);
+
+        {
+            var metricValues = sampledVCUMetricsProvider.getMetrics();
+            Collection<MetricValue> metrics = iterableToList(
+                metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent)
+            );
+            var metric = metrics.stream()
+                .filter(m -> m.id().equals("vcu:search"))
+                .findFirst()
+                .orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent);
+            assertThat(metric.usageMetadata(), hasEntry(USAGE_METADATA_SP_MIN, String.valueOf(firstSpMin)));
+        }
+
+        {
+            var metricValues = sampledVCUMetricsProvider.getMetrics();
+            Collection<MetricValue> metrics = iterableToList(
+                metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent)
+            );
+            var metric = metrics.stream()
+                .filter(m -> m.id().equals("vcu:search"))
+                .findFirst()
+                .orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent);
+            assertThat(metric.usageMetadata(), hasEntry(USAGE_METADATA_SP_MIN, String.valueOf(secondSpMin)));
+        }
     }
 
     public void testNoPersistentTaskNode() {
@@ -282,7 +329,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         var clusterService = mockClusterService(true);
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, Map.of(), Set.of());
         var provider = new SPMinProvisionedMemoryProvider(clusterService, 10, 10);
-        assertThat(provider.apply(current), equalTo(0L));
+        assertThat(provider.apply(current).provisionedMemory(), equalTo(0L));
     }
 
     private static SampledClusterMetricsService.ShardSample randomShardSample(long interactiveSizeInBytes, long totalSizeInBytes) {
@@ -367,7 +414,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         // cacheSize = 10500, boostSize * boostPower + totalSize * basePower, 100 * 95 + 200 * 5
         long cacheSize = totalInteractive * 95 + (totalNonInteractive + totalInteractive) * 5;
         long expectSPMinRam = cacheSize / storageRamRatio;
-        assertThat(provider.apply(current), equalTo(expectSPMinRam));
+        assertThat(provider.apply(current).provisionedMemory(), equalTo(expectSPMinRam));
     }
 
     private Long getSPMinProvisionedMemory(
@@ -381,11 +428,16 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         var shardSamples = Map.of(randomShardKey(), randomShardSample(interactiveSize, totalSize));
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
         var provider = new SPMinProvisionedMemoryProvider(clusterService, provisionedStorage, provisionedRam);
-        return provider.apply(current);
+        return provider.apply(current).provisionedMemory();
     }
 
-    private static Function<SampledClusterMetrics, Long> buildSpMinTestProvider(Long... values) {
-        var iter = Arrays.stream(values).iterator();
+    private static Function<SampledClusterMetrics, SPMinInfo> buildSpMinTestProvider(Long... provisionedMem) {
+        var spMinInfos = Arrays.stream(provisionedMem).map(v -> new SPMinInfo(v, DEFAULT_SP_MIN)).toList();
+        return buildSpMinTestProvider(spMinInfos);
+    }
+
+    private static Function<SampledClusterMetrics, SPMinInfo> buildSpMinTestProvider(List<SPMinInfo> spMinInfos) {
+        var iter = spMinInfos.iterator();
         return current -> {
             assert iter.hasNext() : "Cannot call provider with more than number of provided values";
             return iter.next();

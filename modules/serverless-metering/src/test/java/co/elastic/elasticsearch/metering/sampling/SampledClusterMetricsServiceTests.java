@@ -922,7 +922,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         }
     }
 
-    private static SampledTierMetrics randomSampledTierMetrics() {
+    public static SampledTierMetrics randomSampledTierMetrics() {
         return new SampledTierMetrics(randomNonNegativeLong(), ActivityTests.randomActivity());
     }
 
