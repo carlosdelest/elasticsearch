@@ -24,14 +24,14 @@ steps:
           message: "${BUILDKITE_MESSAGE}"
           env:
             TARGET_ENV: ${ENVIRONMENT}
-            CHECK_LOG_ERROR_RATE: true
+            ELASTICSEARCH_CHECK_LOG_ERROR_RATE: true
             MAX_ERROR_PERCENT: 0.01
             QUERY_WINDOW: 24h
             LOG_LEVEL_ERROR_VALUE: ERROR
             SERVICE: elasticsearch
             SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
             SERVICE_VERSION: ${SERVICE_VERSION:0:12}
-            SERVICE_TYPE_FIELD: kubernetes.container.name
+            SERVICE_TYPE_FIELD: data_stream.dataset
             CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
             MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 0.325
             CHECK_ALERTS: true

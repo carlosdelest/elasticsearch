@@ -53,7 +53,7 @@ steps:
             SERVICE: elasticsearch
             SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
             SERVICE_VERSION: ${SERVICE_VERSION:0:12}
-            SERVICE_TYPE_FIELD: kubernetes.container.name
+            SERVICE_TYPE_FIELD: data_stream.dataset
             CHECK_ALERTS: true
             CHECK_SLO: true
             CHECK_SLO_TAG: "quality-gate"
