@@ -58,7 +58,7 @@ public class MeteringRestTestIT extends AbstractMeteringRestTestIT {
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 3)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2)
             .build();
-        createIndex(indexName, settings);
+        createIndex(INDEX_NAME, settings);
 
         // ingest more docs so that each shard has some
         int numDocs = 99;
@@ -67,19 +67,19 @@ public class MeteringRestTestIT extends AbstractMeteringRestTestIT {
             bulk.append("{\"index\":{}}\n");
             bulk.append("{\"foo\": \"bar\"}\n");
         }
-        Request bulkRequest = new Request("POST", "/" + indexName + "/_bulk");
+        Request bulkRequest = new Request("POST", "/" + INDEX_NAME + "/_bulk");
         bulkRequest.addParameter("refresh", "true");
         bulkRequest.setJsonEntity(bulk.toString());
         client().performRequest(bulkRequest);
 
-        ensureGreen(indexName);
+        ensureGreen(INDEX_NAME);
 
-        client().performRequest(new Request("POST", "/" + indexName + "/_flush"));
+        client().performRequest(new Request("POST", "/" + INDEX_NAME + "/_flush"));
 
-        logShardAllocationInformation(indexName);
+        logShardAllocationInformation(INDEX_NAME);
 
         assertBusy(() -> {
-            var usageRecords = usageApiTestServer.getUsageRecords("shard-size");
+            var usageRecords = drainUsageRecords("shard-size");
             // there might be records from multiple metering.report_period. We are interested in the latest
             // because the replication might take time and also some nodes might be reporting with a delay
 

@@ -456,7 +456,7 @@ public class UsageReportCollectorTests extends ESTestCase {
 
     private static UsageRecord usageRecord(MetricValue value, Instant timestamp) {
         return new UsageRecord(
-            value.id() + "-" + timestamp.truncatedTo(ChronoUnit.SECONDS),
+            value.id() + ":" + PROJECT_ID + ":" + timestamp.truncatedTo(ChronoUnit.SECONDS),
             timestamp,
             new UsageMetrics(value.type(), null, value.value(), REPORT_PERIOD, null, value.usageMetadata()),
             new UsageSource("es-" + NODE_ID, PROJECT_ID, value.sourceMetadata())

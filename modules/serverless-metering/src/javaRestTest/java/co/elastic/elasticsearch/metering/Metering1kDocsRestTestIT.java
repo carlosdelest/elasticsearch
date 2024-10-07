@@ -68,7 +68,7 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 3)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2)
             .build();
-        createIndex(indexName, settings);
+        createIndex(INDEX_NAME, settings);
 
         // ingest more docs so that each shard has some
         int numDocs = 1000;
@@ -79,22 +79,22 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
             bulk.append("{\"index\":{}}\n");
             bulk.append("{\"foo\": \"bar\"}\n");
         }
-        Request bulkRequest = new Request("POST", "/" + indexName + "/_bulk");
+        Request bulkRequest = new Request("POST", "/" + INDEX_NAME + "/_bulk");
         bulkRequest.addParameter("refresh", "true");
         bulkRequest.setJsonEntity(bulk.toString());
         client().performRequest(bulkRequest);
 
-        ensureGreen(indexName);
+        ensureGreen(INDEX_NAME);
 
         forceMerge();
 
-        logShardAllocationInformation(indexName);
+        logShardAllocationInformation(INDEX_NAME);
 
         List<Map<?, ?>> ingestedDocs = new ArrayList<>();
         assertBusy(() -> {
             // ingested-doc metrics are emitted only once.
             // we need to await all are sent.
-            var records = usageApiTestServer.getUsageRecords("ingested-doc");
+            var records = drainUsageRecords("ingested-doc");
             ingestedDocs.addAll(records);
             int sum = sumQuantity(ingestedDocs);
 
@@ -105,17 +105,17 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
             logger.info(sum);
         });
         assertBusy(() -> {
-            var allUsageRecords = usageApiTestServer.drainAllUsageRecords();
-            var ingestedDocsRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "ingested-doc");
+            var allUsageRecords = drainAllUsageRecords();
+            var ingestedDocsRecords = filterUsageRecords(allUsageRecords, "ingested-doc");
             // once we asserted the expected total ingest size there will be no more ingest usage records
             assertThat(ingestedDocsRecords, empty());
         });
 
         List<Map<?, ?>> latestIXShardSizes = new ArrayList<>();
         assertBusy(() -> {
-            var allUsageRecords = usageApiTestServer.getAllUsageRecords();
-            var ixShardSizeRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "shard-size");
-            var raStorageRecords = UsageApiTestServer.filterUsageRecords(allUsageRecords, "raw-stored-index-size");
+            var allUsageRecords = getAllUsageRecords();
+            var ixShardSizeRecords = filterUsageRecords(allUsageRecords, "shard-size");
+            var raStorageRecords = filterUsageRecords(allUsageRecords, "raw-stored-index-size");
 
             // there might be records from multiple metering periods, we are interested in the latest only
 
@@ -128,7 +128,7 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
             latestIXShardSizes.clear();
             latestIXShardSizes.addAll(latestIXShardSizesBatch.getValue());
             logger.info(
-                debugInfoForShardSize(indexName, latestIXShardSizesBatch.getKey(), latestIXShardSizesBatch.getValue(), ixShardSizeRecords)
+                debugInfoForShardSize(INDEX_NAME, latestIXShardSizesBatch.getKey(), latestIXShardSizesBatch.getValue(), ixShardSizeRecords)
             );
         }, 30, TimeUnit.SECONDS);
 
@@ -152,7 +152,7 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
     }
 
     private void forceMerge() throws IOException {
-        Request request = new Request("POST", "/" + indexName + "/_forcemerge");
+        Request request = new Request("POST", "/" + INDEX_NAME + "/_forcemerge");
         request.addParameter("max_num_segments", "1");
         request.addParameter("flush", "true");
         client().performRequest(request);
@@ -181,10 +181,10 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
     @SuppressWarnings("unchecked")
     private Map<String, Map<Integer, Integer>> getExpectedReplicaSizes() throws IOException {
 
-        Map<String, Object> indices = entityAsMap(client().performRequest(new Request("GET", indexName + "/_segments")));
+        Map<String, Object> indices = entityAsMap(client().performRequest(new Request("GET", INDEX_NAME + "/_segments")));
 
         Map<String, List<Map<String, ?>>> shards = (Map<String, List<Map<String, ?>>>) XContentMapValues.extractValue(
-            "indices." + indexName + ".shards",
+            "indices." + INDEX_NAME + ".shards",
             indices
         );
 

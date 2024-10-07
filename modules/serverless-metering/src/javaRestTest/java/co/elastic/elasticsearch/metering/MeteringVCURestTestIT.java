@@ -48,7 +48,7 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
         updateSpMinSetting(firstSpMin);
 
         // Create index with admin client to avoid tracking action
-        createIndex(adminClient(), indexName, Settings.EMPTY);
+        createIndex(adminClient(), INDEX_NAME, Settings.EMPTY);
         var afterIndexCreate = Instant.now();
 
         // Assert expected records before any activity is recorded
@@ -71,7 +71,7 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
         var beforeBulk = Instant.now();
         addDoc(client());
         var afterBulk = Instant.now();
-        ensureGreen(adminClient(), indexName);
+        ensureGreen(adminClient(), INDEX_NAME);
 
         // Assert index activity but no search activity
         assertBusy(() -> {
@@ -93,9 +93,9 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
 
         // Run _search, which is tracked as search activity.
         var beforeSearch = Instant.now();
-        client().performRequest(new Request("GET", "/" + indexName + "/_search"));
+        client().performRequest(new Request("GET", "/" + INDEX_NAME + "/_search"));
         var afterSearch = Instant.now();
-        ensureGreen(adminClient(), indexName);
+        ensureGreen(adminClient(), INDEX_NAME);
 
         // Assert search activity and no new index activity
         assertBusy(() -> {
@@ -117,9 +117,9 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
 
         // Run refresh request
         var beforeRefresh = Instant.now();
-        client().performRequest(new Request("POST", "/" + indexName + "/_refresh"));
+        client().performRequest(new Request("POST", "/" + INDEX_NAME + "/_refresh"));
         var afterRefresh = Instant.now();
-        ensureGreen(adminClient(), indexName);
+        ensureGreen(adminClient(), INDEX_NAME);
 
         var lastSpMinValue = new AtomicLong(-1);
         // Assert both search and index activity
@@ -140,7 +140,7 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
         // Update sp_min value
         long secondSpMin = 100;
         updateSpMinSetting(secondSpMin);
-        ensureGreen(adminClient(), indexName);
+        ensureGreen(adminClient(), INDEX_NAME);
 
         // Assert sp_min_provisioned_memory and sp_min changed
         assertBusy(() -> {
@@ -157,9 +157,9 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
     record Metrics(List<VcuRecord> search, List<VcuRecord> index) {};
 
     private Metrics getActivityRecords() {
-        var usageRecords = usageApiTestServer.drainAllUsageRecords();
-        var search = UsageApiTestServer.filterUsageRecords(usageRecords, "vcu:search").stream().map(VcuRecord::fromRecord).toList();
-        var index = UsageApiTestServer.filterUsageRecords(usageRecords, "vcu:index").stream().map(VcuRecord::fromRecord).toList();
+        var usageRecords = drainAllUsageRecords();
+        var search = filterUsageRecords(usageRecords, "vcu:search").stream().map(VcuRecord::fromRecord).toList();
+        var index = filterUsageRecords(usageRecords, "vcu:index").stream().map(VcuRecord::fromRecord).toList();
         return new Metrics(search, index);
     }
 
@@ -235,7 +235,7 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
         StringBuilder bulk = new StringBuilder();
         bulk.append("{\"index\":{}}\n");
         bulk.append("{\"foo\": \"bar\"}\n");
-        Request bulkRequest = new Request("POST", "/" + indexName + "/_bulk");
+        Request bulkRequest = new Request("POST", "/" + INDEX_NAME + "/_bulk");
         // Do not set refresh, as refresh is both a search and index action
         bulkRequest.setJsonEntity(bulk.toString());
         client.performRequest(bulkRequest);

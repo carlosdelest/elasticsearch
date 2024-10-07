@@ -432,8 +432,9 @@ class UsageReportCollector {
         return samplesById;
     }
 
-    private static String generateId(String key, Instant time) {
-        return key + "-" + time.truncatedTo(ChronoUnit.SECONDS);
+    private String generateId(String key, Instant time) {
+        // include project id to never risk collisions between different projects
+        return key + ":" + projectId + ":" + time.truncatedTo(ChronoUnit.SECONDS);
     }
 
     private UsageRecord getRecordForCount(String metric, String type, long count, Map<String, String> metadata, Instant now) {

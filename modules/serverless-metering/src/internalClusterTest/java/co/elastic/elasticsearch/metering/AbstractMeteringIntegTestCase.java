@@ -68,6 +68,7 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
 
     private final BlockingQueue<List<UsageRecord>> received = new LinkedBlockingQueue<>();
+    private final String projectId = randomAlphaOfLength(8);
     private HttpServer server;
 
     @Before
@@ -108,12 +109,14 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     }
 
     protected BlockingQueue<List<UsageRecord>> receivedMetrics() {
+        List<UsageRecord> invalid = received.stream().flatMap(List::stream).filter(r -> r.id().contains(projectId) == false).toList();
+        assertTrue("Expected usage record ids to contain project id, but got: " + invalid, invalid.isEmpty());
         return received;
     }
 
     @Override
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
-        return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
+        return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), projectId)
             .put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
             // speed things up a bit
             .put(UsageReportService.REPORT_PERIOD.getKey(), REPORT_PERIOD.toString())
@@ -128,11 +131,6 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         return internalCluster().startNode(
             settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.INGEST_ROLE)
         );
-    }
-
-    @Override
-    protected Settings.Builder settingsForRoles(DiscoveryNodeRole... roles) {
-        return super.settingsForRoles(roles).put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId");
     }
 
     @After
