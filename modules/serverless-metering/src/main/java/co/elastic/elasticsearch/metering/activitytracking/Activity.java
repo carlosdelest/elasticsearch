@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering.activitytracking;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.core.Nullable;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -27,6 +28,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 public record Activity(
@@ -37,6 +39,14 @@ public record Activity(
 ) implements Writeable {
 
     public static Activity EMPTY = new Activity(Instant.EPOCH, Instant.EPOCH, Instant.EPOCH, Instant.EPOCH);
+
+    public static ActiveInfo DEFAULT_NOT_ACTIVE = new Activity.ActiveInfo(false, Instant.EPOCH);
+
+    public Activity {
+        assert lastActivityRecentPeriod.isBefore(firstActivityRecentPeriod) == false;
+        assert firstActivityRecentPeriod.isBefore(lastActivityPreviousPeriod) == false;
+        assert lastActivityPreviousPeriod.isBefore(firstActivityPreviousPeriod) == false;
+    }
 
     Activity extendCurrentPeriod(Instant now) {
         var newLastActivity = now.isAfter(lastActivityRecentPeriod) ? now : lastActivityRecentPeriod;
@@ -55,19 +65,61 @@ public record Activity(
         return this.equals(EMPTY);
     }
 
-    record Period(Instant last, Instant first) {
-        public static Period EMPTY = new Period(Instant.EPOCH, Instant.EPOCH);
+    @Nullable
+    public Instant firstActivity() {
+        if (this.equals(EMPTY)) {
+            return null;
+        }
+        return firstActivityPreviousPeriod.isAfter(Instant.EPOCH) ? firstActivityPreviousPeriod : firstActivityRecentPeriod;
     }
 
-    private static Activity fromPeriods(Period recent, Period previous) {
+    public record ActiveInfo(boolean active, Instant lastActivityTime) {};
+
+    /**
+     * Show the activity state of a time during or after this Activity.
+     * If the time is before this Activity, or this Activity is empty, return empty.
+     *
+     * @param timestamp point in time to check for activity
+     * @param coolDown cool down period
+     * @return the activity state at timestamp
+     */
+    public Optional<ActiveInfo> wasActive(Instant timestamp, Duration coolDown) {
+        var periods = toPeriods().toList();
+        // iterate over periods in reverse chronological order
+        for (var period : periods) {
+            if (timestamp.isAfter(period.last().plus(coolDown))) {
+                return Optional.of(new ActiveInfo(false, period.last()));
+            }
+            if (timestamp.isAfter(period.last())) {
+                return Optional.of(new ActiveInfo(true, period.last()));
+            }
+            if (timestamp.isBefore(period.first()) == false) {
+                return Optional.of(new ActiveInfo(true, timestamp));
+            }
+        }
+        return Optional.empty();
+    }
+
+    record Period(Instant last, Instant first) {
+        public static Period EMPTY = new Period(Instant.EPOCH, Instant.EPOCH);
+
+        public Period {
+            assert last.isBefore(first) == false;
+        }
+    }
+
+    static Activity fromPeriods(Period recent, Period previous) {
         return new Activity(recent.last, recent.first, previous.last, previous.first);
     }
 
+    /**
+     * return periods in reverse chronological order
+     */
     private Stream<Period> toPeriods() {
         return Stream.of(
             new Period(lastActivityRecentPeriod, firstActivityRecentPeriod),
             new Period(lastActivityPreviousPeriod, firstActivityPreviousPeriod)
-        );
+        ).filter(p -> p.last.equals(Instant.EPOCH) == false);
     }
 
     public static Activity merge(Stream<Activity> activities, Duration coolDown) {

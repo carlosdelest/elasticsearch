@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
-import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
@@ -109,7 +108,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         );
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(VCUSampledMetricsBackfillStrategy.class))));
 
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent));
         assertThat(metrics, hasSize(2));
@@ -187,7 +186,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         );
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(VCUSampledMetricsBackfillStrategy.class))));
 
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent));
         assertThat(metrics, hasSize(2));

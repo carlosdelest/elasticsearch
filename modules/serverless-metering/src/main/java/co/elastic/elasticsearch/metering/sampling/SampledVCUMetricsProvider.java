@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
-import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
@@ -49,11 +48,11 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     static final String VCU_METRIC_TYPE = "es_vcu";
     static final String VCU_METRIC_ID_PREFIX = "vcu";
     static final String METADATA_PARTIAL_KEY = "partial";
-    static final String USAGE_METADATA_APPLICATION_TIER = "application_tier";
-    static final String USAGE_METADATA_ACTIVE = "active";
-    static final String USAGE_METADATA_LATEST_ACTIVITY_TIME = "latest_activity_timestamp";
-    static final String USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY = "sp_min_provisioned_memory";
-    static final String USAGE_METADATA_SP_MIN = "sp_min";
+    public static final String USAGE_METADATA_APPLICATION_TIER = "application_tier";
+    public static final String USAGE_METADATA_ACTIVE = "active";
+    public static final String USAGE_METADATA_LATEST_ACTIVITY_TIME = "latest_activity_timestamp";
+    public static final String USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY = "sp_min_provisioned_memory";
+    public static final String USAGE_METADATA_SP_MIN = "sp_min";
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
     private final Function<SampledClusterMetrics, SPMinInfo> spMinProvisionedMemoryProvider;
@@ -83,7 +82,14 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
                 ),
                 buildMetricValue(null, sample.indexTierMetrics(), "index", activityCoolDownPeriod, partial)
             );
-            return SampledMetricsProvider.metricValues(metrics, DefaultSampledMetricsBackfillStrategy.INSTANCE);
+            return SampledMetricsProvider.metricValues(
+                metrics,
+                new VCUSampledMetricsBackfillStrategy(
+                    sample.searchTierMetrics().activity(),
+                    sample.indexTierMetrics().activity(),
+                    activityCoolDownPeriod
+                )
+            );
         });
     }
 
@@ -96,7 +102,18 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     ) {
         boolean isActive = tierMetrics.activity().isActive(Instant.now(), coolDown);
         Instant lastActivityTime = tierMetrics.activity().lastActivityRecentPeriod();
+        var usageMetadata = buildUsageMetadata(isActive, lastActivityTime, spMinInfo, tier);
+        return new MetricValue(
+            format("%s:%s", VCU_METRIC_ID_PREFIX, tier),
+            VCU_METRIC_TYPE,
+            partial ? Map.of(METADATA_PARTIAL_KEY, Boolean.TRUE.toString()) : Map.of(),
+            usageMetadata,
+            tierMetrics.memorySize(),
+            null
+        );
+    }
 
+    public static Map<String, String> buildUsageMetadata(boolean isActive, Instant lastActivityTime, SPMinInfo spMinInfo, String tier) {
         Map<String, String> usageMetadata = new HashMap<>();
         usageMetadata.put(USAGE_METADATA_APPLICATION_TIER, tier);
         usageMetadata.put(USAGE_METADATA_ACTIVE, Boolean.toString(isActive));
@@ -107,14 +124,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             usageMetadata.put(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY, Long.toString(spMinInfo.provisionedMemory));
             usageMetadata.put(USAGE_METADATA_SP_MIN, Long.toString(spMinInfo.spMin));
         }
-        return new MetricValue(
-            format("%s:%s", VCU_METRIC_ID_PREFIX, tier),
-            VCU_METRIC_TYPE,
-            partial ? Map.of(METADATA_PARTIAL_KEY, Boolean.TRUE.toString()) : Map.of(),
-            usageMetadata,
-            tierMetrics.memorySize(),
-            null
-        );
+        return usageMetadata;
     }
 
     record SPMinInfo(long provisionedMemory, long spMin) {};

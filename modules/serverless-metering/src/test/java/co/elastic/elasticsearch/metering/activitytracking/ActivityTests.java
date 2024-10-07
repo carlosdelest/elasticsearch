@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
@@ -131,13 +132,85 @@ public class ActivityTests extends ESTestCase {
         assertEquals(new Activity(bLast2, aFirst2, bLast1, aFirst1), merged);
     }
 
+    public void testWasActiveEmpty() {
+        var activity = Activity.EMPTY;
+        // Currently we return unknown on EMPTY to allow a default of active=true, but perhaps this should change.
+        assertEquals(activity.wasActive(randomInstantBetween(Instant.EPOCH, Instant.now()), COOL_DOWN), Optional.empty());
+    }
+
+    public void testWasActiveSinglePeriod() {
+
+        var times = new TimeSequenceHelper(Instant.now());
+        var last = times.current;
+        var duration = randomDuration(Duration.ofMinutes(1), Duration.ofDays(10));
+        var first = times.subtractOffset(duration);
+        var activity = new Activity(last, first, Instant.EPOCH, Instant.EPOCH);
+
+        // at or after last + coolDown + 1ms is not active
+        assertActiveInfo(activity, last.plus(COOL_DOWN).plusMillis(1), false, last);
+
+        // within [first, last+coolDown] is active
+        assertActiveInfo(activity, last.plus(COOL_DOWN), true, last);
+        assertActiveInfo(activity, last.plus(COOL_DOWN.dividedBy(2)), true, last);
+        assertActiveInfo(activity, last, true, last);
+        assertActiveInfo(activity, first.plus(duration.dividedBy(2)), true, first.plus(duration.dividedBy(2)));
+        assertActiveInfo(activity, first, true, first);
+
+        // before first is unknown
+        assertEquals(activity.wasActive(first.minusMillis(1), COOL_DOWN), Optional.empty());
+    }
+
+    public void testWasActiveTwoPeriods() {
+        var times = new TimeSequenceHelper(Instant.now());
+        var last2 = times.current;
+        var duration2 = randomDuration(Duration.ofMinutes(1), Duration.ofDays(10));
+        var first2 = times.subtractOffset(duration2);
+        var interPeriodDuration = randomDurationOverCoolDown();
+        var interPeriodInactiveDuration = interPeriodDuration.minus(COOL_DOWN);
+        var last1 = times.subtractOffset(interPeriodDuration);
+        var duration1 = randomDuration(Duration.ofMinutes(1), Duration.ofDays(10));
+        var first1 = times.subtractOffset(duration1);
+        var activity = new Activity(last2, first2, last1, first1);
+
+        // at or after last2 + coolDown + 1ms is not active
+        assertActiveInfo(activity, last2.plus(COOL_DOWN).plusMillis(1), false, last2);
+
+        // within [first2, last2+coolDown] is active
+        assertActiveInfo(activity, last2.plus(COOL_DOWN), true, last2);
+        assertActiveInfo(activity, last2.plus(COOL_DOWN.dividedBy(2)), true, last2);
+        assertActiveInfo(activity, last2, true, last2);
+        assertActiveInfo(activity, first2.plus(duration2.dividedBy(2)), true, first2.plus(duration2.dividedBy(2)));
+        assertActiveInfo(activity, first2, true, first2);
+
+        // (last1+coolDown, first2) is not active
+        assertActiveInfo(activity, first2.minusMillis(1), false, last1);
+        assertActiveInfo(activity, last1.plus(COOL_DOWN).plus(interPeriodInactiveDuration.dividedBy(2)), false, last1);
+
+        // within [first1, last1+coolDown] is active
+        assertActiveInfo(activity, last1.plus(COOL_DOWN), true, last1);
+        assertActiveInfo(activity, last1.plus(COOL_DOWN.dividedBy(2)), true, last1);
+        assertActiveInfo(activity, last1, true, last1);
+        assertActiveInfo(activity, first1.plus(duration1.dividedBy(2)), true, first1.plus(duration1.dividedBy(2)));
+        assertActiveInfo(activity, first1, true, first1);
+
+        // before first1 is unknown
+        assertEquals(activity.wasActive(first1.minusMillis(1), COOL_DOWN), Optional.empty());
+    }
+
+    private void assertActiveInfo(Activity activity, Instant time, boolean expectedActivity, Instant expectedLastActivity) {
+        var activeInfo = activity.wasActive(time, COOL_DOWN);
+        assertTrue(activeInfo.isPresent());
+        assertEquals(activeInfo.get().active(), expectedActivity);
+        assertEquals(activeInfo.get().lastActivityTime(), expectedLastActivity);
+    }
+
     public static <U> List<U> shuffle(List<U> input) {
         var result = new ArrayList<>(input);
         Collections.shuffle(result, random());
         return result;
     }
 
-    private static Duration randomDuration(Duration min, Duration max) {
+    public static Duration randomDuration(Duration min, Duration max) {
         return Duration.ofMillis(randomTimeValue((int) min.toMillis(), (int) max.toMillis(), TimeUnit.MILLISECONDS).millis());
     }
 
@@ -179,7 +252,7 @@ public class ActivityTests extends ESTestCase {
         }
 
         public Instant subtractRand() {
-            return subtractOffset(randomDuration(Duration.ofMinutes(1), Duration.ofMinutes(100)));
+            return subtractOffset(randomDuration(Duration.ZERO, Duration.ofMinutes(100)));
         }
 
         public Instant subtractRandMoreThanCoolDown() {
