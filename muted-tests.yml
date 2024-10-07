@@ -140,3 +140,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.IngestMeteringIT
   method: testUpdatesViaScriptAreNotMetered
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2913
+- class: co.elastic.elasticsearch.metering.IngestMeteringIT
+  method: testUpdatesAreMeteredInBulkRawWithPartialDoc
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2911
