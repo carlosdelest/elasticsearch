@@ -339,7 +339,7 @@ public class SampledClusterMetricsService {
             long secondsActive = activity.firstActivityRecentPeriod().until(now, ChronoUnit.SECONDS);
             return new LongWithAttributes(secondsActive);
         } else {
-            long secondsInactive = activity.lastActivityRecentPeriod().until(now, ChronoUnit.SECONDS);
+            long secondsInactive = activity.lastActivityRecentPeriod().plus(coolDown).until(now, ChronoUnit.SECONDS);
             return new LongWithAttributes(-secondsInactive);
         }
     }

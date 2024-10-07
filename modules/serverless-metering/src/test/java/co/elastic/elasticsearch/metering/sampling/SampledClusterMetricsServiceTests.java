@@ -929,7 +929,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
     private void assertActivityMetrics(Activity activity, Measurement measurement) {
         var now = Instant.now();
         var sinceFirstInPeriod = Duration.between(activity.firstActivityRecentPeriod(), now).getSeconds();
-        var sinceLastInPeriod = Duration.between(activity.lastActivityRecentPeriod(), now).getSeconds();
+        var sinceLastInPeriod = Duration.between(activity.lastActivityRecentPeriod(), now).minus(ActivityTests.COOL_DOWN).getSeconds();
         if (activity.isActive(now, ActivityTests.COOL_DOWN)) {
             assertThat((double) measurement.getLong(), is(closeTo(sinceFirstInPeriod, 1)));
         } else {
