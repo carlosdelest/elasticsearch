@@ -146,3 +146,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.StorageMeteringIT
   method: testUpdatesViaScriptAreMeteredForSolutions
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2914
+- class: co.elastic.elasticsearch.metering.IndexSizeMeteringIT
+  method: testSizeMetricsAreRecorded
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2915
