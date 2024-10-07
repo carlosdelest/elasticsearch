@@ -156,14 +156,17 @@ public class TaskActivityTracker {
 
         var actionTier = actionTierMapper.toTier(action);
         var now = clock.instant();
+
+        Activity searchCurrent = search;
+        Activity indexCurrent = index;
         switch (actionTier) {
             case SEARCH -> {
                 if (hasSearchRole == false) {
                     log.debug("found action with SEARCH tier but node not search role: " + action);
                 }
 
-                if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(search, now)) {
-                    search = search.makeNewPeriod(now);
+                if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(searchCurrent, now)) {
+                    search = searchCurrent.makeNewPeriod(now);
                 }
                 searchTaskIds.add(task.getId());
             }
@@ -172,17 +175,17 @@ public class TaskActivityTracker {
                     log.debug("found action with INDEX tier but node not index role: " + action);
                 }
 
-                if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(index, now)) {
-                    index = index.makeNewPeriod(now);
+                if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(indexCurrent, now)) {
+                    index = indexCurrent.makeNewPeriod(now);
                 }
                 indexTaskIds.add(task.getId());
             }
             case BOTH -> {
-                if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(search, now)) {
-                    search = search.makeNewPeriod(now);
+                if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(searchCurrent, now)) {
+                    search = searchCurrent.makeNewPeriod(now);
                 }
-                if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(index, now)) {
-                    index = index.makeNewPeriod(now);
+                if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(indexCurrent, now)) {
+                    index = indexCurrent.makeNewPeriod(now);
                 }
                 bothTaskIds.add(task.getId());
             }

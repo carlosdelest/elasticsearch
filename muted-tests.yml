@@ -137,15 +137,3 @@ tests:
 - class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
   method: testTranslogStressRecoveryTest
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2908
-- class: co.elastic.elasticsearch.metering.IngestMeteringIT
-  method: testUpdatesViaScriptAreNotMetered
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2913
-- class: co.elastic.elasticsearch.metering.IngestMeteringIT
-  method: testUpdatesAreMeteredInBulkRawWithPartialDoc
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2911
-- class: co.elastic.elasticsearch.metering.StorageMeteringIT
-  method: testUpdatesViaScriptAreMeteredForSolutions
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2914
-- class: co.elastic.elasticsearch.metering.IndexSizeMeteringIT
-  method: testSizeMetricsAreRecorded
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2915
