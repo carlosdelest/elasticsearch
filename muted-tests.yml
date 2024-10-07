@@ -121,12 +121,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessRollingUpgradeIT
   method: testClusterUpgrade
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2767
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  method: test {yaml=search/600_flattened_ignore_above/flattened ignore_above multi-value field}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2799
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  method: test {yaml=search/600_flattened_ignore_above/flattened ignore_above single-value field}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2800
 - class: co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests
   method: testScheduledCommitUpload
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2808
