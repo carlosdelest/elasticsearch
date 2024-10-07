@@ -359,13 +359,14 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         assertThat(getSPMinProvisionedMemory(0, 100, 100, 1000, 1000), equalTo(0L));
     }
 
-    public void testSpMinProvisionedMemorySmallSpMin() {
-        // spMin = 5, interactiveSize = 100, totalSize = 200, provisionedStorage = 1000, provisionedRam = 1000
+    public void testSpMinProvisionedMemoryCostEfficientProject() {
+        // 0 SP min for cost-efficient projects to not charge for inactivity
+        // spMin = 0, interactiveSize = 100, totalSize = 200, provisionedStorage = 1000, provisionedRam = 1000
         // storageRamRatio = 1, since provisionedStorage and provisionedRam are equal
         // basePower = 5, since default SPMin is small, and min base power is 5
         // boostPower = 0, SPMin - basePower
         // cacheSize = 1000, totalSize * basePower, 200 * 5
-        assertThat(getSPMinProvisionedMemory(5, 100, 200, 1000, 1000), equalTo(1000L));
+        assertThat(getSPMinProvisionedMemory(0, 100, 200, 1000, 1000), equalTo(0L));
     }
 
     public void testSpMinProvisionedMemoryStorageRatioDefaultSPMin() {

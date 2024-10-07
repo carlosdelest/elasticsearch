@@ -120,12 +120,6 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     record SPMinInfo(long provisionedMemory, long spMin) {};
 
     static class SPMinProvisionedMemoryProvider implements Function<SampledClusterMetrics, SPMinInfo> {
-        /**
-         * The minimum allowed search power.
-         * Defined in:
-         * github.com/elastic/elasticsearch-autoscaler/blob/main/internal/autoscaler/elasticsearch/autoscaling/recommender/search.go
-         */
-        private static final int MINIMUM_SEARCH_POWER = 5;
         private final long provisionedStorage;
         private final long provisionedRAM;
         private volatile long searchPowerMin;
@@ -191,7 +185,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             }
 
             double storageRamRatio = provisionedStorage / (double) provisionedRAM;
-            double basePower = Math.max(MINIMUM_SEARCH_POWER, 0.05 * spMin);
+            double basePower = 0.05 * spMin;
             double boostPower = spMin - basePower;
             double cacheSize = boostedDataSetSize * boostPower + totalDataSetSize * basePower;
             long provisionedMemory = (long) (cacheSize / storageRamRatio);
