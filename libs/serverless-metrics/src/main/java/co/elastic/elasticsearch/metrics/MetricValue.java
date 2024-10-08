@@ -42,7 +42,7 @@ public record MetricValue(
     long value,
     @Nullable Instant meteredObjectCreationTime
 ) {
-    public MetricValue(String id, String type, Map<String, String> metadata, long value, Instant meteredObjectCreationTime) {
-        this(id, type, metadata, null, value, meteredObjectCreationTime);
+    public MetricValue(String id, String type, Map<String, String> sourceMetadata, long value, Instant meteredObjectCreationTime) {
+        this(id, type, sourceMetadata, null, value, meteredObjectCreationTime);
     }
 }

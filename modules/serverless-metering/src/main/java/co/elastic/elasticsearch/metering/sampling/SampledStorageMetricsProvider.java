@@ -70,14 +70,14 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
                 var indexName = shardEntry.getKey().indexName();
                 var indexCreationDate = Instant.ofEpochMilli(shardEntry.getValue().shardInfo().indexCreationDateEpochMilli());
 
-                Map<String, String> metadata = new HashMap<>();
-                metadata.put(METADATA_SHARD_KEY, Integer.toString(shardId));
-                fillIndexMetadata(metadata, clusterStateMetadata, indexName, partial);
+                Map<String, String> sourceMetadata = new HashMap<>();
+                sourceMetadata.put(METADATA_SHARD_KEY, Integer.toString(shardId));
+                fillIndexMetadata(sourceMetadata, clusterStateMetadata, indexName, partial);
                 metrics.add(
                     new MetricValue(
                         format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()),
                         IX_METRIC_TYPE,
-                        metadata,
+                        sourceMetadata,
                         size,
                         indexCreationDate
                     )
@@ -116,16 +116,16 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
         return SampledMetricsProvider.metricValues(metrics, DefaultSampledMetricsBackfillStrategy.INSTANCE);
     }
 
-    private void fillIndexMetadata(Map<String, String> usageRecordMetadata, Metadata clusterMetadata, String indexName, boolean partial) {
+    private void fillIndexMetadata(Map<String, String> sourceMetadata, Metadata clusterMetadata, String indexName, boolean partial) {
         final var indexAbstraction = clusterMetadata.getIndicesLookup().get(indexName);
         final boolean inDatastream = indexAbstraction != null && indexAbstraction.getParentDataStream() != null;
 
-        usageRecordMetadata.put(METADATA_INDEX_KEY, indexName);
+        sourceMetadata.put(METADATA_INDEX_KEY, indexName);
         if (partial) {
-            usageRecordMetadata.put(METADATA_PARTIAL_KEY, Boolean.TRUE.toString());
+            sourceMetadata.put(METADATA_PARTIAL_KEY, Boolean.TRUE.toString());
         }
         if (inDatastream) {
-            usageRecordMetadata.put(METADATA_DATASTREAM_KEY, indexAbstraction.getParentDataStream().getName());
+            sourceMetadata.put(METADATA_DATASTREAM_KEY, indexAbstraction.getParentDataStream().getName());
         }
     }
 
