@@ -37,7 +37,8 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
     public static final Setting<Boolean> VALIDATE_DOT_PREFIXES = Setting.boolSetting(
         "serverless.indices.validate_dot_prefixes",
         false,
-        Setting.Property.NodeScope
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
     );
 
     /**
@@ -58,11 +59,16 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
     private static Set<Pattern> IGNORED_INDEX_PATTERNS = Set.of(Pattern.compile("\\.ml-state-\\d+"));
 
     private final ThreadContext threadContext;
-    private final boolean isEnabled;
+    private volatile boolean isEnabled;
 
     public DotPrefixValidator(ThreadContext threadContext, ClusterService clusterService) {
         this.threadContext = threadContext;
         this.isEnabled = VALIDATE_DOT_PREFIXES.get(clusterService.getSettings());
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(VALIDATE_DOT_PREFIXES, this::updateEnabled);
+    }
+
+    private void updateEnabled(boolean enabled) {
+        this.isEnabled = enabled;
     }
 
     protected abstract Set<String> getIndicesFromRequest(RequestType request);
