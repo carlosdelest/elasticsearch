@@ -35,8 +35,6 @@ tests:
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2223"
   methods:
   - "testSearchMetricsArePublishedEventually"
-- class: "org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2266"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2276"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT"
