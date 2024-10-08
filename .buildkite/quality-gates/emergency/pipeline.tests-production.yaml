@@ -14,7 +14,7 @@ steps:
           - echo "Waiting for 60m for indicative health metrics"
           - sleep ${PROD_CANARY_GATE_WAIT_PERIOD:-3600}
 
-      - label: ":pipeline: Trigger Elasticsearch observability checks in Production"
+      - label: ":pipeline: Trigger Elasticsearch observability checks in canary"
         # For now, deploying using the 'all' deployment type algo in production-canary
         if: build.env("ENVIRONMENT") == "production-canary"
         depends_on: production_bake_period
@@ -37,4 +37,22 @@ steps:
             CHECK_ALERTS: true
             CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
             CHECK_ALERTS_TRANSIENT_LOOKBACK: 60m
+            DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}
+
+      - label: ":pipeline: Trigger Elasticsearch observability checks in noncanary"
+        if: build.env("ENVIRONMENT") == "production-noncanary"
+        depends_on: production_bake_period
+        soft_fail: true
+        trigger: serverless-quality-gates
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          env:
+            TARGET_ENV: ${ENVIRONMENT}
+            SERVICE: elasticsearch
+            SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+            SERVICE_VERSION: ${SERVICE_VERSION:0:12}
+            SERVICE_TYPE_FIELD: data_stream.dataset
+            CHECK_ALERTS: true
+            CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
+            CHECK_ALERTS_IGNORE_TRANSIENT: true
             DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}
