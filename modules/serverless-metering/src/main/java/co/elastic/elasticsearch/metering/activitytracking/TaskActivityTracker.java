@@ -167,6 +167,7 @@ public class TaskActivityTracker {
 
                 if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(searchCurrent, now)) {
                     search = searchCurrent.makeNewPeriod(now);
+                    log.info("New activity period started: tier[{}], action[{}]", actionTier, action);
                 }
                 searchTaskIds.add(task.getId());
             }
@@ -177,15 +178,18 @@ public class TaskActivityTracker {
 
                 if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(indexCurrent, now)) {
                     index = indexCurrent.makeNewPeriod(now);
+                    log.info("New activity period started: tier[{}], action[{}]", actionTier, action);
                 }
                 indexTaskIds.add(task.getId());
             }
             case BOTH -> {
                 if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(searchCurrent, now)) {
                     search = searchCurrent.makeNewPeriod(now);
+                    log.info("New activity period started: tier[{}], action[{}]", actionTier, action);
                 }
                 if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(indexCurrent, now)) {
                     index = indexCurrent.makeNewPeriod(now);
+                    log.info("New activity period started: tier[{}], action[{}]", actionTier, action);
                 }
                 bothTaskIds.add(task.getId());
             }
