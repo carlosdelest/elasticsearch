@@ -28,7 +28,7 @@ The metrics metered can be categorized into two types:
 ## Metric computation
 
 
-### RA-Ingest
+### RA-Ingest (`es_raw_data`)
 
 The normalized raw size of ingested data (RA-I) is metered when parsing the source of ingested documents before indexing. This normalized counter metric is metered in bytes and is independent of the actual XContent type used, making it independent of the actual size on the wire.
 
@@ -53,22 +53,29 @@ RA-I is reported _per node_. During document parsing we compute RA-I creating a 
 
 (**) This means that if a node crashes we lose the data we have yet to report. Since RA-I is a counter (an accumulator for a monotonically increasing function), losing the partial data for the period means under-billing, which is the better alternative in case of error.
 
-RA-I usage records look as follows:
+#### Available source metadata
+
+`source.metadata` for `es_raw_data` contains:
+- `index`: the index name
+- `datastream`: the datastream name (optional, only if part of a datastream)
+
+#### RA-I sample record
 
 ```json
 {
-    "id": "ingested-doc:{index name}:{node id}-{current timestamp}",
+    "id": "ingested-doc:{index name}:{node id}:{project id}:{current timestamp}",
     "usage_timestamp": {current timestamp},
     "usage": {
-        "type": "es-raw-data",
-        "period_seconds": {reporting period},
-        "quantity": {RA-Ingest}
+        "type": "es_raw_data",
+        "period_seconds": {reporting period, defaults to 300},
+        "quantity": {RA-Ingest in normalized bytes}
     },
     "source": {
         "id": "es-{node id}",
         "instance_group_id": "{project id}",
         "metadata": {
-            "index": "{index name}"
+            "index": "{index name}",
+            "datastream": "{datastream name, only if part of datastream}"
         }
     }
 }
@@ -82,7 +89,7 @@ Code references:
 * [`UsageReportCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/usagereports/UsageReportCollector.java): Periodically collects usage metrics from all metrics providers and publishes those
 
 
-### RA-Storage
+### RA-Storage (`es_raw_stored_data`)
 
 The normalized raw stored size of data (RA-S) is based on the normalized raw size of ingested data (RA-I) computed when parsing the document source, as described above.
 
@@ -131,22 +138,29 @@ Notice that this happens at commit time: the `DocValuesConsumer` reads the field
 
 For reporting, total RA-S of a shard can then be calculated by summing the approximate live RA-S of each segment, which is the product of the count of live documents in the segment and the average RA-S per document of that segment. If no deletions are present in a segment, e.g.  every time after merging segments, the calculated RA-S of that segment will be precise (again).
 
-RA-S usage sample records look as follows:
+#### Additional source metadata
+
+`source.metadata` for RA-S (`es_raw_stored_data`) contains:
+- `index`: the index name
+- `datastream`: the datastream name (optional, only if part of a datastream)
+
+#### RA-S sample record
 
 ```json
 {
-    "id": "raw-stored-index-size:{index name}-{sampling timestamp}",
+    "id": "raw-stored-index-size:{index name}:{project id}:{sampling timestamp}",
     "usage_timestamp": {sampling timestamp},
     "usage": {
         "type": "es_raw_stored_data",
-        "period_seconds": {reporting period},
-        "quantity": {RA-Storage}
+        "period_seconds": {reporting period, defaults to 300},
+        "quantity": {RA-Storage in normalized bytes}
     },
     "source": {
         "id": "es-{node id}",
         "instance_group_id": "{project id}",
         "metadata": {
-            "index": "{index name}"
+            "index": "{index name}",
+            "datastream": "{datastream name, only if part of datastream}"
         }
     }
 }
@@ -156,7 +170,7 @@ Code references:
 * [`RAStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAStorageReporter.java): Writes RA-S as additional, hidden field to each document
 * [`RAStorageDocValuesFormatFactory`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/codec/RAStorageDocValuesFormatFactory.java): Creates the `DocValuesConsumer` responsible for calculating the average RA-S per document of a segment
 
-### IX (Index Size)
+### Index size IX (`es_indexed_data`)
 
 IX (index size) is a simpler storage metric, computed by summing the disk size occupied by segments on disk. Being based on the actual disk space occupied, this metric includes the deleted documents still present in segments on disk. The metric is sampled, so eventually when/if the deleted documents are cleaned up (e.g. after merging), the segments will occupy less space on disk, and we will report the new size at the next sample.
 
@@ -164,23 +178,31 @@ IX (index size) is a simpler storage metric, computed by summing the disk size o
 Closed indices are not included when metering IX. Closing an index requires Operator privileges and customers cannot do this themselves.
 If doing so on a customer's behalf, be aware that we will stop charging the customer for that index.
 
-IX usage sample records look as follows:
+#### Additional source metadata
+
+`source.metadata` for RA-S (`es_indexed_data`) contains:
+- `index`: the index name
+- `shard`: the shard id
+- `datastream`: the datastream name (optional, only if part of a datastream)
+
+#### IX sample record
 
 ```json
 {
-    "id": "shard-size:{index name}:{shard id}-{sampling timestamp}",
+    "id": "shard-size:{index name}:{shard id}:{project id}:{sampling timestamp}",
     "usage_timestamp": {sampling timestamp},
     "usage": {
         "type": "es_indexed_data",
-        "period_seconds": {reporting period},
-        "quantity": {IX}
+        "period_seconds": {reporting period, defaults to 300},
+        "quantity": {index size in bytes}
     },
     "source": {
         "id": "es-{node id}",
         "instance_group_id": "{project id}",
         "metadata": {
             "index": "{index name}",
-            "shard": "{shard id}"
+            "shard": "{shard id}",
+            "datastream": "{datastream name, only if part of datastream}"
         }
     }
 }
@@ -194,7 +216,9 @@ Additionally, tier activity is reported to be able to charge differently for per
 While some actions activate only the assigned tier of a node, other, more general actions (such as a refresh or settings update) activate both tiers. Once activated, a tier remains active for at least the cooldown period of 15 minutes.
 The cluster sampling infrastructure then builds a cluster wide consolidated per tier view of current activity, for details see the next section below.
 
-`es_vcu` contain the following additional usage metadata in `usage.metadata`:
+#### Additional usage metadata
+
+`usage.metadata` for VCU (`es_vcu`) contains:
 - `application_tier`: the tier (`search` or `index`)
 - `active`: if the tier is active during the current sampling period
 - `latest_activity_timestamp`: the timestamp (ISO-8601 formatted) of the last activity of that tier
@@ -202,15 +226,15 @@ The cluster sampling infrastructure then builds a cluster wide consolidated per 
 - `sp_min`: (search tier only) minimum search power configured for the project.\
   Note: In certain error cases SP min provisioned RAM cannot be calculated and won't be added. very likely, the search tier is not operational in that case. This is actively monitored.
 
-VCU usage sample records look as follows:
+#### VCU sample record
 
 ```json
 {
-    "id": "vcu:{tier}-{sampling timestamp}",
+    "id": "vcu:{tier}:{project id}:{sampling timestamp}",
     "usage_timestamp": {sampling timestamp},
     "usage": {
         "type": "es_vcu",
-        "period_seconds": {reporting period},
+        "period_seconds": {reporting period, defaults to 300},
         "quantity": {VCU in bytes of RAM},
         "metadata": {
           "application_tier": "{search/index}",
