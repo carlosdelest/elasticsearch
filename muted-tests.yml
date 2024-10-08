@@ -139,3 +139,5 @@ tests:
 - class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
   method: testSortByManyLongsTooMuchMemoryAsync
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2926
+- class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2929
