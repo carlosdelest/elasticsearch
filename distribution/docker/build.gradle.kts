@@ -52,7 +52,7 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
     val upstreamContext = configurations.detachedConfiguration(dependencies.create("org.elasticsearch:docker")).apply {
         attributes {
             attribute(Attribute.of(Architecture::class.java), architecture)
-            attribute(Attribute.of(DockerBase::class.java), DockerBase.WOLFI)
+            attribute(Attribute.of(DockerBase::class.java), DockerBase.DEFAULT)
         }
     }
 
