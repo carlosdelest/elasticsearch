@@ -85,8 +85,6 @@ tests:
 - class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2432"
   method: "test {p0=esql/180_match_operator/*}"
-- class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2453"
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2327
