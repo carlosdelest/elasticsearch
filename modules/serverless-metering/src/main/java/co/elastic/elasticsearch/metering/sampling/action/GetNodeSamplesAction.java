@@ -38,10 +38,9 @@ import java.util.Objects;
  */
 public class GetNodeSamplesAction {
 
-    public static final String LEGACY_NAME = "cluster:monitor/get/metering/shard-info";
     public static final String NAME = "cluster:monitor/get/metering/samples";
 
-    public static final ActionType<Response> INSTANCE = new ActionType<>(LEGACY_NAME);
+    public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
     public static class Request extends ActionRequest {
         private final String cacheToken;

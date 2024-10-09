@@ -155,7 +155,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             assertEquals(1, entry.getValue().size());
 
             var capturedRequest = entry.getValue().get(0);
-            assertThat(capturedRequest.action(), is("cluster:monitor/get/metering/shard-info"));
+            assertThat(capturedRequest.action(), is("cluster:monitor/get/metering/samples"));
             assertThat(capturedRequest.request(), instanceOf(GetNodeSamplesAction.Request.class));
             assertThat(
                 asInstanceOf(GetNodeSamplesAction.Request.class, capturedRequest.request()).getCacheToken(),

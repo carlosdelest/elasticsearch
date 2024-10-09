@@ -22,7 +22,6 @@ import co.elastic.elasticsearch.stateless.api.ShardSizeStatsProvider;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
@@ -94,15 +93,6 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
                 telemetryProvider.getMeterRegistry()
             )
             : new ShardInfoMetricsReader.NoOpReader();
-        // TODO remove registration under legacy name once fully deployed
-        transportService.registerRequestHandler(
-            GetNodeSamplesAction.LEGACY_NAME,
-            threadPool.executor(ThreadPool.Names.MANAGEMENT),
-            false,
-            false,
-            GetNodeSamplesAction.Request::new,
-            (request, channel, task) -> executeDirect(task, request, new ChannelActionListener<>(channel))
-        );
     }
 
     @Override

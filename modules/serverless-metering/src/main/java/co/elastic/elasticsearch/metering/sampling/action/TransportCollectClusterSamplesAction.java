@@ -25,7 +25,6 @@ import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
@@ -90,15 +89,6 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
         this.clusterService = clusterService;
         this.executor = executor;
         this.coolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
-        // TODO remove registration under legacy name once fully deployed
-        transportService.registerRequestHandler(
-            CollectClusterSamplesAction.LEGACY_NAME,
-            executor,
-            false,
-            false,
-            CollectClusterSamplesAction.Request::new,
-            (request, channel, task) -> executeDirect(task, request, new ChannelActionListener<>(channel))
-        );
     }
 
     private static class SingleNodeResponse {

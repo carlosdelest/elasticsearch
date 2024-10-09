@@ -40,11 +40,9 @@ import java.util.Objects;
  */
 public class CollectClusterSamplesAction {
 
-    public static final String LEGACY_NAME = "cluster:monitor/collect/metering/shard-info";
     public static final String NAME = "cluster:monitor/collect/metering/samples";
 
-    // TODO migrate this to the new name once fully deployed and remove the legacy name
-    public static final ActionType<Response> INSTANCE = new ActionType<>(LEGACY_NAME);
+    public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
     public static class Request extends ActionRequest {
         public Request() {}
