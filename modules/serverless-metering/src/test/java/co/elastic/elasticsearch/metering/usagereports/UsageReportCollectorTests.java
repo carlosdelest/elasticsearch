@@ -74,7 +74,6 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -201,7 +200,27 @@ public class UsageReportCollectorTests extends ESTestCase {
         verifyNoInteractions(backfillStrategy);
     }
 
-    public void testUnavailableSampleProvider() throws Exception {
+    public void testErroneousCounterProvider() throws Exception {
+        var sampleTime = clock.instant();
+        var committedTime = previousSampleTime(sampleTime);
+        var timestampCursor = inMemoryTimeCursor(committedTime);
+
+        var counterProvider1 = mock(CounterMetricsProvider.class);
+        when(counterProvider1.getMetrics()).thenThrow(new RuntimeException("getMetrics() failed"));
+        var counterProvider2 = mockedCounterProvider(COUNTER);
+        startCollector(
+            shuffledList(List.of(counterProvider1, counterProvider2)),
+            List.of(mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1)),
+            timestampCursor
+        );
+
+        // due to failing sample provider 1 we are not going to advance the sample timestamp
+        var now = advanceTimeAndRunCollection(sampleTime);
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(sampleTime)); // erroneous counter doesn't impact samples
+        verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now), usageRecord(SAMPLE1, sampleTime))); // all available records send
+    }
+
+    public void testErroneousSampleProvider() throws Exception {
         var sampleTime = clock.instant();
         var committedTime = previousSampleTime(sampleTime);
         var timestampCursor = inMemoryTimeCursor(committedTime);
@@ -215,13 +234,20 @@ public class UsageReportCollectorTests extends ESTestCase {
         var now = advanceTimeAndRunCollection(sampleTime);
         assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(committedTime));
         verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now))); // no samples of sample provider 2 included
+    }
 
-        // update sample provider 1 to return unready (empty instead)
-        reset(sampleProvider1);
+    public void testUnavailableSampleProvider() throws Exception {
+        var sampleTime = clock.instant();
+        var committedTime = previousSampleTime(sampleTime);
+        var timestampCursor = inMemoryTimeCursor(committedTime);
+
+        var sampleProvider1 = mock(SampledMetricsProvider.class);
         when(sampleProvider1.getMetrics()).thenReturn(Optional.empty());
+        var sampleProvider2 = mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1);
+        startCollector(List.of(mockedCounterProvider(COUNTER)), shuffledList(List.of(sampleProvider1, sampleProvider2)), timestampCursor);
 
         // due to unready sample provider 1 we are not going to advance the sample timestamp again
-        now = advanceTimeAndRunCollection(nextSampleTime(sampleTime));
+        var now = advanceTimeAndRunCollection(sampleTime);
         assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(committedTime));
         verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now))); // no samples of sample provider 2 included
     }

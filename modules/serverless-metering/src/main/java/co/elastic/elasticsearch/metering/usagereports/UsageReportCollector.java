@@ -200,7 +200,12 @@ class UsageReportCollector {
 
         Instant startedAt = Instant.now(clock);
 
-        var reportsSent = collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
+        var reportsSent = false;
+        try {
+            reportsSent = collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
+        } catch (RuntimeException e) {
+            log.error("Unexpected exception whilst collecting metrics and sending reports", e);
+        }
 
         Instant completedAt = Instant.now(clock);
         checkRuntime(startedAt, completedAt);
@@ -286,21 +291,27 @@ class UsageReportCollector {
     private boolean collectMetricsAndSendReport(Instant now, Instant sampleTimestamp) {
         List<UsageRecord> records = new ArrayList<>();
 
-        List<CounterMetricsProvider.MetricValues> counterMetricValuesList = counterMetricsProviders.stream()
-            .map(CounterMetricsProvider::getMetrics)
-            .toList();
+        List<SampledMetricsProvider.MetricValues> sampledMetricValuesList = Collections.emptyList();
+        List<CounterMetricsProvider.MetricValues> counterMetricValuesList = Collections.emptyList();
+        Map<String, MetricValue> sampledMetricValuesById = Collections.emptyMap();
 
-        counterMetricValuesList.forEach(counterMetricValues -> {
-            for (var v : counterMetricValues) {
-                records.add(getRecordForCount(v.id(), v.type(), v.value(), v.sourceMetadata(), now));
+        if (counterMetricsProviders.isEmpty() == false) {
+            counterMetricValuesList = new ArrayList<>(counterMetricsProviders.size());
+            for (var counterMetricsProvider : counterMetricsProviders) {
+                try {
+                    CounterMetricsProvider.MetricValues metricValues = counterMetricsProvider.getMetrics();
+                    counterMetricValuesList.add(metricValues);
+                    for (var value : metricValues) {
+                        records.add(createUsageRecord(value, now));
+                    }
+                } catch (RuntimeException e) {
+                    log.error(Strings.format("Failed to get counter metrics from %s", counterMetricsProvider.getClass().getName()), e);
+                }
             }
-        });
+        }
 
         var timestamps = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod);
-
-        Map<String, MetricValue> sampledMetricValuesById = Collections.emptyMap();
-        List<SampledMetricsProvider.MetricValues> sampledMetricValuesList = Collections.emptyList();
-        if (timestamps.size() > 0) {
+        if (timestamps.size() > 0 && sampledMetricsProviders.isEmpty() == false) {
             sampledMetricValuesList = new ArrayList<>(sampledMetricsProviders.size());
             for (SampledMetricsProvider sampledMetricsProvider : sampledMetricsProviders) {
                 try {
@@ -313,7 +324,7 @@ class UsageReportCollector {
                         break;
                     }
                     sampledMetricValuesList.add(sampledMetricValues.get());
-                } catch (Exception e) {
+                } catch (RuntimeException e) {
                     log.error(Strings.format("Failed to get sample metrics from %s", sampledMetricsProvider.getClass().getName()), e);
                     // Only process sampled metric values if all providers are ready and successfully returned values
                     // Otherwise we cannot advance the committed sample timestamp.
@@ -358,7 +369,7 @@ class UsageReportCollector {
         for (var sampledMetricValues : sampledMetricValuesList) {
             for (var sample : sampledMetricValues) {
                 samplesById.put(sample.id(), sample);
-                records.add(createRecordForSample(sample, sample.value(), sample.usageMetadata(), sampleTimestamp));
+                records.add(createUsageRecord(sample, sample.value(), sample.usageMetadata(), sampleTimestamp));
             }
         }
         return samplesById;
@@ -399,7 +410,7 @@ class UsageReportCollector {
                 timestamp,
                 timestamps
             );
-            records.add(createRecordForSample(sample, value, metadata, timestamp));
+            records.add(createUsageRecord(sample, value, metadata, timestamp));
         };
 
         for (var sampledMetricValues : sampledMetricValuesList) {
@@ -407,7 +418,7 @@ class UsageReportCollector {
             for (var sample : sampledMetricValues) {
                 samplesById.put(sample.id(), sample);
                 backfills.reset();
-                records.add(createRecordForSample(sample, sample.value(), sample.usageMetadata(), backfills.next())); // not a backfill
+                records.add(createUsageRecord(sample, sample.value(), sample.usageMetadata(), backfills.next())); // not a backfill
 
                 while (backfills.hasNext()) {
                     Instant timestamp = backfills.next();
@@ -437,24 +448,19 @@ class UsageReportCollector {
         return key + ":" + projectId + ":" + time.truncatedTo(ChronoUnit.SECONDS);
     }
 
-    private UsageRecord getRecordForCount(String metric, String type, long count, Map<String, String> metadata, Instant now) {
-        return new UsageRecord(
-            generateId(metric, now),
-            now,
-            new UsageMetrics(type, null, count, reportPeriod, null, null),
-            new UsageSource(sourceId, projectId, metadata)
-        );
+    private UsageRecord createUsageRecord(MetricValue metricValue, Instant usageTimestamp) {
+        return createUsageRecord(metricValue, metricValue.value(), metricValue.usageMetadata(), usageTimestamp);
     }
 
-    private UsageRecord createRecordForSample(
+    private UsageRecord createUsageRecord(
         MetricValue metricValue,
         long usageValue,
         Map<String, String> usageMetadata,
-        Instant sampleTimestamp
+        Instant usageTimestamp
     ) {
         return new UsageRecord(
-            generateId(metricValue.id(), sampleTimestamp),
-            sampleTimestamp,
+            generateId(metricValue.id(), usageTimestamp),
+            usageTimestamp,
             new UsageMetrics(metricValue.type(), null, usageValue, reportPeriod, null, usageMetadata),
             new UsageSource(sourceId, projectId, metricValue.sourceMetadata())
         );
