@@ -346,7 +346,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         // basePower = 5, since spMin=1 falls back to MINIMUM_SEARCH_POWER
         // boostPower = -4, spMin - basePower
         // cacheSize = 100, boostSize * boostPower + totalSize * basePower, 100 * -4 + 100 * 5
-        assertThat(getSPMinProvisionedMemory(1, 100, 100, 1000, 1000), equalTo(100L));
+        assertThat(getSPMinProvisionedMemory(1, 100, 100, 1000, 1000), equalTo(1L));
     }
 
     public void testSpMinProvisionedMemorySearchPower0() {
@@ -374,7 +374,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         // basePower = 5, since default SPMin is 100
         // boostPower = 95, SPMin - basePower
         // cacheSize = 10500, 100 * 95 + 200 * 5
-        assertThat(getSPMinProvisionedMemory(null, 100, 200, 1000, 1000), equalTo(10500L));
+        assertThat(getSPMinProvisionedMemory(null, 100, 200, 1000, 1000), equalTo(105L));
     }
 
     public void testSpMinProvisionedMemoryStorageRatioD() {
@@ -383,8 +383,8 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         // basePower = 5, since default SPMin is 100
         // boostPower = 95, SPMin - basePower
         // cacheSize = 10500, 100 * 95 + 200 * 5
-        // result = 10500 / 2
-        assertThat(getSPMinProvisionedMemory(null, 100, 200, 2000, 1000), equalTo(5250L));
+        // result = 10500 / 2 / 100
+        assertThat(getSPMinProvisionedMemory(null, 100, 200, 2000, 1000), equalTo(52L));
     }
 
     public void testSpMinProvisionedMemoryLotsOfShards() {
@@ -413,7 +413,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         // boostPower = 95, SPMin - basePower
         // cacheSize = 10500, boostSize * boostPower + totalSize * basePower, 100 * 95 + 200 * 5
         long cacheSize = totalInteractive * 95 + (totalNonInteractive + totalInteractive) * 5;
-        long expectSPMinRam = cacheSize / storageRamRatio;
+        long expectSPMinRam = cacheSize / storageRamRatio / 100;
         assertThat(provider.apply(current).provisionedMemory(), equalTo(expectSPMinRam));
     }
 

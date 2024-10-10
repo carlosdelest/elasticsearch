@@ -195,8 +195,8 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             }
 
             double storageRamRatio = provisionedStorage / (double) provisionedRAM;
-            double basePower = 0.05 * spMin;
-            double boostPower = spMin - basePower;
+            double basePower = 0.05 * spMin / 100.0;
+            double boostPower = spMin / 100.0 - basePower;
             double cacheSize = boostedDataSetSize * boostPower + totalDataSetSize * basePower;
             long provisionedMemory = (long) (cacheSize / storageRamRatio);
             return new SPMinInfo(provisionedMemory, spMin);
