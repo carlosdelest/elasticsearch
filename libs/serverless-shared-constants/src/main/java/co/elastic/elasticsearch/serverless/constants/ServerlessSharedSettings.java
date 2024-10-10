@@ -114,15 +114,7 @@ public class ServerlessSharedSettings {
         Setting.Property.Dynamic
     );
 
-    // TODO: This setting name is what the ES controller passes currently.
-    // Remove once the controller is changed to pass with the serverless prefix.
-    static final Setting<String> BWC_PROJECT_ID = Setting.simpleString("metering.project_id", Setting.Property.NodeScope);
-
-    public static final Setting<String> PROJECT_ID = Setting.simpleString(
-        "serverless.project_id",
-        BWC_PROJECT_ID,
-        Setting.Property.NodeScope
-    );
+    public static final Setting<String> PROJECT_ID = Setting.simpleString("serverless.project_id", Setting.Property.NodeScope);
 
     public static final Setting<ProjectType> PROJECT_TYPE = Setting.enumSetting(
         ProjectType.class,
