@@ -104,7 +104,8 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
             metricsService,
             Duration.ofMinutes(15),
-            buildSpMinTestProvider(spMinProvisionedMemory)
+            buildSpMinTestProvider(spMinProvisionedMemory),
+            MeterRegistry.NOOP
         );
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
@@ -182,7 +183,8 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
             metricsService,
             Duration.ofMinutes(15),
-            buildSpMinTestProvider(spMinProvisionedMemory)
+            buildSpMinTestProvider(spMinProvisionedMemory),
+            MeterRegistry.NOOP
         );
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
@@ -254,7 +256,12 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         long firstSpMin = randomIntBetween(0, 100);
         long secondSpMin = randomIntBetween(0, 100);
         var spMinProvider = buildSpMinTestProvider(List.of(new SPMinInfo(1, firstSpMin), new SPMinInfo(2, secondSpMin)));
-        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(metricsService, Duration.ofMinutes(15), spMinProvider);
+        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
+            metricsService,
+            Duration.ofMinutes(15),
+            spMinProvider,
+            MeterRegistry.NOOP
+        );
 
         {
             var metricValues = sampledVCUMetricsProvider.getMetrics();
@@ -283,7 +290,12 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
     public void testNoPersistentTaskNode() {
         var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
-        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(metricsService, Duration.ofMinutes(15), buildSpMinTestProvider());
+        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
+            metricsService,
+            Duration.ofMinutes(15),
+            buildSpMinTestProvider(),
+            MeterRegistry.NOOP
+        );
         metricsService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.NO_NODE;
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
@@ -292,7 +304,12 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
     public void testAnotherNodeIsPersistentTaskNode() {
         var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
-        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(metricsService, Duration.ofMinutes(15), buildSpMinTestProvider());
+        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
+            metricsService,
+            Duration.ofMinutes(15),
+            buildSpMinTestProvider(),
+            MeterRegistry.NOOP
+        );
         metricsService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.ANOTHER_NODE;
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();
@@ -301,7 +318,12 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
     public void testThisNodeIsPersistentTaskNodeButNotReady() {
         var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
-        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(metricsService, Duration.ofMinutes(15), buildSpMinTestProvider());
+        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
+            metricsService,
+            Duration.ofMinutes(15),
+            buildSpMinTestProvider(),
+            MeterRegistry.NOOP
+        );
         metricsService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 
         var metricValues = sampledVCUMetricsProvider.getMetrics();

@@ -22,21 +22,45 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
 import org.elasticsearch.core.Nullable;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
+import org.elasticsearch.telemetry.metric.LongCounter;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.buildUsageMetadata;
 
 public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider.BackfillStrategy {
+
+    private static final Logger logger = LogManager.getLogger(VCUSampledMetricsBackfillStrategy.class);
     private final Activity searchActivity;
     private final Activity indexActivity;
     private final Duration activityCoolDownPeriod;
+    private final LongCounter defaultActivityReturnedCounter;
 
-    public VCUSampledMetricsBackfillStrategy(Activity searchActivity, Activity indexActivity, Duration activityCoolDownPeriod) {
+    enum DefaultReason {
+        MISSING_PREVIOUS,
+        NOT_ENOUGH_PERIODS,
+        EMPTY_ACTIVITY;
+    }
+
+    enum BackfillType {
+        CONSTANT,
+        INTERPOLATED
+    }
+
+    public VCUSampledMetricsBackfillStrategy(
+        Activity searchActivity,
+        Activity indexActivity,
+        Duration activityCoolDownPeriod,
+        LongCounter defaultActivityReturnedCounter
+    ) {
         this.searchActivity = searchActivity;
         this.indexActivity = indexActivity;
         this.activityCoolDownPeriod = activityCoolDownPeriod;
+        this.defaultActivityReturnedCounter = defaultActivityReturnedCounter;
     }
 
     @Override
@@ -45,7 +69,7 @@ public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider
         var tier = sample.usageMetadata().get(SampledVCUMetricsProvider.USAGE_METADATA_APPLICATION_TIER);
         assert tier != null;
         var activity = tier.equals("search") ? searchActivity : indexActivity;
-        var activityInfo = inferActivity(activity, null, timestamp, activityCoolDownPeriod);
+        var activityInfo = inferActivity(activity, null, timestamp, activityCoolDownPeriod, tier, BackfillType.CONSTANT);
         var usageMetadata = buildUsageMetadata(activityInfo.active(), activityInfo.lastActivityTime(), spMinInfo, tier);
         sink.add(sample, sample.value(), usageMetadata, timestamp);
     }
@@ -65,7 +89,14 @@ public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider
         assert tier != null;
         var activity = tier.equals("search") ? searchActivity : indexActivity;
         Instant previousLastActivity = getPreviousLastActivityTime(previousSample);
-        var activityInfo = inferActivity(activity, previousLastActivity, backfillTimestamp, activityCoolDownPeriod);
+        var activityInfo = inferActivity(
+            activity,
+            previousLastActivity,
+            backfillTimestamp,
+            activityCoolDownPeriod,
+            tier,
+            BackfillType.INTERPOLATED
+        );
         var usageMetadata = buildUsageMetadata(activityInfo.active(), activityInfo.lastActivityTime(), spMinInfo, tier);
 
         sink.add(currentSample, interpolatedVCU, usageMetadata, backfillTimestamp);
@@ -98,11 +129,13 @@ public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider
         return null;
     }
 
-    static Activity.ActiveInfo inferActivity(
+    Activity.ActiveInfo inferActivity(
         Activity activity,
         @Nullable Instant previousLastActivity,
         Instant backfillTimestamp,
-        Duration coolDown
+        Duration coolDown,
+        String tier,
+        BackfillType backfillType
     ) {
         assert previousLastActivity == null || backfillTimestamp.isBefore(previousLastActivity) == false;
 
@@ -112,17 +145,35 @@ public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider
             return currentActiveInfo.get();
         } else {
             // backfillTimestamp was not covered by current activity, there are a few reasons why this could have happened
-            // 1) activity is empty because there have been no actions
-            // 2) backfillTimestamp is before activity.firstActivityPreviousPeriod but after previousLastActivity + coolDown
-            // 3) backfillTimestamp is before previousLastActivity + coolDown (and as always, after previousLastActivity)
 
-            // In cases 1 and 2 we return the default value of no activity
-            if (activity.isEmpty() || previousLastActivity == null || backfillTimestamp.isAfter(previousLastActivity.plus(coolDown))) {
+            // 1) activity is empty because there have been no actions, possibly due to a rolling restart
+            if (activity.isEmpty()) {
+                logger.debug("Reporting inactivity due to empty data for backfill time: {}", backfillTimestamp);
+                defaultActivityReturnedCounter.incrementBy(1L, makeAttributes(tier, backfillType, DefaultReason.EMPTY_ACTIVITY));
                 return Activity.DEFAULT_NOT_ACTIVE;
             }
-            // This is case 3, we know there was activity and when it occurred
+
+            // 2) previous sample does not contain last activity, possibly due to the metering persistent task moving nodes
+            if (previousLastActivity == null) {
+                logger.debug("Reporting inactivity because previousLastActivity is missing, backfill time: {}", backfillTimestamp);
+                defaultActivityReturnedCounter.incrementBy(1L, makeAttributes(tier, backfillType, DefaultReason.MISSING_PREVIOUS));
+                return Activity.DEFAULT_NOT_ACTIVE;
+            }
+
+            // 3) backfillTimestamp is before activity.firstActivityPreviousPeriod but after previousLastActivity + coolDown
+            if (backfillTimestamp.isAfter(previousLastActivity.plus(coolDown))) {
+                logger.debug("Reporting inactivity because tracked activity does not cover backfill time: {}", backfillTimestamp);
+                defaultActivityReturnedCounter.incrementBy(1L, makeAttributes(tier, backfillType, DefaultReason.NOT_ENOUGH_PERIODS));
+                return Activity.DEFAULT_NOT_ACTIVE;
+            }
+
+            // 4) backfillTimestamp is before previousLastActivity + coolDown (and as always, after previousLastActivity)
             return new Activity.ActiveInfo(true, previousLastActivity);
         }
+    }
+
+    private static Map<String, Object> makeAttributes(String tier, BackfillType backfillType, DefaultReason reason) {
+        return Map.of("tier", tier, "backfill-type", backfillType.name(), "reason", reason.name());
     }
 
     private static Instant getPreviousLastActivityTime(MetricValue metricValue) {

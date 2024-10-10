@@ -29,6 +29,8 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.monitor.fs.FsService;
 import org.elasticsearch.monitor.os.OsProbe;
+import org.elasticsearch.telemetry.metric.LongCounter;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -53,19 +55,27 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     public static final String USAGE_METADATA_LATEST_ACTIVITY_TIME = "latest_activity_timestamp";
     public static final String USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY = "sp_min_provisioned_memory";
     public static final String USAGE_METADATA_SP_MIN = "sp_min";
+    public static final String METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN = "es.metering.reporting.backfill.activity.unknown.total";
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
     private final Function<SampledClusterMetrics, SPMinInfo> spMinProvisionedMemoryProvider;
     private final Duration activityCoolDownPeriod;
+    private final LongCounter defaultActivityReturnedCounter;
 
     SampledVCUMetricsProvider(
         SampledClusterMetricsService sampledClusterMetricsService,
         Duration activityCoolDownPeriod,
-        Function<SampledClusterMetrics, SPMinInfo> spMinProvisionedMemoryProvider
+        Function<SampledClusterMetrics, SPMinInfo> spMinProvisionedMemoryProvider,
+        MeterRegistry meterRegistry
     ) {
         this.sampledClusterMetricsService = sampledClusterMetricsService;
         this.activityCoolDownPeriod = activityCoolDownPeriod;
         this.spMinProvisionedMemoryProvider = spMinProvisionedMemoryProvider;
+        this.defaultActivityReturnedCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN,
+            "The number of activity backfill attempts where activity data was not present so default value was returned.",
+            "unit"
+        );
     }
 
     @Override
@@ -87,7 +97,8 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
                 new VCUSampledMetricsBackfillStrategy(
                     sample.searchTierMetrics().activity(),
                     sample.indexTierMetrics().activity(),
-                    activityCoolDownPeriod
+                    activityCoolDownPeriod,
+                    defaultActivityReturnedCounter
                 )
             );
         });

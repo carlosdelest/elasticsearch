@@ -59,9 +59,9 @@ public class SampledClusterMetricsService {
     static final String NODE_INFO_COLLECTIONS_PARTIALS_TOTAL = "es.metering.node_info.collections.partial.total";
     static final String NODE_INFO_TIER_SEARCH_ACTIVITY_TIME = "es.metering.node_info.tier.search.activity.time";
     static final String NODE_INFO_TIER_INDEX_ACTIVITY_TIME = "es.metering.node_info.tier.index.activity.time";
-
     private final ClusterService clusterService;
     private final Duration coolDown;
+    private final MeterRegistry meterRegistry;
     private final LongCounter collectionsTotalCounter;
     private final LongCounter collectionsErrorsCounter;
     private final LongCounter collectionsPartialsCounter;
@@ -69,6 +69,7 @@ public class SampledClusterMetricsService {
     @SuppressWarnings("this-escape")
     public SampledClusterMetricsService(ClusterService clusterService, MeterRegistry meterRegistry) {
         this.clusterService = clusterService;
+        this.meterRegistry = meterRegistry;
 
         clusterService.addListener(this::clusterChanged);
         this.coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
@@ -271,7 +272,7 @@ public class SampledClusterMetricsService {
             clusterService,
             nodeEnvironment
         );
-        return new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryProvider);
+        return new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryProvider, meterRegistry);
     }
 
     private static Map<ShardKey, ShardSample> mergeShardInfos(Map<ShardKey, ShardSample> current, Map<ShardId, ShardInfoMetrics> updated) {

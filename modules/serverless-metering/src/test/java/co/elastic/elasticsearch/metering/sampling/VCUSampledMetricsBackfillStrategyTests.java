@@ -23,6 +23,9 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
 import org.elasticsearch.core.Nullable;
+import org.elasticsearch.telemetry.InstrumentType;
+import org.elasticsearch.telemetry.RecordingMeterRegistry;
+import org.elasticsearch.telemetry.metric.LongCounter;
 import org.elasticsearch.test.ESTestCase;
 
 import java.time.Duration;
@@ -31,12 +34,14 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_ACTIVE;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_APPLICATION_TIER;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_LATEST_ACTIVITY_TIME;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY;
-import static co.elastic.elasticsearch.metering.sampling.VCUSampledMetricsBackfillStrategy.inferActivity;
+import static co.elastic.elasticsearch.metering.sampling.VCUSampledMetricsBackfillStrategy.BackfillType;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasKey;
@@ -67,19 +72,25 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
     }
 
     public void testConstantBackfillSinkCalledIfCreationEmpty() {
-        var backfill = new VCUSampledMetricsBackfillStrategy(ActivityTests.randomActivity(), ActivityTests.randomActivity(), COOL_DOWN);
+        var backfill = new VCUSampledMetricsBackfillStrategy(
+            ActivityTests.randomActivity(),
+            ActivityTests.randomActivity(),
+            COOL_DOWN,
+            LongCounter.NOOP
+        );
         var usageMetadata = Map.of(USAGE_METADATA_APPLICATION_TIER, randomFrom("index", "search"));
         // accept if no creation date, vcu provider never sets a creation date
         var value = metricValue(randomNonNegativeLong(), usageMetadata);
         var sink = new ValueConsumer();
         backfill.constant(value, TIME, sink);
         assertNotNull(sink.value.get());
+
     }
 
     public void testConstantBackfillVCU() {
         var indexActivity = ActivityTests.randomActivity();
         var searchActivity = ActivityTests.randomActivity();
-        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN);
+        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN, LongCounter.NOOP);
         var usageMetadata = Map.of(USAGE_METADATA_APPLICATION_TIER, randomFrom("search", "index"));
 
         // accept if no creation date
@@ -94,7 +105,7 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
     public void testConstantBackfillSpMin() {
         var indexActivity = ActivityTests.randomActivity();
         var searchActivity = ActivityTests.randomActivity();
-        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN);
+        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN, LongCounter.NOOP);
 
         var spMinProvisionedMemory = String.valueOf(randomLongBetween(0, 10_000));
         var spMin = String.valueOf(randomLongBetween(0, 100));
@@ -118,7 +129,7 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
     public void testConstantBackfillMissingSpMin() {
         var indexActivity = ActivityTests.randomActivity();
         var searchActivity = ActivityTests.randomActivity();
-        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN);
+        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN, LongCounter.NOOP);
 
         var usageMetadata = Map.of(USAGE_METADATA_APPLICATION_TIER, "search");
 
@@ -161,7 +172,12 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
         );
         var sample1 = metricValue(vcu1, metadata1);
         var sample2 = metricValue(vcu2, metadata2);
-        var backfill = new VCUSampledMetricsBackfillStrategy(ActivityTests.randomActivity(), ActivityTests.randomActivity(), COOL_DOWN);
+        var backfill = new VCUSampledMetricsBackfillStrategy(
+            ActivityTests.randomActivity(),
+            ActivityTests.randomActivity(),
+            COOL_DOWN,
+            LongCounter.NOOP
+        );
 
         var expectedVCU = Long.min(vcu1, vcu2);
         var expectedSpMinProvisioned = Long.min(spMinProvisioned1, spMinProvisioned2);
@@ -187,7 +203,7 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
         boolean isSearch = randomBoolean();
         var searchActivity = isSearch ? Activity.EMPTY : ActivityTests.randomActivityNotEmpty();
         var indexActivity = isSearch ? ActivityTests.randomActivityNotEmpty() : Activity.EMPTY;
-        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN);
+        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN, LongCounter.NOOP);
         var tier = isSearch ? "search" : "index";
 
         var usageMetadata = Map.of(USAGE_METADATA_APPLICATION_TIER, tier);
@@ -217,7 +233,7 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
         boolean isSearch = randomBoolean();
         var searchActivity = isSearch ? ActivityTests.randomActivityNotEmpty() : Activity.EMPTY;
         var indexActivity = isSearch ? Activity.EMPTY : ActivityTests.randomActivityNotEmpty();
-        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN);
+        var backfill = new VCUSampledMetricsBackfillStrategy(searchActivity, indexActivity, COOL_DOWN, LongCounter.NOOP);
         var tier = isSearch ? "search" : "index";
         var activity = isSearch ? searchActivity : indexActivity;
 
@@ -240,63 +256,117 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
         {
             var sink = new ValueConsumer();
             backfill.interpolate(currentTime, current, previousTime, previous, backfillTime, sink);
-            var expectedActiveInfo = inferActivity(
+            var expectedActiveInfo = backfill.inferActivity(
                 activity,
                 hasPreviousLastActivity ? previousLastActivity : null,
                 backfillTime,
-                COOL_DOWN
+                COOL_DOWN,
+                tier,
+                VCUSampledMetricsBackfillStrategy.BackfillType.INTERPOLATED
             );
             assertActiveInfo(sink, tier, expectedActiveInfo.active(), expectedActiveInfo.lastActivityTime());
         }
         {
             var sink = new ValueConsumer();
             backfill.constant(current, backfillTime, sink);
-            var expectedActiveInfo = inferActivity(activity, null, backfillTime, COOL_DOWN);
+            var expectedActiveInfo = backfill.inferActivity(activity, null, backfillTime, COOL_DOWN, tier, BackfillType.INTERPOLATED);
             assertActiveInfo(sink, tier, expectedActiveInfo.active(), expectedActiveInfo.lastActivityTime());
         }
     }
 
     public void testInferActivity() {
+        var tier = randomFrom("search", "index");
+        var expectedBackfillType = randomFrom("CONSTANT", "INTERPOLATED");
+        var backfillType = BackfillType.valueOf(expectedBackfillType);
+
         {
             // Default case
             // If there is no activity return not active
+            var meterRegistry = new RecordingMeterRegistry();
+            var defaultReturnedCounter = meterRegistry.registerLongCounter(METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN, "", "");
+            var backfill = new VCUSampledMetricsBackfillStrategy(Activity.EMPTY, Activity.EMPTY, COOL_DOWN, defaultReturnedCounter);
+
             var backfillTime = Instant.now();
             var previousLastActivity = randomBoolean()
                 ? null
                 : backfillTime.minus(ActivityTests.randomDuration(Duration.ZERO, COOL_DOWN.multipliedBy(2)));
-            assertThat(inferActivity(Activity.EMPTY, previousLastActivity, backfillTime, COOL_DOWN), equalTo(Activity.DEFAULT_NOT_ACTIVE));
+
+            assertThat(
+                backfill.inferActivity(Activity.EMPTY, previousLastActivity, backfillTime, COOL_DOWN, tier, backfillType),
+                equalTo(Activity.DEFAULT_NOT_ACTIVE)
+            );
+            assertMetricValue(meterRegistry, 1L, tier, expectedBackfillType, "EMPTY_ACTIVITY");
         }
 
         {
             // Default case
             // backfill time not covered by activity, but after coolDown period of previousLastActivity, return not active
+            var meterRegistry = new RecordingMeterRegistry();
+            var defaultReturnedCounter = meterRegistry.registerLongCounter(METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN, "", "");
+            var backfill = new VCUSampledMetricsBackfillStrategy(Activity.EMPTY, Activity.EMPTY, COOL_DOWN, defaultReturnedCounter);
+
             var activity = ActivityTests.randomActivityNotEmpty();
             Instant firstActivity = activity.firstActivity();
             var backfillTime = firstActivity.minus(ActivityTests.randomDuration(Duration.ofMillis(1), COOL_DOWN.multipliedBy(2)));
             var previousLastTime = backfillTime.minus(ActivityTests.randomDuration(COOL_DOWN.plusMillis(1), COOL_DOWN.multipliedBy(2)));
-            assertThat(inferActivity(activity, previousLastTime, backfillTime, COOL_DOWN), equalTo(Activity.DEFAULT_NOT_ACTIVE));
+
+            assertThat(
+                backfill.inferActivity(activity, previousLastTime, backfillTime, COOL_DOWN, tier, backfillType),
+                equalTo(Activity.DEFAULT_NOT_ACTIVE)
+            );
+            assertMetricValue(meterRegistry, 1L, tier, expectedBackfillType, "NOT_ENOUGH_PERIODS");
+        }
+
+        {
+            // Default case
+            // backfill time not covered by activity, activity not empty, but previousLastActivity missing
+            var meterRegistry = new RecordingMeterRegistry();
+            var defaultReturnedCounter = meterRegistry.registerLongCounter(METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN, "", "");
+            var backfill = new VCUSampledMetricsBackfillStrategy(Activity.EMPTY, Activity.EMPTY, COOL_DOWN, defaultReturnedCounter);
+
+            var activity = ActivityTests.randomActivityNotEmpty();
+            Instant firstActivity = activity.firstActivity();
+            var backfillTime = firstActivity.minus(ActivityTests.randomDuration(Duration.ofMillis(1), COOL_DOWN.multipliedBy(2)));
+
+            assertThat(
+                backfill.inferActivity(activity, null, backfillTime, COOL_DOWN, tier, backfillType),
+                equalTo(Activity.DEFAULT_NOT_ACTIVE)
+            );
+            assertMetricValue(meterRegistry, 1L, tier, expectedBackfillType, "MISSING_PREVIOUS");
         }
 
         {
             // backfill time not covered by activity, but within coolDown period of previousLastActivity
+            var meterRegistry = new RecordingMeterRegistry();
+            var defaultReturnedCounter = meterRegistry.registerLongCounter(METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN, "", "");
+            var backfill = new VCUSampledMetricsBackfillStrategy(Activity.EMPTY, Activity.EMPTY, COOL_DOWN, defaultReturnedCounter);
+
             var activity = ActivityTests.randomActivityNotEmpty();
             Instant firstActivity = activity.firstActivity();
             var backfillTime = firstActivity.minus(ActivityTests.randomDuration(Duration.ofMillis(1), COOL_DOWN.multipliedBy(2)));
             var previousLastTime = backfillTime.minus(ActivityTests.randomDuration(Duration.ZERO, COOL_DOWN));
+
             assertThat(
-                inferActivity(activity, previousLastTime, backfillTime, COOL_DOWN),
+                backfill.inferActivity(activity, previousLastTime, backfillTime, COOL_DOWN, tier, backfillType),
                 equalTo(new Activity.ActiveInfo(true, previousLastTime))
             );
+            assertMetricEmpty(meterRegistry, METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN);
         }
 
         {
             // backfill time covered by activity or after activity, expect same results as `wasActive` function
+            var meterRegistry = new RecordingMeterRegistry();
+            var defaultReturnedCounter = meterRegistry.registerLongCounter(METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN, "", "");
+            var backfill = new VCUSampledMetricsBackfillStrategy(Activity.EMPTY, Activity.EMPTY, COOL_DOWN, defaultReturnedCounter);
+
             var activity = ActivityTests.randomActivityNotEmpty();
             Instant firstActivity = activity.firstActivity();
             Instant lastActivity = activity.lastActivityRecentPeriod();
             var backfillTime = randomInstantBetween(firstActivity, lastActivity.plus(COOL_DOWN.multipliedBy(2)));
             var expected = activity.wasActive(backfillTime, COOL_DOWN).get();
-            assertThat(inferActivity(activity, null, backfillTime, COOL_DOWN), equalTo(expected));
+            assertThat(backfill.inferActivity(activity, null, backfillTime, COOL_DOWN, tier, backfillType), equalTo(expected));
+
+            assertMetricEmpty(meterRegistry, METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN);
         }
     }
 
@@ -329,5 +399,20 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
             metadata.put(USAGE_METADATA_LATEST_ACTIVITY_TIME, lastActivity.toString());
         }
         return metadata;
+    }
+
+    private void assertMetricValue(RecordingMeterRegistry meterRegistry, long count, String tier, String backfillType, String reason) {
+        var measurements = meterRegistry.getRecorder()
+            .getMeasurements(InstrumentType.LONG_COUNTER, METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN);
+        assertThat(measurements.size(), equalTo(1));
+        assertThat(measurements.get(0).getLong(), equalTo(count));
+        assertThat(measurements.get(0).attributes(), hasEntry("tier", tier));
+        assertThat(measurements.get(0).attributes(), hasEntry("backfill-type", backfillType));
+        assertThat(measurements.get(0).attributes(), hasEntry("reason", reason));
+    }
+
+    private void assertMetricEmpty(RecordingMeterRegistry meterRegistry, String metricName) {
+        var measurements = meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_COUNTER, metricName);
+        assertThat(measurements, empty());
     }
 }
