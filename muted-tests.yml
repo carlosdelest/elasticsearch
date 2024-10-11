@@ -137,3 +137,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=synonyms/50_synonym_rule_put/Update synonym rule for non existing synonym set}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2953
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=profiling/10_basic/Test flamegraph from test-events}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2957
