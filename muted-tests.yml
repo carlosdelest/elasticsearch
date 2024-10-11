@@ -137,21 +137,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test flamegraph from test-events}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2957
-- class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
-  method: testConfigureDisabledSourceModeBeforeIndexCreation
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2958
-- class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
-  method: testConfigureDisabledSourceWhenIndexIsCreated
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2959
-- class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
-  method: testConfigureDisabledSourceModeWhenIndexIsCreated
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2960
-- class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
-  method: testConfigureDisabledSourceBeforeIndexCreation
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2961
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  method: test {yaml=tsdb/20_mapping/disabled source is not supported}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2962
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2965
 - class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
