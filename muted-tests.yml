@@ -140,3 +140,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test flamegraph from test-events}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2957
+- class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
+  method: testConfigureDisabledSourceModeBeforeIndexCreation
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2958
