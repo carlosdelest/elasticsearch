@@ -152,3 +152,6 @@ tests:
 - class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
   method: testConfigureDisabledSourceBeforeIndexCreation
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2961
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=tsdb/20_mapping/disabled source is not supported}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2962
