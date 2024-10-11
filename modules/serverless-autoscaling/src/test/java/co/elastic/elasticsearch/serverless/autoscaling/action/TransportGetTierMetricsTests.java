@@ -20,6 +20,7 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.transport.CapturingTransport;
@@ -33,6 +34,7 @@ import java.util.Collections;
 import java.util.Set;
 
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
+import static org.mockito.Mockito.when;
 
 public class TransportGetTierMetricsTests extends ESTestCase {
 
@@ -44,6 +46,7 @@ public class TransportGetTierMetricsTests extends ESTestCase {
     public void setUp() throws Exception {
         super.setUp();
         var threadPool = Mockito.mock(ThreadPool.class);
+        when(threadPool.getThreadContext()).thenReturn(new ThreadContext(Settings.EMPTY));
         clusterService = createClusterService(
             threadPool,
             new ClusterSettings(
