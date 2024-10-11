@@ -13,5 +13,7 @@ tasks {
         exclude("**/StandardVersusStandardReindexedIntoLogsDbChallengeRestIT.class")
         exclude("**/LogsDbVersusReindexedLogsDbChallengeRestIT.class")
         exclude("**/LogsDbVersusLogsDbReindexedIntoStandardModeChallengeRestIT.class")
+        // Lossy params in source mapper are not allowed in Serverless but included in these tests
+        exclude("**/LogsIndexModeCustomSettingsIT.class")
     }
 }

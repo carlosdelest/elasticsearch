@@ -210,7 +210,7 @@ tasks {
                 "search.inner_hits/20_highlighting/Unified highlighter with stored fields",
                 "search.inner_hits/20_highlighting/Unified highlighter with stored fields and disabled source",
                 "search/330_fetch_fields/Test disable source",
-                "tsdb/20_mapping/disabled source",
+                "tsdb/20_mapping/disabled source is not supported",
                 "tsdb/20_mapping/source include/exclude",
                 "logsdb/20_source_mapping/disabled _source is not supported",
 
