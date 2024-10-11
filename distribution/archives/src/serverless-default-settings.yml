@@ -64,6 +64,12 @@ discovery.initial_state_timeout: 10m
 # one connection per thread, it's ok if we set it to a larger value.
 s3.client.default.max_connections: 150
 
+# We see occasional requests to S3 just fail to get a response for the full 50s
+# default timeout, and then get an immediate success on a retry. Yet almost all
+# requests complete in well under 1s. Thus we can profitably time out and retry
+# sooner. See ES-9719.
+s3.client.default.read_timeout: 10s
+
 # In serverless we want to set this higher than the coordinating limit (10%) to
 # attempt to move forward with indexing data if the we have received it.
 # Autoscaling should kick in and increase resources if nodes are overloaded
