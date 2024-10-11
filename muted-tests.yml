@@ -149,3 +149,6 @@ tests:
 - class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
   method: testConfigureDisabledSourceModeWhenIndexIsCreated
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2960
+- class: org.elasticsearch.datastreams.logsdb.LogsIndexModeCustomSettingsIT
+  method: testConfigureDisabledSourceBeforeIndexCreation
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2961
