@@ -142,3 +142,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
   method: testSortByManyLongsTooMuchMemoryAsync
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2926
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=synonyms/70_synonym_rule_delete/Delete synonym rule - missing synonym rule}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2974
