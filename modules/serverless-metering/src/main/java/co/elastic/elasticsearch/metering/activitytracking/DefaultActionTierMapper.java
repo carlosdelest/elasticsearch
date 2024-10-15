@@ -53,7 +53,9 @@ public class DefaultActionTierMapper implements ActionTier.Mapper {
         new Rule("indices:admin/mapping/put", INDEX),
         new Rule("indices:admin/mapping/auto_put", INDEX),
         new Rule("indices:admin/auto_create", INDEX),
-        new Rule("cluster:monitor/main", NEITHER)  // emitted on serverless initial startup
+        new Rule("cluster:monitor/main", NEITHER),  // emitted on serverless initial startup
+        new Rule("cluster:monitor/async_search", SEARCH),
+        new Rule("cluster:monitor/xpack/license/get", NEITHER)
     );
 
     public static final ActionTier.Mapper INSTANCE = new DefaultActionTierMapper(RULES);
