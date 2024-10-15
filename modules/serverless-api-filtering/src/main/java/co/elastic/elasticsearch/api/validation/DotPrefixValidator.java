@@ -49,6 +49,7 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
      *
      * .elastic-connectors-* is used by enterprise search
      * .ml-* is used by ML
+     * .slo-observability-* is used by Observability
      */
     private static Set<String> IGNORED_INDEX_NAMES = Set.of(
         ".elastic-connectors-v1",
@@ -56,7 +57,11 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
         ".ml-state",
         ".ml-anomalies-unrelated"
     );
-    private static Set<Pattern> IGNORED_INDEX_PATTERNS = Set.of(Pattern.compile("\\.ml-state-\\d+"));
+    private static Set<Pattern> IGNORED_INDEX_PATTERNS = Set.of(
+        Pattern.compile("\\.ml-state-\\d+"),
+        Pattern.compile("\\.slo-observability\\.sli-v\\d+.*"),
+        Pattern.compile("\\.slo-observability\\.summary-v\\d+.*")
+    );
 
     private final ThreadContext threadContext;
     private volatile boolean isEnabled;
