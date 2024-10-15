@@ -21,6 +21,8 @@ if [ -z "${PROMOTED_COMMIT}" ]; then
   PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
 
   echo "Promoted build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --style "info" --context "promoted-build-url"
+  echo "Lock qa / staging environnment https://argo-workflows.cd.internal.qa.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.qa.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-qa-staging"
+  echo "Lock canary / non canary prod environment https://argo-workflows.cd.internal.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-prod"
 fi
 
 if [ -z "${PREVIOUS_PROMOTED_COMMIT}" ]; then

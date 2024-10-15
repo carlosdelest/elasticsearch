@@ -1,6 +1,11 @@
 steps:
   - label: ":git: Promote release build"
     command: ".buildkite/scripts/promote-release.sh"
+    notify:
+      - slack:
+          channels:
+            - "#es-serverless-gitops"
+          message: "Elasticsearch serverless promotion started. See $BUILDKITE_BUILD_URL for details."
     env:
       USE_GITHUB_CREDENTIALS: "true"
     agents:
