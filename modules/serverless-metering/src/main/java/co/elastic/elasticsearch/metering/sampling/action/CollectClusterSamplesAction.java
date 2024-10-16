@@ -20,7 +20,6 @@ package co.elastic.elasticsearch.metering.sampling.action;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
-import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -71,20 +70,10 @@ public class CollectClusterSamplesAction {
         private final List<Exception> exceptions;
 
         public Response(StreamInput in) throws IOException {
-            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)) {
-                this.searchTierMemorySize = in.readVLong();
-                this.indexTierMemorySize = in.readVLong();
-            } else {
-                this.searchTierMemorySize = 0;
-                this.indexTierMemorySize = 0;
-            }
-            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_ACTIVITY_TRACKING_ADDED)) {
-                searchActivity = Activity.readFrom(in);
-                indexActivity = Activity.readFrom(in);
-            } else {
-                searchActivity = Activity.EMPTY;
-                indexActivity = Activity.EMPTY;
-            }
+            this.searchTierMemorySize = in.readVLong();
+            this.indexTierMemorySize = in.readVLong();
+            searchActivity = Activity.readFrom(in);
+            indexActivity = Activity.readFrom(in);
             this.shardInfos = in.readImmutableMap(ShardId::new, ShardInfoMetrics::from);
             this.exceptions = in.readCollectionAsImmutableList(StreamInput::readException);
         }
@@ -107,15 +96,11 @@ public class CollectClusterSamplesAction {
 
         @Override
         public void writeTo(StreamOutput output) throws IOException {
-            if (output.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_SAMPLE_MEMORY)) {
-                output.writeVLong(searchTierMemorySize);
-                output.writeVLong(indexTierMemorySize);
-            }
-            if (output.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_ACTIVITY_TRACKING_ADDED)) {
-                searchActivity.writeTo(output);
-                indexActivity.writeTo(output);
-            }
-            output.writeMap(shardInfos, (out, value) -> value.writeTo(out), (out, value) -> value.writeTo(out));
+            output.writeVLong(searchTierMemorySize);
+            output.writeVLong(indexTierMemorySize);
+            searchActivity.writeTo(output);
+            indexActivity.writeTo(output);
+            output.writeMap(shardInfos, StreamOutput::writeWriteable, StreamOutput::writeWriteable);
             output.writeGenericList(exceptions, StreamOutput::writeException);
         }
 
