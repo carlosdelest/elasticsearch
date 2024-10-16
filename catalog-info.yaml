@@ -263,6 +263,7 @@ spec:
     spec:
       repository: elastic/elasticsearch-serverless
       pipeline_file: .buildkite/pipeline.e2e-tests-qa.yml
+      skip_intermediate_builds: false
       provider_settings:
         trigger_mode: none
       teams:
@@ -293,6 +294,7 @@ spec:
     spec:
       repository: elastic/elasticsearch-serverless
       pipeline_file: .buildkite/pipeline.e2e-tests-staging.yml
+      skip_intermediate_builds: false
       provider_settings:
         trigger_mode: none
       teams:
