@@ -333,12 +333,12 @@ public class SampledClusterMetricsService {
         assert activity.lastActivityRecentPeriod().isBefore(now);
         var isActive = activity.isActive(now, coolDown);
 
-        if (activity.isEmpty()) {
-            // Special case to avoid returning large values for Activity.EMPTY
-            return null;
-        } else if (isActive) {
+        if (isActive) {
             long secondsActive = activity.firstActivityRecentPeriod().until(now, ChronoUnit.SECONDS);
             return new LongWithAttributes(secondsActive);
+        } else if (activity.isEmpty()) {
+            // Special case, inactive, but we don't know for how long
+            return new LongWithAttributes(-1);
         } else {
             long secondsInactive = activity.lastActivityRecentPeriod().plus(coolDown).until(now, ChronoUnit.SECONDS);
             return new LongWithAttributes(-secondsInactive);
