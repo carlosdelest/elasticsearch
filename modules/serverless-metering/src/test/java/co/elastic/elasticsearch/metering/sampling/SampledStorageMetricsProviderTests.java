@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
 import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
@@ -41,6 +42,7 @@ import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSe
 import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
 import static java.util.Map.entry;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -51,6 +53,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasSize;
@@ -107,7 +110,10 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(110L, 11L, 0L, 11L, 1, 1, Instant.now().toEpochMilli())
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                        .withData(110L, 11L, 0L, 11L)
+                        .withGeneration(1, 1, Instant.now().toEpochMilli())
+                        .build()
                 )
             )
         );
@@ -141,7 +147,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         assertTrue(metric1.meteredObjectCreationTime().isAfter(Instant.EPOCH));
 
         assertThat(metric2.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
-        assertThat(metric2.sourceMetadata(), equalTo(Map.of("index", indexName)));
+        assertThat(metric2.sourceMetadata(), hasEntry("index", indexName));
         assertThat(metric2.value(), is(11L));
     }
 
@@ -155,7 +161,10 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, creationDate.toEpochMilli())
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                        .withData(110L, 11L, 0L, 0)
+                        .withGeneration(1, 1, creationDate.toEpochMilli())
+                        .build()
                 )
             )
         );
@@ -189,7 +198,10 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(110L, 0, 0L, 11L, 1, 1, creationDate.toEpochMilli())
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                        .withData(110L, 0, 0L, 11L)
+                        .withGeneration(1, 1, creationDate.toEpochMilli())
+                        .build()
                 )
             )
         );
@@ -208,7 +220,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var metric = (MetricValue) metrics.toArray()[0];
         assertThat(metric.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
         assertThat(metric.type(), equalTo("es_raw_stored_data"));
-        assertThat(metric.sourceMetadata(), equalTo(Map.of("index", indexName)));
+        assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
 
         assertThat(metric.value(), is(11L));
     }
@@ -223,7 +235,10 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(110L, 0, 0L, 0, 1, 1, creationDate.toEpochMilli())
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                        .withData(110L, 0, 0L, 0)
+                        .withGeneration(1, 1, creationDate.toEpochMilli())
+                        .build()
                 )
             )
         );
@@ -251,7 +266,11 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shardId,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(110L, size, 0L, hasIngestSize ? size : 0L, 1, 1, creationDate.toEpochMilli())
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                        .withData(110L, size, 0L, hasIngestSize ? size : 0L)
+                        .withGeneration(1, 1, creationDate.toEpochMilli())
+                        .withRAStats(id, 10L, id, 100L, 20L, 11L, 3, 3, 3 * id, 9 * id)
+                        .build()
                 )
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
@@ -284,7 +303,15 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
 
         for (MetricValue metric : rawStoredDataMetrics) {
             assertThat(metric.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
-            assertThat(metric.sourceMetadata(), equalTo(Map.of("index", indexName)));
+            assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
+            assertThat(metric.usageMetadata(), hasEntry("ra_size_segment_count", "45"));
+            assertThat(metric.usageMetadata(), hasEntry("ra_size_segment_min_ra_avg", "3"));
+            assertThat(metric.usageMetadata(), hasEntry("ra_size_segment_max_ra_avg", "3"));
+            assertThat(metric.usageMetadata(), hasEntry("ra_size_segment_avg_ra_avg", "3"));
+            assertThat(metric.usageMetadata(), hasEntry("ra_size_segment_stddev_ra_avg", "0"));
+            assertThat(metric.usageMetadata(), hasEntry("ra_size_doc_count", "1000"));
+            assertThat(metric.usageMetadata(), hasEntry("ra_size_deleted_doc_count", "200"));
+            assertThat(metric.usageMetadata(), hasEntry("ra_size_approximated_doc_count", "110"));
             assertThat(metric.value(), is(60L));
             shard++;
         }
@@ -304,7 +331,11 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                     shardId,
                     new SampledClusterMetricsService.ShardSample(
                         "myIndexUUID",
-                        new ShardInfoMetrics(110L, size, 0L, hasIngestSize ? size : 0L, 1, 1, creationDate.toEpochMilli())
+                        ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                            .withData(110L, size, 0L, hasIngestSize ? size : 0L)
+                            .withGeneration(1, 1, creationDate.toEpochMilli())
+                            .withRAStats(10, 10L, 8, 100L, 20L, 11L, 3, 10, 31, 163)
+                            .build()
                     )
                 );
             }
@@ -341,8 +372,39 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             containsInAnyOrder(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 0, RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 1)
         );
         var metadataList = rawStoredDataMetrics.stream().map(MetricValue::sourceMetadata).toList();
-        assertThat(metadataList, everyItem(aMapWithSize(1)));
+        assertThat(metadataList, everyItem(aMapWithSize(greaterThanOrEqualTo(1))));
         assertThat(metadataList, everyItem(hasEntry(is("index"), startsWith(baseIndexName))));
+
+        var usageMetadataList = rawStoredDataMetrics.stream().map(MetricValue::usageMetadata).toList();
+        assertThat(usageMetadataList, everyItem(aMapWithSize(greaterThanOrEqualTo(11))));
+
+        assertThat(usageMetadataList, everyItem(hasEntry(is("ra_size_segment_count"), transformedMatch(Long::parseLong, greaterThan(0L)))));
+        assertThat(
+            usageMetadataList,
+            everyItem(hasEntry(is("ra_size_segment_min_ra_avg"), transformedMatch(Long::parseLong, greaterThan(0L))))
+        );
+        assertThat(
+            usageMetadataList,
+            everyItem(hasEntry(is("ra_size_segment_max_ra_avg"), transformedMatch(Long::parseLong, greaterThan(0L))))
+        );
+        assertThat(
+            usageMetadataList,
+            everyItem(hasEntry(is("ra_size_segment_avg_ra_avg"), transformedMatch(Long::parseLong, greaterThan(0L))))
+        );
+        assertThat(
+            usageMetadataList,
+            everyItem(hasEntry(is("ra_size_segment_stddev_ra_avg"), transformedMatch(Long::parseLong, greaterThan(0L))))
+        );
+        assertThat(usageMetadataList, everyItem(hasEntry(is("ra_size_doc_count"), transformedMatch(Long::parseLong, greaterThan(0L)))));
+        assertThat(
+            usageMetadataList,
+            everyItem(hasEntry(is("ra_size_deleted_doc_count"), transformedMatch(Long::parseLong, greaterThan(0L))))
+        );
+        assertThat(
+            usageMetadataList,
+            everyItem(hasEntry(is("ra_size_approximated_doc_count"), transformedMatch(Long::parseLong, greaterThan(0L))))
+        );
+
         assertThat(rawStoredDataMetrics.stream().map(MetricValue::value).toList(), everyItem(is(145L)));
     }
 
@@ -360,7 +422,10 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                     shardId,
                     new SampledClusterMetricsService.ShardSample(
                         "myIndexUUID",
-                        new ShardInfoMetrics(110L, size, 0L, hasIngestSize ? size : 0, 1, 1, creationDate.toEpochMilli())
+                        ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                            .withData(110L, size, 0L, hasIngestSize ? size : 0)
+                            .withGeneration(1, 1, creationDate.toEpochMilli())
+                            .build()
                     )
                 );
             }
@@ -394,7 +459,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
 
         for (MetricValue metric : rawStoredDataMetrics) {
             assertThat(metric.id(), startsWith(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName));
-            assertThat(metric.sourceMetadata(), aMapWithSize(1));
+            assertThat(metric.sourceMetadata(), aMapWithSize(greaterThanOrEqualTo(1)));
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
             assertThat(metric.value(), is(60L));
         }
@@ -411,7 +476,10 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shardId,
                 new SampledClusterMetricsService.ShardSample(
                     "myIndexUUID",
-                    new ShardInfoMetrics(110L, size, 0L, size, 1, 1, creationDate.toEpochMilli())
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                        .withData(110L, size, 0L, size)
+                        .withGeneration(1, 1, creationDate.toEpochMilli())
+                        .build()
                 )
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));

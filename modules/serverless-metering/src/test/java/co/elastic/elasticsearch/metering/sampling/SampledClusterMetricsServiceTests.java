@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.MockedClusterStateTestUtils;
+import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.activitytracking.ActivityTests;
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
@@ -123,9 +124,18 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 21L, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 22L, 1, 2, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 13L, 0L, 23L, 1, 1, 0L))
+            entry(
+                shard1Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 21L).withGeneration(1, 1, 0).build()
+            ),
+            entry(
+                shard2Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 22L).withGeneration(1, 2, 0L).build()
+            ),
+            entry(
+                shard3Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 23L).withGeneration(1, 1, 0).build()
+            )
         );
         var searchMetrics = randomSampledTierMetrics();
         var indexMetrics = randomSampledTierMetrics();
@@ -190,9 +200,18 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 21L, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 22L, 1, 2, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 13L, 0L, 23L, 1, 1, 0L))
+            entry(
+                shard1Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 21L).withGeneration(1, 1, 0).build()
+            ),
+            entry(
+                shard2Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 22L).withGeneration(1, 2, 0).build()
+            ),
+            entry(
+                shard3Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 23L).withGeneration(1, 1, 0).build()
+            )
         );
         var searchMetrics = randomSampledTierMetrics();
         var indexMetrics = randomSampledTierMetrics();
@@ -262,9 +281,18 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 21L, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 22L, 1, 2, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 13L, 0L, 23L, 1, 1, 0L))
+            entry(
+                shard1Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 21L).withGeneration(1, 1, 0).build()
+            ),
+            entry(
+                shard2Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 22L).withGeneration(1, 2, 0).build()
+            ),
+            entry(
+                shard3Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 23L).withGeneration(1, 1, 0).build()
+            )
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -316,14 +344,17 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 0, 1, 2, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 13L, 0L, 0, 1, 1, 0L))
+            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build()),
+            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 0).withGeneration(1, 1, 0).build())
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new ShardInfoMetrics(120L, 22L, 0L, 0, 1, 3, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 23L, 0L, 0, 1, 2, 0L))
+            entry(
+                shard2Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 3, 0L).build()
+            ),
+            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 23L, 0L, 0).withGeneration(1, 2, 0).build())
         );
         var searchMetrics1 = randomSampledTierMetrics();
         var indexMetrics1 = randomSampledTierMetrics();
@@ -412,14 +443,17 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var newShard3Id = new ShardId("index1", "index1UUID-2", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 0, 1, 2, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 13L, 0L, 0, 1, 2, 0L))
+            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build()),
+            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 0).withGeneration(1, 2, 0).build())
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new ShardInfoMetrics(120L, 22L, 0L, 0, 1, 1, 0L)),
-            entry(newShard3Id, new ShardInfoMetrics(130L, 23L, 0L, 0, 1, 1, 0L))
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(
+                newShard3Id,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 23L, 0L, 0).withGeneration(1, 1, 0).build()
+            )
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -474,13 +508,16 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard3Id2 = new ShardId("index1", "index1UUID-2", 2);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 0, 1, 2, 0L))
+            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build())
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard3Id1, new ShardInfoMetrics(120L, 22L, 0L, 0, 1, 1, 0L)),
-            entry(shard3Id2, new ShardInfoMetrics(130L, 23L, 0L, 0, 1, 1, 0L))
+            entry(
+                shard3Id1,
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 1, 0).build()
+            ),
+            entry(shard3Id2, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 23L, 0L, 0).withGeneration(1, 1, 0).build())
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -536,14 +573,14 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard3Id1 = new ShardId("index1", "index1UUID-1", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 0, 1, 2, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(120L, 13L, 0L, 0, 1, 1, 0L))
+            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build()),
+            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 13L, 0L, 0).withGeneration(1, 1, 0).build())
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard3Id, new ShardInfoMetrics(120L, 22L, 0L, 0, 1, 2, 0L)),
-            entry(shard3Id1, new ShardInfoMetrics(130L, 23L, 0L, 0, 1, 1, 0L))
+            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 2, 0).build()),
+            entry(shard3Id1, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 23L, 0L, 0).withGeneration(1, 1, 0).build())
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -591,14 +628,14 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 0, 1, 2, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 13L, 0L, 0, 1, 1, 0L))
+            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build()),
+            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 0).withGeneration(1, 1, 0).build())
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, new ShardInfoMetrics(120L, 22L, 0L, 0, 1, 1, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 23L, 0L, 0, 1, 2, 0L))
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 23L, 0L, 0).withGeneration(1, 2, 0).build())
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
@@ -644,11 +681,13 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard2Id = new ShardId("index2", "index1UUID", 2);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 0, 1, 2, 0L))
+            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build())
         );
 
-        var shardsInfo2 = Map.ofEntries(entry(shard2Id, new ShardInfoMetrics(120L, 22L, 0L, 0, 1, 1, 0L)));
+        var shardsInfo2 = Map.ofEntries(
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 1, 0).build())
+        );
 
         AtomicReference<Set<ShardId>> activeShards = new AtomicReference<>(shardsInfo.keySet());
 
@@ -683,9 +722,9 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shard3Id = new ShardId("index1", "index1UUID", 3);
 
         var shardsInfo = Map.ofEntries(
-            entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 0, 1, 1, 0L)),
-            entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 0, 1, 2, 0L)),
-            entry(shard3Id, new ShardInfoMetrics(130L, 13L, 0L, 0, 1, 1, 0L))
+            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build()),
+            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 0).withGeneration(1, 1, 0).build())
         );
 
         var clusterService = createMockClusterService(shardsInfo::keySet);

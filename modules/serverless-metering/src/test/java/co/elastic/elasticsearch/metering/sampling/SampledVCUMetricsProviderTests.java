@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
@@ -357,7 +358,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         var nonInteractiveSizeInBytes = totalSizeInBytes - interactiveSizeInBytes;
         return new SampledClusterMetricsService.ShardSample(
             randomUUID(),
-            new ShardInfoMetrics(0, interactiveSizeInBytes, nonInteractiveSizeInBytes, 0, 0, 0, 0)
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(0, interactiveSizeInBytes, nonInteractiveSizeInBytes, 0).build()
         );
     }
 

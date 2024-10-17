@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
+import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.activitytracking.ActivityTests;
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
@@ -273,14 +274,29 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         final Map<String, Map<ShardId, ShardInfoMetrics>> nodesShardAnswer = Map.of(
             searchNodes.get(0).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new ShardInfoMetrics(110L, 11L, 0L, 14L, 1, 1, 0L)),
-                Map.entry(shard2Id, new ShardInfoMetrics(120L, 12L, 0L, 15L, 1, 2, 0L)),
-                Map.entry(shard3Id, new ShardInfoMetrics(130L, 13L, 0L, 16L, 1, 1, 0L))
+                Map.entry(
+                    shard1Id,
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 14L).withGeneration(1, 1, 0).build()
+                ),
+                Map.entry(
+                    shard2Id,
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 15L).withGeneration(1, 2, 0L).build()
+                ),
+                Map.entry(
+                    shard3Id,
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 16L).withGeneration(1, 1, 0).build()
+                )
             ),
             searchNodes.get(1).getId(),
             Map.ofEntries(
-                Map.entry(shard1Id, new ShardInfoMetrics(210L, 21L, 0L, 24L, 2, 1, 0L)),
-                Map.entry(shard2Id, new ShardInfoMetrics(220L, 22L, 0L, 25L, 1, 1, 0L))
+                Map.entry(
+                    shard1Id,
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(210L, 21L, 0L, 24L).withGeneration(2, 1, 0L).build()
+                ),
+                Map.entry(
+                    shard2Id,
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(220L, 22L, 0L, 25L).withGeneration(1, 1, 0).build()
+                )
             )
         );
 
@@ -352,6 +368,6 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
 
     static ShardInfoMetrics createMeteringShardInfo(ShardId shardId) {
         var size = ESTestCase.randomLongBetween(0, 10000);
-        return new ShardInfoMetrics(ESTestCase.randomLongBetween(0, 10000), size, 0L, size, 0, 0, 0L);
+        return ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(ESTestCase.randomLongBetween(0, 10000), size, 0L, size).build();
     }
 }

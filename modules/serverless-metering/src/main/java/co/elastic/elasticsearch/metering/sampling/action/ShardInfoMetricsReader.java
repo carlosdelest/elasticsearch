@@ -35,9 +35,11 @@ import org.elasticsearch.telemetry.metric.DoubleHistogram;
 import org.elasticsearch.telemetry.metric.LongCounter;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -130,7 +132,13 @@ interface ShardInfoMetricsReader {
             return raStorage;
         }
 
-        private static Long getRAStorageFromSegmentAttribute(ShardId shardId, SegmentCommitInfo si, long commitLiveDocs, boolean isExact) {
+        private static Long getRAStorageFromSegmentAttribute(
+            ShardId shardId,
+            SegmentCommitInfo si,
+            long commitLiveDocs,
+            boolean isExact,
+            List<Long> avgRASizeList
+        ) {
             var avgRASizeAttribute = si.info.getAttribute(RAStorageAccumulator.RA_STORAGE_AVG_KEY);
             if (avgRASizeAttribute == null) {
                 return null;
@@ -150,6 +158,7 @@ interface ShardInfoMetricsReader {
                 return null;
             }
 
+            avgRASizeList.add(avgRASize);
             var raStorage = avgRASize * commitLiveDocs;
             logger.trace(
                 "using {} RA-S [{}] (avg: [{}], live docs: [{}]) for segment [{}/{}]",
@@ -166,28 +175,41 @@ interface ShardInfoMetricsReader {
         ShardInfoMetrics computeShardInfo(ShardId shardId, ShardSize shardSize, long indexCreationDate, SegmentInfos segmentInfos) {
             // TODO: Moving liveDocCount into ShardSize would allow to skip this entirely if a project doesn't track RA-S.
             long liveDocCount = 0;
+            long raLiveDocCount = 0;
+            long deletedDocCount = 0;
+            long raDeletedDocCount = 0;
+            long raApproximatedDocCount = 0;
             Long totalRAValue = null;
-            final int segments = segmentInfos.size();
-            int approximatedSegments = 0;
+            int segmentCount = segmentInfos.size();
+            int raSegmentCount = 0;
+            int raApproximatedSegmentCount = 0;
+            List<Long> avgRASizeList = new ArrayList<>();
 
             for (SegmentCommitInfo si : segmentInfos) {
                 long commitTotalDocCount = si.info.maxDoc();
-                long commitLiveDocCount = commitTotalDocCount - si.getDelCount() - si.getSoftDelCount();
+                long commitDeletedDocCount = si.getDelCount() + si.getSoftDelCount();
+                long commitLiveDocCount = commitTotalDocCount - commitDeletedDocCount;
+
                 liveDocCount += commitLiveDocCount;
+                deletedDocCount += commitDeletedDocCount;
 
                 boolean isExact = commitLiveDocCount == commitTotalDocCount;
-                var raStorage = getRAStorageFromSegmentAttribute(shardId, si, commitLiveDocCount, isExact);
+                var raStorage = getRAStorageFromSegmentAttribute(shardId, si, commitLiveDocCount, isExact, avgRASizeList);
                 if (raStorage != null) {
                     totalRAValue = raStorage + (totalRAValue != null ? totalRAValue : 0);
+                    ++raSegmentCount;
+                    raLiveDocCount += commitLiveDocCount;
+                    raDeletedDocCount += commitDeletedDocCount;
                     if (isExact == false) {
-                        ++approximatedSegments;
+                        ++raApproximatedSegmentCount;
+                        raApproximatedDocCount += commitLiveDocCount;
                     }
                 }
             }
 
             if (totalRAValue != null) {
                 // report ratio of approximated segments per shard in histogram
-                double approximatedSegmentsRatio = segments == 0 ? 0 : (double) approximatedSegments / (double) segments;
+                double approximatedSegmentsRatio = raSegmentCount == 0 ? 0 : (double) raApproximatedSegmentCount / raSegmentCount;
                 this.shardInfoRaStorageApproximatedRatio.record(
                     approximatedSegmentsRatio,
                     Map.of("index", shardId.getIndexName(), "shard", Integer.toString(shardId.id()))
@@ -200,6 +222,25 @@ interface ShardInfoMetricsReader {
                     totalRAValue = 0L;
                 }
             }
+
+            boolean hasRAStats = avgRASizeList.isEmpty() == false;
+            final ShardInfoMetrics.RawStoredSizeStats raStats;
+            if (hasRAStats == false) {
+                raStats = ShardInfoMetrics.RawStoredSizeStats.EMPTY;
+            } else {
+                var avgRASizeStats = fillAvgRASizeStats(avgRASizeList);
+                raStats = new ShardInfoMetrics.RawStoredSizeStats(
+                    raSegmentCount,
+                    raLiveDocCount,
+                    raDeletedDocCount,
+                    raApproximatedDocCount,
+                    avgRASizeStats.min(),
+                    avgRASizeStats.max(),
+                    avgRASizeStats.total(),
+                    avgRASizeStats.squaredTotal()
+                );
+            }
+
             return new ShardInfoMetrics(
                 liveDocCount,
                 shardSize.interactiveSizeInBytes(),
@@ -207,8 +248,28 @@ interface ShardInfoMetricsReader {
                 totalRAValue,
                 shardSize.primaryTerm(),
                 shardSize.generation(),
-                indexCreationDate
+                indexCreationDate,
+                segmentCount,
+                deletedDocCount,
+                raStats
             );
+        }
+
+        private record AvgRASizeStats(long min, long max, double total, double squaredTotal) {}
+
+        private static AvgRASizeStats fillAvgRASizeStats(List<Long> avgRASizeList) {
+            double total = 0.0;
+            double squaredTotal = 0.0;
+            long min = Long.MAX_VALUE;
+            long max = 0;
+            for (Long x : avgRASizeList) {
+                total += x;
+                squaredTotal += (x * x);
+                min = Math.min(min, x);
+                max = Math.max(max, x);
+            }
+
+            return new AvgRASizeStats(min, max, total, squaredTotal);
         }
 
         @Override

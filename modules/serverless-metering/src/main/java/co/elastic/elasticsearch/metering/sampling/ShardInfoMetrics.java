@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
+
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -30,10 +32,31 @@ public record ShardInfoMetrics(
     long rawStoredSizeInBytes,
     long primaryTerm,
     long generation,
-    long indexCreationDateEpochMilli
+    long indexCreationDateEpochMilli,
+    long segmentCount,
+    long deletedDocCount,
+    RawStoredSizeStats rawStoredSizeStats
 ) implements Writeable {
 
-    public static final ShardInfoMetrics EMPTY = new ShardInfoMetrics(0, 0, 0L, 0, 0, 0, 0);
+    public record RawStoredSizeStats(
+        long segmentCount,
+        long liveDocCount,
+        long deletedDocCount,
+        long approximatedDocCount,
+        long avgMin,
+        long avgMax,
+        double avgTotal,
+        double avgSquaredTotal
+    ) {
+
+        public static final RawStoredSizeStats EMPTY = new RawStoredSizeStats(0, 0, 0L, 0, 0, 0, 0, 0);
+
+        public boolean isEmpty() {
+            return equals(ShardInfoMetrics.RawStoredSizeStats.EMPTY);
+        }
+    }
+
+    public static final ShardInfoMetrics EMPTY = new ShardInfoMetrics(0, 0, 0L, 0, 0, 0, 0, 0, 0, RawStoredSizeStats.EMPTY);
 
     public ShardInfoMetrics {
         assert interactiveSizeInBytes >= 0 : "interactiveSizeInBytes must be non negative";
@@ -46,16 +69,42 @@ public record ShardInfoMetrics(
     }
 
     public static ShardInfoMetrics from(StreamInput in) throws IOException {
-        return new ShardInfoMetrics(
-            in.readVLong(),
-            in.readVLong(),
-            in.readVLong(),
-            in.readVLong(),
-            in.readVLong(),
-            in.readVLong(),
-            in.readVLong()
-        );
-
+        if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_METADATA)) {
+            return new ShardInfoMetrics(
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                new RawStoredSizeStats(
+                    in.readVLong(),
+                    in.readVLong(),
+                    in.readVLong(),
+                    in.readVLong(),
+                    in.readVLong(),
+                    in.readVLong(),
+                    in.readDouble(),
+                    in.readDouble()
+                )
+            );
+        } else {
+            return new ShardInfoMetrics(
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                in.readVLong(),
+                0,
+                0,
+                RawStoredSizeStats.EMPTY
+            );
+        }
     }
 
     @Override
@@ -67,6 +116,19 @@ public record ShardInfoMetrics(
         out.writeVLong(primaryTerm);
         out.writeVLong(generation);
         out.writeVLong(indexCreationDateEpochMilli);
+
+        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_METADATA)) {
+            out.writeVLong(segmentCount);
+            out.writeVLong(deletedDocCount);
+            out.writeVLong(rawStoredSizeStats.segmentCount());
+            out.writeVLong(rawStoredSizeStats.liveDocCount());
+            out.writeVLong(rawStoredSizeStats.deletedDocCount());
+            out.writeVLong(rawStoredSizeStats.approximatedDocCount());
+            out.writeVLong(rawStoredSizeStats.avgMin());
+            out.writeVLong(rawStoredSizeStats.avgMax());
+            out.writeDouble(rawStoredSizeStats.avgTotal());
+            out.writeDouble(rawStoredSizeStats.avgSquaredTotal());
+        }
     }
 
     public boolean isMoreRecentThan(ShardInfoMetrics other) {

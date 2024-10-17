@@ -100,13 +100,16 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
                 final var indexName = indexEntry.getKey();
                 final var indexCreationDate = indexEntry.getValue().indexCreationDate;
 
-                Map<String, String> metadata = new HashMap<>();
-                fillIndexMetadata(metadata, clusterStateMetadata, indexName, partial);
+                Map<String, String> sourceMetadata = new HashMap<>();
+                Map<String, String> usageMetadata = new HashMap<>();
+                fillIndexMetadata(sourceMetadata, clusterStateMetadata, indexName, partial);
+                fillRAStorageMetadata(usageMetadata, indexEntry.getValue());
                 metrics.add(
                     new MetricValue(
                         format("%s:%s", RA_S_METRIC_ID_PREFIX, indexName),
                         RA_S_METRIC_TYPE,
-                        metadata,
+                        sourceMetadata,
+                        usageMetadata,
                         storedIngestSizeInBytes,
                         indexCreationDate
                     )
@@ -129,12 +132,64 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
         }
     }
 
+    private void fillRAStorageMetadata(Map<String, String> usageMetadata, RaStorageInfo info) {
+        usageMetadata.put("segment_count", Long.toString(info.segmentCount));
+        usageMetadata.put("doc_count", Long.toString(info.liveDocCount));
+        usageMetadata.put("deleted_doc_count", Long.toString(info.deletedDocCount));
+
+        if (info.hasRAStats) {
+            usageMetadata.put("ra_size_segment_count", Long.toString(info.raSegmentCount));
+            usageMetadata.put("ra_size_doc_count", Long.toString(info.raLiveDocCount));
+            usageMetadata.put("ra_size_deleted_doc_count", Long.toString(info.raDeletedDocCount));
+            usageMetadata.put("ra_size_approximated_doc_count", Long.toString(info.raApproximatedDocCount));
+
+            long avg = (long) (info.raAvgTotal / info.raSegmentCount);
+            long stddev = (long) Math.sqrt(info.raAvgSquaredTotal / info.raSegmentCount - Math.pow(avg, 2));
+            usageMetadata.put("ra_size_segment_min_ra_avg", Long.toString(info.raAvgMin));
+            usageMetadata.put("ra_size_segment_max_ra_avg", Long.toString(info.raAvgMax));
+            usageMetadata.put("ra_size_segment_avg_ra_avg", Long.toString(avg));
+            usageMetadata.put("ra_size_segment_stddev_ra_avg", Long.toString(stddev));
+        }
+    }
+
     private static final class RaStorageInfo {
         private Instant indexCreationDate;
         private long raStorageSize;
 
+        private long segmentCount;
+        private long liveDocCount;
+        private long deletedDocCount;
+
+        private long raSegmentCount;
+        private long raLiveDocCount;
+        private long raDeletedDocCount;
+        private long raApproximatedDocCount;
+        private long raAvgMin = Long.MAX_VALUE;
+        private long raAvgMax = 0;
+        private double raAvgTotal;
+        private double raAvgSquaredTotal;
+
+        private boolean hasRAStats = false;
+
         void accumulate(Map.Entry<SampledClusterMetricsService.ShardKey, SampledClusterMetricsService.ShardSample> t) {
             raStorageSize += t.getValue().shardInfo().rawStoredSizeInBytes();
+
+            segmentCount += t.getValue().shardInfo().segmentCount();
+            liveDocCount += t.getValue().shardInfo().docCount();
+            deletedDocCount += t.getValue().shardInfo().deletedDocCount();
+
+            if (t.getValue().shardInfo().rawStoredSizeStats().isEmpty() == false) {
+                hasRAStats = true;
+                raSegmentCount += t.getValue().shardInfo().rawStoredSizeStats().segmentCount();
+                raLiveDocCount += t.getValue().shardInfo().rawStoredSizeStats().liveDocCount();
+                raDeletedDocCount += t.getValue().shardInfo().rawStoredSizeStats().deletedDocCount();
+                raApproximatedDocCount += t.getValue().shardInfo().rawStoredSizeStats().approximatedDocCount();
+                raAvgMin = Math.min(raAvgMin, t.getValue().shardInfo().rawStoredSizeStats().avgMin());
+                raAvgMax = Math.max(raAvgMax, t.getValue().shardInfo().rawStoredSizeStats().avgMax());
+                raAvgTotal += t.getValue().shardInfo().rawStoredSizeStats().avgTotal();
+                raAvgSquaredTotal += t.getValue().shardInfo().rawStoredSizeStats().avgSquaredTotal();
+            }
+
             indexCreationDate = getEarlierValidCreationDate(
                 indexCreationDate,
                 Instant.ofEpochMilli(t.getValue().shardInfo().indexCreationDateEpochMilli())
@@ -143,6 +198,20 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
 
         RaStorageInfo combine(RaStorageInfo b) {
             raStorageSize += b.raStorageSize;
+
+            segmentCount += b.segmentCount;
+            liveDocCount += b.liveDocCount;
+            deletedDocCount += b.deletedDocCount;
+
+            raSegmentCount += b.raSegmentCount;
+            raLiveDocCount += b.raLiveDocCount;
+            raDeletedDocCount += b.raDeletedDocCount;
+            raApproximatedDocCount += b.raApproximatedDocCount;
+            raAvgMin = Math.min(raAvgMin, b.raAvgMin);
+            raAvgMax = Math.max(raAvgMax, b.raAvgMax);
+            raAvgTotal += b.raAvgTotal;
+            raAvgSquaredTotal += b.raAvgSquaredTotal;
+
             indexCreationDate = getEarlierValidCreationDate(indexCreationDate, b.indexCreationDate);
             return this;
         }

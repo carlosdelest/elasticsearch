@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.metering.action;
 
 import co.elastic.elasticsearch.metering.MockedClusterStateTestUtils;
+import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledShardInfos;
@@ -76,7 +77,6 @@ import java.util.stream.Collectors;
 import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.createMockClusterState;
 import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
-import static java.time.Instant.EPOCH;
 import static org.elasticsearch.cluster.metadata.IndexMetadata.INDEX_UUID_NA_VALUE;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
 import static org.elasticsearch.test.ClusterServiceUtils.setState;
@@ -446,8 +446,12 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 10L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 20L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 10L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 20L).build()
+        );
 
         createMockClusterState(
             clusterService,
@@ -483,8 +487,12 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 11L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 22L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 11L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 22L).build()
+        );
 
         createMockClusterState(
             clusterService,
@@ -520,8 +528,12 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 11L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 22L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 11L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 22L).build()
+        );
 
         createMockClusterState(clusterService, 3, 2, b -> {
             b.routingTable(
@@ -577,10 +589,18 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId4 = new ShardId(index4, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 10L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 20L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId3)).thenReturn(new ShardInfoMetrics(300L, 30L, 0L, 30L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId4)).thenReturn(new ShardInfoMetrics(400L, 40L, 0L, 40L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 10L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 20L).build()
+        );
+        when(mockShardsInfo.get(shardId3)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(300L, 30L, 0L, 30L).build()
+        );
+        when(mockShardsInfo.get(shardId4)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(400L, 40L, 0L, 40L).build()
+        );
 
         var query = new String[] { "foo*", "bar*" };
 
@@ -643,10 +663,18 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var dsShardId = new ShardId(dataStreamIndex, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 10L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 20L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId3)).thenReturn(new ShardInfoMetrics(300L, 30L, 0L, 30L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(dsShardId)).thenReturn(new ShardInfoMetrics(400L, 40L, 0L, 40L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 10L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 20L).build()
+        );
+        when(mockShardsInfo.get(shardId3)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(300L, 30L, 0L, 30L).build()
+        );
+        when(mockShardsInfo.get(dsShardId)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(400L, 40L, 0L, 40L).build()
+        );
 
         var query = new String[] { "foo*" };
 
@@ -721,8 +749,12 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var shardId2 = new ShardId(index2, 0);
 
         SampledShardInfos mockShardsInfo = mock();
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 11L, 0, 0, EPOCH.toEpochMilli()));
-        when(mockShardsInfo.get(shardId2)).thenReturn(new ShardInfoMetrics(200L, 20L, 0L, 22L, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 11L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 22L).build()
+        );
 
         createMockClusterState(
             clusterService,
@@ -807,7 +839,9 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         SampledShardInfos mockShardsInfo = mock();
         when(mockShardsInfo.get(any())).thenReturn(ShardInfoMetrics.EMPTY);
-        when(mockShardsInfo.get(shardId1)).thenReturn(new ShardInfoMetrics(100L, 10L, 0L, 0, 0, 0, EPOCH.toEpochMilli()));
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 0).build()
+        );
 
         createMockClusterState(
             clusterService,
