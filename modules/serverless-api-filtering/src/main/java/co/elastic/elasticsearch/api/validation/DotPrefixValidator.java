@@ -24,6 +24,8 @@ import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.logging.DeprecationCategory;
+import org.elasticsearch.common.logging.DeprecationLogger;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.Nullable;
@@ -34,6 +36,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 public abstract class DotPrefixValidator<RequestType> implements MappedActionFilter {
+    private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(DotPrefixValidator.class);
+
     public static final Setting<Boolean> VALIDATE_DOT_PREFIXES = Setting.boolSetting(
         "serverless.indices.validate_dot_prefixes",
         false,
@@ -90,6 +94,18 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
         Set<String> indices = getIndicesFromRequest((RequestType) request);
         if (isEnabled) {
             validateIndices(indices);
+        } else if (isOperator() == false) {
+            for (String index : indices) {
+                char c = getFirstChar(index);
+                if (c == '.') {
+                    deprecationLogger.critical(
+                        DeprecationCategory.INDICES,
+                        "dot-prefix",
+                        "Index [{}] name begins with a dot (.) and will not be allowed in the future",
+                        index
+                    );
+                }
+            }
         }
         chain.proceed(task, action, request, listener);
     }
@@ -100,10 +116,11 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
                 if (Strings.hasLength(index)) {
                     char c = getFirstChar(index);
                     if (c == '.') {
-                        if (IGNORED_INDEX_NAMES.contains(index)) {
+                        final String strippedName = stripDateMath(index);
+                        if (IGNORED_INDEX_NAMES.contains(strippedName)) {
                             return;
                         }
-                        if (IGNORED_INDEX_PATTERNS.stream().anyMatch(p -> p.matcher(index).matches())) {
+                        if (IGNORED_INDEX_PATTERNS.stream().anyMatch(p -> p.matcher(strippedName).matches())) {
                             return;
                         }
                         throw new IllegalArgumentException("Index [" + index + "] name beginning with a dot (.) is not allowed");
@@ -127,7 +144,18 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
         return c;
     }
 
-    private boolean isOperator() {
+    private static String stripDateMath(String index) {
+        char c = index.charAt(0);
+        if (c == '<') {
+            assert index.charAt(index.length() - 1) == '>'
+                : "expected index name with date math to start with < and end with >, how did this pass request validation? " + index;
+            return index.substring(1, index.length() - 1);
+        } else {
+            return index;
+        }
+    }
+
+    boolean isOperator() {
         return AuthenticationField.PRIVILEGE_CATEGORY_VALUE_OPERATOR.equals(
             threadContext.getHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY)
         );
