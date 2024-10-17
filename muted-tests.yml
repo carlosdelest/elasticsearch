@@ -119,9 +119,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2808
 - class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
-- class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceTests
-  method: testUploadWarmingSingleRegion
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2868
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
   method: "test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2899"
