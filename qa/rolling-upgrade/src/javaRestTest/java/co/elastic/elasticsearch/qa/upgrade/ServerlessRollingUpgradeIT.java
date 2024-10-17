@@ -102,7 +102,7 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
         assertDocCount(client(), index2, docCount);
     }
 
-    // TODO remove this test (ES-9563)
+    // TODO: remove this test (ES-9563)
     public void testFastRefreshUpgrade() throws Exception {
         record NodeDetails(String name, int indexInCluster, Node clientNode) {}
         ;
