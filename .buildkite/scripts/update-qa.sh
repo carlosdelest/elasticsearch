@@ -18,19 +18,24 @@
 set -euo pipefail
 source "$BUILDKITE_DIR/scripts/utils/misc.sh"
 
-echo "--- Resolve data from deployment build"
-DEPLOY_PIPELINE_SLUG="elasticsearch-serverless-deploy-qa"
-BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
-BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${DEPLOY_PIPELINE_SLUG}/builds?branch=${BUILDKITE_BRANCH}&state=passed" | jq '.[0]')
-DEPLOY_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.web_url')
-PROJECT_ID=$(echo ${BUILD_JSON} | jq -r '.meta_data."ess-project-id"')
+PROJECT_ID=${PROJECT_ID:-$(buildkite-agent meta-data get ess-project-id --default '')}
+ESS_ROOT_USERNAME=${ESS_ROOT_USERNAME:-$(buildkite-agent meta-data get ess-username --default '')}
+ESS_ROOT_PASSWORD_ENCRYPTED=${ESS_ROOT_PASSWORD_ENCRYPTED:-$(buildkite-agent meta-data get ess-password-encrypted --default '')}
 
-ESS_ROOT_USERNAME=$(echo ${BUILD_JSON} | jq -r '.meta_data."ess-username"')
-ESS_PASSWORD_ENCRYPTED=$(echo ${BUILD_JSON} | jq -r '.meta_data."ess-password-encrypted"')
-ESS_ROOT_PASSWORD=$(decrypt "$ESS_PASSWORD_ENCRYPTED")
+if [ -z "${PROJECT_ID}" ]; then
+  echo "--- Resolve data from deployment build"
+  DEPLOY_PIPELINE_SLUG="elasticsearch-serverless-deploy-qa"
+  BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
+  BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${DEPLOY_PIPELINE_SLUG}/builds?branch=${BUILDKITE_BRANCH}&state=passed" | jq '.[0]')
+  DEPLOY_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.web_url')
+  PROJECT_ID=$(echo ${BUILD_JSON} | jq -r '.meta_data."ess-project-id"')
+  ESS_ROOT_USERNAME=$(echo ${BUILD_JSON} | jq -r '.meta_data."ess-username"')
+  ESS_ROOT_PASSWORD_ENCRYPTED=$(echo ${BUILD_JSON} | jq -r '.meta_data."ess-password-encrypted"')
 
-echo "Updating deployment from: ${DEPLOY_BUILD_URL}" | buildkite-agent annotate --style "info" --context "updated-build-url"
+  echo "Updating deployment from: ${DEPLOY_BUILD_URL}" | buildkite-agent annotate --style "info" --context "updated-build-url"
+fi
 
+ESS_ROOT_PASSWORD=$(decrypt "$ESS_ROOT_PASSWORD_ENCRYPTED")
 API_KEY=$(vault_with_retries read -field api-key "$VAULT_PATH_API_KEY")
 
 DEPLOYMENT_NAME=$(curl -k -H "Authorization: ApiKey $API_KEY" \
@@ -66,7 +71,13 @@ echo '--- Wait for ES being ready'
 PROJ_INFO=$(curl -H "Authorization: ApiKey $API_KEY" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE/${PROJECT_ID}")
 ES_ENDPOINT=$(echo $PROJ_INFO | jq -r '.endpoints.elasticsearch')
 
+checkEssUpdated() {
+    # confirm all cluster nodes are running the updated version
+    SHORT_BUILD_HASH=${IMAGE_OVERRIDE:64:12}
+    curl -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD "$ES_ENDPOINT/_nodes" | jq -e ".nodes | map(.build_hash[0:12]) | unique == [\"${SHORT_BUILD_HASH}\"]"
+}
+
 # wait for a maximum of 20 minutes max
-retry 30 40 checkEssAvailability
+retry 30 40 checkEssUpdated
 
 echo "Elasticsearch cluster available via $ES_ENDPOINT" | buildkite-agent annotate --style "info" --context "ess-public-url"

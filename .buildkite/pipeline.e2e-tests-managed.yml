@@ -9,6 +9,7 @@ env:
   IMAGE_OVERRIDE: "${IMAGE_OVERRIDE}"
   SKIP_DOCKER: "${SKIP_DOCKER:-false}"
   PROJECT_TYPE: "${PROJECT_TYPE:-elasticsearch}"
+  UPGRADED_PROJECT: "${UPGRADED_PROJECT:-false}"
 
 steps:
   - label: ":docker: Publish docker test images"
@@ -32,6 +33,19 @@ steps:
       image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
       memory: "4G"
 
+  - label: ":k8s: Upgrade serverless deployment"
+    if: build.env('UPGRADED_PROJECT') == 'true'
+    key: upgrade-ess
+    command: "$$BUILDKITE_DIR/scripts/update-qa.sh"
+    depends_on:
+      - step: deploy-ess
+    timeout_in_minutes: 30
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
+    env:
+      IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
+
   - label: ":java: Run serverless e2e tests"
     key: run-ess-e2e-tests
     agents:
@@ -41,6 +55,7 @@ steps:
     command: "$$BUILDKITE_DIR/scripts/run-e2e-tests.sh"
     depends_on:
       - step: deploy-ess
+      - step: upgrade-ess
 
   - label: ":k8s: Undeploy deployment from ${TEST_ENV}"
     key: undeploy-ess

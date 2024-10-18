@@ -51,7 +51,6 @@ steps:
 
   - label: ":docker: Publish docker images"
     key: docker-publish
-    branches: "main patch/*"
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
     agents:
@@ -74,18 +73,34 @@ steps:
       image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
       memory: "4G"
 
-  - label: ":k8s: :java: Run Elasticsearch E2E tests"
-    trigger: elasticsearch-serverless-e2e-tests-qa
-    depends_on: docker-publish
-    branches: "main patch/*"
-    build:
-      message: "${BUILDKITE_MESSAGE}"
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      env:
-        SKIP_DOCKER: "${SKIP_DOCKER}"
+  - group: ":k8s: Serverless end-to-end tests"
+    steps:
+      - label: ":k8s: :java: Test newly created project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+      - label: ":k8s: :java: Test upgraded project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            UPGRADED_PROJECT: true
+            DEPLOY_ID: "ess-e2e-ci-upgrade-${IMAGE_TAG}"
+            IMAGE_OVERRIDE: ""
+    notify:
+      - github_commit_status:
+          context: "elasticsearch-serverless/e2e tests"
 
-  - wait
+  - wait: ~
 
   - label: ":argo: Promote build using gpctl"
     trigger: gpctl-promote
