@@ -136,21 +136,18 @@ public class TaskActivityTracker {
     }
 
     void onTaskStart(String action, Task task) {
-        if (log.isDebugEnabled()) {
-            log.debug(
-                "Tracking: {},{},{},{}",
+        if (log.isTraceEnabled()) {
+            log.trace(
+                "Tracking: {},{},{},{},{}",
                 isOperator() ? "operator" : "not_operator",
-                getInternalUserName(),
+                isUntrackedInternalUser() ? "untracked_internal" : "not_untracked_internal",
+                getUserName(),
                 actionTierMapper.toTier(action),
                 action
             );
         }
 
-        if (isOperator()) {
-            log.debug("Skip because user has operator privilege, action: " + action);
-            return;
-        } else if (isUntrackedInternalUser()) {
-            log.debug("Skip because is internal user, action: " + action);
+        if (isOperator() || isUntrackedInternalUser()) {
             return;
         }
 
@@ -162,34 +159,34 @@ public class TaskActivityTracker {
         switch (actionTier) {
             case SEARCH -> {
                 if (hasSearchRole == false) {
-                    log.debug("found action with SEARCH tier but node not search role: " + action);
+                    log.trace("found action with SEARCH tier but node not search role: " + action);
                 }
 
                 if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(searchCurrent, now)) {
                     search = searchCurrent.makeNewPeriod(now);
-                    log.info("New activity period started: tier[{}], action[{}]", actionTier, action);
+                    log.info("New activity period started: tier[{}], action[{}], user[{}]", actionTier, action, getUserName());
                 }
                 searchTaskIds.add(task.getId());
             }
             case INDEX -> {
                 if (hasSearchRole) {
-                    log.debug("found action with INDEX tier but node not index role: " + action);
+                    log.trace("found action with INDEX tier but node not index role: " + action);
                 }
 
                 if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(indexCurrent, now)) {
                     index = indexCurrent.makeNewPeriod(now);
-                    log.info("New activity period started: tier[{}], action[{}]", actionTier, action);
+                    log.info("New activity period started: tier[{}], action[{}], user[{}]", actionTier, action, getUserName());
                 }
                 indexTaskIds.add(task.getId());
             }
             case BOTH -> {
                 if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(searchCurrent, now)) {
                     search = searchCurrent.makeNewPeriod(now);
-                    log.info("New activity period started: tier[{}], action[{}]", actionTier, action);
+                    log.info("New activity period started: tier[{}], action[{}], user[{}]", actionTier, action, getUserName());
                 }
                 if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(indexCurrent, now)) {
                     index = indexCurrent.makeNewPeriod(now);
-                    log.info("New activity period started: tier[{}], action[{}]", actionTier, action);
+                    log.info("New activity period started: tier[{}], action[{}], user[{}]", actionTier, action, getUserName());
                 }
                 bothTaskIds.add(task.getId());
             }
@@ -235,6 +232,11 @@ public class TaskActivityTracker {
             return INTERNAL_USERS_TO_IGNORE.contains(iu);
         }
         return false;
+    }
+
+    private String getUserName() {
+        var user = securityContext.getUser();
+        return user == null ? null : user.principal();
     }
 
     private String getInternalUserName() {
