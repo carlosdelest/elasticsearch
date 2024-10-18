@@ -213,6 +213,8 @@ tasks {
                 "tsdb/20_mapping/disabled source is not supported",
                 "tsdb/20_mapping/source include/exclude",
                 "logsdb/20_source_mapping/disabled _source is not supported",
+                "logsdb/20_source_mapping/include/exclude is supported with stored _source",
+                "logsdb/20_source_mapping/include/exclude is not supported with synthetic _source",
 
                 //Tests rely on updating replicas which is not supported in Serverless
                 "indices.put_settings/10_basic/*",
