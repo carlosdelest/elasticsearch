@@ -1,0 +1,15 @@
+steps:
+  - label: ":git: Update lucene_snapshot branch"
+    command: ".buildkite/scripts/update-lucene-snapshot-branch.sh"
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-4"
+      image: family/elasticsearch-ubuntu-2022
+    timeout_in_minutes: 15
+  - wait
+  - trigger: "elasticsearch-serverless-lucene-snapshot-periodic"
+    build:
+      branch: "${BUILDKITE_BRANCH}"
+    async: true
