@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.metering.activitytracking.ActivityTests;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.telemetry.InstrumentType;
 import org.elasticsearch.telemetry.RecordingMeterRegistry;
@@ -40,7 +41,9 @@ import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvid
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_LATEST_ACTIVITY_TIME;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY;
+import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO;
 import static co.elastic.elasticsearch.metering.sampling.VCUSampledMetricsBackfillStrategy.BackfillType;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
@@ -109,13 +112,16 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
 
         var spMinProvisionedMemory = String.valueOf(randomLongBetween(0, 10_000));
         var spMin = String.valueOf(randomLongBetween(0, 100));
+        var spMinStorageRamRatio = Strings.format1Decimals(randomDouble() * 100, "");
         var usageMetadata = Map.of(
             USAGE_METADATA_APPLICATION_TIER,
             "search",
             USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
             spMinProvisionedMemory,
             USAGE_METADATA_SP_MIN,
-            spMin
+            spMin,
+            USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO,
+            spMinStorageRamRatio
         );
 
         var value = metricValue(randomNonNegativeLong(), usageMetadata);
@@ -124,6 +130,7 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
 
         assertThat(sink.metadata.get(), hasEntry(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY, spMinProvisionedMemory));
         assertThat(sink.metadata.get(), hasEntry(USAGE_METADATA_SP_MIN, spMin));
+        assertThat(sink.metadata.get(), hasEntry(USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO, spMinStorageRamRatio));
     }
 
     public void testConstantBackfillMissingSpMin() {
@@ -153,6 +160,8 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
         var spMinProvisioned2 = randomLongBetween(0, 10_000);
         var vcu1 = randomLongBetween(0, 10_000);
         var vcu2 = randomLongBetween(0, 10_000);
+        var ratio1 = randomDouble() * 100;
+        var ratio2 = randomDouble() * 100;
 
         var metadata1 = Map.of(
             USAGE_METADATA_APPLICATION_TIER,
@@ -160,7 +169,9 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
             USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
             Long.toString(spMinProvisioned1),
             USAGE_METADATA_SP_MIN,
-            Long.toString(spMin1)
+            Long.toString(spMin1),
+            USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO,
+            Strings.format1Decimals(ratio1, "")
         );
         var metadata2 = Map.of(
             USAGE_METADATA_APPLICATION_TIER,
@@ -168,7 +179,9 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
             USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
             Long.toString(spMinProvisioned2),
             USAGE_METADATA_SP_MIN,
-            Long.toString(spMin2)
+            Long.toString(spMin2),
+            USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO,
+            Strings.format1Decimals(ratio2, "")
         );
         var sample1 = metricValue(vcu1, metadata1);
         var sample2 = metricValue(vcu2, metadata2);
@@ -181,19 +194,14 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
 
         var expectedVCU = Long.min(vcu1, vcu2);
         var expectedSpMinProvisioned = Long.min(spMinProvisioned1, spMinProvisioned2);
-        var expectedSpMin = Long.min(spMin1, spMin2);
-        {
-            var sink = new ValueConsumer();
-            backfill.interpolate(currentTime, sample1, previousTime, sample2, backfillTime, sink);
-            assertThat(sink.value.get(), equalTo(expectedVCU));
-            assertSpMinInfo(sink, expectedSpMinProvisioned, expectedSpMin);
-        }
-        {
-            var sink = new ValueConsumer();
-            backfill.interpolate(currentTime, sample2, previousTime, sample1, backfillTime, sink);
-            assertThat(sink.value.get(), equalTo(expectedVCU));
-            assertSpMinInfo(sink, expectedSpMinProvisioned, expectedSpMin);
-        }
+        var expectedSpMin = spMinProvisioned1 < spMinProvisioned2 ? spMin1 : spMin2;
+        var expectedRatio = spMinProvisioned1 < spMinProvisioned2 ? ratio1 : ratio2;
+
+        var sink = new ValueConsumer();
+        backfill.interpolate(currentTime, sample1, previousTime, sample2, backfillTime, sink);
+        assertThat(sink.value.get(), equalTo(expectedVCU));
+        assertSpMinInfo(sink, expectedSpMinProvisioned, expectedSpMin, expectedRatio);
+
     }
 
     /**
@@ -384,11 +392,15 @@ public class VCUSampledMetricsBackfillStrategyTests extends ESTestCase {
         }
     }
 
-    private static void assertSpMinInfo(ValueConsumer sink, long expectedSpMinProvisioned, long expectedSpMin) {
-        var spMinProvisioned = Long.parseLong(sink.metadata.get().get(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY));
-        var spMin = Long.parseLong(sink.metadata.get().get(USAGE_METADATA_SP_MIN));
-        assertThat(spMinProvisioned, equalTo(expectedSpMinProvisioned));
-        assertThat(spMin, equalTo(expectedSpMin));
+    private static void assertSpMinInfo(ValueConsumer sink, long expectedSpMinProvisioned, long expectedSpMin, double expectedRatio) {
+        assertThat(
+            sink.metadata.get(),
+            allOf(
+                hasEntry(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY, (Long.toString(expectedSpMinProvisioned))),
+                hasEntry(USAGE_METADATA_SP_MIN, (Long.toString(expectedSpMin))),
+                hasEntry(USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO, (Strings.format1Decimals(expectedRatio, "")))
+            )
+        );
     }
 
     private static Map<String, String> buildMetadata(String tier, boolean active, @Nullable Instant lastActivity) {

@@ -63,21 +63,26 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
         boolean partial = sample.status().contains(SampledClusterMetricsService.SamplingStatus.PARTIAL);
         List<MetricValue> metrics = new ArrayList<>();
         for (final var shardEntry : sample.shardSamples().entrySet()) {
-            long size = shardEntry.getValue().shardInfo().totalSizeInBytes();
+            ShardInfoMetrics shardMetrics = shardEntry.getValue().shardInfo();
+            long size = shardMetrics.totalSizeInBytes();
             // Do not generate records with size 0
             if (size > 0) {
                 int shardId = shardEntry.getKey().shardId();
                 var indexName = shardEntry.getKey().indexName();
-                var indexCreationDate = Instant.ofEpochMilli(shardEntry.getValue().shardInfo().indexCreationDateEpochMilli());
+                var indexCreationDate = Instant.ofEpochMilli(shardMetrics.indexCreationDateEpochMilli());
 
                 Map<String, String> sourceMetadata = new HashMap<>();
                 sourceMetadata.put(METADATA_SHARD_KEY, Integer.toString(shardId));
                 fillIndexMetadata(sourceMetadata, clusterStateMetadata, indexName, partial);
+
+                Map<String, String> usageMetadata = new HashMap<>();
+                fillIXUsageMetadata(usageMetadata, shardMetrics);
                 metrics.add(
                     new MetricValue(
                         format("%s:%s", IX_METRIC_ID_PREFIX, shardEntry.getKey()),
                         IX_METRIC_TYPE,
                         sourceMetadata,
+                        usageMetadata,
                         size,
                         indexCreationDate
                     )
@@ -130,6 +135,13 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
         if (inDatastream) {
             sourceMetadata.put(METADATA_DATASTREAM_KEY, indexAbstraction.getParentDataStream().getName());
         }
+    }
+
+    private void fillIXUsageMetadata(Map<String, String> usageMetadata, ShardInfoMetrics shardMetrics) {
+        usageMetadata.put("segment_count", Long.toString(shardMetrics.segmentCount()));
+        usageMetadata.put("doc_count", Long.toString(shardMetrics.docCount()));
+        usageMetadata.put("deleted_doc_count", Long.toString(shardMetrics.deletedDocCount()));
+        usageMetadata.put("interactive_size", Long.toString(shardMetrics.interactiveSizeInBytes()));
     }
 
     private void fillRAStorageMetadata(Map<String, String> usageMetadata, RaStorageInfo info) {

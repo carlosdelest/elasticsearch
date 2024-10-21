@@ -84,7 +84,7 @@ public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider
         SampledMetricsProvider.BackfillSink sink
     ) {
         long interpolatedVCU = Long.min(currentSample.value(), previousSample.value());
-        var spMinInfo = tryInterpolateSPMin(currentSample, previousSample);
+        var spMinInfo = tryInterpolateSPMinInfo(currentSample, previousSample);
         var tier = currentSample.usageMetadata().get(SampledVCUMetricsProvider.USAGE_METADATA_APPLICATION_TIER);
         assert tier != null;
         var activity = tier.equals("search") ? searchActivity : indexActivity;
@@ -106,25 +106,29 @@ public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider
     static SampledVCUMetricsProvider.SPMinInfo tryExtractSPMinInfo(MetricValue sample) {
         var spMinProvisioned = getSpMinProvisionedMemory(sample);
         if (spMinProvisioned != null) {
-            var spMin = Long.parseLong(sample.usageMetadata().get(SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN));
-            return new SampledVCUMetricsProvider.SPMinInfo(spMinProvisioned, spMin);
+            return new SampledVCUMetricsProvider.SPMinInfo(spMinProvisioned, getSpMin(sample), getSpMinStorageRamRatio(sample));
         }
         return null;
     }
 
     @Nullable
-    static SampledVCUMetricsProvider.SPMinInfo tryInterpolateSPMin(MetricValue currentSample, MetricValue previousSample) {
+    static SampledVCUMetricsProvider.SPMinInfo tryInterpolateSPMinInfo(MetricValue currentSample, MetricValue previousSample) {
         var currentSpMinProvisioned = getSpMinProvisionedMemory(currentSample);
         var previousSpMinProvisioned = getSpMinProvisionedMemory(previousSample);
         if (previousSpMinProvisioned != null && currentSpMinProvisioned != null) {
-            var currentSpMin = getSpMin(currentSample);
-            var previousSpMin = getSpMin(previousSample);
-            // If sp_min_provisioned_memory is present sp_min is also present
-            assert currentSpMin != null && previousSpMin != null;
-
-            long spMinProvisioned = Long.min(previousSpMinProvisioned, currentSpMinProvisioned);
-            long spMin = Long.min(previousSpMin, currentSpMin);
-            return new SampledVCUMetricsProvider.SPMinInfo(spMinProvisioned, spMin);
+            // If sp_min_provisioned_memory is present sp_min and sp_min_storage_ram_ratio are also present
+            // Return the values associated with the smallest sp_min_provisioned_memory
+            return previousSpMinProvisioned < currentSpMinProvisioned
+                ? new SampledVCUMetricsProvider.SPMinInfo(
+                    previousSpMinProvisioned,
+                    getSpMin(previousSample),
+                    getSpMinStorageRamRatio(previousSample)
+                )
+                : new SampledVCUMetricsProvider.SPMinInfo(
+                    currentSpMinProvisioned,
+                    getSpMin(currentSample),
+                    getSpMinStorageRamRatio(currentSample)
+                );
         }
         return null;
     }
@@ -186,8 +190,15 @@ public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider
         return spMinProvisionedMem == null ? null : Long.parseLong(spMinProvisionedMem);
     }
 
-    private static Long getSpMin(MetricValue metricValue) {
+    private static long getSpMin(MetricValue metricValue) {
         String spMin = metricValue.usageMetadata().get(SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN);
-        return spMin == null ? null : Long.parseLong(spMin);
+        assert spMin != null : "sp_min should be present";
+        return Long.parseLong(spMin);
+    }
+
+    private static double getSpMinStorageRamRatio(MetricValue metricValue) {
+        String ratio = metricValue.usageMetadata().get(SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO);
+        assert ratio != null : "sp_min_storage_ram_ratio should be present";
+        return Double.parseDouble(ratio);
     }
 }

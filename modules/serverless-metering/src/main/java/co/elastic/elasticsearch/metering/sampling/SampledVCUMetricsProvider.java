@@ -24,6 +24,8 @@ import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -55,6 +57,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     public static final String USAGE_METADATA_LATEST_ACTIVITY_TIME = "latest_activity_timestamp";
     public static final String USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY = "sp_min_provisioned_memory";
     public static final String USAGE_METADATA_SP_MIN = "sp_min";
+    public static final String USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO = "sp_min_storage_ram_ratio";
     public static final String METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN = "es.metering.reporting.backfill.activity.unknown.total";
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
@@ -134,11 +137,12 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
         if (spMinInfo != null) {
             usageMetadata.put(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY, Long.toString(spMinInfo.provisionedMemory));
             usageMetadata.put(USAGE_METADATA_SP_MIN, Long.toString(spMinInfo.spMin));
+            usageMetadata.put(USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO, Strings.format1Decimals(spMinInfo.storageRamRatio, ""));
         }
         return usageMetadata;
     }
 
-    record SPMinInfo(long provisionedMemory, long spMin) {};
+    record SPMinInfo(long provisionedMemory, long spMin, double storageRamRatio) {};
 
     static class SPMinProvisionedMemoryProvider implements Function<SampledClusterMetrics, SPMinInfo> {
         private final long provisionedStorage;
@@ -210,7 +214,32 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             double boostPower = spMin / 100.0 - basePower;
             double cacheSize = boostedDataSetSize * boostPower + totalDataSetSize * basePower;
             long provisionedMemory = (long) (cacheSize / storageRamRatio);
-            return new SPMinInfo(provisionedMemory, spMin);
+
+            if (provisionedMemory > currentInfo.searchTierMetrics().memorySize()) {
+                logger.warn(
+                    "spMinProvisionedMemory: [{}] exceeded provisioned search tier memory: [{}] "
+                        + "[spMin: {}, storage: {}, memory: {}, interactiveData: {}, totalData: {}]",
+                    ByteSizeValue.ofBytes(provisionedMemory),
+                    ByteSizeValue.ofBytes(currentInfo.searchTierMetrics().memorySize()),
+                    spMin,
+                    ByteSizeValue.ofBytes(provisionedStorage),
+                    ByteSizeValue.ofBytes(provisionedRAM),
+                    ByteSizeValue.ofBytes(boostedDataSetSize),
+                    ByteSizeValue.ofBytes(totalDataSetSize)
+                );
+            } else if (logger.isTraceEnabled()) {
+                logger.trace(
+                    "spMinProvisionedMemory: {} [spMin: {}, storage: {}, memory: {}, interactiveData: {}, totalData: {}]",
+                    ByteSizeValue.ofBytes(provisionedMemory),
+                    spMin,
+                    ByteSizeValue.ofBytes(provisionedStorage),
+                    ByteSizeValue.ofBytes(provisionedRAM),
+                    ByteSizeValue.ofBytes(boostedDataSetSize),
+                    ByteSizeValue.ofBytes(totalDataSetSize)
+                );
+            }
+
+            return new SPMinInfo(provisionedMemory, spMin, storageRamRatio);
         }
     }
 }

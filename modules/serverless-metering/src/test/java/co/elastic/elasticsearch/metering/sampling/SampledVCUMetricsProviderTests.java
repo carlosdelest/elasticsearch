@@ -52,6 +52,7 @@ import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvid
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_LATEST_ACTIVITY_TIME;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY;
+import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.equalTo;
@@ -139,7 +140,9 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
                     USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
                     String.valueOf(spMinProvisionedMemory),
                     USAGE_METADATA_SP_MIN,
-                    String.valueOf(DEFAULT_SP_MIN)
+                    String.valueOf(DEFAULT_SP_MIN),
+                    USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO,
+                    "1"
                 )
             )
         );
@@ -220,7 +223,9 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
                     USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
                     String.valueOf(spMinProvisionedMemory),
                     USAGE_METADATA_SP_MIN,
-                    String.valueOf(DEFAULT_SP_MIN)
+                    String.valueOf(DEFAULT_SP_MIN),
+                    USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO,
+                    "1"
                 )
             )
         );
@@ -256,7 +261,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
         long firstSpMin = randomIntBetween(0, 100);
         long secondSpMin = randomIntBetween(0, 100);
-        var spMinProvider = buildSpMinTestProvider(List.of(new SPMinInfo(1, firstSpMin), new SPMinInfo(2, secondSpMin)));
+        var spMinProvider = buildSpMinTestProvider(List.of(new SPMinInfo(1, firstSpMin, 0.0), new SPMinInfo(2, secondSpMin, 0.0)));
         var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
             metricsService,
             Duration.ofMinutes(15),
@@ -455,7 +460,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
     }
 
     private static Function<SampledClusterMetrics, SPMinInfo> buildSpMinTestProvider(Long... provisionedMem) {
-        var spMinInfos = Arrays.stream(provisionedMem).map(v -> new SPMinInfo(v, DEFAULT_SP_MIN)).toList();
+        var spMinInfos = Arrays.stream(provisionedMem).map(v -> new SPMinInfo(v, DEFAULT_SP_MIN, 1.0)).toList();
         return buildSpMinTestProvider(spMinInfos);
     }
 
