@@ -116,6 +116,9 @@ To deploy a branch snapshot into QA
 1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa
    This deploys a snapshot from the selected branch into our QA environment (see https://docs.elastic.dev/serverless/qa)
    by publishing a docker snapshot into our internal docker registry and then using the serverless project api to deploy that snapshot to our serverless platform QA environment.
+   Ensure you select the intended git branch when triggering this pipeline for your testing. If you want to deploy
+   from a pull request branch, you can point to that PR by declaring the branch in the format of `pull/2996/head` where `2996`
+   is the number of your pull request.
 
    By default a project of type `elasticsearch` is deployed. If you want to deploy a different project type (`observability` or `security`) you can pass the project type as environment variable when triggering the pipeline above via:
 
