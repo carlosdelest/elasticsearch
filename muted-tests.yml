@@ -142,3 +142,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT
   method: testVirtualBatchedCompoundCommitUploadMetrics
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2976
+- class: co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProviderTests
+  method: testSpMinProvisionedMemoryLotsOfShards
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3007
