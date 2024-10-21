@@ -85,9 +85,6 @@ tests:
 - class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2432"
   method: "test {p0=esql/180_match_operator/*}"
-- class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
-  method: testRandomActivities
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2327
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2496"
   method: "testMultipleDatastreamsRanking"
