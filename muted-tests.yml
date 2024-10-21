@@ -111,9 +111,6 @@ tests:
 - class: org.elasticsearch.datastreams.LogsDataStreamRestIT
   method: testLogsDBSnapshotCreateRestoreMount
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2782
-- class: co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests
-  method: testScheduledCommitUpload
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2808
 - class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
