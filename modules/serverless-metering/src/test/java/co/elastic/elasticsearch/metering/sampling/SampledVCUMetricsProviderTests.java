@@ -55,6 +55,7 @@ import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvid
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
+import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasSize;
@@ -437,12 +438,12 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         long provisionedStorage = storageRamRatio * provisionedRam;
         var provider = new SPMinProvisionedMemoryProvider(clusterService, provisionedStorage, provisionedRam);
 
-        // basePower = 5, since default SPMin is 100
-        // boostPower = 95, SPMin - basePower
+        // basePower = 0.05, since default SPMin is 100
+        // boostPower = 0.95, SPMin/100 - basePower
         // cacheSize = 10500, boostSize * boostPower + totalSize * basePower, 100 * 95 + 200 * 5
-        long cacheSize = totalInteractive * 95 + (totalNonInteractive + totalInteractive) * 5;
-        long expectSPMinRam = cacheSize / storageRamRatio / 100;
-        assertThat(provider.apply(current).provisionedMemory(), equalTo(expectSPMinRam));
+        double cacheSize = totalInteractive * 0.95 + (totalNonInteractive + totalInteractive) * 0.05;
+        double expectSPMinRam = cacheSize / storageRamRatio;
+        assertThat((double) provider.apply(current).provisionedMemory(), closeTo(expectSPMinRam, 1.0));
     }
 
     private Long getSPMinProvisionedMemory(
