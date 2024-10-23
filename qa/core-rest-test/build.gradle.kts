@@ -162,6 +162,7 @@ tasks {
                 "indices.simulate_template/*/*",
                 "simulate.ingest/10_basic/Test index templates with pipelines",
                 "simulate.ingest/10_basic/Test bad pipeline substitution",
+                "simulate.ingest/10_basic/Test mapping validation from templates",
                 // - Field Mappings
                 "indices.get_field_mapping/*/*",
                 // - Clone

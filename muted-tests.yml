@@ -94,9 +94,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetentionTests
   method: testInvalidCombination
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2563
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  method: test {yaml=simulate.ingest/10_basic/Test mapping validation from templates}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2700
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_processor/Test create processor with missing mandatory
     fields}
