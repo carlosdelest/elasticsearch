@@ -34,6 +34,7 @@ public class ServerlessTransportVersions {
 
     public static final TransportVersion COMPOUND_COMMITS_WITH_HEADER_SIZE_AND_REPLICATED_RANGES = def(8_757_01_0);
     public static final TransportVersion SHARD_INFO_METADATA = def(8_768_01_0);
+    public static final TransportVersion COMMIT_NOTIFICATION_TRANSPORT_ACTION_SPLIT = def(8_777_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
