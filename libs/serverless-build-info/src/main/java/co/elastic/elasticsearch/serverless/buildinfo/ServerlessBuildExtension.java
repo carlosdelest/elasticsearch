@@ -76,6 +76,11 @@ public class ServerlessBuildExtension implements BuildExtension {
         public int id() {
             return -1;
         }
+
+        @Override
+        public String toString() {
+            return "<SERVERLESS>";
+        }
     };
 
     private static Map<String, String> resolveManifestAttributes(String... keys) {
@@ -128,6 +133,13 @@ public class ServerlessBuildExtension implements BuildExtension {
         if (versionId != -1) {
             logger.warn("Attempted to create a BuildVersion with stateful build id: [{}]", versionId);
         }
+        return SERVERLESS_BUILD_VERSION;
+    }
+
+    @Override
+    public BuildVersion fromString(String version) {
+        // TODO: reenable once all old reserved versions are overwritten
+        // assert version.equals("<SERVERLESS>")
         return SERVERLESS_BUILD_VERSION;
     }
 }
