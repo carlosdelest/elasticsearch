@@ -47,12 +47,7 @@ notify:
   - slack:
       channels:
         - "${TEAM_CHANNEL?}"
-        - "${ALERT_CHANNEL?}"
-    if: (build.env("ENVIRONMENT") == "qa" || build.env("ENVIRONMENT") == "staging") && (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"
-  - slack:
-      channels:
-        - "${TEAM_CHANNEL?}"
         - "#es-search-engine-serverless-alerts"
         - "#es-datastore-serverless-alerts"
-    if: (build.env("ENVIRONMENT") =~ /^production-/) && (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"
+    if: (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"
 
