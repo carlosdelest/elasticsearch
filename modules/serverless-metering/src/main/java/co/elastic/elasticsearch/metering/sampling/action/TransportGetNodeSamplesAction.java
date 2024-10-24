@@ -98,6 +98,9 @@ public class TransportGetNodeSamplesAction extends HandledTransportAction<GetNod
     @Override
     protected void doExecute(Task task, GetNodeSamplesAction.Request request, ActionListener<GetNodeSamplesAction.Response> listener) {
         try {
+            // Update activity from search and index activity broadcast from persistent task node
+            activityTracker.mergeActivity(request.getSearchActivity(), request.getIndexActivity());
+
             long physicalMemorySize = osProbe.getTotalPhysicalMemorySize();
             var shardSizes = shardMetricsReader.getUpdatedShardInfos(request.getCacheToken());
             var searchActivity = activityTracker.getSearchSampleActivity();

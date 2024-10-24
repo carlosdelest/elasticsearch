@@ -157,7 +157,11 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
         int i = 0;
         for (DiscoveryNode node : nodes) {
             final int nodeIndex = i++;
-            var shardInfoRequest = new GetNodeSamplesAction.Request(currentPersistentTaskAllocation);
+            var shardInfoRequest = new GetNodeSamplesAction.Request(
+                currentPersistentTaskAllocation,
+                request.getSearchActivity(),
+                request.getIndexActivity()
+            );
             shardInfoRequest.setParentTask(clusterService.localNode().getId(), task.getId());
 
             sendRequest(node, shardInfoRequest, ActionListener.wrap(response -> {

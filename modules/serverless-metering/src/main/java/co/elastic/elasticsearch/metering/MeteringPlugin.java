@@ -93,6 +93,7 @@ import org.elasticsearch.xcontent.ParseField;
 
 import java.io.IOException;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -197,7 +198,7 @@ public class MeteringPlugin extends Plugin
 
         var activityTracker = TaskActivityTracker.build(
             Clock.systemUTC(),
-            TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()),
+            Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis()),
             hasSearchRole,
             threadPool.getThreadContext(),
             DefaultActionTierMapper.INSTANCE,

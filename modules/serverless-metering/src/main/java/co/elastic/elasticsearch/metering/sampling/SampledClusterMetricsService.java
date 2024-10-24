@@ -199,7 +199,12 @@ public class SampledClusterMetricsService {
         // If we get called and ask to update, that request comes from the PersistentTask, so we are definitely on
         // the PersistentTask node
         persistentTaskNodeStatus = PersistentTaskNodeStatus.THIS_NODE;
-        client.execute(CollectClusterSamplesAction.INSTANCE, new CollectClusterSamplesAction.Request(), new ActionListener<>() {
+
+        var collectSamplesRequest = new CollectClusterSamplesAction.Request(
+            collectedMetrics.get().searchTierMetrics().activity(),
+            collectedMetrics.get().indexTierMetrics().activity()
+        );
+        client.execute(CollectClusterSamplesAction.INSTANCE, collectSamplesRequest, new ActionListener<>() {
             @Override
             public void onResponse(CollectClusterSamplesAction.Response response) {
                 Set<SamplingStatus> status = EnumSet.noneOf(SamplingStatus.class);

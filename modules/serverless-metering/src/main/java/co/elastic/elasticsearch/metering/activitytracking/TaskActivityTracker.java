@@ -35,6 +35,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 public class TaskActivityTracker {
     private static final Logger log = LogManager.getLogger(TaskActivityTracker.class);
@@ -79,7 +80,7 @@ public class TaskActivityTracker {
 
     private TaskActivityTracker(
         Clock clock,
-        TimeValue coolDownPeriod,
+        Duration coolDownPeriod,
         boolean hasSearchRole,
         ThreadContext threadContext,
         ActionTier.Mapper actionTierMapper,
@@ -87,7 +88,7 @@ public class TaskActivityTracker {
     ) {
         // To simplify testing, clock.instant() should be called at most once in every public method
         this.clock = clock;
-        this.coolDownPeriod = Duration.ofMillis(coolDownPeriod.millis());
+        this.coolDownPeriod = coolDownPeriod;
         this.hasSearchRole = hasSearchRole;
         this.threadContext = threadContext;
         this.actionTierMapper = actionTierMapper;
@@ -96,7 +97,7 @@ public class TaskActivityTracker {
 
     public static TaskActivityTracker build(
         Clock clock,
-        TimeValue coolDownPeriod,
+        Duration coolDownPeriod,
         boolean hasSearchRole,
         ThreadContext threadContext,
         ActionTier.Mapper actionTierMapper,
@@ -115,7 +116,7 @@ public class TaskActivityTracker {
 
     static TaskActivityTracker build(
         Clock clock,
-        TimeValue coolDownPeriod,
+        Duration coolDownPeriod,
         boolean hasSearchRole,
         ThreadContext threadContext,
         ActionTier.Mapper actionTierMapper,
@@ -133,6 +134,30 @@ public class TaskActivityTracker {
 
     public Activity getSearchSampleActivity() {
         return noSearchTaskIsRunning() ? search : search.extendCurrentPeriod(clock.instant());
+    }
+
+    /**
+     * Combine activities from persistent task node with search and index activities.
+     * @param otherSearch search activity from persistent task node
+     * @param otherIndex search activity from persistent task node
+     */
+    public void mergeActivity(Activity otherSearch, Activity otherIndex) {
+        /*
+         * The incoming activities contain the most recent activity which the persistent task
+         * node is aware of. This differs from the search and index activity objects within
+         * the tracker. These objects will be out of date if there are open async requests.
+         * Before the other activities can be merged, the tracker's activities need
+         * to be extended if there are open requests.
+         */
+        var now = clock.instant();
+        var searchTasksPresent = searchTaskIds.isEmpty() == false;
+        var indexTasksPresent = indexTaskIds.isEmpty() == false;
+        var bothTasksPresent = bothTaskIds.isEmpty() == false;
+        var thisSearch = searchTasksPresent || bothTasksPresent ? search.extendCurrentPeriod(now) : search;
+        var thisIndex = indexTasksPresent || bothTasksPresent ? index.extendCurrentPeriod(now) : index;
+
+        search = Activity.merge(Stream.of(thisSearch, otherSearch), coolDownPeriod);
+        index = Activity.merge(Stream.of(thisIndex, otherIndex), coolDownPeriod);
     }
 
     void onTaskStart(String action, Task task) {
@@ -237,10 +262,6 @@ public class TaskActivityTracker {
     private String getUserName() {
         var user = securityContext.getUser();
         return user == null ? null : user.principal();
-    }
-
-    private String getInternalUserName() {
-        return securityContext.getUser() instanceof InternalUser iu ? iu.principal() : null;
     }
 
     private String getUserPrivilege() {

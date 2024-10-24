@@ -136,7 +136,9 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
     public void testOneRequestIsSentToEachNode() {
         createMockClusterStateWithPersistentTask(clusterService);
 
-        var request = new CollectClusterSamplesAction.Request();
+        var searchActivity = ActivityTests.randomActivity();
+        var indexActivity = ActivityTests.randomActivity();
+        var request = new CollectClusterSamplesAction.Request(searchActivity, indexActivity);
         PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
@@ -158,10 +160,10 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             var capturedRequest = entry.getValue().get(0);
             assertThat(capturedRequest.action(), is("cluster:monitor/get/metering/samples"));
             assertThat(capturedRequest.request(), instanceOf(GetNodeSamplesAction.Request.class));
-            assertThat(
-                asInstanceOf(GetNodeSamplesAction.Request.class, capturedRequest.request()).getCacheToken(),
-                equalTo(Long.toString(TASK_ALLOCATION_ID))
-            );
+            var getNodeSamplesRequest = asInstanceOf(GetNodeSamplesAction.Request.class, capturedRequest.request());
+            assertThat(getNodeSamplesRequest.getCacheToken(), equalTo(Long.toString(TASK_ALLOCATION_ID)));
+            assertThat(getNodeSamplesRequest.getSearchActivity(), equalTo(searchActivity));
+            assertThat(getNodeSamplesRequest.getIndexActivity(), equalTo(indexActivity));
         }
     }
 
@@ -198,7 +200,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         var nodeSearchActivity = nodeIds.stream().collect(Collectors.toMap(identity(), (k) -> ActivityTests.randomActivity()));
         var nodeIndexActivity = nodeIds.stream().collect(Collectors.toMap(identity(), (k) -> ActivityTests.randomActivity()));
 
-        var request = new CollectClusterSamplesAction.Request();
+        var request = new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY);
         var listener = new PlainActionFuture<CollectClusterSamplesAction.Response>();
 
         action.doExecute(mock(Task.class), request, listener);
@@ -303,7 +305,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         var expectedSizes = Map.of(shard1Id, 21L, shard2Id, 12L, shard3Id, 13L);
         var expectedIngestedSizes = Map.of(shard1Id, 24L, shard2Id, 15L, shard3Id, 16L);
 
-        var request = new CollectClusterSamplesAction.Request();
+        var request = new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY);
         PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
@@ -334,7 +336,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
     public void testNoPersistentTaskNodeFails() {
         createMockClusterState(clusterService);
 
-        var request = new CollectClusterSamplesAction.Request();
+        var request = new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY);
         PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);
@@ -356,7 +358,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
         });
 
-        var request = new CollectClusterSamplesAction.Request();
+        var request = new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY);
         PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
 
         action.doExecute(mock(Task.class), request, listener);

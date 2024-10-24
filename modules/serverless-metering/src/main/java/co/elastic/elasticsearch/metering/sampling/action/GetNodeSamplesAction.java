@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.sampling.action;
 
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -43,20 +44,33 @@ public class GetNodeSamplesAction {
 
     public static class Request extends ActionRequest {
         private final String cacheToken;
+        private final Activity searchActivity;
+        private final Activity indexActivity;
 
         /**
          * Creates a new request, specifying a token to use on the target node to check if the cached info (if any) matches
          * the requesting node, or if it is stale and should not be used and replaced.
          * @param cacheToken a token to be used to check if the cached info (if any) is valid or stale
+         * @param searchActivity search activity to broadcast and merge with other node's activities
+         * @param indexActivity index activity to broadcast and merge with other node's activities
          */
-        public Request(String cacheToken) {
+        public Request(String cacheToken, Activity searchActivity, Activity indexActivity) {
             this.cacheToken = cacheToken;
+            this.searchActivity = searchActivity;
+            this.indexActivity = indexActivity;
             assert cacheToken != null : "cacheToken required to get node samples";
         }
 
         public Request(StreamInput in) throws IOException {
             super(in);
             this.cacheToken = in.readString();
+            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_BROADCAST_ACTIVITY)) {
+                this.searchActivity = Activity.readFrom(in);
+                this.indexActivity = Activity.readFrom(in);
+            } else {
+                this.searchActivity = Activity.EMPTY;
+                this.indexActivity = Activity.EMPTY;
+            }
         }
 
         @Override
@@ -73,10 +87,22 @@ public class GetNodeSamplesAction {
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
             out.writeString(cacheToken);
+            if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_BROADCAST_ACTIVITY)) {
+                searchActivity.writeTo(out);
+                indexActivity.writeTo(out);
+            }
         }
 
         public String getCacheToken() {
             return cacheToken;
+        }
+
+        public Activity getSearchActivity() {
+            return searchActivity;
+        }
+
+        public Activity getIndexActivity() {
+            return indexActivity;
         }
     }
 

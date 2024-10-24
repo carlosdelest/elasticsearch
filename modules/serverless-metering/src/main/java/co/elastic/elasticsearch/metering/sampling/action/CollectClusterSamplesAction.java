@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering.sampling.action;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
+import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -44,10 +45,32 @@ public class CollectClusterSamplesAction {
     public static final ActionType<Response> INSTANCE = new ActionType<>(NAME);
 
     public static class Request extends ActionRequest {
-        public Request() {}
+        private final Activity searchActivity;
+        private final Activity indexActivity;
+
+        public Request(Activity searchActivity, Activity indexActivity) {
+            this.searchActivity = searchActivity;
+            this.indexActivity = indexActivity;
+        }
 
         public Request(StreamInput in) throws IOException {
             super(in);
+            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_BROADCAST_ACTIVITY)) {
+                this.searchActivity = Activity.readFrom(in);
+                this.indexActivity = Activity.readFrom(in);
+            } else {
+                this.searchActivity = Activity.EMPTY;
+                this.indexActivity = Activity.EMPTY;
+            }
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            super.writeTo(out);
+            if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_BROADCAST_ACTIVITY)) {
+                searchActivity.writeTo(out);
+                indexActivity.writeTo(out);
+            }
         }
 
         @Override
@@ -58,6 +81,14 @@ public class CollectClusterSamplesAction {
         @Override
         public String getDescription() {
             return "Collect samples from nodes";
+        }
+
+        public Activity getSearchActivity() {
+            return searchActivity;
+        }
+
+        public Activity getIndexActivity() {
+            return indexActivity;
         }
     }
 
