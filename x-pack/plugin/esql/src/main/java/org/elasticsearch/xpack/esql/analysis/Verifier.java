@@ -21,6 +21,7 @@ import org.elasticsearch.xpack.esql.core.expression.NamedExpression;
 import org.elasticsearch.xpack.esql.core.expression.TypeResolutions;
 import org.elasticsearch.xpack.esql.core.expression.function.Function;
 import org.elasticsearch.xpack.esql.core.expression.predicate.BinaryOperator;
+import org.elasticsearch.xpack.esql.core.expression.predicate.logical.And;
 import org.elasticsearch.xpack.esql.core.expression.predicate.logical.BinaryLogic;
 import org.elasticsearch.xpack.esql.core.expression.predicate.logical.Not;
 import org.elasticsearch.xpack.esql.core.expression.predicate.logical.Or;
@@ -225,7 +226,7 @@ public class Verifier {
             p.forEachDown(Filter.class, f -> {
                 Expression condition = f.condition();
                 // check on instance type of type MatchQueryPredicate or FullTextFunction
-                if (condition instanceof MatchQueryPredicate || condition instanceof FullTextFunction) {
+                if (condition instanceof FullTextFunction) {
                     f.forEachDown(Eval.class, eval -> {
                         List<Alias> fields = eval.fields();
                         for (Alias alias : fields) {
@@ -236,7 +237,7 @@ public class Verifier {
                                 eval.forEachDown(Filter.class, f2 -> {
                                     Expression f2Condition = f2.condition();
                                     // check on instance type of type MatchQueryPredicate or FullTextFunction
-                                    if (f2Condition instanceof MatchQueryPredicate || f2Condition instanceof FullTextFunction) {
+                                    if (f2Condition instanceof FullTextFunction) {
                                         failures.add(fail(p, "`_score` manipulation between fulltext expressions"));
                                     }
                                 });
@@ -677,10 +678,20 @@ public class Verifier {
         java.util.function.Function<FullTextFunction, String> typeNameProvider,
         Set<Failure> failures
     ) {
+
         condition.forEachUp(Or.class, or -> {
+            // If it's all full text functions, it's ok
+            if (or.anyMatch(exp -> isFullTextOrBoolean(exp) == false)) {
+                return;
+            }
+
             checkNotPresentInDisjunctions(or.left(), or, typeNameProvider, failures);
             checkNotPresentInDisjunctions(or.right(), or, typeNameProvider, failures);
         });
+    }
+
+    private static boolean isFullTextOrBoolean(Expression exp) {
+        return exp instanceof FullTextFunction || exp instanceof And || exp instanceof Or || exp instanceof Not;
     }
 
     /**
