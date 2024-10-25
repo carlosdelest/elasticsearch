@@ -54,6 +54,8 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
 
+    static final int PIPELINE_ADDED_FIELDS_SIZE = (13 + 4) * ASCII_SIZE + 16 * ASCII_SIZE + 1;
+
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
         var list = new ArrayList<>(super.nodePlugins());
@@ -114,29 +116,29 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         );
     }
 
-    public void testIngestMetricsAreRecordedThroughIngestPipelines() {
+    public void testIngestMetricsAreRecordedAfterIngestPipelines() {
         String indexName2 = "idx2";
         startMasterIndexAndIngestNode();
         startSearchNode();
         createIndex(indexName2);
 
         client().index(
-            // size 3*char+int (long size), pipeline added fields not included
+            // size 3*char+int (long size)
             new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
         ).actionGet();
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
-        assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
 
         receivedMetrics().clear();
 
         client().index(
-            // size 3*char+int (long size), pipeline added fields not included
+            // size 3*char+int (long size)
             new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
         ).actionGet();
 
         usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
-        assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
         assertThat(usageRecord, transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue()));
     }
 
@@ -157,20 +159,20 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName3);
         // even though 2 documents were in bulk request, we will only have 1 reported
-        assertUsageRecord(indexName3, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName3, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
     }
 
-    public void testUpdatesAreMeteredInBulkRawWithPartialDoc() throws InterruptedException, IOException {
+    public void testUpdatesByDocumentAreMetered() throws IOException {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName4 = "update_partial_doc";
         createIndex(indexName4);
-        indexDoc(indexName4);
+        indexDoc(indexName4, 3 * ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
 
         client().prepareUpdate().setIndex(indexName4).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName4);
-        assertUsageRecord(indexName4, usageRecord, ASCII_SIZE + NUMBER_SIZE);// partial doc size
+        assertUsageRecord(indexName4, usageRecord, (3 * ASCII_SIZE + NUMBER_SIZE) + (ASCII_SIZE + NUMBER_SIZE));// updated size
     }
 
     public void testUpdatesViaScriptAreNotMetered() {
@@ -183,30 +185,32 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         putJsonStoredScript(scriptId, Strings.format("""
             {"script": {"lang": "%s", "source": "ctx._source.b = 'xx'"} }""", MockScriptEngine.NAME));
 
-        // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
-        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
+        indexDoc(indexName, 3 * ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
 
         // update via stored script
         final Script storedScript = new Script(ScriptType.STORED, null, scriptId, Collections.emptyMap());
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).get();
+
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
+        assertUsageRecord(indexName, usageRecord, (3 * ASCII_SIZE + NUMBER_SIZE) + (1 * ASCII_SIZE)); // updated size
+        receivedMetrics().clear();
 
         // update via inlined script
         String scriptCode = "ctx._source.b = 'xx'";
         final Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, scriptCode, Collections.emptyMap());
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).get();
 
-        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
-
-        assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
+        assertUsageRecord(indexName, usageRecord, (3 * ASCII_SIZE + NUMBER_SIZE) + (1 * ASCII_SIZE)); // updated size
         receivedMetrics().clear();
     }
 
-    private void indexDoc(String indexName) {
-        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
+    private void indexDoc(String indexName, int expectedIngestSize, Object... source) {
+        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, source)).actionGet();
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
 
-        assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName, usageRecord, expectedIngestSize);
         receivedMetrics().clear();
     }
 
@@ -232,7 +236,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
             """);
     }
 
-    private void createNewFieldPipeline() {
+    static void createNewFieldPipeline() {
         putJsonPipeline("new_field_pipeline", """
             {
               "processors": [

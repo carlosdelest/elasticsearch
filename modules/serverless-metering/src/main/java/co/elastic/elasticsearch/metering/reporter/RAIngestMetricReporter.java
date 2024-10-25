@@ -38,7 +38,7 @@ public class RAIngestMetricReporter implements DocumentSizeReporter {
 
     @Override
     public void onIndexingCompleted(ParsedDocument parsedDocument) {
-        var normalizedBytesParsed = parsedDocument.getNormalizedSize().ingestedBytes();
+        var normalizedBytesParsed = parsedDocument.getNormalizedSize();
         if (normalizedBytesParsed > 0) {
             this.ingestMetricsCollector.addIngestedDocValue(indexName, normalizedBytesParsed);
         }

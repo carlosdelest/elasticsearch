@@ -116,24 +116,7 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         startMasterIndexAndIngestNode();
         startSearchNode();
         ensureStableCluster(2);
-        putJsonPipeline("pipeline", """
-            {
-              "processors": [
-                {
-                   "set": {
-                     "field": "my-text-field",
-                     "value": "xxxx"
-                   }
-                 },
-                 {
-                   "set": {
-                     "field": "my-boolean-field",
-                     "value": true
-                   }
-                 }
-              ]
-            }
-            """);
+        IngestMeteringIT.createNewFieldPipeline();
 
         String index = "test2";
         assertAcked(prepareCreate(index));
@@ -152,7 +135,10 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
                     .filter(m -> m.id().startsWith("ingested-doc"))
                     .mapToLong(r -> r.usage().quantity())
                     .sum();
-                assertThat(reportedQuantity, equalTo(successCount * documentNormalizedSize));
+                assertThat(
+                    reportedQuantity,
+                    equalTo(successCount * (documentNormalizedSize + IngestMeteringIT.PIPELINE_ADDED_FIELDS_SIZE))
+                );
             });
 
         }
@@ -210,8 +196,8 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
 
             XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, meteringParserDecorator).v2();
 
-            assertThat(meteringParserDecorator.meteredDocumentSize().ingestedBytes(), greaterThan(0L));
-            return meteringParserDecorator.meteredDocumentSize().ingestedBytes();
+            assertThat(meteringParserDecorator.meteredDocumentSize(), greaterThan(0L));
+            return meteringParserDecorator.meteredDocumentSize();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

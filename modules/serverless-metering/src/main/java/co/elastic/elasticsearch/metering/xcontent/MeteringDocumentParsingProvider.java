@@ -23,15 +23,15 @@ import co.elastic.elasticsearch.metering.reporter.RAIngestMetricReporter;
 import co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator;
 import co.elastic.elasticsearch.metering.reporter.RAStorageReporter;
 
-import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
+import org.elasticsearch.plugins.internal.XContentParserDecorator;
+import org.elasticsearch.xcontent.XContentParser;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -52,37 +52,8 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
     }
 
     @Override
-    public <T> XContentMeteringParserDecorator newMeteringParserDecorator(DocWriteRequest<T> request) {
-        if (request instanceof IndexRequest indexRequest) {
-            return newDocumentSizeObserver(indexRequest);
-        } else if (request instanceof UpdateRequest updateRequest) {
-            return newDocumentSizeObserver(updateRequest);
-        }
-        return XContentMeteringParserDecorator.NOOP;
-    }
-
-    private XContentMeteringParserDecorator newDocumentSizeObserver(IndexRequest indexRequest) {
-        if (indexRequest.originatesFromUpdateByScript()) {
-            // if required, meter stored size based on parsing of final document, but don't report ingest size
-            return meterRaStorage ? new XContentMeteringParserDecorators.FixedIngestSize(0) : XContentMeteringParserDecorator.NOOP;
-        } else if (indexRequest.originatesFromUpdateByDoc() && meterRaStorage) {
-            // meter stored size based on parsing of final document, but report ingest size as metered previously
-            return new XContentMeteringParserDecorators.FixedIngestSize(indexRequest.getNormalisedBytesParsed());
-        } else if (indexRequest.getNormalisedBytesParsed() >= 0) {
-            // report previously metered size both as ingest and stored size
-            return new XContentMeteringParserDecorators.FixedSize(indexRequest.getNormalisedBytesParsed());
-        }
-        // no metering / parsing was previously done, use the default metering size observer
-        return new XContentMeteringParserDecorators.DefaultMetering();
-    }
-
-    protected XContentMeteringParserDecorator newDocumentSizeObserver(UpdateRequest updateRequest) {
-        if (updateRequest.doc() != null) {
-            // meter the partial document for updates by document
-            return new XContentMeteringParserDecorators.DefaultMetering();
-        }
-        // in case of updates by script, metering will be done on the resulting IndexRequest (if required)
-        return XContentMeteringParserDecorator.NOOP;
+    public <T> XContentMeteringParserDecorator newMeteringParserDecorator(IndexRequest request) {
+        return new XContentDefaultMeteringParserDecorator();
     }
 
     @Override
@@ -113,5 +84,22 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
             return new RAStorageAccumulator();
         }
         return DocumentSizeAccumulator.EMPTY_INSTANCE;
+    }
+
+    /**
+     * Default {@link XContentParserDecorator} that meters the size of the document being parsed.
+     */
+    private static class XContentDefaultMeteringParserDecorator implements XContentMeteringParserDecorator {
+        private long normalizedSize = UNKNOWN_SIZE;
+
+        @Override
+        public XContentParser decorate(XContentParser xContentParser) {
+            return new XContentMeteringParser(xContentParser, bytesParsed -> normalizedSize = bytesParsed);
+        }
+
+        @Override
+        public long meteredDocumentSize() {
+            return normalizedSize;
+        }
     }
 }

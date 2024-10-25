@@ -20,7 +20,7 @@ package co.elastic.elasticsearch.metering.reporter;
 import co.elastic.elasticsearch.metering.IngestMetricsProvider;
 
 import org.elasticsearch.index.mapper.ParsedDocument;
-import org.elasticsearch.index.mapper.ParsedDocument.DocumentSize;
+import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 import org.elasticsearch.plugins.internal.XContentParserDecorator;
 import org.elasticsearch.test.ESTestCase;
 
@@ -40,14 +40,14 @@ public class RAIngestMetricReporterTests extends ESTestCase {
 
     public void testZeroMeteredIsNotReported() {
         //empty instance returns 0
-        when(parsedDocument.getNormalizedSize()).thenReturn(DocumentSize.UNKNOWN);
+        when(parsedDocument.getNormalizedSize()).thenReturn(XContentMeteringParserDecorator.UNKNOWN_SIZE);
         raIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
         verify(ingestMetricsProvider, times(0)).addIngestedDocValue(any(String.class), any(Long.class));
     }
 
     public void testMeteredValueIsReported() {
-        when(parsedDocument.getNormalizedSize()).thenReturn(new DocumentSize(123,123));
+        when(parsedDocument.getNormalizedSize()).thenReturn(123L);
         raIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
         verify(ingestMetricsProvider).addIngestedDocValue(eq(indexName), eq(123L));

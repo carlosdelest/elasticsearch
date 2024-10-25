@@ -462,9 +462,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         );
     }
 
-    // this test is confirming that for nontimeseries index we will meter ra-s updates by script in solution's cluster
-    // if we didn't the ra-s would decrease after an update by script (because of a delete being followed by a not metered index op)
-    public void testUpdatesViaScriptAreMeteredForSolutions() throws Exception {
+    public void testUpdatesByScriptAreMetered() throws Exception {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName = "index1";
@@ -491,17 +489,15 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
             Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, "ctx._source.b = '0123456789'", Collections.emptyMap());
             client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
         }
-        long updatedRaSize = 12 * ASCII_SIZE + NUMBER_SIZE;
+        long updatedRaSize = initialRaSize + (10 - 1) * ASCII_SIZE;
 
         List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAStorageRecords(usageRecords, indexName, updatedRaSize, 0);
-        waitAndAssertRAIngestRecords(usageRecords, indexName, initialRaSize); // only the initial version was ever ingested
+        waitAndAssertRAIngestRecords(usageRecords, indexName, initialRaSize + updatedRaSize);
         receivedMetrics().clear();
     }
 
-    // this test is confirming that for nontimeseries index we will meter ra-s updates by script in solution's cluster
-    // if we didn't the ra-s would decrease after an update by script (because of a delete being followed by a not metered index op)
-    public void testUpdatesViaDocAreMeteredForSolutions() throws Exception {
+    public void testUpdatesByDocAreMetered() throws Exception {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName = "index1";
@@ -510,22 +506,22 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        long raSize = 3 * ASCII_SIZE + NUMBER_SIZE;
+        long initialSize = 3 * ASCII_SIZE + NUMBER_SIZE;
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
 
         List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, raSize);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, raSize, 1);
+        waitAndAssertRAIngestRecords(usageRecords, indexName, initialSize);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, initialSize, 1);
 
         usageRecords.clear();
         receivedMetrics().clear();
 
-        long raUpdateSize = ASCII_SIZE + NUMBER_SIZE;
+        long updatedSize = initialSize + ASCII_SIZE + NUMBER_SIZE;
         client().prepareUpdate().setIndex(indexName).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
 
-        waitAndAssertRAIngestRecords(usageRecords, indexName, raUpdateSize);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, raSize + raUpdateSize, 1);
+        waitAndAssertRAIngestRecords(usageRecords, indexName, updatedSize);
+        waitAndAssertRAStorageRecords(usageRecords, indexName, updatedSize, 1);
 
         receivedMetrics().clear();
     }

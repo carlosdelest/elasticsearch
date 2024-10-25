@@ -22,9 +22,9 @@ import co.elastic.elasticsearch.metering.RaStorageMetadataFieldMapper;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.ParsedDocument;
-import org.elasticsearch.index.mapper.ParsedDocument.DocumentSize;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
+import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 
 public class RAStorageReporter implements DocumentSizeReporter {
     private final DocumentSizeAccumulator documentSizeAccumulator;
@@ -37,19 +37,19 @@ public class RAStorageReporter implements DocumentSizeReporter {
 
     @Override
     public void onIndexingCompleted(ParsedDocument parsedDocument) {
-        DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
-        if (isTimeSeries() && bytesToReport.storedBytes() >= 0) {
+        long bytesToReport = parsedDocument.getNormalizedSize();
+        if (isTimeSeries() && bytesToReport > XContentMeteringParserDecorator.UNKNOWN_SIZE) {
             // per index storage
-            documentSizeAccumulator.add(bytesToReport.storedBytes());
+            documentSizeAccumulator.add(bytesToReport);
         }
     }
 
     @Override
     public void onParsingCompleted(ParsedDocument parsedDocument) {
-        DocumentSize bytesToReport = parsedDocument.getNormalizedSize();
-        if (isTimeSeries() == false && bytesToReport.storedBytes() >= 0) {
+        long bytesToReport = parsedDocument.getNormalizedSize();
+        if (isTimeSeries() == false && bytesToReport > XContentMeteringParserDecorator.UNKNOWN_SIZE) {
             // Store the result in a new, "hidden" field
-            parsedDocument.rootDoc().add(new NumericDocValuesField(RaStorageMetadataFieldMapper.FIELD_NAME, bytesToReport.storedBytes()));
+            parsedDocument.rootDoc().add(new NumericDocValuesField(RaStorageMetadataFieldMapper.FIELD_NAME, bytesToReport));
         }
     }
 
