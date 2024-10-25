@@ -190,7 +190,7 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var xFieldName = p.nextToken(); // x charged
+            var xFieldName = p.nextToken();
             p.currentName();
             var binary = p.nextToken();
             byte[] bytes = p.binaryValue();
@@ -202,7 +202,7 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         assertThat("bulk vs ingest do not match", parserMetered, equalTo(mapMetered));
         // in fact we have sent less data via cbor or smile but we calculate the base64 length
-        assertThat(mapMetered, equalTo("U29tZSBiaW5hcnkgYmxvYg==".length() * ASCII_SIZE + ASCII_SIZE));
+        assertThat(mapMetered, equalTo("U29tZSBiaW5hcnkgYmxvYg==".length() * ASCII_SIZE));
     }
 
     public void testDisabledFields() throws IOException {
@@ -212,7 +212,7 @@ public class XContentMeteringParserTests extends ESTestCase {
             "y": "123"
             }
             """; // 4 * character size
-        assertSingleFieldParsingSameForParserAndMap(jsonWithSingleField(subJson), 4 * ASCII_SIZE, XContentParser::skipChildren);
+        assertSingleFieldParsingSameForParserAndMap(jsonWithSingleField(subJson), 3 * ASCII_SIZE, XContentParser::skipChildren);
     }
 
     public void testTwoFieldsOfDifferentFieldNameLength() throws IOException {
@@ -226,21 +226,17 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var abcdFieldName = p.nextToken(); // abcd charged
+            var abcdFieldName = p.nextToken();
             p.currentName();
             var number111 = p.nextToken(); // "xyz" charged
             p.text();
-            var efghijkFieldName = p.nextToken(); // efghijk charged
+            var efghijkFieldName = p.nextToken();
             p.currentName();
             var number1 = p.nextToken(); // 1 charged
             p.intValue();
         };
 
-        assertParsingSameForParserAndMap(
-            json,
-            "abcd".length() * ASCII_SIZE + "xyz".length() * ASCII_SIZE + "efghijk".length() * ASCII_SIZE + NUMBER_SIZE,
-            parser
-        );
+        assertParsingSameForParserAndMap(json, "xyz".length() * ASCII_SIZE + NUMBER_SIZE, parser);
     }
 
     public void testArrayOfInts() throws IOException {
@@ -251,7 +247,7 @@ public class XContentMeteringParserTests extends ESTestCase {
             """;
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var xFieldName = p.nextToken(); // x charged
+            var xFieldName = p.nextToken();
             p.currentName();
             var arrayStart = p.nextToken();
             for (int i = 0; i < 3; i++) {
@@ -260,7 +256,7 @@ public class XContentMeteringParserTests extends ESTestCase {
             }
             var arrayEnd = p.nextToken();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE + 3 * NUMBER_SIZE, parser);
+        assertParsingSameForParserAndMap(json, 3 * NUMBER_SIZE, parser);
     }
 
     public void testSameParsingMethodCalledTwiceDoesNotOvercharge() throws IOException {
@@ -280,7 +276,7 @@ public class XContentMeteringParserTests extends ESTestCase {
             p.intValue();
             p.intValue();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE + NUMBER_SIZE, parser);
+        assertParsingSameForParserAndMap(json, NUMBER_SIZE, parser);
 
         json = """
             {
@@ -306,7 +302,7 @@ public class XContentMeteringParserTests extends ESTestCase {
             p.intValue();
             p.intValue();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE * 2 + NUMBER_SIZE * 2, parser);
+        assertParsingSameForParserAndMap(json, NUMBER_SIZE * 2, parser);
     }
 
     public void testFallbackParsingIsNotCharging() throws IOException {
@@ -320,7 +316,7 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var fieldName = p.nextToken(); // charges for text
+            var fieldName = p.nextToken();
             p.currentName();
             p.currentName();
             var field = p.nextToken(); // charges for text
@@ -328,7 +324,7 @@ public class XContentMeteringParserTests extends ESTestCase {
             // let's pretend the text is invalid, so we would like to store it if storeIgnored is enabled
             p.text();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE * 5 + ASCII_SIZE, parser);
+        assertParsingSameForParserAndMap(json, ASCII_SIZE * 5, parser);
     }
 
     public void testWrongTypeMethodCalled() throws IOException {
@@ -347,7 +343,7 @@ public class XContentMeteringParserTests extends ESTestCase {
             var field = p.nextToken();  // charges for number
             p.text(); // does not charge
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE + NUMBER_SIZE, parser);
+        assertParsingSameForParserAndMap(json, NUMBER_SIZE, parser);
     }
 
     public void testIgnoreMalformed() throws IOException {
@@ -367,7 +363,7 @@ public class XContentMeteringParserTests extends ESTestCase {
             p.text(); // does not charge
             p.intValue();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE + NUMBER_SIZE, parser);
+        assertParsingSameForParserAndMap(json, NUMBER_SIZE, parser);
     }
 
     public void testCurrentNameInterleaving() throws IOException {
@@ -380,13 +376,13 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var fieldName = p.nextToken(); // charging char
+            var fieldName = p.nextToken();
             p.currentName();
             var field = p.nextToken(); // charging number
             p.currentName();
             p.intValue();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE + NUMBER_SIZE, parser);
+        assertParsingSameForParserAndMap(json, NUMBER_SIZE, parser);
 
         // nested interleaving
         json = """
@@ -399,17 +395,17 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         parser = p -> {
             var start = p.nextToken();
-            var xName1 = p.nextToken(); // charge for 'x'
+            var xName1 = p.nextToken();
             p.currentName();
             var startObject = p.nextToken(); // start object, does not charge
             p.currentName();
-            var xName2 = p.nextToken(); // charge for 'x' (nested)
+            var xName2 = p.nextToken();
             p.currentName();
             var value = p.nextToken();  // charge for int
             p.intValue();
             p.currentName();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE * 2 + NUMBER_SIZE, parser);
+        assertParsingSameForParserAndMap(json, NUMBER_SIZE, parser);
     }
 
     public void testNestedFields() throws IOException {
@@ -424,17 +420,17 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var xFieldName = p.nextToken();// x charged
+            var xFieldName = p.nextToken();
             p.currentName();
             p.currentName();
             var startObject = p.nextToken(); // start object. does not charge
-            var yFieldName = p.nextToken(); // y charged
+            var yFieldName = p.nextToken();
             String yName = p.currentName();
             XContentParser.Token value = p.nextToken(); // number charged
             p.intValue();
             p.intValue();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE * 2 + NUMBER_SIZE, parser);
+        assertParsingSameForParserAndMap(json, NUMBER_SIZE, parser);
     }
 
     public void testNestedFieldsAndSkipChildren() throws IOException {
@@ -449,18 +445,18 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var xFieldName = p.nextToken(); // x charged
+            var xFieldName = p.nextToken();
             p.currentName();
             p.currentName();
             var startObject = p.nextToken(); // start object, doest not charge
-            p.skipChildren(); // will traverse subobject and charge for y and 123, will consume input up to endObject token
-            var zFieldName = p.nextToken(); // z charged
+            p.skipChildren(); // will traverse subobject and charge for 123, will consume input up to endObject token
+            var zFieldName = p.nextToken();
             p.currentName();
             var zValue = p.nextToken();// long charged
             p.intValue();
         };
 
-        assertParsingSameForParserAndMap(json, ASCII_SIZE * 3 + 2 * NUMBER_SIZE, parser);
+        assertParsingSameForParserAndMap(json, 2 * NUMBER_SIZE, parser);
     }
 
     public void testMultipleNestedFieldsAndSkipChildren() throws IOException {
@@ -479,17 +475,17 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var xFieldName = p.nextToken(); // x charged
+            var xFieldName = p.nextToken();
             p.currentName();
             p.currentName();
             var startObject = p.nextToken();
-            p.skipChildren(); // will traverse subobject and charge for y,z,v and a, will consume input up to endObject token
+            p.skipChildren(); // will traverse subobject and charge for a, will consume input up to endObject token
             var wFieldName = p.nextToken(); // w charged
             p.currentName();
             var wValue = p.nextToken(); // "b" charged
             p.text();
         };
-        assertParsingSameForParserAndMap(json, ASCII_SIZE * 7, parser);
+        assertParsingSameForParserAndMap(json, ASCII_SIZE * 2, parser);
     }
 
     public void testSkipChildrenWithBinaryField() throws IOException {
@@ -503,14 +499,14 @@ public class XContentMeteringParserTests extends ESTestCase {
 
         CheckedConsumer<XContentParser, IOException> parser = p -> {
             var start = p.nextToken();
-            var xFieldName = p.nextToken(); // x charged
+            var xFieldName = p.nextToken();
             p.currentName();
             p.currentName();
-            var startObject = p.nextToken(); // will traverse subobject and charge for y and binary data
+            var startObject = p.nextToken(); // will traverse subobject and charge for binary data
             p.skipChildren();
         };
 
-        assertParsingSameForParserAndMap(json, ASCII_SIZE * 6, parser);
+        assertParsingSameForParserAndMap(json, ASCII_SIZE * 4, parser);
     }
 
     private static String jsonWithSingleField(String value) {
@@ -528,7 +524,7 @@ public class XContentMeteringParserTests extends ESTestCase {
         CheckedConsumer<XContentParser, IOException> valueParser
     ) throws IOException {
         CheckedConsumer<XContentParser, IOException> parser = singleFieldParser(valueParser);
-        assertParsingSameForParserAndMap(json, expectedSize + ASCII_SIZE/*single field name*/, parser);
+        assertParsingSameForParserAndMap(json, expectedSize, parser);
     }
 
     public void assertParsingSameForParserAndMap(String json, int expectedSize, CheckedConsumer<XContentParser, IOException> parser)

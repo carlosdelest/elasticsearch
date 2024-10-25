@@ -106,7 +106,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
-    private static final long EXPECTED_SIZE = 10 * ASCII_SIZE + NUMBER_SIZE + 6 * ASCII_SIZE;
+    private static final long EXPECTED_SIZE = 3 * ASCII_SIZE + NUMBER_SIZE;
 
     /**
      * This extension of the Serverless plugin allow us to intercept and inject a different MergePolicy.
@@ -471,7 +471,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
         client().prepareIndex().setIndex(indexName).setId("1").setSource("a", 1, "b", "c").setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
-        long initialRaSize = 3 * ASCII_SIZE + NUMBER_SIZE;
+        long initialRaSize = ASCII_SIZE + NUMBER_SIZE;
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
@@ -489,8 +489,8 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
             Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, "ctx._source.b = '0123456789'", Collections.emptyMap());
             client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
         }
-        long updatedRaSize = initialRaSize + (10 - 1) * ASCII_SIZE;
 
+        long updatedRaSize = initialRaSize + (10 - 1) * ASCII_SIZE;
         List<UsageRecord> usageRecords = new ArrayList<>();
         waitAndAssertRAStorageRecords(usageRecords, indexName, updatedRaSize, 0);
         waitAndAssertRAIngestRecords(usageRecords, indexName, initialRaSize + updatedRaSize);
@@ -506,7 +506,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
-        long initialSize = 3 * ASCII_SIZE + NUMBER_SIZE;
+        long initialSize = ASCII_SIZE + NUMBER_SIZE;
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
 
@@ -517,7 +517,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         usageRecords.clear();
         receivedMetrics().clear();
 
-        long updatedSize = initialSize + ASCII_SIZE + NUMBER_SIZE;
+        long updatedSize = initialSize + NUMBER_SIZE;
         client().prepareUpdate().setIndex(indexName).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
 
         waitAndAssertRAIngestRecords(usageRecords, indexName, updatedSize);
@@ -580,11 +580,11 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         String indexName = "idx1";
         createIndex(indexName);
 
-        var doc1RASize = 10 * ASCII_SIZE + NUMBER_SIZE + 6 * ASCII_SIZE;
+        var doc1RASize = 3 * ASCII_SIZE + NUMBER_SIZE;
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
-        var doc2RASize = "some_other_field".length() * ASCII_SIZE + 2 * NUMBER_SIZE + "key".length() * ASCII_SIZE;
+        var doc2RASize = 2 * NUMBER_SIZE;
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_other_field", 123, "key", 456)).actionGet();
-        var doc3RASize = 3 * ASCII_SIZE + NUMBER_SIZE;
+        var doc3RASize = ASCII_SIZE + NUMBER_SIZE;
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 123, "b", "c")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
         long raIngestedSize = doc1RASize + doc2RASize + doc3RASize;
@@ -608,7 +608,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         var result = client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 123, "b", "c")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
         client().delete(new DeleteRequest(indexName, result.getId())).actionGet();
-        var raIngestedSize = 2 * EXPECTED_SIZE + (3 * ASCII_SIZE + NUMBER_SIZE);
+        var raIngestedSize = 2 * EXPECTED_SIZE + (ASCII_SIZE + NUMBER_SIZE);
         var raAvgPerDoc = raIngestedSize / 3;
         var raEstimated = raAvgPerDoc * 2;
 

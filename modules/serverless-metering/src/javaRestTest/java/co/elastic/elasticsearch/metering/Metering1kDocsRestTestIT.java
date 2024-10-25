@@ -72,7 +72,7 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
 
         // ingest more docs so that each shard has some
         int numDocs = 1000;
-        int rawSizePerDoc = 6; // raw size in bytes of the single doc
+        int rawSizePerDoc = 3; // raw size in bytes of the single doc
 
         StringBuilder bulk = new StringBuilder();
         for (int i = 0; i < numDocs; i++) {

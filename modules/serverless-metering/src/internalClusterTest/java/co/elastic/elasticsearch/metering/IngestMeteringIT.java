@@ -54,7 +54,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
 
-    static final int PIPELINE_ADDED_FIELDS_SIZE = (13 + 4) * ASCII_SIZE + 16 * ASCII_SIZE + 1;
+    static final int PIPELINE_ADDED_FIELDS_SIZE = 5 * ASCII_SIZE;
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
@@ -80,7 +80,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
-        assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName, usageRecord, ASCII_SIZE + NUMBER_SIZE);
 
         receivedMetrics().clear();
 
@@ -88,7 +88,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
         usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
-        assertUsageRecord(indexName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName, usageRecord, ASCII_SIZE + NUMBER_SIZE);
         assertThat(usageRecord, transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue()));
     }
 
@@ -109,7 +109,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(dsName);
-        assertUsageRecord(dsName, usageRecord, 16 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(dsName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
         assertThat(
             usageRecord,
             transformedMatch((UsageRecord metric) -> metric.source().metadata().get("datastream"), startsWith(indexName))
@@ -123,12 +123,12 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         createIndex(indexName2);
 
         client().index(
-            // size 3*char+int (long size)
+            // size char+int (long size)
             new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
         ).actionGet();
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
-        assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
+        assertUsageRecord(indexName2, usageRecord, ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
 
         receivedMetrics().clear();
 
@@ -138,7 +138,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         ).actionGet();
 
         usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
-        assertUsageRecord(indexName2, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
+        assertUsageRecord(indexName2, usageRecord, ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
         assertThat(usageRecord, transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue()));
     }
 
@@ -159,7 +159,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName3);
         // even though 2 documents were in bulk request, we will only have 1 reported
-        assertUsageRecord(indexName3, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
+        assertUsageRecord(indexName3, usageRecord, ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
     }
 
     public void testUpdatesByDocumentAreMetered() throws IOException {
@@ -167,12 +167,12 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         startSearchNode();
         String indexName4 = "update_partial_doc";
         createIndex(indexName4);
-        indexDoc(indexName4, 3 * ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
+        indexDoc(indexName4, ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
 
         client().prepareUpdate().setIndex(indexName4).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName4);
-        assertUsageRecord(indexName4, usageRecord, (3 * ASCII_SIZE + NUMBER_SIZE) + (ASCII_SIZE + NUMBER_SIZE));// updated size
+        assertUsageRecord(indexName4, usageRecord, 2 * NUMBER_SIZE + ASCII_SIZE);// updated size
     }
 
     public void testUpdatesViaScriptAreNotMetered() {
@@ -185,14 +185,14 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         putJsonStoredScript(scriptId, Strings.format("""
             {"script": {"lang": "%s", "source": "ctx._source.b = 'xx'"} }""", MockScriptEngine.NAME));
 
-        indexDoc(indexName, 3 * ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
+        indexDoc(indexName, ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
 
         // update via stored script
         final Script storedScript = new Script(ScriptType.STORED, null, scriptId, Collections.emptyMap());
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).get();
 
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
-        assertUsageRecord(indexName, usageRecord, (3 * ASCII_SIZE + NUMBER_SIZE) + (1 * ASCII_SIZE)); // updated size
+        assertUsageRecord(indexName, usageRecord, 2 * ASCII_SIZE + NUMBER_SIZE); // updated size
         receivedMetrics().clear();
 
         // update via inlined script
@@ -201,7 +201,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).get();
 
         usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
-        assertUsageRecord(indexName, usageRecord, (3 * ASCII_SIZE + NUMBER_SIZE) + (1 * ASCII_SIZE)); // updated size
+        assertUsageRecord(indexName, usageRecord, 2 * ASCII_SIZE + NUMBER_SIZE); // updated size
         receivedMetrics().clear();
     }
 
@@ -209,7 +209,6 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, source)).actionGet();
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
         UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
-
         assertUsageRecord(indexName, usageRecord, expectedIngestSize);
         receivedMetrics().clear();
     }

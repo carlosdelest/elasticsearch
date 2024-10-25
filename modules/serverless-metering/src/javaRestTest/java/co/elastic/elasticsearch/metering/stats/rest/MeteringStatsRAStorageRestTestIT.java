@@ -44,8 +44,8 @@ public class MeteringStatsRAStorageRestTestIT extends MeteringStatsRestTestCase 
         initClient();
     }
 
-    static final int RA_INDEX_DOC_SIZE = 6;
-    static final int RA_DATASTREAM_DOC_SIZE = 40;
+    static final int RA_INDEX_DOC_SIZE = 3;
+    static final int RA_DATASTREAM_DOC_SIZE = 27;
 
     @Rule
     public ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()

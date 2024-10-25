@@ -32,11 +32,11 @@ import java.util.function.LongConsumer;
 
 /**
  * This is an XContentParser that is performing metering.
- * the metering is taking into account field names and field values.
- * The structure, format is ignored.
+ * The metering is taking into account field values.
+ * The structure and format is ignored.
  * <p>
- * Numbers (float, double, long, int) are all metered with same value (long 8 bytes)
- * field names and text are metered with the number of bytes when encoded in utf-8
+ * Numbers (float, double, long, int) are all metered with same size (long 8 bytes)
+ * Text is metered with the number of bytes when encoded in utf-8
  * (1byte for ascii, 2 bytes for bmf chars, 3 and 4bytes for supplementary character set)
  */
 class XContentMeteringParser extends AbstractXContentParser {
@@ -52,7 +52,7 @@ class XContentMeteringParser extends AbstractXContentParser {
     private void charge(Token token) throws IOException {
         if (token != null) {
             normalisedBytesParsed += switch (token) {
-                case FIELD_NAME -> calculateTextLength(CharBuffer.wrap(currentName()));
+                case FIELD_NAME -> 0;
                 case VALUE_STRING -> calculateTextLength(CharBuffer.wrap(textCharacters(), textOffset(), textLength()));
                 case VALUE_EMBEDDED_OBJECT -> calculateBase64Length(binaryValue().length);
                 case VALUE_NUMBER -> Long.BYTES;
