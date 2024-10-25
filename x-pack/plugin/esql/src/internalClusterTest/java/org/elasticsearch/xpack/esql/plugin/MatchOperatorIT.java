@@ -16,6 +16,7 @@ import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.xpack.esql.VerificationException;
 import org.elasticsearch.xpack.esql.action.AbstractEsqlIntegTestCase;
 import org.elasticsearch.xpack.esql.action.ColumnInfoImpl;
+import org.elasticsearch.xpack.esql.action.EsqlCapabilities;
 import org.elasticsearch.xpack.esql.action.EsqlQueryRequest;
 import org.elasticsearch.xpack.esql.action.EsqlQueryResponse;
 import org.elasticsearch.xpack.esql.core.type.DataType;
@@ -126,6 +127,49 @@ public class MatchOperatorIT extends AbstractEsqlIntegTestCase {
             // values
             List<List<Object>> values = getValuesList(resp);
             assertMap(values, matchesList().item(List.of(5)));
+        }
+    }
+
+    public void testWhereMatchWithScoring() {
+        assumeTrue("'METADATA _score' is disabled", EsqlCapabilities.Cap.METADATA_SCORE.isEnabled());
+        var query = """
+            FROM test
+            METADATA _score
+            | WHERE content MATCH "fox"
+            | KEEP id, _score
+            """;
+
+        try (var resp = run(query)) {
+            assertThat(resp.columns().stream().map(ColumnInfoImpl::name).toList(), equalTo(List.of("id", "_score")));
+            assertThat(
+                resp.columns().stream().map(ColumnInfoImpl::type).map(DataType::toString).toList(),
+                equalTo(List.of("INTEGER", "DOUBLE"))
+            );
+            // values
+            List<List<Object>> values = getValuesList(resp);
+            assertMap(values, matchesList().item(List.of(1, 1.156558871269226)).item(List.of(6, 0.9114001989364624)));
+        }
+    }
+
+    public void testWhereMatchWithScoringDifferentSort() {
+        assumeTrue("'METADATA _score' is disabled", EsqlCapabilities.Cap.METADATA_SCORE.isEnabled());
+        var query = """
+            FROM test
+            METADATA _score
+            | WHERE content MATCH "fox"
+            | KEEP id, _score
+            | SORT id
+            """;
+
+        try (var resp = run(query)) {
+            assertThat(resp.columns().stream().map(ColumnInfoImpl::name).toList(), equalTo(List.of("id", "_score")));
+            assertThat(
+                resp.columns().stream().map(ColumnInfoImpl::type).map(DataType::toString).toList(),
+                equalTo(List.of("INTEGER", "DOUBLE"))
+            );
+            // values
+            List<List<Object>> values = getValuesList(resp);
+            assertMap(values, matchesList().item(List.of(1, 1.156558871269226)).item(List.of(6, 0.9114001989364624)));
         }
     }
 
