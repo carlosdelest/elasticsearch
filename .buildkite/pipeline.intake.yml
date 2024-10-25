@@ -18,8 +18,8 @@ steps:
     command: ".buildkite/scripts/validate-submodule.sh"
     if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check" && build.branch == "main"
 
-  - label: ":git: Submodule info"
-    command: ".buildkite/scripts/show-submodule-info.sh"
+  - label: ":git: Build info"
+    command: ".buildkite/scripts/show-build-info.sh"
     if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
 
   - label: ":java: Run serverless Elasticsearch functional tests"

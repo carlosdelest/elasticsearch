@@ -9,8 +9,8 @@ env:
 # NOTE: This yaml is processed by .buildkite/pipeline.pr.yml.sh before uploading
 
 steps:
-  - label: ":git: Submodule info"
-    command: ".buildkite/scripts/show-submodule-info.sh"
+  - label: ":git: Build info"
+    command: ".buildkite/scripts/show-build-info.sh"
 
   - label: ":java: Run serverless Elasticsearch functional tests"
     command: ".buildkite/scripts/run-gradle.sh check -Dtests.upgrade.skip=true"
