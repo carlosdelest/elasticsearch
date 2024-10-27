@@ -28,7 +28,6 @@ import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.RefreshThrottler;
-import co.elastic.elasticsearch.stateless.engine.translog.TranslogRecoveryMetrics;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
 
 import org.apache.lucene.index.CodecReader;
@@ -213,7 +212,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
             SharedBlobCacheWarmingService sharedBlobCacheWarmingService,
             RefreshThrottler.Factory refreshThrottlerFactory,
             DocumentParsingProvider documentParsingProvider,
-            TranslogRecoveryMetrics translogRecoveryMetrics
+            IndexEngine.EngineMetrics engineMetrics
         ) {
             return new IndexEngine(
                 engineConfig,
@@ -225,7 +224,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
                 statelessCommitService.getIndexEngineLocalReaderListenerForShard(engineConfig.getShardId()),
                 statelessCommitService.getCommitBCCResolverForShard(engineConfig.getShardId()),
                 documentParsingProvider,
-                translogRecoveryMetrics
+                engineMetrics
             ) {
                 @Override
                 protected IndexWriter createWriter(Directory directory, IndexWriterConfig iwc) throws IOException {
