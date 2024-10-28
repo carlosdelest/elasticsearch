@@ -46,7 +46,7 @@ steps:
           env:
             TARGET_ENV: staging
             ELASTICSEARCH_CHECK_LOG_ERROR_RATE: true
-            MAX_ERROR_PERCENT: 0.5
+            MAX_ERROR_PERCENT: 0.1
             QUERY_WINDOW: 60m
             LOG_LEVEL_ERROR_VALUE: ERROR
             SERVICE: elasticsearch
@@ -54,7 +54,7 @@ steps:
             SERVICE_VERSION: ${SERVICE_VERSION:0:12}
             SERVICE_TYPE_FIELD: data_stream.dataset
             CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
-            MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 1.0
+            MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 0.1
             CHECK_ELASTICSEARCH_CLUSTER_HEALTH_RATE: true
             CHECK_ALERTS: true
             CHECK_ALERTS_TRANSIENT_LOOKBACK: 60m
