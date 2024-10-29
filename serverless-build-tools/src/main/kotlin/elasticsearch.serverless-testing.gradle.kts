@@ -44,7 +44,12 @@ allprojects {
     }
     pluginManager.withPlugin("elasticsearch.java-base") {
         dependencies {
-            add("nativeLibs", "org.elasticsearch:elasticsearch-native-libraries")
+            add("nativeLibs", "org.elasticsearch:native-libraries")
+        }
+    }
+    pluginManager.withPlugin("elasticsearch.build") {
+        dependencies {
+            add("jarHell", "org.elasticsearch:core")
         }
     }
 
