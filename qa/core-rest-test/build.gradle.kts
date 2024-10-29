@@ -219,10 +219,7 @@ tasks {
 
                 //Tests rely on updating replicas which is not supported in Serverless
                 "indices.put_settings/10_basic/*",
-                "indices.put_settings/20_update_non_dynamic_settings/*",
-
-                // Muted until the stateless plugin no longer overrides number_of_shards of lookup indices
-                "indices.create/10_basic/Create lookup index*"
+                "indices.put_settings/20_update_non_dynamic_settings/*"
 
             ).joinToString(",")
         )
