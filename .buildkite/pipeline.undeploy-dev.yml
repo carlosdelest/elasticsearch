@@ -5,7 +5,7 @@ env:
   DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-${IMAGE_TAG}}"
   CLUSTER_NAME: "${CLUSTER_NAME:-${CI_PIPELINE_ID}}"
   AWS_CLUSTER_NAME: "${CLUSTER_NAME}"
-  AWS_REGION: "${AWS_REGION:-eu-west-1}"
+  REGION_ID: "${REGION_ID:-eu-west-1}"
   IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
   VAULT_ADDR: "https://vault-ci-prod.elastic.dev"
 

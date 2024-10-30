@@ -4,7 +4,7 @@ env:
   DEPLOY_ID: "${DEPLOY_ID:-ess-ci-${IMAGE_TAG}}"
   VAULT_PATH_API_KEY: "${VAULT_PATH_API_KEY:-secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-qa-creds}"
   ENV_URL: "https://public-api.qa.cld.elstc.co"
-  AWS_REGION: "aws-eu-west-1"
+  REGION_ID: "${REGION_ID:-aws-eu-west-1}"
   TEST_ENV: "qa"
   IMAGE_OVERRIDE: "${IMAGE_OVERRIDE:-docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}}"
   PROJECT_TYPE: "${PROJECT_TYPE:-elasticsearch}"

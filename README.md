@@ -126,6 +126,19 @@ To deploy a branch snapshot into QA
    PROJECT_TYPE=observability
    ```
 
+   By default we use the region `aws-eu-west-1`.
+   To deploy to a different region you can pass the region id as environment variable when triggering the pipeline.
+
+   To run against Azure:
+   ```
+   REGION_ID=azure-eastus2
+   ```
+
+   To run against GCP:
+   ```
+   REGION_ID=gcp-us-central1
+   ```
+
    The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa/builds/3#annotation-ess-public-url
    The encrypted user password is also shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa/builds/4#annotation-ess-password-encrypted
 

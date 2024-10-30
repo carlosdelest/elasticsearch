@@ -2,7 +2,6 @@ env:
   BUILDKITE_DIR: ".buildkite"
   VAULT_PATH_API_KEY: "secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-qa-creds"
   ENV_URL: "${ENV_URL:-https://public-api.qa.cld.elstc.co}"
-  AWS_REGION: "${AWS_REGION:-aws-eu-west-1}"
   TEST_ENV: "${TEST_ENV:-qa}"
   PROJECT_TYPE: "${PROJECT_TYPE:-elasticsearch}"
 

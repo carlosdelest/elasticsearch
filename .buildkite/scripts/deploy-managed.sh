@@ -39,7 +39,7 @@ CREATE_RESULT=$(curl -H "Authorization: ApiKey $API_KEY" \
      -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE" \
      -XPOST -d "{
         \"name\": \"$DEPLOY_ID\",
-        \"region_id\": \"$AWS_REGION\" $OVERRIDE_CONFIG
+        \"region_id\": \"$REGION_ID\" $OVERRIDE_CONFIG
      }")
 
 echo "PROJECT API CREATE RESPONSE: $CREATE_RESULT"
