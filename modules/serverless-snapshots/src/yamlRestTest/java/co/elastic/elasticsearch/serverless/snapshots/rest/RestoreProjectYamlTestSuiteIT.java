@@ -20,7 +20,6 @@ package co.elastic.elasticsearch.serverless.snapshots.rest;
 import com.carrotsearch.randomizedtesting.annotations.Name;
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 
-import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
@@ -29,10 +28,6 @@ import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
 import org.junit.ClassRule;
-
-import java.util.List;
-
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
 
 public class RestoreProjectYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
 
@@ -55,20 +50,6 @@ public class RestoreProjectYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
     @Override
     protected String getTestRestCluster() {
         return cluster.getHttpAddresses();
-    }
-
-    @Override
-    protected Settings getGlobalTemplateSettings(List<String> features) {
-        final Settings defaultSettings = super.getGlobalTemplateSettings(features);
-        assertThat(IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.get(defaultSettings), lessThanOrEqualTo(1));
-        if (features.contains("default_shards")) {
-            return defaultSettings;
-        }
-        return Settings.builder()
-            .put(defaultSettings)
-            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
-            .put(IndexMetadata.SETTING_WAIT_FOR_ACTIVE_SHARDS.getKey(), "all")
-            .build();
     }
 
     @Override
