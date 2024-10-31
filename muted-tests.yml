@@ -134,3 +134,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=logsdb/10_settings/logsdb with default ignore dynamic beyond limit and subobjects false}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3062
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=logsdb/10_settings/logsdb with default ignore dynamic beyond limit and non-default sorting}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3063
