@@ -18,7 +18,7 @@
 module org.elasticsearch.serverless.buildinfo {
     requires org.apache.logging.log4j;
     requires org.elasticsearch.server;
-    requires org.elasticsearch.base;
+    requires org.elasticsearch.xcontent;
 
     provides org.elasticsearch.internal.BuildExtension with co.elastic.elasticsearch.serverless.buildinfo.ServerlessBuildExtension;
 }
