@@ -117,3 +117,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {categorize.Categorize SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncIT
+  method: test {p0=esql/170_no_replicas/Test From 1}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3081
