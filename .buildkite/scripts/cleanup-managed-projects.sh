@@ -26,7 +26,7 @@ API_KEY=$(vault_with_retries read -field api-key "$VAULT_PATH_API_KEY")
 read -ra OLD_PROJECTS <<< $(curl -k -H "Authorization: ApiKey $API_KEY" \
                             -H "Content-Type: application/json" \
                             ${ENV_URL}/api/v1/serverless/projects/${PROJECT_TYPE} \
-                            | jq -r '.items | map(select(.metadata.created_at | sub(".[0-9]+Z$"; "Z") | fromdate < now - (60 * 60))) | map(.id) | join(" ")')
+                            | jq -r '.items | map(select(.metadata.created_at | sub(".[0-9]+Z$"; "Z") | fromdate < now - (60 * 60))) | map(select(.name | test("keep_") | not)) | map(.id) | join(" ")')
 
 if [[ -n "${OLD_PROJECTS}" ]]; then
   for PROJECT_ID in "${OLD_PROJECTS[@]}"; do

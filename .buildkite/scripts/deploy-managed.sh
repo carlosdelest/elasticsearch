@@ -35,10 +35,18 @@ OVERRIDE_CONFIG=",
     }"
 fi
 
+# Provide a mechanism to keep manual deployment when deployed via QA deploy pipeline
+if [[ -n "${KEEP_DEPLOYMENT:-}" && "$KEEP_DEPLOYMENT" == "true" ]]; then
+  echo "We are keeping the deployment, prefixing project name"
+DEPLOYMENT_NAME="keep_$DEPLOY_ID"
+else
+DEPLOYMENT_NAME=$DEPLOY_ID
+fi
+
 CREATE_RESULT=$(curl -H "Authorization: ApiKey $API_KEY" \
      -H "Content-Type: application/json" "${ENV_URL}/api/v1/serverless/projects/$PROJECT_TYPE" \
      -XPOST -d "{
-        \"name\": \"$DEPLOY_ID\",
+        \"name\": \"$DEPLOYMENT_NAME\",
         \"region_id\": \"$REGION_ID\" $OVERRIDE_CONFIG
      }")
 

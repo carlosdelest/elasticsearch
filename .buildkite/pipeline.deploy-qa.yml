@@ -7,6 +7,7 @@ env:
   REGION_ID: "${REGION_ID:-aws-eu-west-1}"
   TEST_ENV: "qa"
   IMAGE_OVERRIDE: "${IMAGE_OVERRIDE:-docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}}"
+  KEEP_DEPLOYMENT: "${KEEP_DEPLOYMENT:-false}"
   PROJECT_TYPE: "${PROJECT_TYPE:-elasticsearch}"
 
 steps:
