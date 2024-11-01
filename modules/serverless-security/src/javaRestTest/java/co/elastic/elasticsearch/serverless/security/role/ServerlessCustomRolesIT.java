@@ -88,7 +88,9 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             settings.put("xpack.security.authc.native_users.enabled", "false");
         }
         settings.put("xpack.security.reserved_roles.include", Strings.collectionToCommaDelimitedString(RESERVED_ROLES));
-        settings.put("xpack.security.authc.native_roles.enabled", "true");
+        if (randomBoolean()) {
+            settings.put("xpack.security.authc.native_roles.enabled", "true");
+        }
         return settings;
     }
 

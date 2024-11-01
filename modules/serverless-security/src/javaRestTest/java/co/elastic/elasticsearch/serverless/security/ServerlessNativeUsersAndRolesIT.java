@@ -66,10 +66,8 @@ public class ServerlessNativeUsersAndRolesIT extends ESRestTestCase {
             // Explicitly disable native user mgt, rather than relying on the serverless default
             settings.put("xpack.security.authc.native_users.enabled", "false");
         }
-        if (randomBoolean()) {
-            // Explicitly disable native role mgt, rather than relying on the serverless default
-            settings.put("xpack.security.authc.native_roles.enabled", "false");
-        }
+        // Explicitly disable native role mgt. It's enabled by default
+        settings.put("xpack.security.authc.native_roles.enabled", "false");
         return settings;
     }
 

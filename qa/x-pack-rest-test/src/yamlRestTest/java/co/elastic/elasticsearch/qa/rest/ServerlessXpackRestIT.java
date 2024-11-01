@@ -43,7 +43,6 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
         .setting("xpack.security.transport.ssl.verification_mode", "certificate")
         .setting("xpack.security.audit.enabled", "true")
         .setting("xpack.security.authc.native_users.enabled", "true")
-        .setting("xpack.security.authc.native_roles.enabled", "true")
         .setting("xpack.security.authc.native_role_mappings.enabled", "true")
         .setting("stateless.translog.flush.interval", "20ms")
         .keystore("bootstrap.password", "x-pack-test-password")

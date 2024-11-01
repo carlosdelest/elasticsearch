@@ -71,7 +71,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
      */
     public static final Setting<Boolean> NATIVE_ROLES_SETTING = Setting.boolSetting(
         "xpack.security.authc.native_roles.enabled",
-        false,
+        true,
         Setting.Property.NodeScope
     );
 
@@ -123,7 +123,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .putList(INCLUDED_RESERVED_ROLES_SETTING.getKey(), "superuser", "remote_monitoring_agent", "remote_monitoring_collector")
             .put(OPERATOR_PRIVILEGES_ENABLED.getKey(), true)
             .put(NATIVE_USERS_SETTING.getKey(), false)
-            .put(NATIVE_ROLES_SETTING.getKey(), false)
+            .put(NATIVE_ROLES_SETTING.getKey(), true)
             .put(CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), true) // the setting is false by default; this sets it to true
             .put(NATIVE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), false) // the setting is true by default; this sets it to false
             .build();
