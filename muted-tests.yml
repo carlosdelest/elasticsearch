@@ -96,3 +96,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   method: test {p0=esql/170_no_replicas/Test From 1}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3077
+- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
+  method: test {p0=esql/170_no_replicas/Test From 5}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3078
