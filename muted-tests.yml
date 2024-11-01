@@ -99,3 +99,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   method: test {p0=esql/170_no_replicas/Test From 5}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3078
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {categorize.Categorize ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
