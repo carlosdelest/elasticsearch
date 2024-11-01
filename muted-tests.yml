@@ -102,3 +102,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {categorize.Categorize ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
