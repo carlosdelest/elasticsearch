@@ -111,8 +111,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test flamegraph from test-events}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2957
-- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2965
 - class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
   method: testSortByManyLongsTooMuchMemoryAsync
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2926
