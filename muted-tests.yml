@@ -136,3 +136,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_crud/Test delete given model referenced by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3085
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=ml/inference_crud/Test delete given model with alias referenced by pipeline}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3088
