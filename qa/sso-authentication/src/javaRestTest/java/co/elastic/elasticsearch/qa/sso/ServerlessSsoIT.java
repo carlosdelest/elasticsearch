@@ -8,9 +8,11 @@
 
 package co.elastic.elasticsearch.qa.sso;
 
+import org.apache.http.HttpHost;
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.ResponseException;
+import org.elasticsearch.client.RestClient;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.SecureString;
@@ -193,18 +195,23 @@ public final class ServerlessSsoIT extends ESRestTestCase {
     }
 
     private void waitForRoleMappings() throws Exception {
-        assertBusy(() -> {
-            try {
-                final Request request = new Request("GET", "_cluster/state/metadata");
-                request.addParameter("filter_path", "metadata.role_mappings");
-                var response = new ObjectPath(entityAsMap(adminClient().performRequest(request)));
-                List<?> mappings = response.evaluate("metadata.role_mappings.role_mappings");
-                assertThat(mappings, not(empty()));
-            } catch (ResponseException e) {
-                logger.info("Failed to retrieve role mappings from cluster state - {}", e.toString());
-                fail("Failed to retrieve role mappings");
+        for (final HttpHost host : getClusterHosts()) {
+            try (RestClient client = buildClient(restAdminSettings(), new HttpHost[] { host })) {
+                assertBusy(() -> {
+                    try {
+                        final Request request = new Request("GET", "_cluster/state/metadata");
+                        request.addParameter("filter_path", "metadata.role_mappings");
+                        request.addParameter("local", "true");
+                        var response = new ObjectPath(entityAsMap(client.performRequest(request)));
+                        List<?> mappings = response.evaluate("metadata.role_mappings.role_mappings");
+                        assertThat(mappings, not(empty()));
+                    } catch (ResponseException e) {
+                        logger.info("Failed to retrieve role mappings from cluster state - {}", e.toString());
+                        fail("Failed to retrieve role mappings from host: " + host.toHostString());
+                    }
+                }, 90, TimeUnit.SECONDS);
             }
-        }, 90, TimeUnit.SECONDS);
+        }
     }
 
     private Map<String, Object> samlAuthenticate(UserInfo user) throws Exception {
