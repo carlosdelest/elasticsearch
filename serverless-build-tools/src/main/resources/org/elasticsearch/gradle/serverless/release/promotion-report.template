@@ -153,6 +153,22 @@
                 </tbody>
             </table>
         </section>
+        <section>
+            <h2 id="internal-prs">Internal Pull Requests</h2>
+            <table class="fixed-table">
+                <thead>
+                    <tr>
+                    <th class="col-1">Date</th>
+                    <th class="col-2">Summary</th>
+                    <th class="col-3">Link</th>
+                    <th>Labels</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${internalPrs}
+                </tbody>
+            </table>
+        </section>
     </main>
     <footer>
         <p>&copy; 2024 Elastic.</p>

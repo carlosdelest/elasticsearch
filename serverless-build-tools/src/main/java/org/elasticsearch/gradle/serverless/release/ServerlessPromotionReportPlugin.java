@@ -37,7 +37,9 @@ public abstract class ServerlessPromotionReportPlugin implements Plugin<Project>
         target.getTasks().register("generatePromotionReport", GenerateServerlessPromotionNotesTask.class, task -> {
             task.setDescription("Generates promotion report for serverless distributions");
             task.setGroup("Serverless");
-            task.getReleaseNotesFile().set(getProjectLayout().getBuildDirectory().file("reports/serverless-promotion-report.html"));
+            task.getReportsDirectory().set(getProjectLayout().getBuildDirectory().dir("reports/promotion"));
+            task.getHtmlReportName().set("serverless-promotion-report.html");
+            task.getJsonReportName().set("serverless-promotion-report.json");
             task.getCurrentGitHash().convention(getProviderFactory().systemProperty("current.promoted.version"));
             task.getPreviousGitHash().convention(getProviderFactory().systemProperty("previous.promoted.version"));
             task.getGithubToken().set(getProviderFactory().environmentVariable("GITHUB_TOKEN"));

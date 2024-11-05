@@ -27,6 +27,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
 
+import org.apache.commons.compress.utils.Lists;
 import org.apache.commons.lang3.tuple.Pair;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
@@ -43,6 +44,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class GithubApi {
+    public static final String GITHUB_PULL_REQUEST_COMMIT_PATTERN = ".+\\(#(\\d+)\\)";
+    public static final Type LIST_PR_TYPE = new TypeToken<List<PullRequest>>() {
+    }.getType();
+    public static final Type PR_TYPE = new TypeToken<PullRequest>() {
+    }.getType();
+    public static final String APPLICATION_VND_GITHUB_JSON = "application/vnd.github+json";
     private static final String GITHUB_API_BASE = "https://api.github.com/repos/";
 
     private final String owner;
@@ -56,13 +63,14 @@ public class GithubApi {
 
     public List<PullRequest> getPullRequestsFor(String repositoryName, String commit1, String commit2) throws Exception {
         List<Commit> commitsBetween = getCommitsBetween(repositoryName, commit1, commit2).stream().toList();
-
+        logger.lifecycle("Found {} commits in {} between {} and {}", commitsBetween.size(), repositoryName, commit1, commit2);
+        List<Commit> revisitCommits = Lists.newArrayList();
         List<PullRequest> prs = new ArrayList<>();
         for (Commit commit : commitsBetween) {
             try {
                 List<PullRequest> pullRequestsForCommit = getPullRequestsForCommit(owner, repositoryName, commit.getSha());
                 if (pullRequestsForCommit.isEmpty()) {
-                    logger.lifecycle("Not a pull request: = " + commit.getSha() + " --- " + commit.getShortMessage());
+                    revisitCommits.add(commit);
                 } else {
                     prs.addAll(pullRequestsForCommit);
                 }
@@ -70,7 +78,22 @@ public class GithubApi {
                 throw new RuntimeException(e);
             }
         }
+        Pattern revisitPattern = Pattern.compile(GITHUB_PULL_REQUEST_COMMIT_PATTERN);
+        for (Commit revisitCommit : revisitCommits) {
+            Matcher matcher = revisitPattern.matcher(revisitCommit.getShortMessage());
+            if (matcher.matches()) {
+                String prNumber = matcher.group(1);
+                PullRequest pr = getPullRequest(repositoryName, Integer.parseInt(prNumber));
+                prs.add(pr);
+            }
+        }
         return prs;
+    }
+
+    private PullRequest getPullRequest(String repository, int pullRequestNumber) throws Exception {
+        String apiUrl = GITHUB_API_BASE + owner + "/" + repository + "/pulls/" + pullRequestNumber;
+        String response = getGitHubData(apiUrl);
+        return new GsonBuilder().registerTypeAdapter(PullRequest.class, new PullRequestDeserializer()).create().fromJson(response, PR_TYPE);
     }
 
     public Pair<String, String> resolveElasticsearchCommits(String repositoryName, String submodulePath, String commit1, String commit2)
@@ -95,17 +118,15 @@ public class GithubApi {
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .header("Authorization", "Bearer " + token)
-            .header("Accept", "application/vnd.github.groot-preview+json")
+            .header("Accept", APPLICATION_VND_GITHUB_JSON)
             .GET()
             .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() == 200) {
-            Type prType = new TypeToken<List<PullRequest>>() {
-            }.getType();
             return new GsonBuilder().registerTypeAdapter(PullRequest.class, new PullRequestDeserializer())
                 .create()
-                .fromJson(response.body(), prType);
+                .fromJson(response.body(), LIST_PR_TYPE);
         } else {
             throw new IOException("Failed to retrieve PRs: " + response.statusCode() + " " + response.body());
         }
@@ -137,15 +158,14 @@ public class GithubApi {
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(apiUrl))
             .header("Authorization", "token " + token)
-            .header("Accept", "application/vnd.github.groot-preview+json")
+            .header("Accept", APPLICATION_VND_GITHUB_JSON)
             .GET()
             .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
         if (response.statusCode() == 200) {
             return response.body();
         } else {
-            throw new IOException("Failed : HTTP error code : " + response.statusCode());
+            throw new IOException("Failed : HTTP Request: '" + apiUrl + " - Error code: " + response.statusCode());
         }
     }
 

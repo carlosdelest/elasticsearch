@@ -46,10 +46,11 @@ steps:
   - label: ":github: Generate Report"
     command: |
           .buildkite/scripts/run-gradle.sh generatePromotionReport --previousGitHash=${PREVIOUS_PROMOTED_COMMIT} -Dcurrent.promoted.version=${PROMOTED_COMMIT}
-          buildkite-agent artifact upload "build/reports/serverless-promotion-report.html"
+          buildkite-agent artifact upload "build/reports/promotion/serverless-promotion-report.html"
+          buildkite-agent artifact upload "build/reports/promotion/serverless-promotion-report.json"
           cat << EOF | buildkite-agent annotate --style "info" --context "promotion-report"
             ### Promotion Report for ${PROMOTED_COMMIT}
-            <a href="artifact://build/reports/serverless-promotion-report.html">serverless-promotion-report.html</a>
+            <a href="artifact://build/reports/promotion/serverless-promotion-report.html">serverless-promotion-report.html</a>
           EOF
     env:
       USE_GITHUB_CREDENTIALS: "true"
