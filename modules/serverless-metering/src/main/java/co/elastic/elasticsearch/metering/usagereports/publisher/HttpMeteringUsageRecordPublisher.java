@@ -173,12 +173,13 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
                 );
                 handleResponse(response, batch);
             } catch (PrivilegedActionException e) {
-                log.error("Could not send {} records to billing service", batch.size(), e);
+                Throwable cause = e.getCause();
+                log.warn("Could not send {} records to billing service", batch.size(), cause);
                 requestsErrorCounter.increment();
-                if (e.getCause() instanceof IOException ex) {
+                if (cause instanceof IOException ex) {
                     throw ex;
                 }
-                if (e.getCause() instanceof InterruptedException ex) {
+                if (cause instanceof InterruptedException ex) {
                     throw ex;
                 }
                 assert false : e;
