@@ -50,6 +50,7 @@ import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.NamedDiff;
+import org.elasticsearch.cluster.SafeClusterStateSupplier;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
@@ -185,7 +186,9 @@ public class MeteringPlugin extends Plugin
         String projectId = PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
-        ingestMetricsCollector = new IngestMetricsProvider(nodeEnvironment.nodeId(), clusterService);
+        var clusterStateSupplier = new SafeClusterStateSupplier();
+        clusterService.addListener(clusterStateSupplier);
+        ingestMetricsCollector = new IngestMetricsProvider(nodeEnvironment.nodeId(), clusterStateSupplier);
 
         var clusterMetricsService = new SampledClusterMetricsService(clusterService, services.telemetryProvider().getMeterRegistry());
 
@@ -227,7 +230,8 @@ public class MeteringPlugin extends Plugin
             projectId,
             builtInCounterMetrics,
             builtInSampledMetrics,
-            clusterService,
+            clusterStateSupplier,
+            clusterService.getSettings(),
             services.featureService(),
             services.client(),
             reportPeriod,

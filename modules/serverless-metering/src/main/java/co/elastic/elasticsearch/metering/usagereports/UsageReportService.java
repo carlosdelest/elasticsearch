@@ -22,9 +22,10 @@ import co.elastic.elasticsearch.metrics.CounterMetricsProvider;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
 import org.elasticsearch.client.internal.Client;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.cluster.ClusterStateSupplier;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.features.FeatureService;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
@@ -64,7 +65,8 @@ public class UsageReportService extends AbstractLifecycleComponent {
         String projectId,
         List<CounterMetricsProvider> counterMetricsProviders,
         List<SampledMetricsProvider> sampledMetricsProviders,
-        ClusterService clusterService,
+        ClusterStateSupplier clusterStateSupplier,
+        Settings settings,
         FeatureService featureService,
         Client client,
         TimeValue reportPeriod,
@@ -78,7 +80,7 @@ public class UsageReportService extends AbstractLifecycleComponent {
             projectId,
             counterMetricsProviders,
             sampledMetricsProviders,
-            new ClusterStateSampledMetricsTimeCursor(clusterService, featureService, client),
+            new ClusterStateSampledMetricsTimeCursor(clusterStateSupplier, settings, featureService, client),
             reportPeriod,
             usageRecordPublisher,
             threadPool,

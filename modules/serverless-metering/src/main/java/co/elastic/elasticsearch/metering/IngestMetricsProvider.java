@@ -22,10 +22,8 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.elasticsearch.cluster.ClusterChangedEvent;
-import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ClusterStateSupplier;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
 
@@ -36,8 +34,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
-import static org.elasticsearch.gateway.GatewayService.STATE_NOT_RECOVERED_BLOCK;
 
 /**
  * Responsible for the ingest document size collection.
@@ -73,55 +69,36 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
     private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
     private final String nodeId;
-    private final ClusterService clusterService;
-    private ClusterStateListener initializationListener;
+    private final ClusterStateSupplier clusterStateSupplier;
 
-    public IngestMetricsProvider(String nodeId, ClusterService clusterService) {
+    public IngestMetricsProvider(String nodeId, ClusterStateSupplier clusterStateSupplier) {
         this.nodeId = nodeId;
-        this.clusterService = clusterService;
-        this.initializationListener = this::init;
-        clusterService.addListener(initializationListener);
-    }
-
-    private boolean isInitialized() {
-        return initializationListener == null; // successfully initialized once the listener is removed
-    }
-
-    private void init(ClusterChangedEvent clusterChangedEvent) {
-        if (clusterChangedEvent.state().blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK) == false) {
-            ClusterStateListener listener = initializationListener;
-            if (listener != null) {
-                initializationListener = null;
-                clusterService.removeListener(listener);
-            }
-        }
+        this.clusterStateSupplier = clusterStateSupplier;
     }
 
     private record SnapshotEntry(String key, long value) {}
 
     @Override
     public MetricValues getMetrics() {
-        if (isInitialized() == false) {
-            return CounterMetricsProvider.NO_VALUES;
-        }
+        return clusterStateSupplier.withCurrentClusterState(clusterState -> {
+            final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
+            final var indicesLookup = clusterState.metadata().getIndicesLookup();
 
-        final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
-        final var indicesLookup = clusterService.state().metadata().getIndicesLookup();
+            final var toReturn = metricsSnapshot.stream().map(e -> metricValue(nodeId, e.key(), e.value(), indicesLookup)).toList();
+            logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
 
-        final var toReturn = metricsSnapshot.stream().map(e -> metricValue(nodeId, e.key(), e.value(), indicesLookup)).toList();
-        logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
+            return new MetricValues() {
+                @Override
+                public Iterator<MetricValue> iterator() {
+                    return toReturn.iterator();
+                }
 
-        return new MetricValues() {
-            @Override
-            public Iterator<MetricValue> iterator() {
-                return toReturn.iterator();
-            }
-
-            @Override
-            public void commit() {
-                adjustMap(metrics, metricsSnapshot);
-            }
-        };
+                @Override
+                public void commit() {
+                    adjustMap(metrics, metricsSnapshot);
+                }
+            };
+        }, CounterMetricsProvider.NO_VALUES);
     }
 
     void adjustMap(Map<String, AtomicLong> metrics, List<SnapshotEntry> metricsSnapshot) {
