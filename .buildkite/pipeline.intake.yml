@@ -79,7 +79,7 @@ steps:
 
   - group: ":k8s: Serverless end-to-end tests"
     steps:
-      - label: ":k8s: :java: Test newly created project"
+      - label: ":aws: :java: Test newly created project"
         trigger: elasticsearch-serverless-e2e-tests-qa
         if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
         depends_on: docker-publish
@@ -89,7 +89,9 @@ steps:
           branch: "${BUILDKITE_BRANCH}"
           env:
             SKIP_DOCKER: "${SKIP_DOCKER}"
-      - label: ":k8s: :java: Test upgraded project"
+            DEPLOY_ID: "ess-e2e-ci-aws-${IMAGE_TAG}"
+            REGION_ID: "aws-eu-west-1"
+      - label: ":aws: :java: Test upgraded project"
         trigger: elasticsearch-serverless-e2e-tests-qa
         if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
         depends_on: docker-publish
@@ -100,7 +102,34 @@ steps:
           env:
             SKIP_DOCKER: "${SKIP_DOCKER}"
             UPGRADED_PROJECT: true
-            DEPLOY_ID: "ess-e2e-ci-upgrade-${IMAGE_TAG}"
+            DEPLOY_ID: "ess-e2e-ci-aws-upgrade-${IMAGE_TAG}"
+            REGION_ID: "aws-eu-west-1"
+            IMAGE_OVERRIDE: ""
+      - label: ":azure: :java: Test newly created project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            DEPLOY_ID: "ess-e2e-ci-azure-${IMAGE_TAG}"
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            REGION_ID: "azure-eastus2"
+      - label: ":azure: :java: Test upgraded project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            UPGRADED_PROJECT: true
+            DEPLOY_ID: "ess-e2e-ci-azure-upgrade-${IMAGE_TAG}"
+            REGION_ID: "azure-eastus2"
             IMAGE_OVERRIDE: ""
     notify:
       - github_commit_status:
