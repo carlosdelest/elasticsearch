@@ -120,6 +120,10 @@ To deploy a branch snapshot into QA
    from a pull request branch, you can point to that PR by declaring the branch in the format of `pull/2996/head` where `2996`
    is the number of your pull request.
 
+   By default, custom projects are automatically removed after about an hour.
+   If you want to keep it longer set `KEEP_DEPLOYMENT=true`,
+   but please also remember to undeploy it once no longer needed.
+
    By default a project of type `elasticsearch` is deployed. If you want to deploy a different project type (`observability` or `security`) you can pass the project type as environment variable when triggering the pipeline above via:
 
    ```
