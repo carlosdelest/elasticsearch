@@ -32,8 +32,11 @@ import org.elasticsearch.core.Nullable;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
 public abstract class DotPrefixValidator<RequestType> implements MappedActionFilter {
     private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(DotPrefixValidator.class);
@@ -61,23 +64,46 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
         ".ml-state",
         ".ml-anomalies-unrelated"
     );
-    private static Set<Pattern> IGNORED_INDEX_PATTERNS = Set.of(
-        Pattern.compile("\\.ml-state-\\d+"),
-        Pattern.compile("\\.slo-observability\\.sli-v\\d+.*"),
-        Pattern.compile("\\.slo-observability\\.summary-v\\d+.*")
+    public static Setting<List<String>> IGNORED_INDEX_PATTERNS_SETTING = Setting.stringListSetting(
+        "serverless.indices.validate_ignored_dot_patterns",
+        List.of(
+            "\\.ml-state-\\d+",
+            "\\.slo-observability\\.sli-v\\d+.*",
+            "\\.slo-observability\\.summary-v\\d+.*",
+            "\\.entities\\.v\\d+\\.latest\\..*"
+        ),
+        (patternList) -> patternList.forEach(pattern -> {
+            try {
+                Pattern.compile(pattern);
+            } catch (PatternSyntaxException e) {
+                throw new IllegalArgumentException("invalid dot validation exception pattern: [" + pattern + "]", e);
+            }
+        }),
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
     );
 
     private final ThreadContext threadContext;
     private volatile boolean isEnabled;
+    private volatile Set<Pattern> ignoredIndexPatterns;
 
     public DotPrefixValidator(ThreadContext threadContext, ClusterService clusterService) {
         this.threadContext = threadContext;
         this.isEnabled = VALIDATE_DOT_PREFIXES.get(clusterService.getSettings());
+        this.ignoredIndexPatterns = IGNORED_INDEX_PATTERNS_SETTING.get(clusterService.getSettings())
+            .stream()
+            .map(Pattern::compile)
+            .collect(Collectors.toSet());
         clusterService.getClusterSettings().addSettingsUpdateConsumer(VALIDATE_DOT_PREFIXES, this::updateEnabled);
+        clusterService.getClusterSettings().addSettingsUpdateConsumer(IGNORED_INDEX_PATTERNS_SETTING, this::updateIgnoredIndexPatterns);
     }
 
     private void updateEnabled(boolean enabled) {
         this.isEnabled = enabled;
+    }
+
+    private void updateIgnoredIndexPatterns(List<String> patterns) {
+        this.ignoredIndexPatterns = patterns.stream().map(Pattern::compile).collect(Collectors.toSet());
     }
 
     protected abstract Set<String> getIndicesFromRequest(RequestType request);
@@ -120,7 +146,7 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
                         if (IGNORED_INDEX_NAMES.contains(strippedName)) {
                             return;
                         }
-                        if (IGNORED_INDEX_PATTERNS.stream().anyMatch(p -> p.matcher(strippedName).matches())) {
+                        if (this.ignoredIndexPatterns.stream().anyMatch(p -> p.matcher(strippedName).matches())) {
                             return;
                         }
                         throw new IllegalArgumentException("Index [" + index + "] name beginning with a dot (.) is not allowed");

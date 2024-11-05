@@ -91,7 +91,7 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(DotPrefixValidator.VALIDATE_DOT_PREFIXES);
+        return List.of(DotPrefixValidator.VALIDATE_DOT_PREFIXES, DotPrefixValidator.IGNORED_INDEX_PATTERNS_SETTING);
     }
 
     @Override
