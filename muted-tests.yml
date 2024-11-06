@@ -136,3 +136,5 @@ tests:
 - class: co.elastic.elasticsearch.stateless.CorruptionIT
   method: testConcurrentOperations
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2969
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3096
