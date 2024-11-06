@@ -130,8 +130,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_crud/Test force delete given model referenced by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3089
-- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3096
 - class: co.elastic.elasticsearch.stateless.StatelessMergeIT
   method: testOnlyForceMergesAreAllowedDuringRelocation
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3100
