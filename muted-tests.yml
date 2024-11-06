@@ -133,3 +133,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessMergeIT
   method: testOnlyForceMergesAreAllowedDuringRelocation
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3100
+- class: co.elastic.elasticsearch.stateless.CorruptionIT
+  method: testConcurrentOperations
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2969
