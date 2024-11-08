@@ -21,8 +21,8 @@ if [ -z "${PROMOTED_COMMIT}" ]; then
   PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
 
   echo "Promoted build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --style "info" --context "promoted-build-url"
-  echo "Lock qa / staging environnment https://argo-workflows.cd.internal.qa.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.qa.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-qa-staging"
-  echo "Lock canary / non canary prod environment https://argo-workflows.cd.internal.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-prod"
+  echo "Lock/Unlock qa / staging environnment https://argo-workflows.cd.internal.qa.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.qa.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-qa-staging"
+  echo "Lock/Unlock canary / non canary prod environment https://argo-workflows.cd.internal.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-prod"
 fi
 
 if [ -z "${PREVIOUS_PROMOTED_COMMIT}" ]; then
@@ -35,7 +35,19 @@ echo "Promoting from commit '$PREVIOUS_PROMOTED_COMMIT' to commit '${PROMOTED_CO
 echo "--- Trigger release build"
 cat <<EOF | buildkite-agent pipeline upload
 steps:
+  - label: ":github: Check Promotion Blocker"
+    key: "checkblocker"
+    command: |
+          .buildkite/scripts/run-gradle.sh checkPromotionBlocker
+    env:
+        USE_GITHUB_CREDENTIALS: "true"
+        BLOCK_ON_ISSUES_UNTRIAGED: ${BLOCK_ON_ISSUES_UNTRIAGED}
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
   - label: ":argo: Trigger serverless Elasticsearch release"
+    depends_on: "checkblocker"
     trigger: elasticsearch-serverless-intake
     build:
       commit: "${PROMOTED_COMMIT}"

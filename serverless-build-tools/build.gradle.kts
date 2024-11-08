@@ -30,7 +30,7 @@ gradlePlugin {
         }
         val serverlessPromotionReport by creating {
             id = "elasticsearch.serverless-promotion-report"
-            implementationClass = "org.elasticsearch.gradle.serverless.release.ServerlessPromotionReportPlugin"
+            implementationClass = "org.elasticsearch.gradle.serverless.release.ServerlessPromotionPlugin"
         }
     }
 }

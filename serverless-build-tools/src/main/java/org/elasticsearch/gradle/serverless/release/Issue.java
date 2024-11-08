@@ -17,25 +17,20 @@
 
 package org.elasticsearch.gradle.serverless.release;
 
+import java.time.Instant;
 import java.util.List;
 
-public class PullRequest {
-    private final String repository;
+public class Issue {
     private final String title;
     private final String url;
-    private final String mergedAt;
+    private final Instant createdAt;
     private final List<Label> labels;
 
-    public PullRequest(String repository, String title, String url, String mergedAt, List<Label> labels) {
-        this.repository = repository;
+    public Issue(String title, String url, String created_at, List<Label> labels) {
         this.title = title;
         this.url = url;
-        this.mergedAt = mergedAt;
+        createdAt = Instant.parse(created_at);
         this.labels = labels;
-    }
-
-    public String getRepository() {
-        return repository;
     }
 
     public String getTitle() {
@@ -46,12 +41,13 @@ public class PullRequest {
         return url;
     }
 
-    public String getMergedAt() {
-        return mergedAt;
+    public Instant getCreatedAt() {
+        return createdAt;
     }
 
     public List<Label> getLabels() {
         return labels;
     }
+
 
 }

@@ -145,7 +145,6 @@ public abstract class GenerateServerlessPromotionNotesTask extends DefaultTask {
             getCurrentGitHash().get(),
             allPullRequests
         );
-        // Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
         // Register the custom serializer
         Gson gson = new GsonBuilder().registerTypeAdapter(PromotionReport.class, new PromotionReportSerializer())
@@ -252,7 +251,7 @@ public abstract class GenerateServerlessPromotionNotesTask extends DefaultTask {
             jsonObject.addProperty("title", pullRequest.getTitle());
             jsonObject.addProperty("mergedAt", pullRequest.getMergedAt());
             jsonObject.addProperty("repository", pullRequest.getRepository());
-            JsonElement labels = new Gson().toJsonTree(pullRequest.getLabels().stream().map(PullRequest.Label::getName).toList());
+            JsonElement labels = new Gson().toJsonTree(pullRequest.getLabels().stream().map(Label::getName).toList());
             jsonObject.add("labels", labels);
             return jsonObject;
         }
