@@ -136,4 +136,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.CorruptionIT
   method: testConcurrentOperations
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2969
-
+- class: co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT
+  method: testDeleteIndexWhileNodeStopping
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3107
