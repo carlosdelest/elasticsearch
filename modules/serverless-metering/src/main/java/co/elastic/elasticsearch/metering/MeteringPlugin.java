@@ -126,7 +126,6 @@ public class MeteringPlugin extends Plugin
     private final boolean hasSearchRole;
     private List<SampledMetricsProvider> sampledMetricsProviders;
     private List<CounterMetricsProvider> counterMetricsProviders;
-    private MeteringUsageRecordPublisher usageRecordPublisher;
     private UsageReportService usageReportService;
     public final SetOnce<List<ActionFilter>> actionFilters = new SetOnce<>();
     private volatile IngestMetricsProvider ingestMetricsCollector;
@@ -214,6 +213,7 @@ public class MeteringPlugin extends Plugin
         builtInSampledMetrics.add(clusterMetricsService.createSampledVCUMetricsProvider(nodeEnvironment));
         builtInSampledMetrics.addAll(sampledMetricsProviders);
 
+        MeteringUsageRecordPublisher usageRecordPublisher;
         if (projectId.isEmpty()) {
             log.warn(PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
             usageRecordPublisher = MeteringUsageRecordPublisher.NOOP_REPORTER;
@@ -243,7 +243,6 @@ public class MeteringPlugin extends Plugin
 
         List<Object> cs = new ArrayList<>();
         cs.add(activityTracker);
-        cs.add(usageRecordPublisher);
         cs.add(usageReportService);
         cs.add(clusterMetricsService);
         cs.addAll(builtInCounterMetrics);
@@ -292,7 +291,7 @@ public class MeteringPlugin extends Plugin
 
     @Override
     public void close() throws IOException {
-        IOUtils.close(usageRecordPublisher, usageReportService);
+        IOUtils.close(usageReportService);
     }
 
     IngestMetricsProvider getIngestMetricsCollector() {

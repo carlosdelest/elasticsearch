@@ -17,18 +17,10 @@
 
 package co.elastic.elasticsearch.metering.usagereports.publisher;
 
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.List;
 
-public interface MeteringUsageRecordPublisher extends Closeable {
-    MeteringUsageRecordPublisher NOOP_REPORTER = new MeteringUsageRecordPublisher() {
-        @Override
-        public void sendRecords(List<UsageRecord> records) {}
+public interface MeteringUsageRecordPublisher {
+    MeteringUsageRecordPublisher NOOP_REPORTER = records -> true;
 
-        @Override
-        public void close() {}
-    };
-
-    void sendRecords(List<UsageRecord> records) throws IOException, InterruptedException;
+    boolean sendRecords(List<UsageRecord> records);
 }

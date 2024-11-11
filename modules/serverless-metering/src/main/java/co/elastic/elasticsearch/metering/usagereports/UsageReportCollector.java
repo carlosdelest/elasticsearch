@@ -66,13 +66,14 @@ class UsageReportCollector {
     static final int MAX_CONSTANT_BACKFILL = 2;
 
     static final String METERING_REPORTS_TOTAL = "es.metering.reporting.runs.total";
+    static final String METERING_REPORTS_FAILED_TOTAL = "es.metering.reporting.runs.failed.total";
     static final String METERING_REPORTS_DELAYED_TOTAL = "es.metering.reporting.runs.delayed.total";
     static final String METERING_REPORTS_RETRIED_TOTAL = "es.metering.reporting.runs.retried.total";
     static final String METERING_REPORTS_TIME = "es.metering.reporting.runs.time";
     static final String METERING_REPORTS_SENT_TOTAL = "es.metering.reporting.sent.total";
-    static final String METERING_REPORTS_BACKFILL_CURRENT = "es.metering.reporting.backfill.current";
     static final String METERING_REPORTS_BACKFILL_TOTAL = "es.metering.reporting.backfill.total";
-    static final String METERING_REPORTS_BACKFILL_DROPPED_TOTAL = "es.metering.reporting.backfill.dropped.total";
+    static final String METERING_REPORTS_BACKFILL_PERIODS_TOTAL = "es.metering.reporting.backfill.periods.total";
+    static final String METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL = "es.metering.reporting.backfill.dropped.total";
     static final String METERING_REPORTS_PERIOD = "es_metering_reporting_period";
 
     private final List<CounterMetricsProvider> counterMetricsProviders;
@@ -89,13 +90,14 @@ class UsageReportCollector {
     private final String projectId;
 
     private final LongCounter reportsTotalCounter;
+    private final LongCounter reportsFailedCounter;
     private final LongCounter reportsDelayedCounter;
     private final LongCounter reportsRetryCounter;
     private final LongHistogram reportsRunTime;
     private final LongCounter reportsSentTotalCounter;
     private final LongCounter reportsBackfillTotalCounter;
-    private final LongHistogram reportsTimeframesToBackfill;
-    private final LongCounter reportsBackfillDroppedCounter;
+    private final LongCounter reportsBackfillPeriodsCounter;
+    private final LongCounter reportsBackfillDroppedPeriodsCounter;
 
     private volatile boolean cancel;
     private volatile Scheduler.Cancellable nextRun;
@@ -137,14 +139,19 @@ class UsageReportCollector {
             "The total number the reporting task run",
             "unit"
         );
+        this.reportsFailedCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_FAILED_TOTAL,
+            "The total number the reporting task failed",
+            "unit"
+        );
         this.reportsDelayedCounter = meterRegistry.registerLongCounter(
             METERING_REPORTS_DELAYED_TOTAL,
-            "The total number the reporting task had to be delayed because it run for longer than the reporting period",
+            "The total number the reporting schedule got delayed because a task run for longer than the reporting period",
             "unit"
         );
         this.reportsRetryCounter = meterRegistry.registerLongCounter(
             METERING_REPORTS_RETRIED_TOTAL,
-            "The number of times the reporting task was re-scheduled to retry after failing to published a report",
+            "The number of times the reporting task was re-scheduled in the same reporting period after failing to published a report",
             "unit"
         );
         this.reportsRunTime = meterRegistry.registerLongHistogram(METERING_REPORTS_TIME, "The run time of the reporting task, in ms", "ms");
@@ -158,13 +165,13 @@ class UsageReportCollector {
             "The number of times the reporting task had to backfill",
             "unit"
         );
-        this.reportsTimeframesToBackfill = meterRegistry.registerLongHistogram(
-            METERING_REPORTS_BACKFILL_CURRENT,
-            "The current number of timeframes that need to be backfilled (number of timeframes we are behind)",
+        this.reportsBackfillPeriodsCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_BACKFILL_PERIODS_TOTAL,
+            "The number of timeframes that need to be backfilled (number of timeframes we are behind)",
             "unit"
         );
-        this.reportsBackfillDroppedCounter = meterRegistry.registerLongCounter(
-            METERING_REPORTS_BACKFILL_DROPPED_TOTAL,
+        this.reportsBackfillDroppedPeriodsCounter = meterRegistry.registerLongCounter(
+            METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL,
             "The number of timeframes the reporting task had to drop during a backfill",
             "unit"
         );
@@ -204,6 +211,7 @@ class UsageReportCollector {
         try {
             reportsSent = collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
         } catch (RuntimeException e) {
+            reportsFailedCounter.increment();
             log.error("Unexpected exception whilst collecting metrics and sending reports", e);
         }
 
@@ -279,12 +287,14 @@ class UsageReportCollector {
 
     private boolean sendReport(List<UsageRecord> report) {
         try {
-            usageRecordPublisher.sendRecords(report);
-            reportsSentTotalCounter.increment();
-            return true;
-        } catch (Exception e) {
+            if (usageRecordPublisher.sendRecords(report)) {
+                reportsSentTotalCounter.increment();
+                return true;
+            }
+        } catch (RuntimeException e) {
             log.warn("Exception when publishing usage records", e);
         }
+        reportsFailedCounter.increment();
         return false;
     }
 
@@ -364,7 +374,6 @@ class UsageReportCollector {
         List<SampledMetricsProvider.MetricValues> sampledMetricValuesList,
         List<UsageRecord> records
     ) {
-        reportsTimeframesToBackfill.record(0);
         Map<String, MetricValue> samplesById = new HashMap<>();
         for (var sampledMetricValues : sampledMetricValuesList) {
             for (var sample : sampledMetricValues) {
@@ -383,11 +392,11 @@ class UsageReportCollector {
         var backfills = timestamps.limit(lastSampledMetricValues == null ? 1 + MAX_CONSTANT_BACKFILL : maxPeriodsLookback);
 
         reportsBackfillTotalCounter.increment();
-        reportsTimeframesToBackfill.record(backfills.size() - 1); // first is not a backfill
+        reportsBackfillPeriodsCounter.incrementBy(backfills.size() - 1); // first is not a backfill
 
         var type = lastSampledMetricValues == null ? "constant" : "interpolated";
         if (timestamps.size() > backfills.size()) {
-            reportsBackfillDroppedCounter.incrementBy(timestamps.size() - backfills.size());
+            reportsBackfillDroppedPeriodsCounter.incrementBy(timestamps.size() - backfills.size());
             log.warn(
                 "Partially backfilling {} of {} periods [{}] with {} samples [last success: {}]",
                 backfills.size() - 1,

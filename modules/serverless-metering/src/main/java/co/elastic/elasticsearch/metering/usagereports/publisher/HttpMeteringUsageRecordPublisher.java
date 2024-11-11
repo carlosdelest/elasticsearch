@@ -19,7 +19,6 @@ package co.elastic.elasticsearch.metering.usagereports.publisher;
 
 import org.elasticsearch.Build;
 import org.elasticsearch.common.bytes.BytesReference;
-import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
@@ -58,7 +57,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509ExtendedTrustManager;
 
-public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent implements MeteringUsageRecordPublisher {
+public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPublisher {
 
     private static final Logger log = LogManager.getLogger(HttpMeteringUsageRecordPublisher.class);
     private static final String USER_AGENT = "elasticsearch/metering/" + Build.current().version();
@@ -148,58 +147,76 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
         );
     }
 
+    /**
+     * Publish usage records to the usage API.
+     *
+     * <p>Retries shall be handled by the caller, as soon as this encounters an error it will return false.
+     * Note, requests are sent in batches, so some requests may have been sent successfully before an error is encountered.
+     */
     @Override
-    protected void doStart() {}
-
-    @Override
-    protected void doStop() {}
-
-    @Override
-    public void sendRecords(List<UsageRecord> records) throws IOException, InterruptedException {
+    public boolean sendRecords(List<UsageRecord> records) {
         log.trace(() -> Strings.format("Sending records: %s", records));
         if (records.isEmpty()) {
-            return;
+            return true;
         }
-
+        int successCount = 0;
         List<List<UsageRecord>> batches = CollectionUtils.eagerPartition(records, batchSize);
-        for (List<UsageRecord> batch : batches) {
+        for (int i = 0; i < batches.size(); i++) {
             requestsTotalCounter.increment();
             Instant startedAt = Instant.now();
             try {
+                var batch = batches.get(i);
                 HttpRequest request = createRequest(batch);
 
                 var response = AccessController.doPrivileged(
                     (PrivilegedExceptionAction<HttpResponse<String>>) () -> client.send(request, HttpResponse.BodyHandlers.ofString())
                 );
-                handleResponse(response, batch);
+                var success = handleResponse(response, batch);
+                if (success == false) {
+                    if (batches.size() > 1) {
+                        logFailedRecords(records.size(), successCount, batches.size(), i, null); // otherwise logs for current batch suffice
+                    }
+                    return false;
+                }
+                successCount += batch.size();
             } catch (PrivilegedActionException e) {
-                Throwable cause = e.getCause();
-                log.warn("Could not send {} records to billing service", batch.size(), cause);
+                logFailedRecords(records.size(), successCount, batches.size(), i, e.getCause());
                 requestsErrorCounter.increment();
-                if (cause instanceof IOException ex) {
-                    throw ex;
-                }
-                if (cause instanceof InterruptedException ex) {
-                    throw ex;
-                }
-                assert false : e;
+                return false;
+            } catch (IOException e) {
+                logFailedRecords(records.size(), successCount, batches.size(), i, e);
+                requestsErrorCounter.increment();
+                return false;
             } finally {
                 Instant completedAt = Instant.now();
                 requestsTime.record(startedAt.until(completedAt, ChronoUnit.MILLIS));
             }
         }
+        return true;
     }
 
-    private void handleResponse(HttpResponse<?> response, List<UsageRecord> records) {
+    private void logFailedRecords(int totalRecordsCount, int successCount, int batchesCount, int currentBatch, Throwable e) {
+        log.warn(
+            "Failed to send {} records [of {} batches] to usage api [partial success: {} records in {} batches]",
+            totalRecordsCount - successCount,
+            batchesCount - currentBatch,
+            successCount,
+            currentBatch,
+            e
+        );
+    }
+
+    private boolean handleResponse(HttpResponse<?> response, List<UsageRecord> records) {
         int statusCode = response.statusCode();
         if (statusCode == 201) {
             // all ok
-            return;
+            return true;
         }
         switch (statusCode / 100) {
             case 2 -> {
                 // some other success - not expecting this?
                 log.info("Unexpected status code {} sending {} records [{}]", response.statusCode(), records.size(), response.body());
+                return true;
             }
             case 4 -> {
                 // problem with the request...?
@@ -217,6 +234,7 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
                 requestsErrorCounter.incrementBy(1, Map.of(STATUS_CODE_KEY, response.statusCode()));
             }
         }
+        return false; // request for batch failed
     }
 
     private HttpRequest createRequest(List<UsageRecord> records) throws IOException {
@@ -238,7 +256,4 @@ public class HttpMeteringUsageRecordPublisher extends AbstractLifecycleComponent
             .header("User-Agent", USER_AGENT)
             .build();
     }
-
-    @Override
-    protected void doClose() throws IOException {}
 }

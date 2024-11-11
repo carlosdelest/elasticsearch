@@ -40,14 +40,16 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
@@ -59,6 +61,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.startsWith;
 
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
@@ -66,12 +69,16 @@ import static org.hamcrest.Matchers.startsWith;
 public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
 
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
+    private static final int BATCH_SIZE = 10;
 
     private HttpServer server;
     private Settings settings;
 
+    private RecordingMeterRegistry meterRegistry;
+    private HttpMeteringUsageRecordPublisher reporter;
+
     private final BlockingQueue<List<?>> requests = new LinkedBlockingQueue<>();
-    private volatile int nextRequestStatusCode = HttpStatus.SC_CREATED;
+    private Deque<Integer> nextRequestStatusCode = new LinkedBlockingDeque<>();
 
     @Before
     public void setupServer() throws IOException {
@@ -82,7 +89,12 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
         server.createContext("/", this::handle);
         server.start();
 
-        settings = Settings.builder().put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + port).build();
+        settings = Settings.builder()
+            .put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + port)
+            .put(HttpMeteringUsageRecordPublisher.BATCH_SIZE.getKey(), BATCH_SIZE)
+            .build();
+        meterRegistry = new RecordingMeterRegistry();
+        reporter = new HttpMeteringUsageRecordPublisher(settings, meterRegistry);
     }
 
     private void handle(HttpExchange exchange) throws IOException {
@@ -91,13 +103,23 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
             assertTrue(exchange.getRequestHeaders().containsKey(HttpHeaders.USER_AGENT));
             assertThat(exchange.getRequestHeaders().get(HttpHeaders.USER_AGENT), contains(startsWith("elasticsearch/metering")));
 
-            if (nextRequestStatusCode == HttpStatus.SC_CREATED) {
+            int statusCode = Objects.requireNonNullElse(nextRequestStatusCode.pollFirst(), HttpStatus.SC_CREATED);
+            if (statusCode == HttpStatus.SC_CREATED) {
                 var map = toUsageRecordMaps(exchange.getRequestBody());
                 requests.add(map);
             }
 
-            exchange.sendResponseHeaders(nextRequestStatusCode, 0);
+            exchange.sendResponseHeaders(statusCode, 0);
         }
+    }
+
+    private static UsageRecord usageRecord(int id) {
+        return new UsageRecord(
+            "id" + id,
+            Instant.now(),
+            new UsageMetrics("type", null, 1, null, null, null),
+            new UsageSource("es-id", "instanceId", null)
+        );
     }
 
     private static List<?> toUsageRecordMaps(List<UsageRecord> records) throws IOException {
@@ -122,24 +144,12 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
     }
 
     public void testReporterSendsData() throws Exception {
-        UsageRecord record = new UsageRecord(
-            "id1",
-            Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null),
-            new UsageSource("es-id", "instanceId", null)
-        );
+        UsageRecord record = usageRecord(1);
+        assertThat(reporter.sendRecords(List.of(record)), is(true));
 
-        var meterRegistry = new RecordingMeterRegistry();
-        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, meterRegistry)) {
-            reporter.start();
-            reporter.sendRecords(List.of(record));
-
-            List<?> data = requests.poll(10, TimeUnit.SECONDS);
-            assertNotNull("Request was not received in time", data);
-            assertRecord(List.of(record), data);
-
-            reporter.stop();
-        }
+        List<?> data = requests.poll(10, TimeUnit.SECONDS);
+        assertNotNull("Request was not received in time", data);
+        assertRecord(List.of(record), data);
 
         final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
         final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
@@ -152,40 +162,22 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
         assertThat(times, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
     }
 
-    public void testReporterSendsLotsOfData() throws Exception {
-        Settings testSettings = Settings.builder().put(settings).put(HttpMeteringUsageRecordPublisher.BATCH_SIZE.getKey(), 10).build();
+    public void testReporterSendsMultipleBatches() throws Exception {
+        List<UsageRecord> records = IntStream.range(0, 25).mapToObj(HttpMeteringUsageRecordPublisherTests::usageRecord).toList();
+        assertThat(reporter.sendRecords(records), is(true));
 
-        List<UsageRecord> records = IntStream.range(0, 25)
-            .mapToObj(
-                i -> new UsageRecord(
-                    "id" + i,
-                    Instant.now(),
-                    new UsageMetrics("type", null, 1, null, null, null),
-                    new UsageSource("es-id", "instanceId", null)
-                )
-            )
-            .toList();
-
-        var meterRegistry = new RecordingMeterRegistry();
-        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(testSettings, meterRegistry)) {
-            reporter.start();
-            reporter.sendRecords(records);
-
-            List<Object> received = new ArrayList<>();
-            waitUntil(() -> {
-                try {
-                    var polled = requests.poll(10, TimeUnit.SECONDS);
-                    assertNotNull("Request was not received in time", polled);
-                    received.addAll(polled);
-                    return received.size() == records.size();
-                } catch (InterruptedException e) {
-                    throw new AssertionError(e);
-                }
-            });
-            assertRecord(records, received);
-
-            reporter.stop();
-        }
+        List<Object> received = new ArrayList<>();
+        waitUntil(() -> {
+            try {
+                var polled = requests.poll(10, TimeUnit.SECONDS);
+                assertNotNull("Request was not received in time", polled);
+                received.addAll(polled);
+                return received.size() == records.size();
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+        });
+        assertRecord(records, received);
 
         final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
         final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
@@ -201,19 +193,8 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
     public void testServerDown() {
         server.stop(0);     // bye bye server
 
-        UsageRecord record = new UsageRecord(
-            "id1",
-            Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null),
-            new UsageSource("es-id", "instanceId", null)
-        );
-
-        var meterRegistry = new RecordingMeterRegistry();
-        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, meterRegistry)) {
-            reporter.start();
-
-            expectThrows(ConnectException.class, () -> reporter.sendRecords(List.of(record)));
-        }
+        UsageRecord record = usageRecord(1);
+        assertThat(reporter.sendRecords(List.of(record)), is(false)); // server is down
 
         final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
         final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
@@ -226,21 +207,11 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
         assertThat(times, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
     }
 
-    public void testServerFailure() throws IOException, InterruptedException {
-        nextRequestStatusCode = 500;    // server is wrong
+    public void testServerFailure() {
+        nextRequestStatusCode.add(HttpStatus.SC_INTERNAL_SERVER_ERROR);    // server is wrong
 
-        UsageRecord record = new UsageRecord(
-            "id1",
-            Instant.now(),
-            new UsageMetrics("type", null, 1, null, null, null),
-            new UsageSource("es-id", "instanceId", null)
-        );
-
-        var meterRegistry = new RecordingMeterRegistry();
-        try (HttpMeteringUsageRecordPublisher reporter = new HttpMeteringUsageRecordPublisher(settings, meterRegistry)) {
-            reporter.start();
-            reporter.sendRecords(List.of(record));
-        }
+        UsageRecord record = usageRecord(1);
+        assertThat(reporter.sendRecords(List.of(record)), is(false)); // server error
 
         final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
         final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
@@ -251,6 +222,37 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
         assertThat(errors, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
         assertThat(sizes, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
         assertThat(times, contains(transformedMatch(Measurement::getLong, greaterThan(0L))));
+    }
+
+    public void testPartialServerFailure() throws Exception {
+        nextRequestStatusCode.add(HttpStatus.SC_CREATED);
+        nextRequestStatusCode.add(HttpStatus.SC_INTERNAL_SERVER_ERROR);    // server is wrong
+
+        List<UsageRecord> records = IntStream.range(0, 25).mapToObj(HttpMeteringUsageRecordPublisherTests::usageRecord).toList();
+        assertThat(reporter.sendRecords(records), is(false));
+
+        List<Object> received = new ArrayList<>();
+        waitUntil(() -> {
+            try {
+                var polled = requests.poll(10, TimeUnit.SECONDS);
+                assertNotNull("Request was not received in time", polled);
+                received.addAll(polled);
+                return received.size() == BATCH_SIZE; // only first batch is successful
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+        });
+        assertRecord(records.subList(0, 10), received);
+
+        final var requests = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TOTAL);
+        final var errors = getCounter(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_ERRORS_TOTAL);
+        final var sizes = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_SIZE);
+        final var times = getHistogram(meterRegistry.getRecorder(), HttpMeteringUsageRecordPublisher.USAGE_API_REQUESTS_TIME);
+
+        assertThat(requests, contains(transformedMatch(Measurement::getLong, equalTo(2L)))); // 3rd request is skipped
+        assertThat(errors, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
+        assertThat(sizes, everyItem(transformedMatch(Measurement::getLong, greaterThan(0L))));
+        assertThat(times, everyItem(transformedMatch(Measurement::getLong, greaterThan(0L))));
     }
 
     @After

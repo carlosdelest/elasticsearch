@@ -52,8 +52,9 @@ import static co.elastic.elasticsearch.metering.usagereports.SampledMetricsTimeC
 import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.MAX_BACKFILL_LOOKBACK;
 import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.MAX_CONSTANT_BACKFILL;
 import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.MAX_JITTER_FACTOR;
-import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_BACKFILL_DROPPED_TOTAL;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL;
 import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_BACKFILL_TOTAL;
+import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_FAILED_TOTAL;
 import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_RETRIED_TOTAL;
 import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_SENT_TOTAL;
 import static co.elastic.elasticsearch.metering.usagereports.UsageReportCollector.METERING_REPORTS_TOTAL;
@@ -104,6 +105,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         List<SampledMetricsProvider> samplers,
         SampledMetricsTimeCursor timestampCursor
     ) {
+        when(publisher.sendRecords(anyList())).thenReturn(true); // success
         UsageReportCollector collector = new UsageReportCollector(
             NODE_ID,
             PROJECT_ID,
@@ -290,7 +292,11 @@ public class UsageReportCollectorTests extends ESTestCase {
         var timestampCursor = inMemoryTimeCursor();
         startCollector(List.of(counterProvider), List.of(sampleProvider), timestampCursor);
 
-        doThrow(new RuntimeException("publishing failed")).when(publisher).sendRecords(anyList());
+        if (randomBoolean()) {
+            when(publisher.sendRecords(anyList())).thenReturn(false); // publishing failed
+        } else {
+            doThrow(new RuntimeException("publishing failed")).when(publisher).sendRecords(anyList());
+        }
 
         var sampleTime = clock.instant();
         var committedTime = previousSampleTime(sampleTime);
@@ -315,10 +321,11 @@ public class UsageReportCollectorTests extends ESTestCase {
 
         // Validate observability metrics
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_TOTAL), contains(measurement(is(attempts))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_FAILED_TOTAL), contains(measurement(is(attempts))));
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_RETRIED_TOTAL), contains(measurement(is(attempts - 1))));
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), contains(measurement(is(1L))));
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), empty());
-        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), empty());
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL), empty());
     }
 
     public void testCommitSampleTimestampFailure() throws Exception {
@@ -355,7 +362,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_RETRIED_TOTAL), contains(measurement(is(attempts - 1L))));
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), contains(measurement(is(1L))));
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), contains(measurement(is((long) attempts))));
-        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), empty());
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL), empty());
     }
 
     /**
@@ -395,9 +402,12 @@ public class UsageReportCollectorTests extends ESTestCase {
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), contains(measurement(is(1L))));
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), contains(measurement(is(1L))));
         if (dropped > 0) {
-            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), contains(measurement(is((long) dropped))));
+            assertThat(
+                getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL),
+                contains(measurement(is((long) dropped)))
+            );
         } else {
-            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), empty());
+            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL), empty());
         }
     }
 
@@ -446,9 +456,12 @@ public class UsageReportCollectorTests extends ESTestCase {
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), contains(measurement(is(2L))));
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), contains(measurement(is(1L))));
         if (dropped > 0) {
-            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), contains(measurement(is((long) dropped))));
+            assertThat(
+                getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL),
+                contains(measurement(is((long) dropped)))
+            );
         } else {
-            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_TOTAL), empty());
+            assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL), empty());
         }
     }
 
