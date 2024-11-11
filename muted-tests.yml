@@ -63,24 +63,12 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/3034"
   method: "testBackgroundMergeCanRetainDeletedGenerationalFile"
-- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
-  method: test {p0=esql/170_no_replicas/Test From 1}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3077
-- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
-  method: test {p0=esql/170_no_replicas/Test From 5}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3078
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {categorize.Categorize ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT
-  method: test {p0=esql/170_no_replicas/Test From 1}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2299
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT
-  method: test {p0=esql/170_no_replicas/Test From 5}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3080
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {categorize.Categorize ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
@@ -90,24 +78,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: "test {categorize.Categorize *"
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncIT
-  method: test {p0=esql/170_no_replicas/Test From 1}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3081
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncIT
-  method: test {p0=esql/170_no_replicas/Test From 5}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3082
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlIT
-  method: test {p0=esql/170_no_replicas/Test From 1}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3077
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlIT
-  method: test {p0=esql/170_no_replicas/Test From 5}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3078
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlClientYamlIT
-  method: test {p0=esql/170_no_replicas/Test From 1}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3077
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlClientYamlIT
-  method: test {p0=esql/170_no_replicas/Test From 5}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3078
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_crud/Test delete given model referenced by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3085
