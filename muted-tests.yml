@@ -93,3 +93,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.CorruptionIT
   method: testConcurrentOperations
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2969
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=profiling/10_basic/Test get stacktraces}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3121
