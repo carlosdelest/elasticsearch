@@ -105,3 +105,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessCommitServiceIT
   method: testRetainCommitForReadersAfterShardMovedAway
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3124
+- class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
+  method: testTranslogRestartOnlyStressRecoveryTest
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3138
