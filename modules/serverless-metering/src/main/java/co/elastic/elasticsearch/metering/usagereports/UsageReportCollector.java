@@ -318,8 +318,12 @@ class UsageReportCollector {
                     log.error(Strings.format("Failed to get counter metrics from %s", counterMetricsProvider.getClass().getName()), e);
                 }
             }
+            if (records.isEmpty()) {
+                log.info("No counter usage records generated during this metrics collection [{}]", now);
+            }
         }
 
+        // only process sampled metrics if the SampledMetricsTimeCursor is ready (none empty timestamps)
         var timestamps = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod);
         if (timestamps.size() > 0 && sampledMetricsProviders.isEmpty() == false) {
             sampledMetricValuesList = new ArrayList<>(sampledMetricsProviders.size());
@@ -342,14 +346,22 @@ class UsageReportCollector {
                     break;
                 }
             }
-            sampledMetricValuesById = timestamps.size() == 1
-                ? appendSampleRecords(sampleTimestamp, sampledMetricValuesList, records)
-                : appendSampleRecordsWithBackfill(timestamps, sampledMetricValuesList, records);
+
+            if (sampledMetricValuesList.isEmpty() == false) {
+                if (timestamps.size() == 1) {
+                    // the default case
+                    sampledMetricValuesById = appendSampleRecords(sampleTimestamp, sampledMetricValuesList, records);
+                } else {
+                    // backfill missing samples for multiple timestamps (when we're behind schedule)
+                    sampledMetricValuesById = appendSampleRecordsWithBackfill(timestamps, sampledMetricValuesList, records);
+                }
+
+                if (sampledMetricValuesById.isEmpty()) {
+                    log.info("No sampled usage records generated during this metrics collection [{}]", timestamps);
+                }
+            }
         }
 
-        if (records.isEmpty()) {
-            log.info("No usage record generated during this metrics collection [{}]", timestamps);
-        }
         // Note: success does not necessarily mean counters or samples were reported.
         if (records.isEmpty() || sendReport(records)) {
             // Commit the counter metrics on success.

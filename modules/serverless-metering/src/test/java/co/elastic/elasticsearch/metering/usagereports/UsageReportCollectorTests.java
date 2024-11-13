@@ -161,7 +161,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         );
     }
 
-    public void testReportCollectionAlwaysRunsOrderly() throws Exception {
+    public void testReportCollectionAlwaysRunsOrderly() {
         var backfillStrategy = mock(BackfillStrategy.class);
 
         var sampleProvider = mockedSampleProvider(backfillStrategy, SAMPLE1);
@@ -202,7 +202,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         verifyNoInteractions(backfillStrategy);
     }
 
-    public void testErroneousCounterProvider() throws Exception {
+    public void testErroneousCounterProvider() {
         var sampleTime = clock.instant();
         var committedTime = previousSampleTime(sampleTime);
         var timestampCursor = inMemoryTimeCursor(committedTime);
@@ -222,7 +222,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now), usageRecord(SAMPLE1, sampleTime))); // all available records send
     }
 
-    public void testErroneousSampleProvider() throws Exception {
+    public void testErroneousSampleProvider() {
         var sampleTime = clock.instant();
         var committedTime = previousSampleTime(sampleTime);
         var timestampCursor = inMemoryTimeCursor(committedTime);
@@ -238,7 +238,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         verify(publisher).sendRecords(List.of(usageRecord(COUNTER, now))); // no samples of sample provider 2 included
     }
 
-    public void testUnavailableSampleProvider() throws Exception {
+    public void testUnavailableSampleProvider() {
         var sampleTime = clock.instant();
         var committedTime = previousSampleTime(sampleTime);
         var timestampCursor = inMemoryTimeCursor(committedTime);
@@ -267,7 +267,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(sampleTime));
     }
 
-    public void testSkipSampleProvidersIfTimestampCursorNotReady() throws Exception {
+    public void testSkipSampleProvidersIfTimestampCursorNotReady() {
         var sampleProvider = mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1);
         var counterProvider = mockedCounterProvider(COUNTER);
         var timestampCursor = mock(SampledMetricsTimeCursor.class);
@@ -286,7 +286,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         verifyNoInteractions(sampleProvider);
     }
 
-    public void testPublishingFailure() throws Exception {
+    public void testPublishingFailure() {
         var sampleProvider = mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1);
         var counterProvider = mockedCounterProvider(COUNTER);
         var timestampCursor = inMemoryTimeCursor();
@@ -328,7 +328,7 @@ public class UsageReportCollectorTests extends ESTestCase {
         assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_DROPPED_PERIODS_TOTAL), empty());
     }
 
-    public void testCommitSampleTimestampFailure() throws Exception {
+    public void testCommitSampleTimestampFailure() {
         var sampleProvider = mockedSampleProvider(BackfillStrategy.NOOP, SAMPLE1);
         var counterProvider = mockedCounterProvider(COUNTER);
         var timestampCursor = mock(SampledMetricsTimeCursor.class);
@@ -369,7 +369,7 @@ public class UsageReportCollectorTests extends ESTestCase {
      * On a node change, we will have no local state. Test that we are backfilling a few (2) samples anyway, to account for common
      * scenarios in which this happens (scaling and rolling upgrade).
      */
-    public void testConstantBackfillIfNoPreviousSamples() throws Exception {
+    public void testConstantBackfillIfNoPreviousSamples() {
 
         var backfillStrategy = mock(BackfillStrategy.class);
         doAnswer(v -> {
@@ -411,7 +411,24 @@ public class UsageReportCollectorTests extends ESTestCase {
         }
     }
 
-    public void testInterpolatedBackfillUsingPreviousSamples() throws Exception {
+    public void testSkipBackfillIfNoSamples() {
+        var sampleTime = clock.instant();
+        var commitTime = sampleTime.minus(REPORT_PERIOD_DURATION.multipliedBy(1 + randomIntBetween(1, 10)));
+
+        var timestampCursor = inMemoryTimeCursor(commitTime); // revert commit time to trigger backfill
+
+        startCollector(List.of(), List.of(mock(SampledMetricsProvider.class)), timestampCursor);
+
+        advanceTimeAndRunCollection(sampleTime);
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(commitTime));
+        verifyNoInteractions(publisher);
+
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_TOTAL), contains(measurement(is(1L))));
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_SENT_TOTAL), empty());
+        assertThat(getMeasurements(LONG_COUNTER, METERING_REPORTS_BACKFILL_TOTAL), empty());
+    }
+
+    public void testInterpolatedBackfillUsingPreviousSamples() {
         var backfillStrategy = mock(BackfillStrategy.class);
         doAnswer(v -> {
             BackfillSink sink = v.getArgument(5);
