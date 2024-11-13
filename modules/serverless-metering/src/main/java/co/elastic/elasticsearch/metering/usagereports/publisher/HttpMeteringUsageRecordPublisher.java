@@ -24,6 +24,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.telemetry.metric.LongCounter;
@@ -47,6 +48,7 @@ import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -58,9 +60,10 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPublisher {
-
     private static final Logger log = LogManager.getLogger(HttpMeteringUsageRecordPublisher.class);
+
     private static final String USER_AGENT = "elasticsearch/metering/" + Build.current().version();
+    private static final TimeValue DEFAULT_REQUEST_TIMEOUT = TimeValue.timeValueSeconds(30);
 
     static final String USAGE_API_REQUESTS_TOTAL = "es.metering.usage_api.request.total";
     static final String USAGE_API_ERRORS_TOTAL = "es.metering.usage_api.error.total"; // (include http status in the attributes)
@@ -77,6 +80,12 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
     }, Setting.Property.NodeScope);
 
     public static final Setting<Integer> BATCH_SIZE = Setting.intSetting("metering.batch_size", 100, Setting.Property.NodeScope);
+
+    public static final Setting<TimeValue> REQUEST_TIMEOUT = Setting.timeSetting(
+        "metering.request_timeout",
+        DEFAULT_REQUEST_TIMEOUT,
+        Setting.Property.NodeScope
+    );
 
     private static final TrustManager TRUST_EVERYTHING = new X509ExtendedTrustManager() {
         @Override
@@ -103,7 +112,8 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
         public void checkServerTrusted(X509Certificate[] chain, String authType) {}
     };
 
-    private final Settings settings;
+    private final URI meteringUri;
+    private final Duration requestTimeout;
     private final int batchSize;
     private final HttpClient client;
     private final LongCounter requestsTotalCounter;
@@ -112,8 +122,9 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
     private final LongHistogram requestsTime;
 
     public HttpMeteringUsageRecordPublisher(Settings settings, MeterRegistry meterRegistry) {
-        this.settings = settings;
+        this.meteringUri = METERING_URL.get(settings);
         this.batchSize = BATCH_SIZE.get(settings);
+        this.requestTimeout = Duration.ofMillis(REQUEST_TIMEOUT.get(settings).millis());
 
         SSLContext context;
         try {
@@ -173,18 +184,18 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
                 );
                 var success = handleResponse(response, batch);
                 if (success == false) {
-                    if (batches.size() > 1) {
-                        logFailedRecords(records.size(), successCount, batches.size(), i, null); // otherwise logs for current batch suffice
+                    if (batches.size() > 1) { // otherwise logs for current batch suffice
+                        logFailedRecords(records.size(), successCount, batches.size(), i, startedAt, null);
                     }
                     return false;
                 }
                 successCount += batch.size();
             } catch (PrivilegedActionException e) {
-                logFailedRecords(records.size(), successCount, batches.size(), i, e.getCause());
+                logFailedRecords(records.size(), successCount, batches.size(), i, startedAt, e.getCause());
                 requestsErrorCounter.increment();
                 return false;
-            } catch (IOException e) {
-                logFailedRecords(records.size(), successCount, batches.size(), i, e);
+            } catch (IOException | RuntimeException e) {
+                logFailedRecords(records.size(), successCount, batches.size(), i, startedAt, e);
                 requestsErrorCounter.increment();
                 return false;
             } finally {
@@ -195,13 +206,21 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
         return true;
     }
 
-    private void logFailedRecords(int totalRecordsCount, int successCount, int batchesCount, int currentBatch, Throwable e) {
+    private void logFailedRecords(
+        int totalRecordsCount,
+        int successCount,
+        int batchesCount,
+        int currentBatch,
+        Instant startedAt,
+        Throwable e
+    ) {
         log.warn(
-            "Failed to send {} records [of {} batches] to usage api [partial success: {} records in {} batches]",
+            "Failed to send {} records [of {} batches] to usage api [partial success: {} records in {} batches] after [{}]",
             totalRecordsCount - successCount,
             batchesCount - currentBatch,
             successCount,
             currentBatch,
+            TimeValue.timeValueMillis(startedAt.until(Instant.now(), ChronoUnit.MILLIS)),
             e
         );
     }
@@ -250,7 +269,8 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
         BytesReference recordData = BytesReference.bytes(builder);
         requestsSize.record(recordData.length());
 
-        return HttpRequest.newBuilder(METERING_URL.get(settings))
+        return HttpRequest.newBuilder(meteringUri)
+            .timeout(requestTimeout)
             .POST(HttpRequest.BodyPublishers.ofByteArray(recordData.array(), recordData.arrayOffset(), recordData.length()))
             .header("Content-Type", "application/json")
             .header("User-Agent", USER_AGENT)

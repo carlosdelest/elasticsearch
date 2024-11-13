@@ -142,6 +142,7 @@ public class MeteringPlugin extends Plugin
             UsageReportService.REPORT_PERIOD,
             HttpMeteringUsageRecordPublisher.METERING_URL,
             HttpMeteringUsageRecordPublisher.BATCH_SIZE,
+            HttpMeteringUsageRecordPublisher.REQUEST_TIMEOUT,
             SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING,
             SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING,
             TaskActivityTracker.COOL_DOWN_PERIOD
