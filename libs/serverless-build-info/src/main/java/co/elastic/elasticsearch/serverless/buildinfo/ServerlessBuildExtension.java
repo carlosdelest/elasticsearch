@@ -143,9 +143,6 @@ public class ServerlessBuildExtension implements BuildExtension {
     public BuildVersion fromVersionId(int versionId) {
         // TODO: reenable this once we deal with PersistedCLusterState (ES-7343)
         // assert versionId == -1 : "do not create serverless build version with real version ID";
-        if (versionId != -1) {
-            logger.warn("Attempted to create a BuildVersion with stateful build id: [{}]", versionId);
-        }
         return SERVERLESS_BUILD_VERSION;
     }
 
