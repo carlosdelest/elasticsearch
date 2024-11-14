@@ -102,6 +102,3 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {union_types.Multi Index millis to nanos stats ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3123
-- class: co.elastic.elasticsearch.stateless.StatelessCommitServiceIT
-  method: testRetainCommitForReadersAfterShardMovedAway
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3124
