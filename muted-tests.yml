@@ -102,6 +102,9 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {union_types.Multi Index millis to nanos stats ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3123
+- class: org.elasticsearch.xpack.esql.qa.single-node.EsqlSpecIT
+  method: "test {lookup-join.*"
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: "test {lookup-join.*"
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
