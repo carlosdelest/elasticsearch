@@ -577,4 +577,3 @@ spec:
         hourly:
           branch: main
           cronline: "@hourly"
-          enabled: false
