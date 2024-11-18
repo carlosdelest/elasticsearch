@@ -43,7 +43,7 @@ public abstract class DotPrefixValidator<RequestType> implements MappedActionFil
 
     public static final Setting<Boolean> VALIDATE_DOT_PREFIXES = Setting.boolSetting(
         "serverless.indices.validate_dot_prefixes",
-        false,
+        true,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
