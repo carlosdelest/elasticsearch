@@ -20,9 +20,12 @@ package org.elasticsearch.gradle.serverless.release;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.ProjectLayout;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.ProviderFactory;
 
 import javax.inject.Inject;
+
+import static org.elasticsearch.gradle.internal.util.ParamsUtils.loadBuildParams;
 
 public abstract class ServerlessPromotionPlugin implements Plugin<Project> {
 
@@ -63,6 +66,7 @@ public abstract class ServerlessPromotionPlugin implements Plugin<Project> {
             task.setIgnoreFailures(
                 getProviderFactory().environmentVariable(IGNORE_BLOCKER_ENV).map(Boolean::parseBoolean).orElse(false).get()
             );
+            task.isCi().set(loadBuildParams(target).map(params -> params.isCi()));
         });
         target.getTasks().register(GENERATE_PROMOTION_REPORT_TASKNAME, GenerateServerlessPromotionNotesTask.class, task -> {
             task.setDescription("Generates promotion report for serverless distributions");

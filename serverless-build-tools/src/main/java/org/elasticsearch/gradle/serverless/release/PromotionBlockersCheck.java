@@ -20,7 +20,6 @@ package org.elasticsearch.gradle.serverless.release;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import org.elasticsearch.gradle.internal.info.BuildParams;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.DirectoryProperty;
@@ -52,6 +51,9 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
 
     @Internal
     public abstract Property<String> getGithubToken();
+
+    @Internal
+    public abstract Property<Boolean> isCi();
 
     @Input
     public abstract Property<String> getJsonReportName();
@@ -96,7 +98,7 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
     }
 
     private void addReportAsBuildAnnotation(List<CheckedIssues> issues) {
-        if (issues.isEmpty() == false && BuildParams.isCi()) {
+        if (issues.isEmpty() == false && isCi().get()) {
             StringBuilder blockerAnnotation = new StringBuilder("### Promotion Issues\n\n");
             Map<Boolean, List<CheckedIssues>> byBlocking = issues.stream().collect(Collectors.groupingBy(i -> i.blocking()));
             byBlocking.forEach((blocking, checkIssues) -> {

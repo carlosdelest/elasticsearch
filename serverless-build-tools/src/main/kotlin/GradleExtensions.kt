@@ -1,7 +1,9 @@
 import groovy.lang.Closure
+import org.elasticsearch.gradle.internal.util.ParamsUtils.loadBuildParams
 import org.elasticsearch.gradle.serverless.ServerlessDistributionDownloadPlugin
 import org.elasticsearch.gradle.test.SystemPropertyCommandLineArgumentProvider
 import org.elasticsearch.gradle.testclusters.StandaloneRestIntegTestTask
+import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ModuleDependency
 import org.gradle.api.artifacts.dsl.DependencyHandler
@@ -33,6 +35,14 @@ fun DependencyHandler.testArtifact(dependency: ModuleDependency, sourceSet: Stri
     dependency.capabilities { this.requireCapability("org.elasticsearch.gradle:${dependency.name}-${sourceSet}-artifacts") }
 
     return dependency
+}
+
+/**
+ * Access isCi from a project.
+ *
+ */
+fun Project.isCi(): Boolean {
+    return loadBuildParams(this).map { it.isCi }.get()
 }
 
 fun StandaloneRestIntegTestTask.usesDefaultDistribution() {
