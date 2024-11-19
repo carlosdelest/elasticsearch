@@ -116,3 +116,6 @@ tests:
 - class: org.elasticsearch.xpack.fleet.FleetRestIT
   method: test {p0=fleet/40_secrets_get/Get Fleet Secret}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3159
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=profiling/10_basic/Test topN functions from profiling-events}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3160
