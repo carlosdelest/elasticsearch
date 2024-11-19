@@ -111,3 +111,5 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=synonyms/20_synonyms_get/Get synonyms set}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3157
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3158
