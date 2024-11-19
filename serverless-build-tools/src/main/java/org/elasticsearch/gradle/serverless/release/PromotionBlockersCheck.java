@@ -106,6 +106,7 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
                     checkedIssue -> blockerAnnotation.append(
                         "#### "
                             + checkedIssue.reason
+                            + " (" + checkedIssue.issues().size() + " total) "
                             + (blocking ? " (blocking promotion) " : " (not blocking promotion) ") + "\n"
                             + checkedIssue.issues().stream().map(i -> "- " + i.getUrl()).collect(Collectors.joining("\n"))
                             + "\n\n"

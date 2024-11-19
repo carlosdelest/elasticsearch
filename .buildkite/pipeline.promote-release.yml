@@ -7,7 +7,7 @@ steps:
             - "#es-serverless-gitops"
             - "#es-datastore-serverless-alerts"
             - "#es-search-engine-serverless-alerts"
-          message: "Elasticsearch serverless promotion triggered. See $BUILDKITE_BUILD_URL for details."
+          message: "Elasticsearch serverless promotion started. See $BUILDKITE_BUILD_URL for details."
     env:
       USE_GITHUB_CREDENTIALS: "true"
       BLOCK_ON_ISSUES_UNTRIAGED: "false"
