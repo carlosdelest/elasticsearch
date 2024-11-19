@@ -53,7 +53,7 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
     public abstract Property<String> getGithubToken();
 
     @Internal
-    public abstract Property<Boolean> isCi();
+    public abstract Property<Boolean> getCi();
 
     @Input
     public abstract Property<String> getJsonReportName();
@@ -98,7 +98,7 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
     }
 
     private void addReportAsBuildAnnotation(List<CheckedIssues> issues) {
-        if (issues.isEmpty() == false && isCi().get()) {
+        if (issues.isEmpty() == false && getCi().get()) {
             StringBuilder blockerAnnotation = new StringBuilder("### Promotion Issues\n\n");
             Map<Boolean, List<CheckedIssues>> byBlocking = issues.stream().collect(Collectors.groupingBy(i -> i.blocking()));
             byBlocking.forEach((blocking, checkIssues) -> {
