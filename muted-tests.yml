@@ -108,3 +108,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test topN functions from test-events}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3153
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=synonyms/20_synonyms_get/Get synonyms set}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3157
