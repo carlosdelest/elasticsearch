@@ -82,7 +82,7 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
     public MetricValues getMetrics() {
         return clusterStateSupplier.withCurrentClusterState(clusterState -> {
             final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
-            final var indicesLookup = clusterState.metadata().getIndicesLookup();
+            final var indicesLookup = clusterState.metadata().getProject().getIndicesLookup();
 
             final var toReturn = metricsSnapshot.stream().map(e -> metricValue(nodeId, e.key(), e.value(), indicesLookup)).toList();
             logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));

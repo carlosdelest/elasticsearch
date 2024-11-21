@@ -174,7 +174,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
                     final var concreteIndicesNames = indexNameExpressionResolver.concreteIndexNames(clusterState, request);
                     final var dataStreamConcreteIndicesNames = DataStreamsActionUtil.resolveConcreteIndexNames(
                         indexNameExpressionResolver,
-                        clusterState,
+                        clusterState.metadata().getProject(),
                         request.indices(),
                         request.indicesOptions()
                     );
@@ -324,7 +324,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
             var shardInfo = shardInfos.get(shardId);
 
             String indexName = shardId.getIndexName();
-            IndexAbstraction indexAbstraction = metadata.getIndicesLookup().get(indexName);
+            IndexAbstraction indexAbstraction = metadata.getProject().getIndicesLookup().get(indexName);
 
             long currentCount = shardInfo.docCount();
             long currentSize = getSizeToDisplay(shardId, shardInfo);

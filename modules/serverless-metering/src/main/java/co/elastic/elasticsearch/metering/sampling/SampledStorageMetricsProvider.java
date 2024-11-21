@@ -125,7 +125,7 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
     }
 
     private void fillIndexMetadata(Map<String, String> sourceMetadata, Metadata clusterMetadata, String indexName, boolean partial) {
-        final var indexAbstraction = clusterMetadata.getIndicesLookup().get(indexName);
+        final var indexAbstraction = clusterMetadata.getProject().getIndicesLookup().get(indexName);
         final boolean inDatastream = indexAbstraction != null && indexAbstraction.getParentDataStream() != null;
 
         sourceMetadata.put(METADATA_INDEX_KEY, indexName);

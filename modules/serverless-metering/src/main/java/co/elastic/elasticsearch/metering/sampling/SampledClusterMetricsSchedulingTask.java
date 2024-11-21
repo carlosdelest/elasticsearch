@@ -77,7 +77,7 @@ public class SampledClusterMetricsSchedulingTask extends AllocatedPersistentTask
 
     @Nullable
     public static PersistentTasksCustomMetadata.PersistentTask<?> findTask(ClusterState clusterState) {
-        PersistentTasksCustomMetadata taskMetadata = clusterState.getMetadata().custom(PersistentTasksCustomMetadata.TYPE);
+        PersistentTasksCustomMetadata taskMetadata = clusterState.getMetadata().getProject().custom(PersistentTasksCustomMetadata.TYPE);
         if (taskMetadata == null) {
             return null;
         }
