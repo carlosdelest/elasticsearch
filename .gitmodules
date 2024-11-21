@@ -1,4 +1,4 @@
 [submodule "elasticsearch"]
   path = elasticsearch
-	url = git@github.com:elastic/elasticsearch-internal.git
-	branch = multi-project
+  url = git@github.com:elastic/elasticsearch-internal.git
+  branch = multi-project
