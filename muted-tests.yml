@@ -90,16 +90,13 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test get stacktraces}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3121
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {union_types.Multi Index millis to nanos stats SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3122
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {union_types.Multi Index millis to nanos stats ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3123
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: "test {lookup-join.*"
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: "test {lookup-join.*"
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: "test {lookup-join.*"
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
@@ -108,8 +105,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=synonyms/20_synonyms_get/Get synonyms set}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3157
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3158
 - class: org.elasticsearch.xpack.fleet.FleetRestIT
   method: test {p0=fleet/40_secrets_get/Get Fleet Secret}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3159
