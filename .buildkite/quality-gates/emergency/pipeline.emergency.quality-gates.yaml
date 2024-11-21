@@ -12,6 +12,7 @@
 
 env:
   ENVIRONMENT: ${ENVIRONMENT?}
+  DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}
   TEAM_CHANNEL: "#es-serverless-gitops"
 
 steps:
@@ -29,14 +30,14 @@ steps:
 
   - label: ":git: Push promoted build tags"
     branches: "main patch/*"
-    command: ".buildkite/scripts/tag-promoted-commit.sh"
     env:
+      USE_GITHUB_CREDENTIALS: "true"
       GITOPS_ENV: "${ENVIRONMENT}"
+    command: ".buildkite/scripts/tag-promoted-commit.sh"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
 
   - label: ":elasticsearch: Annotate promotion in O11y dashboards"
     command: ".buildkite/scripts/annotate-promotion.sh"

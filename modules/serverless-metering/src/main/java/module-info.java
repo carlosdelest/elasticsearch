@@ -16,6 +16,7 @@
  */
 
 import co.elastic.elasticsearch.metering.MeteringFeatures;
+import co.elastic.elasticsearch.metering.codec.RAStorageDocValuesFormatFactory;
 
 module org.elasticsearch.metering {
     requires org.apache.logging.log4j;
@@ -28,8 +29,16 @@ module org.elasticsearch.metering {
     requires java.net.http;
     requires org.apache.lucene.core;
     requires org.elasticsearch.serverless.constants;
+    requires org.elasticsearch.stateless.api;
+    requires org.elasticsearch.xcore;
 
     provides org.elasticsearch.features.FeatureSpecification with MeteringFeatures;
+    provides co.elastic.elasticsearch.stateless.api.DocValuesFormatFactory with RAStorageDocValuesFormatFactory;
 
     exports co.elastic.elasticsearch.metering.action to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.metering.codec to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.metering.sampling to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.metering.sampling.action to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.metering.usagereports.action to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.metering.activitytracking to org.elasticsearch.server;
 }

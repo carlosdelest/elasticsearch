@@ -29,8 +29,8 @@ import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -72,7 +72,7 @@ public class TransportPublishSearchLoads extends TransportMasterNodeAction<Publi
         ActionListener<ActionResponse.Empty> listener
     ) {
         ActionListener.completeWith(listener, () -> {
-            searchTierMetricsService.processSearchLoadRequest(request);
+            searchTierMetricsService.processSearchLoadRequest(state, request);
             return ActionResponse.Empty.INSTANCE;
         });
     }

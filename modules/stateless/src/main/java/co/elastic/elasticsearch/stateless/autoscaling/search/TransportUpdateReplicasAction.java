@@ -35,13 +35,13 @@ import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MetadataUpdateSettingsService;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.Index;
+import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -86,13 +86,17 @@ public class TransportUpdateReplicasAction extends TransportMasterNodeAction<Tra
     protected void masterOperation(Task task, Request request, ClusterState state, ActionListener<AcknowledgedResponse> listener)
         throws Exception {
         final Index[] concreteIndices = indexNameExpressionResolver.concreteIndices(state, request);
-        UpdateSettingsClusterStateUpdateRequest clusterStateUpdateRequest = new UpdateSettingsClusterStateUpdateRequest().indices(
-            concreteIndices
-        )
-            .settings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, request.numReplicas).build())
-            .masterNodeTimeout(request.masterNodeTimeout())
-            .ackTimeout(TimeValue.MINUS_ONE);
-        metadataUpdateSettingsService.updateSettings(clusterStateUpdateRequest, listener);
+        metadataUpdateSettingsService.updateSettings(
+            new UpdateSettingsClusterStateUpdateRequest(
+                request.masterNodeTimeout(),
+                TimeValue.MINUS_ONE,
+                Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, request.numReplicas).build(),
+                UpdateSettingsClusterStateUpdateRequest.OnExisting.OVERWRITE,
+                UpdateSettingsClusterStateUpdateRequest.OnStaticSetting.REJECT,
+                concreteIndices
+            ),
+            listener
+        );
     }
 
     @Override

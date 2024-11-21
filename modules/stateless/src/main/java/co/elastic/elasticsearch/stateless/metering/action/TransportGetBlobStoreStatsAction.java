@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.stateless.metering.action;
 
 import co.elastic.elasticsearch.stateless.Stateless;
+import co.elastic.elasticsearch.stateless.StatelessComponents;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 
 import org.elasticsearch.action.FailedNodeException;
@@ -25,9 +26,9 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.core.Assertions;
+import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.repositories.RepositoryStats;
 import org.elasticsearch.repositories.RepositoryStatsSnapshot;
@@ -44,7 +45,8 @@ public class TransportGetBlobStoreStatsAction extends TransportNodesAction<
     GetBlobStoreStatsNodesRequest,
     GetBlobStoreStatsNodesResponse,
     GetBlobStoreStatsNodeRequest,
-    GetBlobStoreStatsNodeResponse> {
+    GetBlobStoreStatsNodeResponse,
+    Void> {
     private final ObjectStoreService objectStoreService;
     private final RepositoriesService repositoriesService;
 
@@ -54,7 +56,7 @@ public class TransportGetBlobStoreStatsAction extends TransportNodesAction<
         ClusterService clusterService,
         TransportService transportService,
         ActionFilters actionFilters,
-        ObjectStoreService objectStoreService,
+        StatelessComponents statelessComponents,
         RepositoriesService repositoriesService
     ) {
         super(
@@ -65,7 +67,7 @@ public class TransportGetBlobStoreStatsAction extends TransportNodesAction<
             GetBlobStoreStatsNodeRequest::new,
             threadPool.executor(ThreadPool.Names.MANAGEMENT)
         );
-        this.objectStoreService = objectStoreService;
+        this.objectStoreService = statelessComponents.getObjectStoreService();
         this.repositoriesService = repositoriesService;
     }
 

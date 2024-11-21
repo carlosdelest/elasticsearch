@@ -19,6 +19,7 @@ module org.elasticsearch.metrics {
     requires org.apache.logging.log4j;
 
     requires org.elasticsearch.logging;
+    requires org.elasticsearch.base;
 
     exports co.elastic.elasticsearch.metrics;
 }

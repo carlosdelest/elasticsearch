@@ -19,13 +19,11 @@ package co.elastic.elasticsearch.stateless.commits;
 
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
-import co.elastic.elasticsearch.stateless.utils.IndexingShardRecoveryComparator;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.CorruptIndexException;
-import org.apache.lucene.store.ChecksumIndexInput;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.InputStreamDataInput;
 import org.apache.lucene.store.OutputStreamDataOutput;
 import org.elasticsearch.TransportVersion;
@@ -36,9 +34,7 @@ import org.elasticsearch.common.io.stream.PositionTrackingOutputStreamStreamOutp
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
-import org.elasticsearch.common.lucene.store.InputStreamIndexInput;
 import org.elasticsearch.common.util.Maps;
-import org.elasticsearch.core.Streams;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.translog.BufferedChecksumStreamInput;
@@ -53,9 +49,7 @@ import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +57,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions.COMPOUND_COMMITS_WITH_HEADER_SIZE_AND_REPLICATED_RANGES;
 import static org.elasticsearch.xcontent.ConstructingObjectParser.constructorArg;
 import static org.elasticsearch.xcontent.ConstructingObjectParser.optionalConstructorArg;
 
@@ -76,22 +71,12 @@ public record StatelessCompoundCommit(
     long translogRecoveryStartFile,
     String nodeEphemeralId,
     Map<String, BlobLocation> commitFiles,
-    // the size of the compound commit including codec, header, checksums and all files
+    // the size of the compound commit including codec, header, checksums, replicated content and all internal files
     long sizeInBytes,
-    Set<String> internalFiles
+    Set<String> internalFiles,
+    long headerSizeInBytes,
+    InternalFilesReplicatedRanges internalFilesReplicatedRanges
 ) implements Writeable {
-
-    public StatelessCompoundCommit(
-        ShardId shardId,
-        long generation,
-        long primaryTerm,
-        String nodeEphemeralId,
-        Map<String, BlobLocation> commitFiles,
-        long sizeInBytes,
-        Set<String> internalFiles
-    ) {
-        this(shardId, new PrimaryTermAndGeneration(primaryTerm, generation), 0, nodeEphemeralId, commitFiles, sizeInBytes, internalFiles);
-    }
 
     public StatelessCompoundCommit {
         assert commitFiles.keySet().containsAll(internalFiles);
@@ -148,6 +133,10 @@ public record StatelessCompoundCommit(
         out.writeMap(commitFiles, StreamOutput::writeString, (o, v) -> v.writeTo(o));
         out.writeVLong(sizeInBytes);
         out.writeStringCollection(internalFiles);
+        if (out.getTransportVersion().onOrAfter(COMPOUND_COMMITS_WITH_HEADER_SIZE_AND_REPLICATED_RANGES)) {
+            out.writeVLong(headerSizeInBytes);
+            out.writeCollection(internalFilesReplicatedRanges.replicatedRanges());
+        }
     }
 
     public static StatelessCompoundCommit readFromTransport(StreamInput in) throws IOException {
@@ -157,6 +146,19 @@ public record StatelessCompoundCommit(
         String nodeEphemeralId = in.readString();
         Map<String, BlobLocation> commitFiles = in.readImmutableMap(StreamInput::readString, BlobLocation::readFromTransport);
         long sizeInBytes = in.readVLong();
+        Set<String> internalFiles = in.readCollectionAsImmutableSet(StreamInput::readString);
+        long headerSizeInBytes;
+        InternalFilesReplicatedRanges replicatedRanges;
+        if (in.getTransportVersion().onOrAfter(COMPOUND_COMMITS_WITH_HEADER_SIZE_AND_REPLICATED_RANGES)) {
+            headerSizeInBytes = in.readVLong();
+            replicatedRanges = InternalFilesReplicatedRanges.from(
+                in.readCollectionAsImmutableList(InternalFilesReplicatedRanges.InternalFileReplicatedRange::fromStream)
+            );
+        } else {
+            headerSizeInBytes = 0L;
+            replicatedRanges = InternalFilesReplicatedRanges.EMPTY;
+
+        }
         return new StatelessCompoundCommit(
             shardId,
             primaryTermAndGeneration,
@@ -164,7 +166,9 @@ public record StatelessCompoundCommit(
             nodeEphemeralId,
             commitFiles,
             sizeInBytes,
-            in.readCollectionAsImmutableSet(StreamInput::readString)
+            internalFiles,
+            headerSizeInBytes,
+            replicatedRanges
         );
     }
 
@@ -179,15 +183,19 @@ public record StatelessCompoundCommit(
         return internalFiles;
     }
 
-    static long writeInternalFilesToStore(OutputStream outputStream, List<InternalFile> internalFiles, Directory directory)
-        throws IOException {
-        long writtenBytes = 0L;
-        for (InternalFile internalFile : internalFiles) {
-            try (ChecksumIndexInput input = directory.openChecksumInput(internalFile.name(), IOContext.READONCE)) {
-                writtenBytes += Streams.copy(new InputStreamIndexInput(input, internalFile.length()), outputStream, false);
-            }
+    /**
+     * Calculates and returns the total size of all the files referenced in this compound commit.
+     * This method includes the sizes of files stored in other commits, unlike {@link #sizeInBytes()},
+     * which only considers the sizes of files unique to this commit and the header + padding.
+     *
+     * @return the total size of the files either embedded or referenced in this commit in bytes
+     */
+    public long getAllFilesSizeInBytes() {
+        long commitFilesSizeInBytes = 0;
+        for (BlobLocation commitFile : commitFiles.values()) {
+            commitFilesSizeInBytes += commitFile.fileLength();
         }
-        return writtenBytes;
+        return commitFilesSizeInBytes;
     }
 
     /**
@@ -202,12 +210,15 @@ public record StatelessCompoundCommit(
         String nodeEphemeralId,
         long translogRecoveryStartFile,
         Map<String, BlobLocation> referencedBlobFiles,
-        List<InternalFile> internalFiles,
+        Iterable<InternalFile> internalFiles,
+        InternalFilesReplicatedRanges internalFilesReplicatedRanges,
         int version,
-        PositionTrackingOutputStreamStreamOutput positionTracking
+        PositionTrackingOutputStreamStreamOutput positionTracking,
+        boolean useInternalFilesReplicatedContent
     ) throws IOException {
         assert version == CURRENT_VERSION
             : "writing to object store must use the current version [" + CURRENT_VERSION + "], got [" + version + "]";
+        assert assertSortedBySize(internalFiles) : "internal files must be sorted by size, got " + internalFiles;
         BufferedChecksumStreamOutput out = new BufferedChecksumStreamOutput(positionTracking);
         CodecUtil.writeHeader(new OutputStreamDataOutput(out), SHARD_COMMIT_CODEC, version);
         long codecSize = positionTracking.position();
@@ -236,11 +247,14 @@ public record StatelessCompoundCommit(
                     }
                 }
                 b.endArray();
+                if (useInternalFilesReplicatedContent) {
+                    internalFilesReplicatedRanges.toXContent(b, ToXContent.EMPTY_PARAMS);
+                }
             }
             b.endObject();
         }
         // Write the end marker manually, can't customize XContent to use SmileGenerator.Feature#WRITE_END_MARKER
-        bytesStreamOutput.write(XContentType.SMILE.xContent().streamSeparator());
+        bytesStreamOutput.write(XContentType.SMILE.xContent().bulkSeparator());
         bytesStreamOutput.flush();
 
         BytesReference xContentHeader = bytesStreamOutput.bytes();
@@ -263,8 +277,10 @@ public record StatelessCompoundCommit(
     static final int CURRENT_VERSION = VERSION_WITH_XCONTENT_ENCODING;
 
     public static StatelessCompoundCommit readFromStore(StreamInput in) throws IOException {
-        return readFromStoreAtOffset(in, 0, StatelessCompoundCommit::blobNameFromGeneration);
+        return readFromStoreAtOffset(in, 0, Function.identity());
     }
+
+    private static final Logger logger = LogManager.getLogger(StatelessCompoundCommit.class);
 
     /**
      * Reads the compound commit header from the data store at the specified offset within the input stream.
@@ -273,9 +289,9 @@ public record StatelessCompoundCommit(
      * referring to the compound commit at the given offset within the {@link BatchedCompoundCommit}.
      * @param in the input stream to read from
      * @param offset the offset within the blob where this compound commit header starts
-     * @param blobNameSupplier a function that provides the blob name where this compound commit is stored
+     * @param bccGenSupplier a function that gives the generation of the batched compound commit blob where this compound commit is stored
      */
-    public static StatelessCompoundCommit readFromStoreAtOffset(StreamInput in, long offset, Function<Long, String> blobNameSupplier)
+    public static StatelessCompoundCommit readFromStoreAtOffset(StreamInput in, long offset, Function<Long, Long> bccGenSupplier)
         throws IOException {
         try (BufferedChecksumStreamInput input = new BufferedChecksumStreamInput(in, SHARD_COMMIT_CODEC)) {
             int version = CodecUtil.checkHeader(
@@ -290,6 +306,16 @@ public record StatelessCompoundCommit(
                 long generation = input.readVLong();
                 long primaryTerm = input.readVLong();
                 String nodeEphemeralId = input.readString();
+
+                // TODO: remove logging after confirming that no compound commits exist at obsolete versions
+                logger.info(
+                    "{} with UUID [{}] reading compound commit {} of obsolete version [{}]",
+                    shardId,
+                    shardId.getIndex().getUUID(),
+                    new PrimaryTermAndGeneration(primaryTerm, generation),
+                    version
+                );
+
                 Map<String, BlobLocation> referencedBlobLocations = input.readMap(
                     StreamInput::readString,
                     (is) -> BlobLocation.readFromStore(is, version == VERSION_WITH_BLOB_LENGTH)
@@ -306,10 +332,11 @@ public record StatelessCompoundCommit(
                     nodeEphemeralId,
                     referencedBlobLocations,
                     internalFiles,
+                    InternalFilesReplicatedRanges.EMPTY,
                     offset,
                     headerSize,
                     totalSizeInBytes,
-                    blobNameSupplier
+                    bccGenSupplier
                 );
             } else {
                 assert version == VERSION_WITH_XCONTENT_ENCODING;
@@ -323,7 +350,7 @@ public record StatelessCompoundCommit(
 
                 // codec header + serialized header size + checksum + header content + checksum
                 var headerSize = CodecUtil.headerLength(SHARD_COMMIT_CODEC) + 4 + 4 + xContentLength + 4;
-                return readXContentHeader(new BytesArray(bytes).streamInput(), headerSize, offset, blobNameSupplier);
+                return readXContentHeader(new BytesArray(bytes).streamInput(), headerSize, offset, bccGenSupplier);
             }
         } catch (Exception e) {
             throw new IOException("Failed to read shard commit", e);
@@ -348,7 +375,7 @@ public record StatelessCompoundCommit(
         StreamInput is,
         long headerSize,
         long offset,
-        Function<Long, String> blobNameSupplier
+        Function<Long, Long> bccGenSupplier
     ) throws IOException {
         record XContentStatelessCompoundCommit(
             ShardId shardId,
@@ -357,7 +384,8 @@ public record StatelessCompoundCommit(
             long translogRecoveryStartFile,
             String nodeEphemeralId,
             Map<String, BlobLocation> referencedBlobLocations,
-            List<InternalFile> internalFiles
+            List<InternalFile> internalFiles,
+            InternalFilesReplicatedRanges replicatedContentMetadata
         ) {
             @SuppressWarnings("unchecked")
             private static final ConstructingObjectParser<XContentStatelessCompoundCommit, Void> PARSER = new ConstructingObjectParser<>(
@@ -370,7 +398,9 @@ public record StatelessCompoundCommit(
                     args[3] == null ? 0 : (long) args[3],
                     (String) args[4],
                     (Map<String, BlobLocation>) args[5],
-                    (List<InternalFile>) args[6]
+                    (List<InternalFile>) args[6],
+                    // args[7] is null if the xcontent does not contain replicated ranges
+                    InternalFilesReplicatedRanges.from((List<InternalFilesReplicatedRanges.InternalFileReplicatedRange>) args[7])
                 )
             );
             static {
@@ -385,13 +415,20 @@ public record StatelessCompoundCommit(
                     new ParseField("commit_files")
                 );
                 PARSER.declareObjectArray(constructorArg(), InternalFile.PARSER, new ParseField("internal_files"));
+                PARSER.declareObjectArray(
+                    optionalConstructorArg(),
+                    InternalFilesReplicatedRanges.InternalFileReplicatedRange.PARSER,
+                    new ParseField("internal_files_replicated_ranges")
+                );
             }
         }
 
         try (XContentParser parser = XContentType.SMILE.xContent().createParser(XContentParserConfiguration.EMPTY, is)) {
             XContentStatelessCompoundCommit c = XContentStatelessCompoundCommit.PARSER.parse(parser, null);
             assert headerSize > 0;
-            long totalSizeInBytes = headerSize + c.internalFiles.stream().mapToLong(InternalFile::length).sum();
+            long totalSizeInBytes = headerSize + c.replicatedContentMetadata.dataSizeInBytes() + c.internalFiles.stream()
+                .mapToLong(InternalFile::length)
+                .sum();
             return statelessCompoundCommit(
                 c.shardId,
                 c.generation,
@@ -400,10 +437,11 @@ public record StatelessCompoundCommit(
                 c.nodeEphemeralId,
                 c.referencedBlobLocations,
                 c.internalFiles,
+                c.replicatedContentMetadata,
                 offset,
                 headerSize,
                 totalSizeInBytes,
-                blobNameSupplier
+                bccGenSupplier
             );
         }
     }
@@ -416,15 +454,17 @@ public record StatelessCompoundCommit(
         String nodeEphemeralId,
         Map<String, BlobLocation> referencedBlobLocations,
         List<InternalFile> internalFiles,
+        InternalFilesReplicatedRanges replicatedContentRanges,
         long internalFilesOffset,
         long headerSizeInBytes,
         long totalSizeInBytes,
-        Function<Long, String> blobNameSupplier
+        Function<Long, Long> bccGenSupplier
     ) {
-        String commitFileName = blobNameSupplier.apply(generation);
+        PrimaryTermAndGeneration bccTermAndGen = new PrimaryTermAndGeneration(primaryTerm, bccGenSupplier.apply(generation));
+        var blobFile = new BlobFile(StatelessCompoundCommit.blobNameFromGeneration(bccTermAndGen.generation()), bccTermAndGen);
         Map<String, BlobLocation> commitFiles = combineCommitFiles(
-            commitFileName,
-            primaryTerm,
+            blobFile,
+            replicatedContentRanges,
             internalFiles,
             referencedBlobLocations,
             internalFilesOffset,
@@ -437,7 +477,9 @@ public record StatelessCompoundCommit(
             nodeEphemeralId,
             Collections.unmodifiableMap(commitFiles),
             totalSizeInBytes,
-            internalFiles.stream().map(InternalFile::name).collect(Collectors.toSet())
+            internalFiles.stream().map(InternalFile::name).collect(Collectors.toSet()),
+            headerSizeInBytes,
+            replicatedContentRanges
         );
     }
 
@@ -445,8 +487,8 @@ public record StatelessCompoundCommit(
     // to one map of commit file locations.
     // visible for testing
     static Map<String, BlobLocation> combineCommitFiles(
-        String blobName,
-        long primaryTerm,
+        BlobFile blobFile,
+        InternalFilesReplicatedRanges replicatedContentRanges,
         List<InternalFile> internalFiles,
         Map<String, BlobLocation> referencedBlobFiles,
         long internalFilesOffset,
@@ -455,9 +497,9 @@ public record StatelessCompoundCommit(
         var commitFiles = Maps.<String, BlobLocation>newHashMapWithExpectedSize(referencedBlobFiles.size() + internalFiles.size());
         commitFiles.putAll(referencedBlobFiles);
 
-        long currentOffset = internalFilesOffset + headerSizeInBytes;
+        long currentOffset = internalFilesOffset + headerSizeInBytes + replicatedContentRanges.dataSizeInBytes();
         for (InternalFile internalFile : internalFiles) {
-            commitFiles.put(internalFile.name(), new BlobLocation(primaryTerm, blobName, currentOffset, internalFile.length()));
+            commitFiles.put(internalFile.name(), new BlobLocation(blobFile, currentOffset, internalFile.length()));
             currentOffset += internalFile.length();
         }
 
@@ -495,6 +537,17 @@ public record StatelessCompoundCommit(
         return Long.parseLong(name.substring(name.lastIndexOf('_') + 1));
     }
 
+    private static boolean assertSortedBySize(Iterable<InternalFile> files) {
+        InternalFile previous = null;
+        for (InternalFile file : files) {
+            if (previous != null && previous.compareTo(file) >= 0) {
+                return false;
+            }
+            previous = file;
+        }
+        return true;
+    }
+
     record InternalFile(String name, long length) implements Writeable, ToXContentObject, Comparable<InternalFile> {
 
         private static final ConstructingObjectParser<InternalFile, Void> PARSER = new ConstructingObjectParser<>(
@@ -502,9 +555,6 @@ public record StatelessCompoundCommit(
             true,
             args -> new InternalFile((String) args[0], (long) args[1])
         );
-
-        // Order commit files in an optimized order for indexing shard recoveries
-        public static final Comparator<String> INTERNAL_FILES_COMPARATOR = new IndexingShardRecoveryComparator();
 
         static {
             PARSER.declareString(constructorArg(), new ParseField("name"));
@@ -528,7 +578,11 @@ public record StatelessCompoundCommit(
 
         @Override
         public int compareTo(InternalFile o) {
-            return INTERNAL_FILES_COMPARATOR.compare(this.name, o.name);
+            int cmp = Long.compare(length, o.length);
+            if (cmp != 0) {
+                return cmp;
+            }
+            return name.compareTo(o.name);
         }
     }
 }

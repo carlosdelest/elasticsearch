@@ -39,7 +39,7 @@ dependencies {
     api("javax.xml.bind:jaxb-api:2.2.2")
 
     compileOnly("org.elasticsearch:server")
-    compileOnly("org.elasticsearch:elasticsearch-cli")
+    compileOnly("org.elasticsearch:cli")
     compileOnly("org.elasticsearch:server-cli")
 
     // serverless libs are placed on the server classpath, so they are already present at runtime
@@ -48,7 +48,7 @@ dependencies {
 
     testImplementation("org.elasticsearch.test:framework")
     testImplementation("org.elasticsearch:server")
-    testImplementation("org.elasticsearch:elasticsearch-cli")
+    testImplementation("org.elasticsearch:cli")
     testImplementation("org.elasticsearch.test:s3-fixture")
 }
 

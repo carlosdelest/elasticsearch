@@ -35,12 +35,12 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.discovery.MasterNotDiscoveredException;
+import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.Task;
@@ -84,7 +84,7 @@ public final class TransportConsistentClusterStateReadAction extends TransportAc
         ClusterService clusterService,
         StatelessClusterConsistencyService consistencyService
     ) {
-        super(NAME, actionFilters, transportService.getTaskManager());
+        super(NAME, actionFilters, transportService.getTaskManager(), EsExecutors.DIRECT_EXECUTOR_SERVICE);
         this.clusterService = clusterService;
         this.transportService = transportService;
         this.executor = EsExecutors.DIRECT_EXECUTOR_SERVICE;

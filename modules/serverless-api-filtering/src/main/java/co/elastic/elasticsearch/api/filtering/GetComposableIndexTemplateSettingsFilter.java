@@ -55,7 +55,7 @@ public class GetComposableIndexTemplateSettingsFilter extends ApiFilteringAction
     private Template mapTemplate(Template template) {
         if (template.settings() != null) {
             Settings filter = publicSettingsFilter.filter(template.settings());
-            return new Template(filter, template.mappings(), template.aliases(), template.lifecycle());
+            return Template.builder(template).settings(filter).build();
         }
         return template;
     }

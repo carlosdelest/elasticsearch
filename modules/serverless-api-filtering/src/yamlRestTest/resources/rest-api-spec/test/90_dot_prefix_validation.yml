@@ -1,0 +1,151 @@
+---
+"Reject create index request that has a dot prefix":
+  - do:
+      catch: bad_request
+      indices.create:
+        index: .myindex
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Index [.myindex] name beginning with a dot (.) is not allowed" }
+
+  - do:
+      catch: bad_request
+      indices.create:
+        index: <.myindex-{now/d}>
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Index [<.myindex-{now/d}>] name beginning with a dot (.) is not allowed" }
+
+---
+"Reject auto-creation of dot-prefixed indices":
+  - do:
+      catch: bad_request
+      index:
+        index: .myindex
+        id: "1"
+        body: {foo: bar}
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Index [.myindex] name beginning with a dot (.) is not allowed" }
+
+  - do:
+      bulk:
+        body:
+          - index:
+              _index: other
+          - message: foo
+          - index:
+              _index: .myindex
+          - message: foo
+
+  - match: { errors: true }
+  - match: { items.1.index.error.type: "illegal_argument_exception" }
+  - match: { items.1.index.error.reason: "Index [.myindex] name beginning with a dot (.) is not allowed" }
+
+---
+"Reject auto-creation of dot-prefixed indices through pipelines":
+  - do:
+      ingest.put_pipeline:
+        id: mypipeline
+        body:  >
+          {
+            "processors": [
+              {
+                "set" : {
+                  "field" : "_index",
+                  "value": "{{redirect_to}}"
+                }
+              }
+            ]
+          }
+
+  - do:
+      catch: bad_request
+      index:
+        index: myindex
+        id: "1"
+        body: {redirect_to: ".other"}
+        pipeline: mypipeline
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Index [.other] name beginning with a dot (.) is not allowed" }
+
+  - do:
+      bulk:
+        body:
+          - index:
+              _index: other
+          - message: foo
+          - index:
+              _index: myindex
+              pipeline: mypipeline
+          - redirect_to: .other
+
+  - match: { errors: true }
+  - match: { items.1.index.error.type: "illegal_argument_exception" }
+  - match: { items.1.index.error.reason: "Index [.other] name beginning with a dot (.) is not allowed" }
+
+  - do:
+      index:
+        index: original
+        id: "1"
+        body: { "redirect_to": ".other" }
+  - do:
+      indices.refresh: {}
+  - do:
+      catch: bad_request
+      reindex:
+        body:
+          source:
+            index: original
+          dest:
+            index: newindex
+            pipeline: mypipeline
+
+  - match: { failures.0.status: 400 }
+  - match: { failures.0.cause.type: "illegal_argument_exception" }
+  - match: { failures.0.cause.reason: "Index [.other] name beginning with a dot (.) is not allowed" }
+
+  - do:
+      catch: bad_request
+      reindex:
+        body:
+          source:
+            index: original
+          dest:
+            index: .reindex
+
+  - match: { failures.0.status: 400 }
+  - match: { failures.0.cause.type: "illegal_argument_exception" }
+  - match: { failures.0.cause.reason: "Index [.reindex] name beginning with a dot (.) is not allowed" }
+
+---
+"Reject index template that has a dot prefix index pattern":
+  - do:
+      catch: bad_request
+      indices.put_index_template:
+        name: my-template
+        body:
+          index_patterns: [regular, .data-*]
+          data_stream: {}
+
+  - match: { status: 400 }
+  - match: { error.root_cause.0.type: "illegal_argument_exception" }
+  - match: { error.root_cause.0.reason: "Index [.data-*] name beginning with a dot (.) is not allowed" }
+
+---
+"Allow non-restricted names":
+  - do:
+      indices.put_index_template:
+        name: my-template
+        body:
+          index_patterns: [.ml-state-9000]
+          priority: 1
+
+  - do:
+      indices.delete_index_template:
+        name: my-template

@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.security;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -49,6 +51,8 @@ import static org.elasticsearch.xpack.security.operator.OperatorPrivileges.OPERA
  */
 public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
+    private static final Logger logger = LogManager.getLogger(ServerlessSecurityPlugin.class);
+
     /**
      * Register a <code>Setting</code> for the (x-pack) "native_users.enabled" implicit setting.
      * X-Pack never registers the setting - it only exists so that serverless can use it.
@@ -67,7 +71,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
      */
     public static final Setting<Boolean> NATIVE_ROLES_SETTING = Setting.boolSetting(
         "xpack.security.authc.native_roles.enabled",
-        false,
+        true,
         Setting.Property.NodeScope
     );
 
@@ -96,14 +100,6 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
-    public static final Setting<Boolean> OPERATOR_STRICT_ROLE_VALIDATION = Setting.boolSetting(
-        "xpack.security.authz.operator.strict_role_validation.enabled",
-        false,
-        Setting.Property.OperatorDynamic,
-        Setting.Property.NodeScope
-    );
-
-    private volatile boolean operatorStrictRoleValidation;
     private final AtomicReference<SecurityContext> securityContext = new AtomicReference<>();
 
     @Override
@@ -115,16 +111,10 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
                     + "] to true"
             );
         }
-        final ClusterSettings clusterSettings = services.clusterService().getClusterSettings();
-        clusterSettings.addSettingsUpdateConsumer(OPERATOR_STRICT_ROLE_VALIDATION, this::configureOperatorStrictRoleValidation);
 
         this.securityContext.set(new SecurityContext(services.environment().settings(), services.threadPool().getThreadContext()));
 
         return Collections.emptyList();
-    }
-
-    private void configureOperatorStrictRoleValidation(boolean enabled) {
-        this.operatorStrictRoleValidation = enabled;
     }
 
     @Override
@@ -133,10 +123,9 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             .putList(INCLUDED_RESERVED_ROLES_SETTING.getKey(), "superuser", "remote_monitoring_agent", "remote_monitoring_collector")
             .put(OPERATOR_PRIVILEGES_ENABLED.getKey(), true)
             .put(NATIVE_USERS_SETTING.getKey(), false)
-            .put(NATIVE_ROLES_SETTING.getKey(), false)
+            .put(NATIVE_ROLES_SETTING.getKey(), true)
             .put(CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), true) // the setting is false by default; this sets it to true
             .put(NATIVE_ROLE_MAPPINGS_ENABLED_SETTING.getKey(), false) // the setting is true by default; this sets it to false
-            .put(OPERATOR_STRICT_ROLE_VALIDATION.getKey(), false)
             .build();
     }
 
@@ -148,8 +137,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             NATIVE_ROLES_SETTING,
             CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
             NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
-            EXCLUDE_ROLES,
-            OPERATOR_STRICT_ROLE_VALIDATION
+            EXCLUDE_ROLES
         );
     }
 
@@ -165,13 +153,8 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Supplier<DiscoveryNodes> nodesInCluster,
         Predicate<NodeFeature> clusterSupportsFeature
     ) {
-        this.operatorStrictRoleValidation = clusterSettings.get(OPERATOR_STRICT_ROLE_VALIDATION);
         restController.getApiProtections().setEnabled(true);
         return List.of();
-    }
-
-    public boolean isOperatorStrictRoleValidationEnabled() {
-        return operatorStrictRoleValidation;
     }
 
     public SecurityContext getSecurityContext() {

@@ -35,7 +35,6 @@ import org.elasticsearch.common.blobstore.OperationPurpose;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
-import org.elasticsearch.core.CheckedConsumer;
 import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexSettings;
@@ -49,7 +48,7 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.transport.MockTransportService;
 
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -60,11 +59,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
-import static co.elastic.elasticsearch.stateless.IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertExists;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
@@ -98,9 +95,8 @@ public class StatelessBatchedBehavioursIT extends AbstractStatelessIntegTestCase
     public void testGenerationalFileBlobReferenceIsRetainedCorrectly() throws Exception {
         final String indexNode = startMasterAndIndexNode(
             Settings.builder()
-                .put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true)
                 .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 2)
-                .put(INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), -1)
+                .put(disableIndexingDiskAndMemoryControllersNodeSettings())
                 .build()
         );
         final String indexName = randomIdentifier();
@@ -128,7 +124,7 @@ public class StatelessBatchedBehavioursIT extends AbstractStatelessIntegTestCase
         // speed up commit deletion since it uses delayed cluster consistency check from translog
         indexDoc(indexName, "doc-extra", "field", randomUnicodeOfLength(50));
 
-        final ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        final ObjectStoreService objectStoreService = getObjectStoreService(indexNode);
         final IndexShard indexShard = findIndexShard(indexName);
         final Engine indexEngine = indexShard.getEngineOrNull();
         final long generation = indexEngine.getLastCommittedSegmentInfos().getGeneration();
@@ -139,9 +135,9 @@ public class StatelessBatchedBehavioursIT extends AbstractStatelessIntegTestCase
         });
     }
 
-    public void testFlushAfterRelocationWillThrowOnlyExpectedError() throws Exception {
+    public void testFlushAfterRelocationWillThrowOnlyExpectedError() {
         startMasterOnlyNode();
-        final String oldIndexNode = startIndexNode();
+        startIndexNode();
         ensureStableCluster(2);
 
         final String indexName = randomIdentifier();
@@ -189,43 +185,8 @@ public class StatelessBatchedBehavioursIT extends AbstractStatelessIntegTestCase
         }
     }
 
-    public void testDefaultToNotifyOnlyForUpload() {
-        assumeFalse("skip test because stateless.upload.delayed is enabled", STATELESS_UPLOAD_DELAYED);
-
-        final String indexNode = startMasterAndIndexNode();
-        startSearchNode();
-
-        final String indexName = randomIdentifier();
-        createIndex(indexName, indexSettings(1, 1).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
-        ensureGreen(indexName);
-
-        final MockTransportService indexTransportService = MockTransportService.getInstance(indexNode);
-        final var requestRef = new AtomicReference<NewCommitNotificationRequest>();
-        indexTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
-            if (action.equals(TransportNewCommitNotificationAction.NAME + "[u]")) {
-                final boolean success = requestRef.compareAndSet(null, (NewCommitNotificationRequest) request);
-                assertThat("expect null requestRef, but got " + requestRef.get(), success, is(true));
-            }
-            connection.sendRequest(requestId, action, request, options);
-        });
-
-        final int numberOfRuns = between(1, 5);
-        for (int i = 0; i < numberOfRuns; i++) {
-            indexDocs(indexName, randomIntBetween(1, 100));
-            refresh(indexName);
-            final NewCommitNotificationRequest request = requestRef.getAndSet(null);
-            assertThat(request, notNullValue());
-            assertThat(request.isUploaded(), is(true));
-        }
-    }
-
     public void testIndexCanBeCleanedUpAfterTest() {
-        startMasterAndIndexNode(
-            Settings.builder()
-                .put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true)
-                .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 10)
-                .build()
-        );
+        startMasterAndIndexNode(Settings.builder().put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 10).build());
         startSearchNode();
 
         final String indexName = randomIdentifier();
@@ -243,12 +204,7 @@ public class StatelessBatchedBehavioursIT extends AbstractStatelessIntegTestCase
     }
 
     public void testBCCDoesNotHoldHoldCommitReferencesAfterIndexShardClose() throws Exception {
-        final String indexNode = startMasterAndIndexNode(
-            Settings.builder()
-                .put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true)
-                .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 10)
-                .build()
-        );
+        startMasterAndIndexNode(Settings.builder().put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 10).build());
         startSearchNode();
 
         final String indexName = randomIdentifier();
@@ -270,9 +226,9 @@ public class StatelessBatchedBehavioursIT extends AbstractStatelessIntegTestCase
 
     public void testNewCommitNotificationOnCreation() throws Exception {
         final String indexNode = startMasterAndIndexNode(
-            Settings.builder().put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true).build()
+            Settings.builder().put(disableIndexingDiskAndMemoryControllersNodeSettings()).build()
         );
-        startSearchNode(Settings.builder().put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true).build());
+        startSearchNode();
 
         final String indexName = randomIdentifier();
         createIndex(indexName, indexSettings(1, 1).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
@@ -342,25 +298,22 @@ public class StatelessBatchedBehavioursIT extends AbstractStatelessIntegTestCase
     public void testRefreshAndSearchWorksWithoutUpload() throws Exception {
         final AtomicBoolean shouldBlock = new AtomicBoolean(false);
         final CountDownLatch latch = new CountDownLatch(1);
-        final String indexNode = startMasterAndIndexNode(
-            Settings.builder().put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true).build(),
-            new StatelessMockRepositoryStrategy() {
-                @Override
-                public void blobContainerWriteMetadataBlob(
-                    CheckedRunnable<IOException> original,
-                    OperationPurpose purpose,
-                    String blobName,
-                    boolean failIfAlreadyExists,
-                    boolean atomic,
-                    CheckedConsumer<OutputStream, IOException> writer
-                ) throws IOException {
-                    if (shouldBlock.get() && StatelessCompoundCommit.startsWithBlobPrefix(blobName)) {
-                        safeAwait(latch);
-                    }
-                    super.blobContainerWriteMetadataBlob(original, purpose, blobName, failIfAlreadyExists, atomic, writer);
+        final String indexNode = startMasterAndIndexNode(Settings.EMPTY, new StatelessMockRepositoryStrategy() {
+            @Override
+            public void blobContainerWriteBlobAtomic(
+                CheckedRunnable<IOException> originalRunnable,
+                OperationPurpose purpose,
+                String blobName,
+                InputStream inputStream,
+                long blobSize,
+                boolean failIfAlreadyExists
+            ) throws IOException {
+                if (shouldBlock.get() && StatelessCompoundCommit.startsWithBlobPrefix(blobName)) {
+                    safeAwait(latch);
                 }
+                super.blobContainerWriteBlobAtomic(originalRunnable, purpose, blobName, inputStream, blobSize, failIfAlreadyExists);
             }
-        );
+        });
         startSearchNode();
 
         final String indexName = randomIdentifier();

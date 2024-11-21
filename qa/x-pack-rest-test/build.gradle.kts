@@ -40,7 +40,7 @@ tasks {
             "ml/jobs_get_stats/Test get job stats after uploading data prompting the creation of some stats",
             // monitoring doesn't exist in serverless
             "monitoring/bulk/*/*",
-            // rollup has many tests failing with "Expected: <1> but: was <0>"
+            // rollup doesn't exist in serverless
             "rollup/*/*",
             // searchable_snapshots doesn't exist in serverless
             "searchable_snapshots/*/*",
@@ -82,15 +82,15 @@ tasks {
             "ml/ml_anomalies_default_mappings/*",
             "ml/job_cat_apis/*",
 
-            // Learning to rank is disabled in serverless
-            "ml/learning_to_rank_rescorer/*",
-
             // - CCS/CCR access keys
             "api_key/50_cross_cluster/*",
             // - Internal API using native user
             "api_key/12_grant/*",
             "privileges/40_get_user_privs/*",
             "security/authz/40_condtional_cluster_priv/*",
+            // - Invalid application privileges assigned to roles
+            "privileges/20_has_application_privs/*",
+
             // - Legacy templates
             "analytics/multi_terms/*",
             // Set of privileges is different in Serverless; we cover this case in
@@ -105,6 +105,11 @@ tasks {
 
             // awaitsFix https://github.com/elastic/elasticsearch-serverless/issues/1777
             "ml/inference_crud/Test force delete given model with alias referenced by pipeline",
+
+            // Bulk roles is not available in serverless
+            "roles/60_bulk_roles/*",
+            // Global privileges not supported in Serverless
+            "roles/40_global_privileges/*"
         ).joinToString(","))
     }
 }

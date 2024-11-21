@@ -25,6 +25,7 @@ import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.cluster.coordination.stateless.StoreHeartbeatService;
 import org.elasticsearch.common.CheckedSupplier;
 import org.elasticsearch.common.Strings;
@@ -54,6 +55,11 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
 
+/**
+ * Avoid using WindowsFS and ExtraFS since they cause occasional failures due to file deletion or unexpected extra files.
+ * See e.g. https://github.com/elastic/elasticsearch-serverless/issues/1998
+ */
+@LuceneTestCase.SuppressFileSystems(value = { "WindowsFS", "ExtrasFS" })
 public class StatelessClusterStateCleanupServiceIT extends AbstractStatelessIntegTestCase {
     private static final Logger logger = LogManager.getLogger(StatelessClusterStateCleanupServiceIT.class);
     private final long NUM_NODES = 3;
@@ -101,7 +107,7 @@ public class StatelessClusterStateCleanupServiceIT extends AbstractStatelessInte
      * Returns a list of term directory names (1/, 2/, etc.) that are present in the blob store.
      */
     public static List<String> getTermDirectories() throws IOException {
-        var objectStoreService = internalCluster().getInstance(ObjectStoreService.class, internalCluster().getRandomNodeName());
+        var objectStoreService = getObjectStoreService(internalCluster().getRandomNodeName());
         var blobContainerForClusterState = objectStoreService.getClusterStateBlobContainer();
         var clusterStateDirectories = blobContainerForClusterState.children(OperationPurpose.CLUSTER_STATE);
         return clusterStateDirectories.keySet()
@@ -169,7 +175,7 @@ public class StatelessClusterStateCleanupServiceIT extends AbstractStatelessInte
             List<String> terms = getTermDirectories();
             assertThat("Expected a single term directory: " + terms.size(), terms.size(), is(equalTo(1)));
 
-            long currentTerm = clusterAdmin().prepareState().get().getState().term();
+            long currentTerm = clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT).get().getState().term();
             assertThat(
                 Strings.format("Expected the latest term directory [%s] to match the latest term [%d]", terms.get(0), currentTerm),
                 Long.parseLong(terms.get(0)),
@@ -254,7 +260,7 @@ public class StatelessClusterStateCleanupServiceIT extends AbstractStatelessInte
             List<String> terms = getTermDirectories();
             assertThat("Expected a single term directory: " + terms.size(), terms.size(), is(equalTo(1)));
 
-            long currentTerm = clusterAdmin().prepareState().get().getState().term();
+            long currentTerm = clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT).get().getState().term();
             assertThat(
                 Strings.format("Expected the latest term directory [%s] to match the latest term [%d]", terms.get(0), currentTerm),
                 Long.parseLong(terms.get(0)),

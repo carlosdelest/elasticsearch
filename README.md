@@ -54,7 +54,7 @@ Changes not staged for commit:
 ```
 
 At which point the typical `git add`, `git commit` and `git push` workflow would be used to push these changes to a
-remote branch. Similarly, you can revert uncommitted changes by simply doing `git checkout elasticsearch`.
+remote branch. Similarly, you can revert uncommitted changes by simply doing `git checkout elasticsearch`. To `git checkout a-specific-branch` in the `elasticsearch` submodule, you can `cd elasticsearch` into the submodule folder.
 
 ### Working on submodule code
 
@@ -108,16 +108,39 @@ If you need to make further customizations, the cluster definition for this task
 
 ### Deploy snapshot into in QA environment
 
+
 To deploy a branch snapshot into QA
+
+1. If you've made changes in the elasticsearch repo, pull those changes into a branch in elasticsearch-serverless by following the instructions above in [Updating submodules](#updating-submodules).
 
 1. Trigger a new build from this pipeline https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa
    This deploys a snapshot from the selected branch into our QA environment (see https://docs.elastic.dev/serverless/qa)
    by publishing a docker snapshot into our internal docker registry and then using the serverless project api to deploy that snapshot to our serverless platform QA environment.
+   Ensure you select the intended git branch when triggering this pipeline for your testing. If you want to deploy
+   from a pull request branch, you can point to that PR by declaring the branch in the format of `pull/2996/head` where `2996`
+   is the number of your pull request.
+
+   By default, custom projects are automatically removed after about an hour.
+   If you want to keep it longer set `KEEP_DEPLOYMENT=true`,
+   but please also remember to undeploy it once no longer needed.
 
    By default a project of type `elasticsearch` is deployed. If you want to deploy a different project type (`observability` or `security`) you can pass the project type as environment variable when triggering the pipeline above via:
 
    ```
    PROJECT_TYPE=observability
+   ```
+
+   By default we use the region `aws-eu-west-1`.
+   To deploy to a different region you can pass the region id as environment variable when triggering the pipeline.
+
+   To run against Azure:
+   ```
+   REGION_ID=azure-eastus2
+   ```
+
+   To run against GCP:
+   ```
+   REGION_ID=gcp-us-central1
    ```
 
    The url of the deployed ess instance is shown in an info box top of the build. e.g. https://buildkite.com/elastic/elasticsearch-serverless-deploy-qa/builds/3#annotation-ess-public-url
@@ -130,13 +153,14 @@ To deploy a branch snapshot into QA
    export ESS_ROOT_PASSWORD_ENCRYPTED="<ENCRYPTED_PASSWORD_FROM_BUILD_INFO_BOX>"
    ```
 
-2. to decrypt the elastic userpassword you need to resolve the encryption key from vault and then decrypt the password
+1. to decrypt the elastic userpassword you need to resolve the encryption key from vault and then decrypt the password
    ```
-   > vault read -field private-key secret/elasticsearch-team/delivery-encryption > key.pem;
-
+   export VAULT_ADDR=https://secrets.elastic.co:8200
+   export VAULT_TOKEN=$(vault login -field=token -method=oidc)
+   vault read -field private-key secret/elasticsearch-team/delivery-encryption > key.pem;
    export ESS_ROOT_PASSWORD=$(echo "$ESS_ROOT_PASSWORD_ENCRYPTED" | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem)
    ```
-4. Now you should be able to access the ess instance via curl
+1. Now you should be able to access the ess instance via curl
    ```
 
    curl -k -u $ESS_ROOT_USERNAME:$ESS_ROOT_PASSWORD $ESS_PUBLIC_URL
@@ -191,11 +215,13 @@ The end to end tests can be run locally against a kubernetes based serverless pl
 6. Run `./gradlew :qa:e2e-test:javaRestTest` to invoke the end to end tests.
 
 ```
-> export ESS_PUBLIC_URL=<your ess deployment url>
-> export ESS_API_KEY_ENCRYPTED=<the encrypted ess api key of the deployment>
-> vault read -field private-key secret/elasticsearch-team/delivery-encryption > key.pem
-> export ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_ENCRYPTED | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem)`
-> ./gradlew :qa:e2e-test:javaRestTest
+export ESS_PUBLIC_URL=<your ess deployment url>
+export ESS_API_KEY_ENCRYPTED=<the encrypted ess api key of the deployment>
+export VAULT_ADDR=https://secrets.elastic.co:8200
+export VAULT_TOKEN=$(vault login -field=token -method=oidc)
+vault read -field private-key secret/elasticsearch-team/delivery-encryption > key.pem
+export ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_ENCRYPTED | openssl base64 -d | openssl pkeyutl -decrypt -inkey key.pem)`
+./gradlew :qa:e2e-test:javaRestTest
 ```
 
 ### Building and running locally with docker

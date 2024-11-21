@@ -21,7 +21,6 @@ steps:
           provider: "gcp"
           machineType: "n1-standard-16"
           image: family/elasticsearch-ubuntu-2022
-          diskSizeGb: 250
         matrix:
           - "current_production-canary"
           - "current_production-noncanary"
@@ -37,6 +36,7 @@ steps:
           - echo "Waiting for 60m for indicative health metrics"
           - sleep ${QA_GATE_WAIT_PERIOD:-3600}
 
+      # For now, deploying using the 'all' deployment type algo in staging 
       - label: ":pipeline: Trigger Elasticsearch observability checks in Staging"
         depends_on: bake_period
         trigger: serverless-quality-gates
@@ -45,16 +45,17 @@ steps:
           message: "${BUILDKITE_MESSAGE}"
           env:
             TARGET_ENV: staging
-            CHECK_LOG_ERROR_RATE: true
-            MAX_ERROR_PERCENT: 0.5
+            ELASTICSEARCH_CHECK_LOG_ERROR_RATE: true
+            MAX_ERROR_PERCENT: 0.1
             QUERY_WINDOW: 60m
             LOG_LEVEL_ERROR_VALUE: ERROR
             SERVICE: elasticsearch
             SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
             SERVICE_VERSION: ${SERVICE_VERSION:0:12}
-            SERVICE_TYPE_FIELD: kubernetes.container.name
+            SERVICE_TYPE_FIELD: data_stream.dataset
             CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
-            MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 1.0
+            MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 0.1
             CHECK_ELASTICSEARCH_CLUSTER_HEALTH_RATE: true
             CHECK_ALERTS: true
             CHECK_ALERTS_TRANSIENT_LOOKBACK: 60m
+            DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}

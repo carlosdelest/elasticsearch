@@ -43,6 +43,7 @@ public class ApiFilteringYamlTestSuiteIT extends AbstractXPackRestTest {
         .module("x-pack-core")
         .name("yamlRestTest")
         .setting("xpack.security.operator_privileges.enabled", "true")
+        .setting("serverless.indices.validate_dot_prefixes", "true")
         .user(OPERATOR_USER, OPERATOR_PASSWORD, User.ROOT_USER_ROLE, true)
         .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.ROOT_USER_ROLE, false)
         .build();

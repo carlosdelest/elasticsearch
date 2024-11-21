@@ -20,13 +20,15 @@
 package co.elastic.elasticsearch.stateless.engine;
 
 import co.elastic.elasticsearch.stateless.action.GetVirtualBatchedCompoundCommitChunkRequest;
+import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
 import co.elastic.elasticsearch.stateless.commits.CommitBCCResolver;
 import co.elastic.elasticsearch.stateless.commits.IndexEngineLocalReaderListener;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommit;
+import co.elastic.elasticsearch.stateless.engine.translog.TranslogRecoveryMetrics;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicatorReader;
-import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
+import co.elastic.elasticsearch.stateless.lucene.IndexDirectory;
 
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.FilterDirectoryReader;
@@ -41,7 +43,10 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.lucene.index.ElasticsearchDirectoryReader;
 import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.core.IOUtils;
+import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.index.IndexSettings;
+import org.elasticsearch.index.engine.ElasticsearchMergeScheduler;
 import org.elasticsearch.index.engine.ElasticsearchReaderManager;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.EngineConfig;
@@ -50,7 +55,10 @@ import org.elasticsearch.index.engine.EngineException;
 import org.elasticsearch.index.engine.InternalEngine;
 import org.elasticsearch.index.engine.LiveVersionMapArchive;
 import org.elasticsearch.index.mapper.ParsedDocument;
+import org.elasticsearch.index.merge.OnGoingMerge;
 import org.elasticsearch.index.seqno.LocalCheckpointTracker;
+import org.elasticsearch.index.seqno.SequenceNumbers;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
@@ -62,15 +70,16 @@ import java.io.UncheckedIOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.LongConsumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
-import static org.elasticsearch.index.IndexSettings.INDEX_FAST_REFRESH_SETTING;
 
 /**
  * {@link Engine} implementation for index shards
@@ -84,12 +93,16 @@ public class IndexEngine extends InternalEngine {
     private final TranslogReplicator translogReplicator;
     private final StatelessCommitService statelessCommitService;
     private final Function<String, BlobContainer> translogBlobContainer;
-    private final boolean fastRefresh;
     private final RefreshThrottler refreshThrottler;
+    private final long mergeForceRefreshSize;
     private final IndexEngineLocalReaderListener localReaderListener;
     private final CommitBCCResolver commitBCCResolver;
     private final DocumentSizeAccumulator documentSizeAccumulator;
     private final DocumentSizeReporter documentParsingReporter;
+    private final TranslogRecoveryMetrics translogRecoveryMetrics;
+    private final MergeMetrics mergeMetrics;
+    private final SharedBlobCacheWarmingService cacheWarmingService;
+    private final Predicate<ShardId> shouldSkipMerges;
     // This is written and then accessed on the same thread under the flush lock. So not need for volatile
     private long translogStartFileForNextCommit = 0;
 
@@ -97,24 +110,59 @@ public class IndexEngine extends InternalEngine {
     private final Map<DirectoryReader, Set<PrimaryTermAndGeneration>> openReaders = new HashMap<>();
 
     private final AtomicBoolean ongoingFlushMustUpload = new AtomicBoolean(false);
+    private final AtomicInteger forceMergesInProgress = new AtomicInteger(0);
 
+    @SuppressWarnings("this-escape")
     public IndexEngine(
         EngineConfig engineConfig,
         TranslogReplicator translogReplicator,
         Function<String, BlobContainer> translogBlobContainer,
         StatelessCommitService statelessCommitService,
+        SharedBlobCacheWarmingService cacheWarmingService,
         RefreshThrottler.Factory refreshThrottlerFactory,
         IndexEngineLocalReaderListener localReaderListener,
         CommitBCCResolver commitBCCResolver,
-        DocumentParsingProvider documentParsingProvider
+        DocumentParsingProvider documentParsingProvider,
+        EngineMetrics metrics
+    ) {
+        this(
+            engineConfig,
+            translogReplicator,
+            translogBlobContainer,
+            statelessCommitService,
+            cacheWarmingService,
+            refreshThrottlerFactory,
+            localReaderListener,
+            commitBCCResolver,
+            documentParsingProvider,
+            metrics,
+            (shardId) -> false
+        );
+    }
+
+    @SuppressWarnings("this-escape")
+    public IndexEngine(
+        EngineConfig engineConfig,
+        TranslogReplicator translogReplicator,
+        Function<String, BlobContainer> translogBlobContainer,
+        StatelessCommitService statelessCommitService,
+        SharedBlobCacheWarmingService cacheWarmingService,
+        RefreshThrottler.Factory refreshThrottlerFactory,
+        IndexEngineLocalReaderListener localReaderListener,
+        CommitBCCResolver commitBCCResolver,
+        DocumentParsingProvider documentParsingProvider,
+        EngineMetrics metrics,
+        Predicate<ShardId> shouldSkipMerges
     ) {
         super(engineConfig);
         assert engineConfig.isPromotableToPrimary();
         this.translogReplicator = translogReplicator;
         this.translogBlobContainer = translogBlobContainer;
         this.statelessCommitService = statelessCommitService;
-        this.fastRefresh = INDEX_FAST_REFRESH_SETTING.get(config().getIndexSettings().getSettings());
+        this.cacheWarmingService = cacheWarmingService;
         this.refreshThrottler = refreshThrottlerFactory.create(this::doExternalRefresh);
+        this.mergeForceRefreshSize = ThreadPoolMergeScheduler.MERGE_FORCE_REFRESH_SIZE.get(config().getIndexSettings().getSettings())
+            .getBytes();
         this.localReaderListener = localReaderListener;
         this.commitBCCResolver = commitBCCResolver;
         this.documentSizeAccumulator = documentParsingProvider.createDocumentSizeAccumulator();
@@ -123,6 +171,7 @@ public class IndexEngine extends InternalEngine {
             engineConfig.getMapperService(),
             documentSizeAccumulator
         );
+        this.shouldSkipMerges = shouldSkipMerges;
         // We have to track the initial BCC references held by local readers at this point instead of doing it in
         // #createInternalReaderManager because that method is called from the super constructor and at that point,
         // commitBCCResolver field is not set yet.
@@ -137,6 +186,8 @@ public class IndexEngine extends InternalEngine {
         } catch (IOException e) {
             throw new EngineCreationFailureException(engineConfig.getShardId(), "Failed to create an index engine", e);
         }
+        this.translogRecoveryMetrics = metrics.translogRecoveryMetrics();
+        this.mergeMetrics = metrics.mergeMetrics();
     }
 
     @Override
@@ -151,6 +202,11 @@ public class IndexEngine extends InternalEngine {
                 tracker.markSeqNoAsPersisted(seqNo);
             }
         };
+    }
+
+    @Override
+    public long getLastSyncedGlobalCheckpoint() {
+        return getPersistedLocalCheckpoint();
     }
 
     @Override
@@ -227,13 +283,12 @@ public class IndexEngine extends InternalEngine {
 
     @Override
     public boolean refreshNeeded() {
-        if (fastRefresh) {
-            return super.refreshNeeded();
-        } else {
-            // It is possible that the index writer has uncommitted changes. We could check here, but we will check before actually
-            // triggering the flush anyway.
-            return hasUncommittedChanges() || super.refreshNeeded();
-        }
+        boolean committedLocalCheckpointNeedsUpdate = getProcessedLocalCheckpoint() > Long.parseLong(
+            getLastCommittedSegmentInfos().userData.get(SequenceNumbers.LOCAL_CHECKPOINT_KEY)
+        );
+        // It is possible that the index writer has uncommitted changes. We could check here, but we will check before actually
+        // triggering the flush anyway.
+        return hasUncommittedChanges() || committedLocalCheckpointNeedsUpdate || super.refreshNeeded();
     }
 
     @Override
@@ -340,53 +395,45 @@ public class IndexEngine extends InternalEngine {
 
     @Override
     public void maybeRefresh(String source, ActionListener<RefreshResult> listener) throws EngineException {
-        if (fastRefresh) {
-            super.maybeRefresh(source, listener);
-        } else {
-            try {
-                IS_FLUSH_BY_REFRESH.set(true);
-                Thread originalThread = Thread.currentThread();
-                // Maybe refresh is called on scheduled periodic refreshes and needs to flush so that the search shards received the data.
-                flush(false, false, listener.delegateFailure((l, flushResult) -> {
-                    ActionRunnable<RefreshResult> refreshRunnable = new ActionRunnable<>(listener) {
+        try {
+            IS_FLUSH_BY_REFRESH.set(true);
+            Thread originalThread = Thread.currentThread();
+            // Maybe refresh is called on scheduled periodic refreshes and needs to flush so that the search shards received the data.
+            flush(false, false, listener.delegateFailure((l, flushResult) -> {
+                ActionRunnable<RefreshResult> refreshRunnable = new ActionRunnable<>(listener) {
 
-                        @Override
-                        protected void doRun() {
-                            IndexEngine.super.maybeRefresh(source, listener);
-                        }
-                    };
+                    @Override
+                    protected void doRun() {
+                        IndexEngine.super.maybeRefresh(source, listener);
+                    }
+                };
 
-                    dispatchRefreshRunnable(originalThread, refreshRunnable);
-                }));
-            } finally {
-                IS_FLUSH_BY_REFRESH.set(false);
-            }
+                dispatchRefreshRunnable(originalThread, refreshRunnable);
+            }));
+        } finally {
+            IS_FLUSH_BY_REFRESH.set(false);
         }
-
     }
 
     private void doExternalRefresh(RefreshThrottler.Request request) {
-        if (fastRefresh) {
-            IndexEngine.super.externalRefresh(request.source(), request.listener());
-        } else {
-            try {
-                IS_FLUSH_BY_REFRESH.set(true);
-                Thread originalThread = Thread.currentThread();
-                flush(true, true, request.listener().delegateFailure((l, flushResult) -> {
-                    ActionRunnable<RefreshResult> refreshRunnable = new ActionRunnable<>(l) {
+        try {
+            IS_FLUSH_BY_REFRESH.set(true);
+            Thread originalThread = Thread.currentThread();
+            flush(true, true, request.listener().delegateFailure((l, flushResult) -> {
+                ActionRunnable<RefreshResult> refreshRunnable = new ActionRunnable<>(l) {
 
-                        @Override
-                        protected void doRun() {
-                            IndexEngine.super.externalRefresh(request.source(), listener);
-                        }
-                    };
-                    dispatchRefreshRunnable(originalThread, refreshRunnable);
-                }));
-            } finally {
-                IS_FLUSH_BY_REFRESH.set(false);
-            }
+                    @Override
+                    protected void doRun() {
+                        IndexEngine.super.externalRefresh(request.source(), listener);
+                    }
+                };
+                dispatchRefreshRunnable(originalThread, refreshRunnable);
+            }));
+        } catch (AlreadyClosedException ace) {
+            request.listener().onFailure(ace);
+        } finally {
+            IS_FLUSH_BY_REFRESH.set(false);
         }
-
     }
 
     private void dispatchRefreshRunnable(Thread originalThread, ActionRunnable<RefreshResult> refreshRunnable) {
@@ -440,6 +487,10 @@ public class IndexEngine extends InternalEngine {
         }
     }
 
+    public void syncTranslogReplicator(ActionListener<Void> listener) {
+        translogReplicator.syncAll(shardId, listener);
+    }
+
     @Override
     public void flushAndClose() throws IOException {
         // Don't flush on closing to avoid doing blobstore IO for reading back the latest commit from the repository
@@ -475,9 +526,9 @@ public class IndexEngine extends InternalEngine {
 
     @Override
     protected Translog.Snapshot newTranslogSnapshot(long fromSeqNo, long toSeqNo) throws IOException {
-        SearchDirectory searchDirectory = SearchDirectory.unwrapDirectory(this.store.directory());
-        Optional<String> nodeEphemeralId = searchDirectory.getCurrentMetadataNodeEphemeralId();
-        long translogRecoveryStartFile = searchDirectory.getTranslogRecoveryStartFile();
+        IndexDirectory indexDirectory = IndexDirectory.unwrapDirectory(this.store.directory());
+        Optional<String> nodeEphemeralId = indexDirectory.getRecoveryCommitMetadataNodeEphemeralId();
+        long translogRecoveryStartFile = indexDirectory.getTranslogRecoveryStartFile();
 
         if (nodeEphemeralId.isPresent()) {
             logger.debug("new translog snapshot seqnos [{}]-[{}] and node ephemeral id [{}]", fromSeqNo, toSeqNo, nodeEphemeralId.get());
@@ -488,7 +539,8 @@ public class IndexEngine extends InternalEngine {
                 fromSeqNo,
                 toSeqNo,
                 translogRecoveryStartFile,
-                this::isClosing
+                this::isClosing,
+                translogRecoveryMetrics
             );
             return new Translog.Snapshot() {
                 @Override
@@ -529,7 +581,7 @@ public class IndexEngine extends InternalEngine {
         } else {
             // Wait for upload to complete only for true flushes, i.e. _not_ converted from refreshes, which guarantee
             // a commit to be uploaded.
-            if (statelessCommitService.isStatelessUploadDelayed() == false || IS_FLUSH_BY_REFRESH.get() == false) {
+            if (IS_FLUSH_BY_REFRESH.get() == false) {
                 statelessCommitService.addListenerForUploadedGeneration(shardId, generation, listener);
             } else {
                 logger.trace(() -> Strings.format("no need to wait for non-uploaded generation [%s]", generation));
@@ -545,6 +597,27 @@ public class IndexEngine extends InternalEngine {
         flush(false, false, ActionListener.noop());
     }
 
+    @Override
+    public void forceMerge(boolean flush, int maxNumSegments, boolean onlyExpungeDeletes, String forceMergeUUID) throws EngineException,
+        IOException {
+        forceMergesInProgress.incrementAndGet();
+        try (Releasable ignored = forceMergesInProgress::decrementAndGet) {
+            int before = getLastCommittedSegmentInfos().size();
+            super.forceMerge(flush, maxNumSegments, onlyExpungeDeletes, forceMergeUUID);
+            if (flush) {
+                var info = getLastCommittedSegmentInfos();
+                int after = info.size();
+                boolean merged = Objects.equals(info.getUserData().get(FORCE_MERGE_UUID_KEY), forceMergeUUID);
+                logger.info("Completed force merge for shard {}. forceMergeSet={}, segment count {} -> {}", shardId, merged, before, after);
+            } else {
+                logger.info("Completed force merge for shard {} without flushing", shardId);
+            }
+        } catch (EngineException | IOException e) {
+            logger.warn(() -> Strings.format("Force merge failed for shard %s", shardId), e);
+            throw e;
+        }
+    }
+
     // package private for testing
 
     RefreshThrottler getRefreshThrottler() {
@@ -554,4 +627,38 @@ public class IndexEngine extends InternalEngine {
     public StatelessCommitService getStatelessCommitService() {
         return statelessCommitService;
     }
+
+    private void onAfterMerge(OnGoingMerge merge) {
+        // A merge can occupy a lot of disk space that can't be reused until it has been pushed into the object store, so it
+        // can be worth refreshing immediately to allow that space to be reclaimed faster.
+        if (merge.getTotalBytesSize() >= mergeForceRefreshSize) {
+            maybeRefresh("large merge", ActionListener.noop());
+        }
+    }
+
+    @Override
+    protected ElasticsearchMergeScheduler createMergeScheduler(ShardId shardId, IndexSettings indexSettings) {
+        if (ThreadPoolMergeScheduler.MERGE_THREAD_POOL_SCHEDULER.get(indexSettings.getSettings())) {
+            return new ThreadPoolMergeScheduler(
+                shardId,
+                ThreadPoolMergeScheduler.MERGE_PREWARM.get(indexSettings.getSettings()),
+                engineConfig.getThreadPool(),
+                () -> mergeMetrics, // Have to use supplier as this method is called from super ctor
+                (mergeId, merge) -> cacheWarmingService.warmCacheForMerge(
+                    mergeId,
+                    shardId,
+                    store,
+                    merge,
+                    fileName -> statelessCommitService.getBlobLocation(shardId, fileName)
+                ),
+                () -> forceMergesInProgress.get() == 0 && shouldSkipMerges.test(shardId),
+                this::onAfterMerge,
+                this::mergeException
+            );
+        } else {
+            return super.createMergeScheduler(shardId, indexSettings);
+        }
+    }
+
+    public record EngineMetrics(TranslogRecoveryMetrics translogRecoveryMetrics, MergeMetrics mergeMetrics) {}
 }

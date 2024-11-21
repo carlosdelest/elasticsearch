@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.stateless.recovery;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
-import co.elastic.elasticsearch.stateless.IndexingDiskController;
 import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessClusterConsistencyService;
 import co.elastic.elasticsearch.stateless.commits.BatchedCompoundCommit;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
@@ -26,12 +25,18 @@ import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
 import co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommit;
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
-import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 
+import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
+import org.elasticsearch.action.admin.cluster.reroute.ClusterRerouteRequest;
+import org.elasticsearch.action.admin.cluster.reroute.TransportClusterRerouteAction;
+import org.elasticsearch.action.admin.indices.refresh.TransportUnpromotableShardRefreshAction;
+import org.elasticsearch.action.admin.indices.refresh.UnpromotableShardRefreshRequest;
+import org.elasticsearch.action.admin.indices.stats.IndicesStatsResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.bulk.TransportShardBulkAction;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.action.support.WriteRequest.RefreshPolicy;
@@ -41,6 +46,8 @@ import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.coordination.ApplyCommitRequest;
 import org.elasticsearch.cluster.coordination.Coordinator;
 import org.elasticsearch.cluster.health.ClusterHealthStatus;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
+import org.elasticsearch.cluster.routing.allocation.command.MoveAllocationCommand;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.TriConsumer;
@@ -48,9 +55,12 @@ import org.elasticsearch.common.blobstore.OperationPurpose;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.CollectionUtils;
+import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.MergePolicyConfig;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.seqno.SeqNoStats;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.recovery.RecoveryClusterStateDelayListeners;
 import org.elasticsearch.plugins.Plugin;
@@ -58,6 +68,7 @@ import org.elasticsearch.search.SearchResponseUtils;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.disruption.NetworkDisruption;
 import org.elasticsearch.test.transport.MockTransportService;
+import org.elasticsearch.transport.TestTransportChannel;
 import org.elasticsearch.transport.TransportSettings;
 import org.elasticsearch.xpack.shutdown.ShutdownPlugin;
 import org.hamcrest.Matchers;
@@ -67,7 +78,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -75,6 +89,8 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiConsumer;
 
 import static co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit.blobNameFromGeneration;
+import static org.elasticsearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
+import static org.elasticsearch.action.support.WriteRequest.RefreshPolicy.WAIT_UNTIL;
 import static org.elasticsearch.cluster.coordination.FollowersChecker.FOLLOWER_CHECK_INTERVAL_SETTING;
 import static org.elasticsearch.cluster.coordination.FollowersChecker.FOLLOWER_CHECK_RETRY_COUNT_SETTING;
 import static org.elasticsearch.cluster.coordination.LeaderChecker.LEADER_CHECK_INTERVAL_SETTING;
@@ -84,6 +100,7 @@ import static org.elasticsearch.cluster.metadata.IndexMetadata.SETTING_NUMBER_OF
 import static org.elasticsearch.cluster.routing.UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING;
 import static org.elasticsearch.discovery.PeerFinder.DISCOVERY_FIND_PEERS_INTERVAL_SETTING;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -108,8 +125,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
     protected Settings.Builder nodeSettings() {
         return super.nodeSettings().put(StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.getKey(), ByteSizeValue.ofGb(1))
             .put(StatelessCommitService.STATELESS_UPLOAD_VBCC_MAX_AGE.getKey(), TimeValue.timeValueDays(1))
-            .put(StatelessCommitService.STATELESS_UPLOAD_MONITOR_INTERVAL.getKey(), TimeValue.timeValueDays(1))
-            .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.MINUS_ONE);
+            .put(StatelessCommitService.STATELESS_UPLOAD_MONITOR_INTERVAL.getKey(), TimeValue.timeValueDays(1));
     }
 
     /**
@@ -128,7 +144,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
     }
 
     public void testEmptyStoreRecovery() throws Exception {
-        startMasterAndIndexNode();
+        startMasterAndIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         var indexName = createIndex(randomIntBetween(1, 3), 0);
 
         var initialTermAndGen = new PrimaryTermAndGeneration(1L, 3L);
@@ -143,7 +159,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
 
     public void testExistingStoreRecovery() throws Exception {
         startMasterOnlyNode();
-        var indexNode = startIndexNode();
+        var indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         var indexName = createIndex(randomIntBetween(1, 3), 0);
 
         var recoveredBcc = new PrimaryTermAndGeneration(1L, 3L);
@@ -175,7 +191,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
                 internalCluster().restartNode(indexNode);
             } else {
                 internalCluster().stopNode(indexNode);
-                indexNode = startIndexNode();
+                indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
             }
             ensureGreen(indexName);
 
@@ -189,7 +205,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
 
     public void testSnapshotRecovery() throws Exception {
         startMasterOnlyNode();
-        startIndexNode();
+        startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
 
         var indexName = createIndex(randomIntBetween(1, 3), 0);
         var lastUploaded = new PrimaryTermAndGeneration(1L, 3L);
@@ -226,7 +242,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
         assertAcked(client().admin().indices().prepareDelete(indexName));
 
         logger.info("--> restoring snapshot of {}", indexName);
-        var restore = clusterAdmin().prepareRestoreSnapshot("snapshots", "snapshot").setWaitForCompletion(true).get();
+        var restore = clusterAdmin().prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "snapshots", "snapshot").setWaitForCompletion(true).get();
         assertThat(restore.getRestoreInfo().successfulShards(), equalTo(getNumShards(indexName).numPrimaries));
         assertThat(restore.getRestoreInfo().failedShards(), equalTo(0));
         ensureGreen(indexName);
@@ -243,7 +259,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
 
     public void testPeerRecovery() throws Exception {
         startMasterOnlyNode();
-        var indexNode = startIndexNode();
+        var indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         var indexName = createIndex(randomIntBetween(1, 3), 0);
 
         var currentGeneration = new PrimaryTermAndGeneration(1L, 3L);
@@ -277,7 +293,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
                 expectedGenerationAfterRelocation = currentGeneration.generation() + 1L;
             }
 
-            var newIndexNode = startIndexNode();
+            var newIndexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
             logger.info("--> iteration {}/{}: node {} started", i, iters, newIndexNode);
 
             var excludedNode = indexNode;
@@ -299,6 +315,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
         final var masterNode = startMasterOnlyNode();
         final var extraSettings = Settings.builder()
             .put(StatelessClusterConsistencyService.DELAYED_CLUSTER_CONSISTENCY_INTERVAL_SETTING.getKey(), "100ms")
+            .put(disableIndexingDiskAndMemoryControllersNodeSettings())
             .build();
         final var indexNode = startIndexNode(extraSettings);
         ensureStableCluster(2, masterNode);
@@ -371,7 +388,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
         masterClusterService.removeListener(nodeRemovedClusterStateListener);
 
         logger.debug("--> waiting for index to recover on new index node {}", newIndexNode);
-        ClusterHealthRequest healthRequest = new ClusterHealthRequest(indexName).timeout(TimeValue.timeValueSeconds(30L))
+        ClusterHealthRequest healthRequest = new ClusterHealthRequest(TEST_REQUEST_TIMEOUT, indexName).timeout(TEST_REQUEST_TIMEOUT)
             .waitForStatus(ClusterHealthStatus.GREEN)
             .waitForEvents(Priority.LANGUID)
             .waitForNoRelocatingShards(true)
@@ -415,7 +432,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
         networkDisruption.stopDisrupting();
 
         // list the blobs that exist in the object store and map the staless_commit_N files with their primary term prefixes
-        var objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
+        var objectStoreService = getCurrentMasterObjectStoreService();
         var blobContainer = objectStoreService.getBlobContainer(newIndexShard.shardId());
         var blobNamesAndPrimaryTerms = new HashMap<String, Set<Long>>();
         for (var child : blobContainer.children(operationPurpose).entrySet()) {
@@ -588,7 +605,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
 
             assertBusy(() -> assertThat(getPrimaryTerms(client(masterName), indexName)[0], greaterThan(initialPrimaryTerm)));
 
-            ClusterHealthRequest healthRequest = new ClusterHealthRequest(indexName).timeout(TimeValue.timeValueSeconds(30))
+            ClusterHealthRequest healthRequest = new ClusterHealthRequest(TEST_REQUEST_TIMEOUT, indexName).timeout(TEST_REQUEST_TIMEOUT)
                 .waitForStatus(ClusterHealthStatus.GREEN)
                 .waitForEvents(Priority.LANGUID)
                 .waitForNoRelocatingShards(true)
@@ -639,12 +656,131 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
         assertThat(totalHits, equalTo((long) docsAcknowledged.get()));
     }
 
+    public void testPostWriteRefreshTimeoutDoesNotMakeOnGoingRecoveryFail() throws Exception {
+        var indexNode1 = startMasterAndIndexNode();
+        var searchNode = startSearchNode();
+        ensureStableCluster(2);
+
+        var indexName = randomIdentifier();
+        createIndex(indexName, 1, 1);
+        ensureGreen(indexName);
+        var requestTimeout = TimeValue.timeValueSeconds(1);
+
+        var indexDocs = new AtomicBoolean(true);
+        var indexerThread = new Thread(() -> {
+            while (indexDocs.get()) {
+                try {
+                    var bulkRequest = client().prepareBulk();
+                    bulkRequest.setTimeout(requestTimeout);
+                    var numDocs = randomIntBetween(50, 100);
+                    for (int i = 0; i < numDocs; i++) {
+                        bulkRequest.add(new IndexRequest(indexName).source("field", randomUnicodeOfCodepointLengthBetween(1, 25)));
+                    }
+                    bulkRequest.setRefreshPolicy(randomFrom(IMMEDIATE, WAIT_UNTIL));
+                    // The refresh timeouts and that's considered a bulk failure (hence we cannot assert that there are no failures)
+                    bulkRequest.get();
+                } catch (Exception e) {
+                    logger.info("Error", e);
+                }
+            }
+        }, "indexer-thread");
+        indexerThread.start();
+
+        var indexNode2 = startMasterAndIndexNode();
+        ensureStableCluster(3);
+
+        Queue<CheckedRunnable<Exception>> pendingRefreshRequests = new LinkedBlockingQueue<>();
+        var shardRefreshRequestSent = new CountDownLatch(1);
+        var delayRefreshResponses = new AtomicBoolean(true);
+        MockTransportService.getInstance(searchNode)
+            .addRequestHandlingBehavior(TransportUnpromotableShardRefreshAction.NAME + "[u]", (handler, request, channel, task) -> {
+                UnpromotableShardRefreshRequest req = (UnpromotableShardRefreshRequest) request;
+                if (req.shardId().getIndexName().equals(indexName) && delayRefreshResponses.get()) {
+                    shardRefreshRequestSent.countDown();
+                    pendingRefreshRequests.add(() -> handler.messageReceived(request, channel, task));
+                } else {
+                    handler.messageReceived(request, channel, task);
+                }
+            });
+
+        safeAwait(shardRefreshRequestSent);
+        logger.info("--> relocating shard 0 from {} to {}", indexNode1, indexNode2);
+        var relocationFuture = client().execute(
+            TransportClusterRerouteAction.TYPE,
+            new ClusterRerouteRequest(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT).setRetryFailed(false)
+                .add(new MoveAllocationCommand(indexName, 0, indexNode1, indexNode2))
+        );
+        // Ensure that ongoing refreshes time-out
+        safeSleep(requestTimeout.millis() + 100);
+
+        // Process the refresh requests, even though the search shard should have failed at that point
+        CheckedRunnable<Exception> pendingRefresh;
+        while ((pendingRefresh = pendingRefreshRequests.poll()) != null) {
+            pendingRefresh.run();
+        }
+
+        delayRefreshResponses.set(false);
+        safeGet(relocationFuture);
+        ensureGreen(indexName);
+
+        indexDocs.set(false);
+        indexerThread.join(requestTimeout.millis());
+    }
+
+    public void testRecoverMultipleIndexingShardsWithCoordinatingRetries() throws Exception {
+        startMasterOnlyNode();
+        String firstIndexingShard = startIndexNode();
+        final String indexName = randomIdentifier();
+        createIndex(indexName, indexSettings(1, 0).build());
+
+        ensureGreen(indexName);
+
+        MockTransportService.getInstance(firstIndexingShard)
+            .addRequestHandlingBehavior(
+                TransportShardBulkAction.ACTION_NAME,
+                (handler, request, channel, task) -> handler.messageReceived(request, new TestTransportChannel(ActionListener.noop()), task)
+            );
+
+        String coordinatingNode = startIndexNode();
+        updateIndexSettings(Settings.builder().put("index.routing.allocation.exclude._name", coordinatingNode), indexName);
+
+        ActionFuture<BulkResponse> bulkRequest = client(coordinatingNode).prepareBulk(indexName)
+            .add(new IndexRequest(indexName).source(Map.of("custom", "value")))
+            .execute();
+
+        assertBusy(() -> {
+            IndicesStatsResponse statsResponse = client(firstIndexingShard).admin().indices().prepareStats(indexName).get();
+            SeqNoStats seqNoStats = statsResponse.getIndex(indexName).getShards()[0].getSeqNoStats();
+            assertThat(seqNoStats.getMaxSeqNo(), equalTo(0L));
+        });
+        flush(indexName);
+
+        internalCluster().stopNode(firstIndexingShard);
+
+        String secondIndexingShard = startIndexNode();
+        ensureGreen(indexName);
+
+        BulkResponse response = bulkRequest.actionGet();
+        assertFalse(response.hasFailures());
+
+        internalCluster().stopNode(secondIndexingShard);
+
+        startIndexNodes(1);
+        ensureGreen(indexName);
+
+        updateIndexSettings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1));
+        startSearchNode();
+        ensureGreen(indexName);
+
+        assertHitCount(prepareSearch(indexName).setQuery(QueryBuilders.termQuery("custom", "value")), 1);
+    }
+
     private static void assertBusyCommitsMatchExpectedResults(String indexName, ExpectedCommits expected) throws Exception {
         assertBusyCommits(indexName, (shardId, uploaded, virtual) -> {
             assertThat(uploaded, notNullValue());
 
             assertThat(uploaded.primaryTermAndGeneration(), equalTo(expected.lastUploadedBcc));
-            assertThat(uploaded.last().primaryTermAndGeneration(), equalTo(expected.lastUploadedCc));
+            assertThat(uploaded.lastCompoundCommit().primaryTermAndGeneration(), equalTo(expected.lastUploadedCc));
             assertBlobExists(shardId, expected.lastUploadedBcc);
 
             if (expected.lastVirtualBcc == null) {
@@ -675,7 +811,12 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
     }
 
     private static void forAllCommitServices(String indexName, BiConsumer<ShardId, StatelessCommitService> consumer) {
-        var clusterState = clusterAdmin().prepareState().setMetadata(true).setNodes(true).setIndices(indexName).get().getState();
+        var clusterState = clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT)
+            .setMetadata(true)
+            .setNodes(true)
+            .setIndices(indexName)
+            .get()
+            .getState();
         assertThat("Index not found: " + indexName, clusterState.metadata().hasIndex(indexName), equalTo(true));
 
         var indexMetadata = clusterState.metadata().index(indexName);
@@ -723,7 +864,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
         if (numCommits == 0) {
             return new ExpectedCommits(initial, initial, null, null);
         }
-        int uploadMaxCommits = STATELESS_UPLOAD_DELAYED ? getUploadMaxCommits() : 1;
+        int uploadMaxCommits = getUploadMaxCommits();
         int uploads = numCommits / uploadMaxCommits;
         if (uploads == 0) {
             return new ExpectedCommits(
@@ -749,7 +890,7 @@ public class IndexingShardRecoveryIT extends AbstractStatelessIntegTestCase {
 
     private static void assertBlobExists(ShardId shardId, PrimaryTermAndGeneration primaryTermAndGeneration) {
         try {
-            var objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
+            var objectStoreService = getCurrentMasterObjectStoreService();
             var blobContainer = objectStoreService.getBlobContainer(shardId, primaryTermAndGeneration.primaryTerm());
             var blobName = blobNameFromGeneration(primaryTermAndGeneration.generation());
             assertTrue("Blob not found: " + blobContainer.path() + blobName, blobContainer.blobExists(OperationPurpose.INDICES, blobName));

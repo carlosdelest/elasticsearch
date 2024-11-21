@@ -2,8 +2,8 @@ env:
   BUILDKITE_DIR: ".buildkite"
   DEPLOY_ID: "${DEPLOY_ID:-ess-e2e-ci-git-${BUILDKITE_COMMIT:0:12}}"
   VAULT_PATH_API_KEY: "secret/ci/elastic-elasticsearch-serverless/ess-delivery-ci-staging-creds"
-  ENV_URL: "https://global.staging.cld.elstc.co"
-  AWS_REGION: "aws-us-east-1"
+  ENV_URL: "https://public-api.staging.foundit.no"
+  REGION_ID: "aws-us-east-1"
   TEST_ENV: "staging"
   IMAGE_OVERRIDE: ""
 

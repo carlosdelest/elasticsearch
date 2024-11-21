@@ -20,10 +20,12 @@ package co.elastic.elasticsearch.stateless.engine;
 import co.elastic.elasticsearch.stateless.action.NewCommitNotificationRequestTests;
 import co.elastic.elasticsearch.stateless.cache.reader.AtomicMutableObjectStoreUploadTracker;
 import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
+import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommitTestUtils;
 import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
 
 import org.apache.lucene.index.CheckIndex;
 import org.apache.lucene.index.CorruptIndexException;
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.IndexFormatTooNewException;
 import org.apache.lucene.index.IndexFormatTooOldException;
@@ -56,6 +58,7 @@ import static org.elasticsearch.test.ActionListenerUtils.anyActionListener;
 import static org.hamcrest.Matchers.arrayWithSize;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
@@ -536,11 +539,8 @@ public class SearchEngineTests extends AbstractEngineTestCase {
                 new NewCommitNotification(compoundCommit, bccGen, latestUploadedTermAndGen, 1L, "_node_id"),
                 new PlainActionFuture<>()
             );
-            verify(objectStoreUploadTracker, times(1)).updateLatestUploadInfo(
-                latestUploadedTermAndGen,
-                compoundCommit.primaryTermAndGeneration(),
-                "_node_id"
-            );
+            verify(objectStoreUploadTracker, times(1)).updateLatestUploadedBcc(latestUploadedTermAndGen);
+            verify(objectStoreUploadTracker, times(1)).updateLatestCommitInfo(compoundCommit.primaryTermAndGeneration(), "_node_id");
             var uploadInfoGen = objectStoreUploadTracker.getLatestUploadInfo(latestUploadedTermAndGen);
             assertThat(uploadInfoGen.isUploaded(), is(true));
             var uploadInfoGenPlus1 = objectStoreUploadTracker.getLatestUploadInfo(latestUploadedTermAndGenPlus1);
@@ -552,11 +552,8 @@ public class SearchEngineTests extends AbstractEngineTestCase {
                 new NewCommitNotification(compoundCommit, bccGen, latestUploadedTermAndGenPlus1, 1L, "_node_id"),
                 new PlainActionFuture<>()
             );
-            verify(objectStoreUploadTracker, times(1)).updateLatestUploadInfo(
-                latestUploadedTermAndGenPlus1,
-                compoundCommit.primaryTermAndGeneration(),
-                "_node_id"
-            );
+            verify(objectStoreUploadTracker, times(1)).updateLatestUploadedBcc(latestUploadedTermAndGenPlus1);
+            verify(objectStoreUploadTracker, times(1)).updateLatestCommitInfo(compoundCommit.primaryTermAndGeneration(), "_node_id");
             assertThat(uploadInfoGen.isUploaded(), is(true));
             assertThat(uploadInfoGenPlus1.isUploaded(), is(true));
 
@@ -577,8 +574,8 @@ public class SearchEngineTests extends AbstractEngineTestCase {
                 ),
                 new PlainActionFuture<>()
             );
-            verify(objectStoreUploadTracker, times(1)).updateLatestUploadInfo(
-                latestUploadedTermAndGenMinusN,
+            verify(objectStoreUploadTracker, times(1)).updateLatestUploadedBcc(latestUploadedTermAndGenMinusN);
+            verify(objectStoreUploadTracker, times(1)).updateLatestCommitInfo(
                 compoundCommitGenMinusN.primaryTermAndGeneration(),
                 "_node_id"
             );
@@ -589,8 +586,57 @@ public class SearchEngineTests extends AbstractEngineTestCase {
         }
     }
 
+    public void testAcquireLastIndexCommit() throws IOException {
+        final var indexConfig = indexConfig();
+        final var searchTaskQueue = new DeterministicTaskQueue();
+        try (
+            var indexEngine = newIndexEngine(indexConfig);
+            var searchEngine = newSearchEngineFromIndexEngine(indexEngine, searchTaskQueue)
+        ) {
+            int numDocs = between(0, 100);
+            for (int i = 0; i < numDocs; i++) {
+                indexEngine.index(randomDoc(String.valueOf(i)));
+            }
+            indexEngine.flush();
+            notifyCommits(indexEngine, searchEngine);
+            searchTaskQueue.runAllRunnableTasks();
+            Engine.IndexCommitRef commit1 = searchEngine.acquireLastIndexCommit(false);
+            try (DirectoryReader reader = DirectoryReader.open(commit1.getIndexCommit())) {
+                assertThat(reader.numDocs(), equalTo(numDocs));
+            }
+            int moreDocs = between(0, 100);
+            for (int i = 0; i < moreDocs; i++) {
+                indexEngine.index(randomDoc("more-" + i));
+            }
+            indexEngine.flush();
+            notifyCommits(indexEngine, searchEngine);
+            searchTaskQueue.runAllRunnableTasks();
+            Engine.IndexCommitRef commit2 = searchEngine.acquireLastIndexCommit(false);
+            try (DirectoryReader reader = DirectoryReader.open(commit2.getIndexCommit())) {
+                assertThat(reader.numDocs(), equalTo(numDocs + moreDocs));
+            }
+            var error = expectThrows(IllegalArgumentException.class, () -> searchEngine.acquireLastIndexCommit(true).close());
+            assertThat(error.getMessage(), containsString("Search engine does not support acquiring last index commit with flush_first"));
+            if (randomBoolean()) {
+                int extraDocs = between(0, 100);
+                for (int i = 0; i < extraDocs; i++) {
+                    indexEngine.index(randomDoc("extra-" + i));
+                }
+                indexEngine.flush();
+                notifyCommits(indexEngine, searchEngine);
+            }
+            try (DirectoryReader reader = DirectoryReader.open(commit1.getIndexCommit())) {
+                assertThat(reader.numDocs(), equalTo(numDocs));
+            }
+            try (DirectoryReader reader = DirectoryReader.open(commit2.getIndexCommit())) {
+                assertThat(reader.numDocs(), equalTo(numDocs + moreDocs));
+            }
+            IOUtils.close(commit1, commit2);
+        }
+    }
+
     private StatelessCompoundCommit buildCompoundCommit(ShardId shardId, long primaryTerm, long ccGen) {
-        return new StatelessCompoundCommit(shardId, ccGen, primaryTerm, randomUUID(), Map.of(), randomLongBetween(10, 100), Set.of());
+        return StatelessCompoundCommitTestUtils.randomCompoundCommit(shardId, new PrimaryTermAndGeneration(primaryTerm, ccGen));
     }
 
     private static List<String> listFiles(Engine engine) {

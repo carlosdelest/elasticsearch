@@ -19,19 +19,13 @@ package co.elastic.elasticsearch.serverless.security.operator;
 
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchStatusException;
-import org.elasticsearch.common.Randomness;
 import org.elasticsearch.rest.ApiNotAvailableException;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.rest.Scope;
 import org.elasticsearch.test.ESTestCase;
-import org.elasticsearch.test.rest.FakeRestRequest;
-import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.junit.Before;
-
-import java.util.Arrays;
-import java.util.List;
 
 import static org.elasticsearch.test.TestMatchers.throwableWithMessage;
 import static org.hamcrest.Matchers.instanceOf;
@@ -44,7 +38,7 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
     @Before
     public void setup() {}
 
-    public void testCheckRestFull() throws Exception {
+    public void testCheckRestFull() {
         RestHandler restHandler = mock(RestHandler.class);
         RestRequest restRequest = mock(RestRequest.class);
         ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry();
@@ -76,30 +70,4 @@ public class ServerlessOperatorOnlyRegistryTests extends ESTestCase {
             fail("Public rest handlers should not trigger exceptions in the operator-only registry - " + e);
         }
     }
-
-    public void testCheckRestPartial() {
-        ServerlessOperatorOnlyRegistry registry = new ServerlessOperatorOnlyRegistry();
-
-        // create a rest request that should be restricted
-        final String requestPath = randomAlphaOfLengthBetween(10, 20);
-        RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withPath(requestPath).build();
-
-        RestHandler restHandler = mock(RestHandler.class);
-        when(restHandler.getServerlessScope()).thenReturn(Scope.PUBLIC);
-
-        final RestHandler.Route additionalRoute = RestHandler.Route.builder(
-            randomFrom(RestRequest.Method.values()),
-            randomValueOtherThan(requestPath, () -> randomAlphaOfLengthBetween(10, 20))
-        ).build();
-        List<RestHandler.Route> handlerRoutes = Arrays.asList(
-            RestHandler.Route.builder(randomFrom(RestRequest.Method.values()), requestPath).build(),
-            additionalRoute
-        );
-        Randomness.shuffle(handlerRoutes);
-        when(restHandler.routes()).thenReturn(handlerRoutes);
-
-        registry.checkRest(restHandler, request);
-        assertThat(request.param(RestRequest.PATH_RESTRICTED), is("serverless"));
-    }
-
 }

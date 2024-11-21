@@ -17,12 +17,11 @@
 
 package co.elastic.elasticsearch.stateless.autoscaling.search;
 
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader.ShardSize;
 import co.elastic.elasticsearch.stateless.autoscaling.MetricQuality;
 import co.elastic.elasticsearch.stateless.autoscaling.memory.MemoryMetricsService;
 import co.elastic.elasticsearch.stateless.autoscaling.search.load.NodeSearchLoadSnapshot;
 import co.elastic.elasticsearch.stateless.autoscaling.search.load.PublishNodeSearchLoadRequest;
-import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
-import co.elastic.elasticsearch.stateless.lucene.stats.ShardSize;
 
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
@@ -83,7 +82,7 @@ public class SearchMetricsService implements ClusterStateListener {
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
-    private static final ShardSize ZERO_SHARD_SIZE = new ShardSize(0, 0, PrimaryTermAndGeneration.ZERO);
+    private static final ShardSize ZERO_SHARD_SIZE = ShardSize.EMPTY;
 
     private final LongSupplier relativeTimeInNanosSupplier;
     private final MemoryMetricsService memoryMetricsService;
@@ -174,7 +173,15 @@ public class SearchMetricsService implements ClusterStateListener {
         }
     }
 
-    public void processSearchLoadRequest(PublishNodeSearchLoadRequest request) {
+    public void processSearchLoadRequest(ClusterState state, PublishNodeSearchLoadRequest request) {
+        String nodeId = request.getNodeId();
+        // Prevent a delayed metric publication from adding back a removed node to the list of search loads which would
+        // lead to continued reporting of the search load until it gets stale, although we know that node removal
+        // was planned and the node does not come back.
+        if (state.nodes().get(nodeId) == null && state.metadata().nodeShutdowns().isNodeMarkedForRemoval(nodeId)) {
+            logger.trace("dropping search load metric received from removed node {}", nodeId);
+            return;
+        }
         var nodeSearchLoad = nodeSearchLoads.computeIfAbsent(request.getNodeId(), unused -> new NodeSearchLoad(request.getNodeId()));
         nodeSearchLoad.setLatestReadingTo(request.getSearchLoad(), request.getQuality(), request.getSeqNo());
     }
@@ -262,10 +269,16 @@ public class SearchMetricsService implements ClusterStateListener {
                 }
                 for (DiscoveryNode removedNode : event.nodesDelta().removedNodes()) {
                     if (isSearchNode(removedNode)) {
-                        var removedNodeSearchLoad = nodeSearchLoads.get(removedNode.getId());
+                        String removedNodeId = removedNode.getId();
+                        var removedNodeSearchLoad = nodeSearchLoads.get(removedNodeId);
                         if (removedNodeSearchLoad != null) {
-                            // We don’t know if the node was just disconnected, and it will come back eventually, or if it’s dead.
-                            removedNodeSearchLoad.setQualityToMinimumAndLoadToZero();
+                            if (event.state().metadata().nodeShutdowns().isNodeMarkedForRemoval(removedNodeId)) {
+                                // Planned node removal, no need to track the search load anymore
+                                nodeSearchLoads.remove(removedNodeId);
+                            } else {
+                                // We don’t know if the node was just disconnected, and it will come back eventually, or if it’s dead.
+                                removedNodeSearchLoad.setQualityToMinimumAndLoadToZero();
+                            }
                         }
                     }
                 }
@@ -393,7 +406,7 @@ public class SearchMetricsService implements ClusterStateListener {
         ShardSize shardSize = ZERO_SHARD_SIZE;
 
         private synchronized void update(NodeTimingForShardMetrics sourceNode, ShardSize shardSize) {
-            if (this.shardSize.primaryTermGeneration().compareTo(shardSize.primaryTermGeneration()) <= 0) {
+            if (this.shardSize.onOrBefore(shardSize)) {
                 this.sourceNode = sourceNode;
                 this.shardSize = shardSize;
             }
@@ -425,7 +438,7 @@ public class SearchMetricsService implements ClusterStateListener {
                 this.latestSampleTimeInNanos = relativeTimeInNanos();
                 this.maxSeqNo = metricSeqNo;
                 SEARCH_LOAD_LOGGER.trace(
-                    "Set the load reading for node [{}] to: searchLoad: [{}], isSearchLoadValid: [{}], quality: [{}]",
+                    "Set the load reading for node [{}] to: searchLoad: [{}], quality: [{}]",
                     nodeId,
                     searchLoad,
                     quality

@@ -30,7 +30,6 @@ import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.plugins.Plugin;
-import org.elasticsearch.search.SearchResponseUtils;
 import org.elasticsearch.snapshots.mockstore.MockRepository;
 
 import java.util.Collection;
@@ -61,11 +60,11 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
         final String indexNodeA = startIndexNode();
         ensureStableCluster(2);
         final String indexName = SYSTEM_INDEX_NAME;
-        createSystemIndex(indexSettings(1, 0).put(IndexSettings.INDEX_FAST_REFRESH_SETTING.getKey(), true).build());
+        createSystemIndex(indexSettings(1, 0).put(IndexSettings.INDEX_FAST_REFRESH_SETTING.getKey(), randomBoolean()).build());
         startIndexNode();
         ensureStableCluster(3);
 
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNodeA);
+        ObjectStoreService objectStoreService = getObjectStoreService(indexNodeA);
         MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
         repository.setRandomControlIOExceptionRate(1.0);
         repository.setRandomDataFileIOExceptionRate(1.0);
@@ -119,9 +118,8 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
         logger.info("--> [{}] documents acknowledged, [{}] documents failed", docsAcknowledged, docsFailed);
         ensureGreen();
 
-        refresh(indexName); // so that any translog ops become visible for searching
-        final long totalHits = SearchResponseUtils.getTotalHitsValue(prepareSearch(indexName));
-        assertThat(totalHits, greaterThanOrEqualTo((long) docsAcknowledged.get()));
+        refresh(indexName); // so that we can count docs
+        assertThat(findIndexShard(resolveIndex(indexName), 0).docStats().getCount(), greaterThanOrEqualTo((long) docsAcknowledged.get()));
     }
 
     public void testRecoverSearchShardWithObjectStoreFailures() throws Exception {
@@ -135,7 +133,7 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
         indexDocsAndRefresh(indexName, numDocs);
         ensureSearchable(indexName);
 
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, searchNode);
+        ObjectStoreService objectStoreService = getObjectStoreService(searchNode);
         MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
         repository.setRandomControlIOExceptionRate(1.0);
         repository.setRandomDataFileIOExceptionRate(1.0);
@@ -162,7 +160,7 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
         final String searchNodeB = startSearchNode();
         ensureStableCluster(4);
 
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, searchNodeB);
+        ObjectStoreService objectStoreService = getObjectStoreService(searchNodeB);
         MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
         repository.setRandomControlIOExceptionRate(1.0);
         repository.setRandomDataFileIOExceptionRate(1.0);
@@ -172,7 +170,7 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
         logger.info("--> move replica shard from: {} to: {}", searchNodeA, searchNodeB);
         ClusterRerouteUtils.reroute(client(), new MoveAllocationCommand(indexName, 0, searchNodeA, searchNodeB));
 
-        ensureGreen();
+        ensureGreen(indexName);
         assertThat(repository.getFailureCount(), greaterThan(0L));
         assertNodeHasNoCurrentRecoveries(searchNodeB);
         assertThat(findSearchShard(resolveIndex(indexName), 0).routingEntry().currentNodeId(), equalTo(getNodeId(searchNodeB)));
@@ -191,7 +189,7 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
         final String indexNodeB = startIndexNode();
         ensureStableCluster(3);
 
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNodeB);
+        ObjectStoreService objectStoreService = getObjectStoreService(indexNodeB);
         MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
         repository.setRandomControlIOExceptionRate(1.0);
         repository.setRandomDataFileIOExceptionRate(1.0);
@@ -214,7 +212,7 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
 
     public void testRelocateIndexingShardWithObjectStoreFailures() {
         startMasterOnlyNode();
-        final String indexNodeA = startIndexNode();
+        final String indexNodeA = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         ensureStableCluster(2);
         final String indexName = "test";
         createIndex(
@@ -230,10 +228,7 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
 
         boolean failuresOnSource = randomBoolean(); // else failures on target node
         logger.info("--> failures will be on source node? [{}]", failuresOnSource);
-        ObjectStoreService objectStoreService = internalCluster().getInstance(
-            ObjectStoreService.class,
-            failuresOnSource ? indexNodeA : indexNodeB
-        );
+        ObjectStoreService objectStoreService = getObjectStoreService(failuresOnSource ? indexNodeA : indexNodeB);
         MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
         repository.setRandomControlIOExceptionRate(1.0);
         repository.setRandomDataFileIOExceptionRate(1.0);
@@ -245,7 +240,7 @@ public class ObjectStoreFailuresIT extends AbstractStatelessIntegTestCase {
         logger.info("--> move primary shard from: {} to: {}", indexNodeA, indexNodeB);
         ClusterRerouteUtils.reroute(client(), new MoveAllocationCommand(indexName, 0, indexNodeA, indexNodeB));
 
-        ensureGreen();
+        ensureGreen(indexName);
         assertThat(repository.getFailureCount(), greaterThan(0L));
         assertNodeHasNoCurrentRecoveries(indexNodeB);
         assertThat(findIndexShard(resolveIndex(indexName), 0).docStats().getCount(), equalTo((long) numDocs));

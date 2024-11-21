@@ -22,12 +22,14 @@ package co.elastic.elasticsearch.stateless.commits;
 import co.elastic.elasticsearch.stateless.lucene.StatelessCommitRef;
 import co.elastic.elasticsearch.stateless.test.FakeStatelessNode;
 
+import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
-import org.elasticsearch.core.Tuple;
+import org.elasticsearch.common.lucene.store.BytesReferenceIndexInput;
+import org.elasticsearch.core.Streams;
 import org.elasticsearch.test.ESTestCase;
 
 import java.io.IOException;
@@ -40,6 +42,7 @@ import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.function.BiConsumer;
 
+import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
@@ -68,16 +71,21 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                     primaryTerm,
                     firstCommitGeneration,
                     uploadedBlobLocations::get,
-                    ESTestCase::randomNonNegativeLong
+                    ESTestCase::randomNonNegativeLong,
+                    fakeNode.sharedCacheService.getRegionSize(),
+                    randomDoubleBetween(0.0d, 1.0d, true)
                 );
                 for (StatelessCommitRef statelessCommitRef : indexCommits) {
-                    assertTrue(virtualBatchedCompoundCommit.appendCommit(statelessCommitRef));
+                    assertTrue(virtualBatchedCompoundCommit.appendCommit(statelessCommitRef, randomBoolean()));
                 }
                 virtualBatchedCompoundCommit.freeze();
 
                 try (BytesStreamOutput output = new BytesStreamOutput()) {
                     assertTrue(virtualBatchedCompoundCommit.isFrozen());
-                    var batchedCompoundCommit = virtualBatchedCompoundCommit.writeToStore(output);
+                    try (var frozenInputStream = virtualBatchedCompoundCommit.getFrozenInputStreamForUpload()) {
+                        Streams.copy(frozenInputStream, output, false);
+                    }
+                    var batchedCompoundCommit = virtualBatchedCompoundCommit.getFrozenBatchedCompoundCommit();
                     virtualBatchedCompoundCommit.close();
 
                     var serializedBatchedCompoundCommit = output.bytes();
@@ -86,7 +94,8 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                     var deserializedBatchedCompoundCommit = BatchedCompoundCommit.readFromStore(
                         virtualBatchedCompoundCommit.getBlobName(),
                         output.size(),
-                        (blobName, offset, length) -> serializedBatchedCompoundCommit.slice((int) offset, (int) length).streamInput()
+                        (blobName, offset, length) -> serializedBatchedCompoundCommit.slice((int) offset, (int) length).streamInput(),
+                        true
                     );
                     assertEquals(batchedCompoundCommit, deserializedBatchedCompoundCommit);
 
@@ -99,14 +108,14 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                         // Make sure that all internal files are on the same blob
                         Set<String> internalFiles = compoundCommit.getInternalFiles();
                         internalFiles.forEach(f -> assertEquals(virtualBatchedCompoundCommit.getBlobName(), commitFiles.get(f).blobName()));
-                        // Check that internalFiles in the ascending order by offset are sorted according to the FILE_NAME_COMPARATOR
+                        // Check that internalFiles are sorted according to the file size and name
                         assertThat(
-                            internalFiles.stream()
-                                .map(e -> Tuple.tuple(e, commitFiles.get(e)))
-                                .sorted(Comparator.comparingLong(e -> e.v2().offset()))
-                                .map(Tuple::v1)
-                                .toList(),
-                            equalTo(internalFiles.stream().sorted(StatelessCompoundCommit.InternalFile.INTERNAL_FILES_COMPARATOR).toList())
+                            internalFiles.stream().sorted(Comparator.comparingLong(e -> commitFiles.get(e).offset())).toList(),
+                            equalTo(
+                                internalFiles.stream()
+                                    .sorted(Comparator.<String>comparingLong(e -> commitFiles.get(e).fileLength()).thenComparing(it -> it))
+                                    .toList()
+                            )
                         );
 
                         for (Map.Entry<String, BlobLocation> commitFileBlobLocation : compoundCommit.commitFiles().entrySet()) {
@@ -129,7 +138,7 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
         try (var fakeNode = createFakeNode(primaryTerm)) {
             var numberOfCommits = randomIntBetween(2, 4);
             List<Long> closedCommitRefGenerations = new ArrayList<>();
-            var commits = fakeNode.generateIndexCommits(numberOfCommits, false, closedCommitRefGenerations::add);
+            var commits = fakeNode.generateIndexCommits(numberOfCommits, false, true, closedCommitRefGenerations::add);
 
             long firstCommitGeneration = commits.get(0).getGeneration();
             var virtualBatchedCompoundCommit = new VirtualBatchedCompoundCommit(
@@ -140,11 +149,13 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                 (fileName) -> {
                     throw new AssertionError("Unexpected call");
                 },
-                ESTestCase::randomNonNegativeLong
+                ESTestCase::randomNonNegativeLong,
+                fakeNode.sharedCacheService.getRegionSize(),
+                randomDoubleBetween(0.0d, 1.0d, true)
             );
 
             for (StatelessCommitRef commit : commits) {
-                assertTrue(virtualBatchedCompoundCommit.appendCommit(commit));
+                assertTrue(virtualBatchedCompoundCommit.appendCommit(commit, randomBoolean()));
             }
 
             assertThat(closedCommitRefGenerations, is(empty()));
@@ -166,7 +177,7 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
         var primaryTerm = 1;
         try (var fakeNode = createFakeNode(primaryTerm)) {
             List<Long> closedCommitRefGenerations = new ArrayList<>();
-            var commits = fakeNode.generateIndexCommits(randomIntBetween(1, 4), randomBoolean(), closedCommitRefGenerations::add);
+            var commits = fakeNode.generateIndexCommits(randomIntBetween(1, 4), randomBoolean(), true, closedCommitRefGenerations::add);
             var virtualBatchedCompoundCommit = new VirtualBatchedCompoundCommit(
                 fakeNode.shardId,
                 "node-id",
@@ -175,16 +186,20 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                 (fileName) -> {
                     throw new AssertionError("Unexpected call");
                 },
-                ESTestCase::randomNonNegativeLong
+                ESTestCase::randomNonNegativeLong,
+                fakeNode.sharedCacheService.getRegionSize(),
+                randomDoubleBetween(0.0d, 1.0d, true)
             );
             for (StatelessCommitRef statelessCommitRef : commits) {
-                assertTrue(virtualBatchedCompoundCommit.appendCommit(statelessCommitRef));
+                assertTrue(virtualBatchedCompoundCommit.appendCommit(statelessCommitRef, randomBoolean()));
             }
             virtualBatchedCompoundCommit.freeze();
 
             try (BytesStreamOutput output = new BytesStreamOutput()) {
                 assertTrue(virtualBatchedCompoundCommit.isFrozen());
-                virtualBatchedCompoundCommit.writeToStore(output);
+                try (var frozenInputStream = virtualBatchedCompoundCommit.getFrozenInputStreamForUpload()) {
+                    Streams.copy(frozenInputStream, output, false);
+                }
                 var serializedBatchedCompoundCommit = output.bytes();
 
                 BiConsumer<Long, Long> assertBytesRange = (offset, bytesToRead) -> {
@@ -216,7 +231,7 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                 assertBytesRange.accept((long) serializedBatchedCompoundCommit.length(), 0L);
 
                 // Read first header
-                var firstCC = virtualBatchedCompoundCommit.getPendingCompoundCommits().stream().findFirst().get();
+                var firstCC = virtualBatchedCompoundCommit.getPendingCompoundCommits().getFirst();
                 long firstCCHeaderSize = firstCC.getHeaderSize();
                 assertBytesRange.accept(0L, firstCCHeaderSize);
 
@@ -268,7 +283,7 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
         var primaryTerm = 1;
         try (var fakeNode = createFakeNode(primaryTerm)) {
             List<Long> closedCommitRefGenerations = new ArrayList<>();
-            var commits = fakeNode.generateIndexCommits(randomIntBetween(4, 20), randomBoolean(), closedCommitRefGenerations::add);
+            var commits = fakeNode.generateIndexCommits(randomIntBetween(4, 20), randomBoolean(), true, closedCommitRefGenerations::add);
             var virtualBatchedCompoundCommit = new VirtualBatchedCompoundCommit(
                 fakeNode.shardId,
                 "node-id",
@@ -277,12 +292,14 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                 (fileName) -> {
                     throw new AssertionError("Unexpected call");
                 },
-                ESTestCase::randomNonNegativeLong
+                ESTestCase::randomNonNegativeLong,
+                fakeNode.sharedCacheService.getRegionSize(),
+                randomDoubleBetween(0.0d, 1.0d, true)
             );
 
             if (randomBoolean()) {
                 StatelessCommitRef firstCommit = commits.get(0);
-                assertTrue(virtualBatchedCompoundCommit.appendCommit(firstCommit));
+                assertTrue(virtualBatchedCompoundCommit.appendCommit(firstCommit, randomBoolean()));
                 commits.remove(0);
             }
 
@@ -291,7 +308,7 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                 try {
                     for (StatelessCommitRef statelessCommitRef : commits) {
                         appendBlock.acquire(); // wait on the slow validator thread to reach the point that it calls getBytesByRange
-                        assertTrue(virtualBatchedCompoundCommit.appendCommit(statelessCommitRef));
+                        assertTrue(virtualBatchedCompoundCommit.appendCommit(statelessCommitRef, randomBoolean()));
                     }
                 } catch (Exception e) {
                     assert false : "Unexpected exception: " + e.getMessage();
@@ -303,17 +320,19 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                 if (virtualBatchedCompoundCommit.getPendingCompoundCommits().size() > 0) {
                     try (BytesStreamOutput output = new BytesStreamOutput()) {
                         // Workaround to serialize VBCC without freezing for testing
-                        virtualBatchedCompoundCommit.doWriteToStore(output);
+                        try (var vbccInputStream = virtualBatchedCompoundCommit.getInputStreamForUpload()) {
+                            Streams.copy(vbccInputStream, output, false);
+                        }
 
                         var serializedBatchedCompoundCommit = output.bytes();
-                        Long randomOffset = randomLongBetween(0, serializedBatchedCompoundCommit.length() - 1);
-                        Long randomBytesToRead = randomLongBetween(0, serializedBatchedCompoundCommit.length() - randomOffset);
+                        int randomOffset = randomIntBetween(0, serializedBatchedCompoundCommit.length() - 1);
+                        int randomBytesToRead = randomIntBetween(0, serializedBatchedCompoundCommit.length() - randomOffset);
                         var serializedBatchedCompoundCommitBytesRef = new BytesRef(
                             serializedBatchedCompoundCommit.toBytesRef().bytes,
-                            randomOffset.intValue(),
-                            randomBytesToRead.intValue()
+                            randomOffset,
+                            randomBytesToRead
                         );
-                        var bytesStreamOutput = new BytesStreamOutput(randomBytesToRead.intValue());
+                        var bytesStreamOutput = new BytesStreamOutput(randomBytesToRead);
                         appendBlock.release();
                         virtualBatchedCompoundCommit.getBytesByRange(randomOffset, randomBytesToRead, bytesStreamOutput);
                         assertArrayEquals(
@@ -345,11 +364,13 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                 (fileName) -> {
                     throw new AssertionError("Unexpected call");
                 },
-                ESTestCase::randomNonNegativeLong
+                ESTestCase::randomNonNegativeLong,
+                fakeNode.sharedCacheService.getRegionSize(),
+                randomDoubleBetween(0.0d, 1.0d, true)
             );
 
             for (StatelessCommitRef commit : commits) {
-                assertTrue(virtualBatchedCompoundCommit.appendCommit(commit));
+                assertTrue(virtualBatchedCompoundCommit.appendCommit(commit, randomBoolean()));
             }
 
             try (BytesStreamOutput output = new BytesStreamOutput()) {
@@ -358,11 +379,88 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
                 if (randomBoolean()) { // extra freeze is a no-op
                     assertFalse(virtualBatchedCompoundCommit.freeze());
                 }
-                virtualBatchedCompoundCommit.writeToStore(output);
+                try (var frozenInputStream = virtualBatchedCompoundCommit.getFrozenInputStreamForUpload()) {
+                    Streams.copy(frozenInputStream, output, false);
+                }
             }
 
             final StatelessCommitRef newCommitRef = fakeNode.generateIndexCommits(1).get(0);
-            assertFalse(virtualBatchedCompoundCommit.appendCommit(newCommitRef));
+            assertFalse(virtualBatchedCompoundCommit.appendCommit(newCommitRef, randomBoolean()));
+        }
+    }
+
+    public void testReplicatedContent() throws IOException {
+        var primaryTerm = 1;
+        try (var fakeNode = createFakeNode(primaryTerm)) {
+            var numberOfNewCommits = randomIntBetween(1, 10);
+            var commits = fakeNode.generateIndexCommits(numberOfNewCommits);
+            var virtualBatchedCompoundCommit = new VirtualBatchedCompoundCommit(
+                fakeNode.shardId,
+                "node-id",
+                primaryTerm,
+                commits.getFirst().getGeneration(),
+                (fileName) -> {
+                    throw new AssertionError("Unexpected call");
+                },
+                ESTestCase::randomNonNegativeLong,
+                fakeNode.sharedCacheService.getRegionSize(),
+                randomDoubleBetween(0.0d, 1.0d, true)
+            );
+
+            for (StatelessCommitRef commit : commits) {
+                assertTrue(virtualBatchedCompoundCommit.appendCommit(commit, true));
+            }
+
+            var batchedCompoundCommitBlobs = new HashMap<String, BytesReference>();
+
+            try (BytesStreamOutput output = new BytesStreamOutput()) {
+                try (var vbccInputStream = virtualBatchedCompoundCommit.getInputStreamForUpload()) {
+                    Streams.copy(vbccInputStream, output, false);
+                }
+                batchedCompoundCommitBlobs.put(virtualBatchedCompoundCommit.getBlobName(), output.bytes());
+
+                long lastCommitPosition = 0;
+                for (var commit : virtualBatchedCompoundCommit.getPendingCompoundCommits()) {
+                    // check replicated content
+                    try (var vbccIndexInput = new BytesReferenceIndexInput("test", output.bytes())) {
+                        long consumedReplicatedRangeSize = 0;
+                        var replicatedRanges = commit.getStatelessCompoundCommit().internalFilesReplicatedRanges();
+                        for (var replicatedRange : replicatedRanges.replicatedRanges()) {
+                            // range represents header or footer
+                            vbccIndexInput.seek(lastCommitPosition + commit.getHeaderSize() + consumedReplicatedRangeSize);
+                            assertThat(
+                                CodecUtil.readBEInt(vbccIndexInput),
+                                anyOf(equalTo(CodecUtil.CODEC_MAGIC), equalTo(CodecUtil.FOOTER_MAGIC))
+                            );
+                            // range is the same as original content
+                            byte[] replicatedBytes = readBytes(
+                                vbccIndexInput,
+                                lastCommitPosition + commit.getHeaderSize() + consumedReplicatedRangeSize,
+                                replicatedRange.length()
+                            );
+                            byte[] originalBytes = readBytes(
+                                vbccIndexInput,
+                                lastCommitPosition + commit.getHeaderSize() + replicatedRanges.dataSizeInBytes() + replicatedRange
+                                    .position(),
+                                replicatedRange.length()
+                            );
+                            assertArrayEquals("Replicated range is not same as original content", originalBytes, replicatedBytes);
+                            consumedReplicatedRangeSize += replicatedRange.length();
+                        }
+                    }
+
+                    // check files
+                    for (var commitFileBlobLocation : commit.getStatelessCompoundCommit().commitFiles().entrySet()) {
+                        var fileName = commitFileBlobLocation.getKey();
+                        var blobLocation = commitFileBlobLocation.getValue();
+
+                        byte[] batchedCompoundCommitFileContents = readFileFromBlob(batchedCompoundCommitBlobs, blobLocation);
+                        byte[] localFileContents = readLocalFile(fakeNode, fileName);
+                        assertArrayEquals(batchedCompoundCommitFileContents, localFileContents);
+                    }
+                    lastCommitPosition += commit.getSizeInBytes();
+                }
+            }
         }
     }
 
@@ -385,6 +483,13 @@ public class VirtualBatchedCompoundCommitTests extends ESTestCase {
             input.read(compoundCommitFileContents, 0, compoundCommitFileContents.length);
             return compoundCommitFileContents;
         }
+    }
+
+    private static byte[] readBytes(BytesReferenceIndexInput input, long position, int length) throws IOException {
+        var bytes = new byte[length];
+        input.seek(position);
+        input.readBytes(bytes, 0, length);
+        return bytes;
     }
 
     private FakeStatelessNode createFakeNode(long primaryTerm) throws IOException {

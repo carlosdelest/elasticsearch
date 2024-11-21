@@ -23,6 +23,7 @@ import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.cache.reader.CacheBlobReader;
 import co.elastic.elasticsearch.stateless.cache.reader.CacheBlobReaderService;
 import co.elastic.elasticsearch.stateless.cache.reader.MutableObjectStoreUploadTracker;
+import co.elastic.elasticsearch.stateless.commits.BlobFileRanges;
 import co.elastic.elasticsearch.stateless.commits.BlobLocation;
 import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
 import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
@@ -33,65 +34,58 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FilterDirectory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
-import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.Lock;
-import org.apache.lucene.store.LockFactory;
-import org.apache.lucene.store.SingleInstanceLockFactory;
-import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.RefCountingListener;
+import org.elasticsearch.blobcache.BlobCacheMetrics;
 import org.elasticsearch.blobcache.BlobCacheUtils;
 import org.elasticsearch.blobcache.common.ByteRange;
 import org.elasticsearch.blobcache.shared.SharedBytes;
-import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.OperationPurpose;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.set.Sets;
+import org.elasticsearch.core.AbstractRefCounted;
 import org.elasticsearch.core.Assertions;
+import org.elasticsearch.core.RefCounted;
+import org.elasticsearch.core.Releasable;
+import org.elasticsearch.core.Releasables;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.index.store.ByteSizeDirectory;
-import org.elasticsearch.index.store.ImmutableDirectoryException;
-import org.elasticsearch.index.store.Store;
+import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
-import java.util.function.LongFunction;
-import java.util.stream.Stream;
 
+import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.isGenerationalFile;
 import static org.elasticsearch.blobcache.shared.SharedBytes.MAX_BYTES_PER_WRITE;
 
-public class SearchDirectory extends ByteSizeDirectory {
+public class SearchDirectory extends BlobStoreCacheDirectory {
 
     private static final Logger logger = LogManager.getLogger(SearchDirectory.class);
 
-    private final ShardId shardId;
-
-    private final StatelessSharedBlobCacheService cacheService;
     private final CacheBlobReaderService cacheBlobReaderService;
-    private final LongAdder totalBytesReadFromObjectStore = new LongAdder();
     private final LongAdder totalBytesReadFromIndexing = new LongAdder();
-    private final LongAdder totalBytesWarmedFromObjectStore = new LongAdder();
     private final LongAdder totalBytesWarmedFromIndexing = new LongAdder();
 
-    private final SetOnce<LongFunction<BlobContainer>> blobContainer = new SetOnce<>();
-    private final AtomicReference<String> corruptionMarker = new AtomicReference<>();
-    private final LockFactory lockFactory = new SingleInstanceLockFactory();
-
-    private final AtomicReference<Thread> updatingCommitThread = Assertions.ENABLED ? new AtomicReference<>() : null;// only used in asserts
     private final AtomicReference<StatelessCompoundCommit> currentCommit = new AtomicReference<>(null);
-    private volatile Map<String, BlobLocation> currentMetadata = Map.of();
-    private volatile long currentDataSetSizeInBytes = 0L;
     private final MutableObjectStoreUploadTracker objectStoreUploadTracker;
+
+    /**
+     * Map of terms/generations that are currently in use by opened Lucene generational files.
+     */
+    private final Map<PrimaryTermAndGeneration, RefCounted> generationalFilesTermAndGens;
+
+    /**
+     * Term/generation of the latest updated commit if it contained at least one generational file.
+     */
+    private volatile Releasable lastAcquiredGenerationalFilesTermAndGen = null;
 
     public SearchDirectory(
         StatelessSharedBlobCacheService cacheService,
@@ -99,47 +93,71 @@ public class SearchDirectory extends ByteSizeDirectory {
         MutableObjectStoreUploadTracker objectStoreUploadTracker,
         ShardId shardId
     ) {
-        super(EmptyDirectory.INSTANCE);
-        this.cacheService = cacheService;
+        super(cacheService, shardId);
         this.cacheBlobReaderService = cacheBlobReaderService;
         this.objectStoreUploadTracker = objectStoreUploadTracker;
-        this.shardId = shardId;
+        this.generationalFilesTermAndGens = new HashMap<>();
+    }
+
+    public void updateLatestUploadedBcc(PrimaryTermAndGeneration latestUploadedBccTermAndGen) {
+        objectStoreUploadTracker.updateLatestUploadedBcc(latestUploadedBccTermAndGen);
+    }
+
+    public void updateLatestCommitInfo(PrimaryTermAndGeneration ccTermAndGen, String nodeId) {
+        objectStoreUploadTracker.updateLatestCommitInfo(ccTermAndGen, nodeId);
+    }
+
+    private Releasable acquireGenerationalFileTermAndGeneration(PrimaryTermAndGeneration termAndGen, String name) {
+        synchronized (generationalFilesTermAndGens) {
+            var refCounted = generationalFilesTermAndGens.get(termAndGen);
+            if (refCounted == null || refCounted.tryIncRef() == false) {
+                throw new IllegalStateException("Cannot acquire " + termAndGen + " for generational file [" + name + ']');
+            }
+            assert generationalFilesTermAndGens.isEmpty() == false;
+            return refCounted::decRef;
+        }
+    }
+
+    private Releasable addGenerationalFileTermAndGeneration(PrimaryTermAndGeneration termAndGen) {
+        RefCounted refCounted;
+        synchronized (generationalFilesTermAndGens) {
+            refCounted = generationalFilesTermAndGens.get(termAndGen);
+            if (refCounted == null) {
+                refCounted = AbstractRefCounted.of(() -> removeGenerationalFileTermAndGeneration(termAndGen));
+                generationalFilesTermAndGens.put(termAndGen, refCounted);
+            } else {
+                // when updating the commit we always acquire the BCC term/gen the commit is part of; if two commits are in the same BCC
+                // the second update need to incRef the same BCC term/gen instead of creating a new AbstractRefCounted
+                refCounted.incRef();
+            }
+        }
+        return refCounted::decRef;
+    }
+
+    private void removeGenerationalFileTermAndGeneration(PrimaryTermAndGeneration termAndGen) {
+        synchronized (generationalFilesTermAndGens) {
+            var removed = generationalFilesTermAndGens.remove(termAndGen);
+            assert removed != null : termAndGen;
+            assert removed.hasReferences() == false : termAndGen;
+        }
+    }
+
+    /**
+     * @return the set of {@link PrimaryTermAndGeneration} used by opened Lucene generational files
+     */
+    public Set<PrimaryTermAndGeneration> getAcquiredGenerationalFileTermAndGenerations() {
+        synchronized (generationalFilesTermAndGens) {
+            return Set.copyOf(generationalFilesTermAndGens.keySet());
+        }
     }
 
     @Override
-    public Lock obtainLock(String name) throws IOException {
-        return lockFactory.obtainLock(this, name);
-    }
-
-    public void setBlobContainer(LongFunction<BlobContainer> blobContainer) {
-        this.blobContainer.set(blobContainer);
-    }
-
-    public void updateLatestUploadInfo(
-        PrimaryTermAndGeneration latestUploadedBccTermAndGen,
-        PrimaryTermAndGeneration ccTermAndGen,
-        String nodeId
-    ) {
-        objectStoreUploadTracker.updateLatestUploadInfo(latestUploadedBccTermAndGen, ccTermAndGen, nodeId);
-    }
-
-    public boolean containsFile(String name) {
-        if (currentMetadata.isEmpty()) {
-            try {
-                for (String s : super.listAll()) {
-                    if (name.equals(s)) {
-                        return true;
-                    }
-                }
-            } catch (IOException e) {
-                throw new AssertionError("never throws");
-            }
+    protected IndexInput doOpenInput(String name, IOContext context, BlobFileRanges blobFileRanges) {
+        if (isGenerationalFile(name) == false) {
+            return super.doOpenInput(name, context, blobFileRanges);
         }
-        return currentMetadata.containsKey(name);
-    }
-
-    public boolean isMarkedAsCorrupted() {
-        return corruptionMarker.get() != null;
+        var releasable = acquireGenerationalFileTermAndGeneration(blobFileRanges.getBatchedCompoundCommitTermAndGeneration(), name);
+        return doOpenInput(name, context, blobFileRanges, releasable);
     }
 
     /**
@@ -151,14 +169,50 @@ public class SearchDirectory extends ByteSizeDirectory {
     public boolean updateCommit(StatelessCompoundCommit newCommit) {
         assert blobContainer.get() != null : shardId + " must have the blob container set before any commit update";
         assert assertCompareAndSetUpdatingCommitThread(null, Thread.currentThread());
+
+        var previousGenerationalFilesTermAndGen = this.lastAcquiredGenerationalFilesTermAndGen;
         try {
-            final Map<String, BlobLocation> updated = new HashMap<>(currentMetadata);
+            final var updatedMetadata = new HashMap<>(currentMetadata);
+            PrimaryTermAndGeneration generationalFilesTermAndGen = null;
             long commitSize = 0L;
             for (var entry : newCommit.commitFiles().entrySet()) {
-                updated.put(entry.getKey(), entry.getValue());
-                commitSize += entry.getValue().fileLength();
+                var fileName = entry.getKey();
+                var blobLocation = entry.getValue();
+                if (isGenerationalFile(fileName)) {
+                    // blob locations for generational files are not updated: we pin the file to the first blob location that we know about.
+                    // we expect generational files to be opened when the reader is refreshed and picks up the generational files for the
+                    // first time and never reopened them after that (as segment core readers are handed over between refreshed reader
+                    // instances).
+                    updatedMetadata.putIfAbsent(fileName, new BlobFileRanges(blobLocation));
+                    if (generationalFilesTermAndGen == null) {
+                        generationalFilesTermAndGen = blobLocation.getBatchedCompoundCommitTermAndGeneration();
+                    }
+                    assert blobLocation.getBatchedCompoundCommitTermAndGeneration().equals(generationalFilesTermAndGen)
+                        : "Because they are either new or copied, generational files should all belong to the same BCC, but "
+                            + fileName
+                            + " has location "
+                            + blobLocation
+                            + " which is different from "
+                            + generationalFilesTermAndGen;
+                } else {
+                    updatedMetadata.put(fileName, new BlobFileRanges(blobLocation));
+                }
+                commitSize += blobLocation.fileLength();
             }
-            currentMetadata = Map.copyOf(updated);
+            // If we have generational file(s) in the new commit, we create a ref counted instance that holds the term/generation of the
+            // batched compound commit so that it can be reported as used to the indexing shard in new commit responses. The ref counted
+            // instance will be decRef on the next commit update or when the directory is closed. Any generational file opened between two
+            // commits update should incRef the instance to indicate that the BCC term/generation is in use and decRef it once the file is
+            // closed. When fully decRefed, the BCC term/gen is removed from the set of used generations.
+            if (generationalFilesTermAndGen != null) {
+                var releasable = addGenerationalFileTermAndGeneration(generationalFilesTermAndGen);
+                // use releaseOnce to decRef only once, either on commit update or directory close
+                this.lastAcquiredGenerationalFilesTermAndGen = Releasables.releaseOnce(releasable);
+            } else {
+                // commit has no generational files
+                this.lastAcquiredGenerationalFilesTermAndGen = null;
+            }
+            currentMetadata = Map.copyOf(updatedMetadata);
             currentDataSetSizeInBytes = commitSize;
             // TODO: Commits may not arrive in order. However, the maximum commit we have received is the commit of this directory since the
             // TODO: files always accumulate
@@ -172,7 +226,11 @@ public class SearchDirectory extends ByteSizeDirectory {
                 }
             }).generation() == newCommit.generation();
         } finally {
-            assert assertCompareAndSetUpdatingCommitThread(Thread.currentThread(), null);
+            try {
+                Releasables.close(previousGenerationalFilesTermAndGen);
+            } finally {
+                assert assertCompareAndSetUpdatingCommitThread(Thread.currentThread(), null);
+            }
         }
     }
 
@@ -184,7 +242,7 @@ public class SearchDirectory extends ByteSizeDirectory {
         if (filesToRetain.containsAll(currentMetadata.keySet()) == false) {
             assert assertCompareAndSetUpdatingCommitThread(null, Thread.currentThread());
             try {
-                final Map<String, BlobLocation> updated = new HashMap<>(currentMetadata);
+                final var updated = new HashMap<>(currentMetadata);
                 updated.keySet().retainAll(filesToRetain);
                 assert updated.keySet().containsAll(filesToRetain)
                     : "missing files [" + Sets.difference(filesToRetain, updated.keySet()) + "]";
@@ -196,48 +254,16 @@ public class SearchDirectory extends ByteSizeDirectory {
     }
 
     /**
-     * On indexing shards we cannot accurately calculate the files to retain such that it does not contain files not
-     * in the directory. Hence we omit the assertion for indexing.
-     * @param filesToRetain the files to retain
-     */
-    public void retainFilesIndexing(Set<String> filesToRetain) {
-        if (filesToRetain.containsAll(currentMetadata.keySet()) == false) {
-            assert assertCompareAndSetUpdatingCommitThread(null, Thread.currentThread());
-            try {
-                final Map<String, BlobLocation> updated = new HashMap<>(currentMetadata);
-                updated.keySet().retainAll(filesToRetain);
-                currentMetadata = Map.copyOf(updated);
-            } finally {
-                assert assertCompareAndSetUpdatingCommitThread(Thread.currentThread(), null);
-            }
-        }
-    }
-
-    /**
      * For test usage only.
      */
-    void setMetadata(Map<String, BlobLocation> blobLocations) {
-        assert currentMetadata.isEmpty();
-        currentMetadata = Map.copyOf(blobLocations);
-    }
-
-    /**
-     * For test usage only.
-     */
-    BlobLocation getBlobLocation(String fileName) {
-        return currentMetadata.get(fileName);
-    }
-
-    /**
-     * For test usage only.
-     */
+    @Override
     StatelessSharedBlobCacheService getCacheService() {
-        return cacheService;
+        return super.getCacheService();
     }
 
     // TODO this method works because we never prune old commits files
     public OptionalLong getPrimaryTerm(String segmentsFileName) throws FileNotFoundException {
-        final BlobLocation location = currentMetadata.get(segmentsFileName);
+        final BlobLocation location = getBlobLocation(segmentsFileName);
         if (location != null) {
             return OptionalLong.of(location.primaryTerm());
         }
@@ -254,207 +280,41 @@ public class SearchDirectory extends ByteSizeDirectory {
         return currentCommit.get();
     }
 
-    public Optional<String> getCurrentMetadataNodeEphemeralId() {
-        StatelessCompoundCommit compoundCommit = currentCommit.get();
-        return compoundCommit != null ? Optional.of(compoundCommit.nodeEphemeralId()) : Optional.empty();
-    }
-
-    public long getTranslogRecoveryStartFile() {
-        StatelessCompoundCommit compoundCommit = currentCommit.get();
-        return compoundCommit != null ? compoundCommit.translogRecoveryStartFile() : 0;
-    }
-
-    private boolean assertCompareAndSetUpdatingCommitThread(Thread current, Thread updated) {
-        final Thread witness = updatingCommitThread.compareAndExchange(current, updated);
-        assert witness == current
-            : "Unable to set updating commit thread to ["
-                + updated
-                + "]: expected thread ["
-                + current
-                + "] to be the updating commit thread, but thread "
-                + witness
-                + " is already updating the commit of "
-                + shardId;
-        return true;
-    }
-
     @Override
-    public String[] listAll() throws IOException {
-        final var current = currentMetadata;
-        final String[] list;
-        if (current.isEmpty()) {
-            list = super.listAll();
-        } else {
-            list = current.keySet().stream().sorted(String::compareTo).toArray(String[]::new);
-        }
-        if (isMarkedAsCorrupted()) {
-            return Stream.concat(Stream.of(list), Stream.of(corruptionMarker.get())).sorted(String::compareTo).toArray(String[]::new);
-        }
-        return list;
-    }
-
-    @Override
-    public void deleteFile(String name) {
-        throw unsupportedException();
-    }
-
-    @Override
-    public long fileLength(String name) throws IOException {
-        final var current = currentMetadata;
-        if (current.isEmpty()) {
-            return super.fileLength(name);
-        }
-        BlobLocation location = current.get(name);
-        if (location == null) {
-            throw new FileNotFoundException(name);
-        }
-        return location.fileLength();
-    }
-
-    @Override
-    public IndexOutput createOutput(String name, IOContext context) {
-        if (name.startsWith(Store.CORRUPTED_MARKER_NAME_PREFIX)) {
-            if (corruptionMarker.compareAndSet(null, name)) {
-                throw new ImmutableDirectoryException(name);
-            }
-        }
-        throw unsupportedException();
-    }
-
-    @Override
-    public IndexOutput createTempOutput(String prefix, String suffix, IOContext context) {
-        throw unsupportedException();
-    }
-
-    @Override
-    public void sync(Collection<String> names) {
-        if (isMarkedAsCorrupted()) {
-            return; // allows to sync after the corruption marker has been written
-        }
-        throw unsupportedException();
-    }
-
-    @Override
-    public void syncMetaData() {
-        throw unsupportedException();
-    }
-
-    @Override
-    public void rename(String source, String dest) {
-        throw unsupportedException();
-    }
-
-    @Override
-    public IndexInput openInput(String name, IOContext context) throws IOException {
-        final var current = currentMetadata;
-        if (current.isEmpty()) {
-            return super.openInput(name, context);
-        }
-        final BlobLocation location = current.get(name);
-        if (location == null) {
-            throw new FileNotFoundException(name);
-        }
-        return doOpenInput(name, context, location);
-    }
-
-    protected IndexInput doOpenInput(String name, IOContext context, BlobLocation blobLocation) {
-        return new SearchIndexInput(
-            name,
-            cacheService.getCacheFile(
-                new FileCacheKey(shardId, blobLocation.primaryTerm(), blobLocation.blobName()),
-                // this length is a lower bound on the length of the blob, used to assert that the cache file does not try to read
-                // data beyond the file boundary within the blob since we overload computeCacheFileRegionSize in
-                // StatelessSharedBlobCacheService to fully utilize each region
-                // it is also used for bounding the reads we do against indexing shard to ensure that we never read beyond the
-                // blob length (with padding added).
-                blobLocation.offset() + blobLocation.fileLength()
-            ),
-            context,
-            getCacheBlobReader(blobLocation),
-            blobLocation.fileLength(),
-            blobLocation.offset()
-        );
-    }
-
     public CacheBlobReader getCacheBlobReader(BlobLocation blobLocation) {
         return cacheBlobReaderService.getCacheBlobReader(
             shardId,
-            blobContainer.get(),
+            this::getBlobContainer,
             blobLocation,
             objectStoreUploadTracker,
             totalBytesReadFromObjectStore::add,
-            totalBytesReadFromIndexing::add
+            totalBytesReadFromIndexing::add,
+            BlobCacheMetrics.CachePopulationReason.CacheMiss,
+            cacheService.getShardReadThreadPoolExecutor()
         );
     }
 
+    @Override
     public CacheBlobReader getCacheBlobReaderForWarming(BlobLocation blobLocation) {
+        assert ThreadPool.assertCurrentThreadPool(ThreadPool.Names.GENERIC);
         return cacheBlobReaderService.getCacheBlobReader(
             shardId,
-            blobContainer.get(),
+            this::getBlobContainer,
             blobLocation,
             objectStoreUploadTracker,
             totalBytesWarmedFromObjectStore::add,
-            totalBytesWarmedFromIndexing::add
+            totalBytesWarmedFromIndexing::add,
+            BlobCacheMetrics.CachePopulationReason.Warming,
+            EsExecutors.DIRECT_EXECUTOR_SERVICE
         );
-    }
-
-    @Override
-    public void close() throws IOException {
-        // do not close EmptyDirectory
-        if (isMarkedAsCorrupted()) {
-            forceEvict();
-        }
-    }
-
-    @Override
-    public Set<String> getPendingDeletions() {
-        throw unsupportedException();
-    }
-
-    public void forceEvict() {
-        final int n = cacheService.forceEvict(fileCacheKey -> shardId.equals(fileCacheKey.shardId()));
-        logger.warn("[{}] force evicted [{}] blob cache entries for ShardId {}", this, n, shardId);
-    }
-
-    public BlobContainer getBlobContainer(long primaryTerm) {
-        return blobContainer.get().apply(primaryTerm);
-    }
-
-    public ShardId getShardId() {
-        return shardId;
-    }
-
-    @Override
-    public long estimateSizeInBytes() {
-        // size is 0 bytes since search directory has no files on disk
-        return 0L;
-    }
-
-    @Override
-    public long estimateDataSetSizeInBytes() {
-        // data set size is equal to the size of the last commit fetched from the object store
-        return currentDataSetSizeInBytes;
     }
 
     public long totalBytesReadFromIndexing() {
         return totalBytesReadFromIndexing.sum();
     }
 
-    public long totalBytesReadFromObjectStore() {
-        return totalBytesReadFromObjectStore.sum();
-    }
-
     public long totalBytesWarmedFromIndexing() {
         return totalBytesWarmedFromIndexing.sum();
-    }
-
-    public long totalBytesWarmedFromObjectStore() {
-        return totalBytesWarmedFromObjectStore.sum();
-    }
-
-    private static UnsupportedOperationException unsupportedException() {
-        assert false : "this operation is not supported and should have not be called";
-        return new UnsupportedOperationException("stateless directory does not support this operation");
     }
 
     public static SearchDirectory unwrapDirectory(final Directory directory) {
@@ -462,8 +322,6 @@ public class SearchDirectory extends ByteSizeDirectory {
         while (dir != null) {
             if (dir instanceof SearchDirectory searchDirectory) {
                 return searchDirectory;
-            } else if (dir instanceof IndexDirectory indexDirectory) {
-                return indexDirectory.getSearchDirectory();
             } else if (dir instanceof FilterDirectory) {
                 dir = ((FilterDirectory) dir).getDelegate();
             } else {
@@ -486,38 +344,60 @@ public class SearchDirectory extends ByteSizeDirectory {
                 }
                 FileCacheKey key = new FileCacheKey(shardId, blobLocation.primaryTerm(), blobLocation.blobName());
                 final var blobLength = Long.MIN_VALUE;
-                final var container = blobContainer.get().apply(blobLocation.primaryTerm());
-                cacheService.maybeFetchFullEntry(key, blobLength, (channel, channelPos, relativePos, length, progressUpdater) -> {
-                    final ByteRange rangeToWrite = BlobCacheUtils.computeRange(
-                        cacheService.getRangeSize(),
-                        relativePos,
-                        length,
-                        blobLength
-                    );
-                    final long streamStartPosition = rangeToWrite.start() + relativePos;
-                    try (InputStream in = container.readBlob(OperationPurpose.INDICES, key.fileName(), streamStartPosition, length)) {
-                        // assert ThreadPool.assertCurrentThreadPool(ThreadPool.Names.GENERIC);
-                        logger.trace(
-                            "{}: writing channel {} pos {} length {} (details: {})",
-                            key.fileName(),
-                            channelPos,
-                            relativePos,
-                            length,
-                            key
-                        );
-                        SharedBytes.copyToCacheFileAligned(
-                            channel,
-                            in,
-                            channelPos,
-                            relativePos,
-                            length,
-                            progressUpdater,
-                            writeBuffer.get().clear()
-                        );
-                    }
-                }, fetchExecutor, refCountingListener.acquire());
+                final var container = getBlobContainer(blobLocation.primaryTerm());
+                cacheService.maybeFetchFullEntry(
+                    key,
+                    blobLength,
+                    (channel, channelPos, streamFactory, relativePos, length, progressUpdater, completionListener) -> ActionListener
+                        .completeWith(completionListener, () -> {
+                            assert streamFactory == null : streamFactory;
+                            final ByteRange rangeToWrite = BlobCacheUtils.computeRange(
+                                cacheService.getRangeSize(),
+                                relativePos,
+                                length,
+                                blobLength
+                            );
+                            final long streamStartPosition = rangeToWrite.start() + relativePos;
+                            try (
+                                InputStream in = container.readBlob(OperationPurpose.INDICES, key.fileName(), streamStartPosition, length)
+                            ) {
+                                // assert ThreadPool.assertCurrentThreadPool(ThreadPool.Names.GENERIC);
+                                logger.trace(
+                                    "{}: writing channel {} pos {} length {} (details: {})",
+                                    key.fileName(),
+                                    channelPos,
+                                    relativePos,
+                                    length,
+                                    key
+                                );
+                                SharedBytes.copyToCacheFileAligned(
+                                    channel,
+                                    in,
+                                    channelPos,
+                                    relativePos,
+                                    length,
+                                    progressUpdater,
+                                    writeBuffer.get().clear()
+                                );
+                                return null;
+                            }
+                        }),
+                    fetchExecutor,
+                    refCountingListener.acquire()
+                );
             });
         }
+    }
+
+    @Override
+    public void close() throws IOException {
+        Releasables.close(lastAcquiredGenerationalFilesTermAndGen);
+        if (Assertions.ENABLED) {
+            synchronized (generationalFilesTermAndGens) {
+                assert generationalFilesTermAndGens.isEmpty() : "expect all inputs to be closed at the time the directory is closed";
+            }
+        }
+        super.close();
     }
 
     private static final ThreadLocal<ByteBuffer> writeBuffer = ThreadLocal.withInitial(

@@ -49,7 +49,7 @@ public abstract class AbstractObjectStoreIntegTestCase extends AbstractStateless
 
     public void testBlobCreateVerifyDelete() throws Exception {
         startMasterAndIndexNode();
-        var objectStoreService = internalCluster().getAnyMasterNodeInstance(ObjectStoreService.class);
+        var objectStoreService = getCurrentMasterObjectStoreService();
         BlobStoreRepository repository = objectStoreService.getObjectStore();
 
         logger.info("--> About to write test blob");
@@ -70,7 +70,7 @@ public abstract class AbstractObjectStoreIntegTestCase extends AbstractStateless
 
     public void testBlobStoreStats() throws IOException {
         startMasterAndIndexNode();
-        var objectStoreService = internalCluster().getAnyMasterNodeInstance(ObjectStoreService.class);
+        var objectStoreService = getCurrentMasterObjectStoreService();
         BlobStoreRepository repository = objectStoreService.getObjectStore();
 
         // randomly read, write and delete some data
@@ -86,9 +86,15 @@ public abstract class AbstractObjectStoreIntegTestCase extends AbstractStateless
 
         // Create a repository and perform some snapshot actions
         createRepository("backup", repositorySettings());
-        clusterAdmin().prepareCreateSnapshot("backup", "snapshot").setIncludeGlobalState(true).setWaitForCompletion(true).get();
-        clusterAdmin().prepareRestoreSnapshot("backup", "snapshot").setRestoreGlobalState(true).setWaitForCompletion(true).get();
-        assertThat(clusterAdmin().prepareDeleteSnapshot("backup", "snapshot").get().isAcknowledged(), is(true));
+        clusterAdmin().prepareCreateSnapshot(TEST_REQUEST_TIMEOUT, "backup", "snapshot")
+            .setIncludeGlobalState(true)
+            .setWaitForCompletion(true)
+            .get();
+        clusterAdmin().prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "backup", "snapshot")
+            .setRestoreGlobalState(true)
+            .setWaitForCompletion(true)
+            .get();
+        assertThat(clusterAdmin().prepareDeleteSnapshot(TEST_REQUEST_TIMEOUT, "backup", "snapshot").get().isAcknowledged(), is(true));
 
         GetBlobStoreStatsNodesResponse getBlobStoreStatsNodesResponse = client().execute(
             Stateless.GET_BLOB_STORE_STATS_ACTION,
@@ -119,7 +125,10 @@ public abstract class AbstractObjectStoreIntegTestCase extends AbstractStateless
 
     protected void createRepository(String repoName, Settings repoSettings) {
         assertAcked(
-            clusterAdmin().preparePutRepository(repoName).setType(repositoryType()).setVerify(randomBoolean()).setSettings(repoSettings)
+            clusterAdmin().preparePutRepository(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, repoName)
+                .setType(repositoryType())
+                .setVerify(randomBoolean())
+                .setSettings(repoSettings)
         );
     }
 }

@@ -18,7 +18,20 @@
 package co.elastic.elasticsearch.stateless.recovery;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
+import co.elastic.elasticsearch.stateless.Stateless;
+import co.elastic.elasticsearch.stateless.action.GetVirtualBatchedCompoundCommitChunkRequest;
+import co.elastic.elasticsearch.stateless.action.NewCommitNotificationRequest;
+import co.elastic.elasticsearch.stateless.action.TransportGetVirtualBatchedCompoundCommitChunkAction;
+import co.elastic.elasticsearch.stateless.action.TransportNewCommitNotificationAction;
+import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
+import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
+import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
+import co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommit;
+import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
+import co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectory;
+import co.elastic.elasticsearch.stateless.lucene.IndexBlobStoreCacheDirectory;
+import co.elastic.elasticsearch.stateless.lucene.IndexDirectory;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreTestUtils;
 
@@ -34,6 +47,9 @@ import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.CountDownActionListener;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.action.support.SubscribableListener;
+import org.elasticsearch.blobcache.BlobCacheUtils;
+import org.elasticsearch.blobcache.shared.SharedBlobCacheService;
+import org.elasticsearch.blobcache.shared.SharedBytes;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
@@ -46,10 +62,19 @@ import org.elasticsearch.cluster.routing.allocation.command.MoveAllocationComman
 import org.elasticsearch.cluster.routing.allocation.decider.MaxRetryAllocationDecider;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.blobstore.OperationPurpose;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.CollectionUtils;
+import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
+import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.index.IndexSettings;
+import org.elasticsearch.index.MergePolicyConfig;
+import org.elasticsearch.index.engine.EngineConfig;
 import org.elasticsearch.index.shard.IllegalIndexShardStateException;
+import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.recovery.RecoveryClusterStateDelayListeners;
@@ -57,7 +82,8 @@ import org.elasticsearch.indices.recovery.StatelessPrimaryRelocationAction;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.snapshots.mockstore.MockRepository;
-import org.elasticsearch.test.InternalTestCluster;
+import org.elasticsearch.telemetry.TelemetryProvider;
+import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.MockLog;
 import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.test.transport.MockTransportService;
@@ -68,11 +94,16 @@ import org.elasticsearch.transport.NodeNotConnectedException;
 import org.elasticsearch.transport.TestTransportChannel;
 import org.elasticsearch.transport.TransportResponse;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
@@ -80,29 +111,39 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
+import java.util.function.LongSupplier;
 import java.util.stream.IntStream;
 
+import static co.elastic.elasticsearch.stateless.objectstore.ObjectStoreTestUtils.getObjectStoreMockRepository;
 import static co.elastic.elasticsearch.stateless.recovery.TransportStatelessPrimaryRelocationAction.PRIMARY_CONTEXT_HANDOFF_ACTION_NAME;
 import static co.elastic.elasticsearch.stateless.recovery.TransportStatelessPrimaryRelocationAction.START_RELOCATION_ACTION_NAME;
-import static org.elasticsearch.cluster.coordination.stateless.StoreHeartbeatService.HEARTBEAT_FREQUENCY;
+import static org.elasticsearch.blobcache.BlobCacheUtils.toIntBytes;
 import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailures;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertResponse;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.oneOf;
 
 public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return CollectionUtils.concatLists(List.of(MockRepository.Plugin.class), super.nodePlugins());
+        final var plugins = new ArrayList<>(super.nodePlugins());
+        plugins.remove(Stateless.class);
+        plugins.add(DisableWarmOnUploadPlugin.class);
+        plugins.add(MockRepository.Plugin.class);
+        plugins.add(InternalSettingsPlugin.class);
+        return List.copyOf(plugins);
     }
 
     @Override
@@ -223,7 +264,7 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
         final var indexNodeB = startIndexNode();
         ensureStableCluster(3); // with master node
 
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNodeB);
+        ObjectStoreService objectStoreService = getObjectStoreService(indexNodeB);
         MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
         repository.setRandomControlIOExceptionRate(1.0);
         repository.setRandomDataFileIOExceptionRate(1.0);
@@ -364,6 +405,73 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
         assertEquals(Set.of(indexNodes.get(1)), internalCluster().nodesInclude(indexName));
     }
 
+    public void testCommitGenerationOnRelocatingShardNeverGoesBackward() throws Exception {
+        startMasterOnlyNode();
+        var indexNodeA = startIndexNode();
+        var indexNodeB = startIndexNode();
+
+        final String indexName = randomIdentifier();
+        createIndex(indexName, indexSettings(1, 0).put("index.routing.allocation.require._name", indexNodeA).build());
+        ensureGreen(indexName);
+
+        indexDocs(indexName, between(1, 100));
+        flush(indexName);
+
+        IndexShard indexShard;
+
+        indexShard = findIndexShard(indexName);
+        var generationBeforeRelocation = indexShard.getEngineOrNull().getLastCommittedSegmentInfos().getGeneration();
+        var metadataFilesBeforeRelocation = BlobStoreCacheDirectory.unwrapDirectory(indexShard.store().directory()).listAll();
+
+        var relocationStarted = new CountDownLatch(1);
+        var proceedWithRelocation = new CountDownLatch(1);
+
+        var transportServiceSourceNode = MockTransportService.getInstance(indexNodeA);
+        transportServiceSourceNode.addRequestHandlingBehavior(START_RELOCATION_ACTION_NAME, (handler, request, channel, task) -> {
+            relocationStarted.countDown();
+            safeAwait(proceedWithRelocation);
+            handler.messageReceived(request, channel, task);
+        });
+
+        var mockRepositoryTargetNode = getObjectStoreMockRepository(getObjectStoreService(indexNodeB));
+        // delay early cache prewarming to have it running (concurrently) with relocation
+        // pre-warming reads the latest BCC blob and that we're blocking that read
+        mockRepositoryTargetNode.setBlockOnAnyFiles();
+
+        updateIndexSettings(Settings.builder().put("index.routing.allocation.require._name", indexNodeB), indexName);
+
+        // early cache prewarming on target node scheduled or started
+        safeAwait(relocationStarted);
+
+        // add more commit on source shard before it gets block for primary context relocation
+        var newCommits = randomIntBetween(1, 10);
+        for (int i = 0; i < newCommits; i++) {
+            indexDocs(indexName, between(1, 100));
+            assertNoFailures(indicesAdmin().prepareRefresh(indexName).get());
+            if (randomBoolean()) {
+                assertNoFailures(indicesAdmin().prepareFlush(indexName).get());
+            }
+            if (rarely()) {
+                assertNoFailures(indicesAdmin().prepareForceMerge().setMaxNumSegments(1).get());
+            }
+        }
+
+        mockRepositoryTargetNode.unblock();
+        proceedWithRelocation.countDown();
+
+        ensureGreen(indexName);
+        assertEquals(Set.of(indexNodeB), internalCluster().nodesInclude(indexName));
+
+        indexShard = findIndexShard(indexName);
+        var generationAfterRelocation = indexShard.getEngineOrNull().getLastCommittedSegmentInfos().getGeneration();
+        var metadataFilesAfterRelocation = BlobStoreCacheDirectory.unwrapDirectory(indexShard.store().directory()).listAll();
+
+        // assert that shard was not bootstrapped with old generation
+        assertThat(generationAfterRelocation, greaterThan(generationBeforeRelocation));
+        // assert that internal cache metadata files were not replaced by obsolete metadata files
+        assertThat(metadataFilesAfterRelocation, not(equalTo(metadataFilesBeforeRelocation)));
+    }
+
     public void testWaitForClusterStateToBeAppliedOnSourceNodeInPrimaryRelocation() throws Exception {
         startMasterOnlyNode();
         final var sourceNode = startIndexNode();
@@ -483,13 +591,13 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
             nodeAMockTransportService.addRequestHandlingBehavior(recoveryActionToBlock, (handler, request, channel, task) -> {
                 logger.info("--> preventing {} response by closing response channel", recoveryActionToBlock);
                 requestFailed.countDown();
-                nodeBMockTransportService.disconnectFromNode(nodeAMockTransportService.getLocalDiscoNode());
+                nodeBMockTransportService.disconnectFromNode(nodeAMockTransportService.getLocalNode());
                 handler.messageReceived(request, channel, task);
             });
             nodeBMockTransportService.addRequestHandlingBehavior(recoveryActionToBlock, (handler, request, channel, task) -> {
                 logger.info("--> preventing {} response by closing response channel", recoveryActionToBlock);
                 requestFailed.countDown();
-                nodeAMockTransportService.disconnectFromNode(nodeBMockTransportService.getLocalDiscoNode());
+                nodeAMockTransportService.disconnectFromNode(nodeBMockTransportService.getLocalNode());
                 handler.messageReceived(request, channel, task);
             });
         }
@@ -505,18 +613,15 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
     }
 
     public void testOngoingIndexShardRelocationAndMasterFailOver() throws Exception {
-        // TODO: remove heartbeat setting once ES-6481 is done.
-        var heartBeatNodeSettings = Settings.builder().put(HEARTBEAT_FREQUENCY.getKey(), TimeValue.timeValueSeconds(5)).build();
-
-        startMasterOnlyNode(heartBeatNodeSettings);  // first master eligible node
+        startMasterOnlyNode();  // first master eligible node
         String indexName = "test";
-        startMasterOnlyNode(heartBeatNodeSettings); // second master eligible node
-        final String indexNodeA = startIndexNode(heartBeatNodeSettings);
+        startMasterOnlyNode(); // second master eligible node
+        final String indexNodeA = startIndexNode();
         ensureStableCluster(3);
         createIndex(indexName, indexSettings(1, 0).build());
         int numDocs = scaledRandomIntBetween(1, 10);
         indexDocs(indexName, numDocs);
-        final String indexNodeB = startIndexNode(heartBeatNodeSettings);
+        final String indexNodeB = startIndexNode();
         ensureStableCluster(4);
         final boolean blockSourceNode = randomBoolean(); // else block target node
 
@@ -556,19 +661,16 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
             ClusterRerouteUtils.reroute(client(), new MoveAllocationCommand(indexName, 0, indexNodeA, indexNodeB));
 
             safeAwait(relocationStartReadyBlocked);
-            internalCluster().restartNode(
-                clusterService().state().nodes().getMasterNode().getName(),
-                new InternalTestCluster.RestartCallback()
-            );
+            restartMasterNodeGracefully();
         } finally {
             logger.info("--> Unblocking actions");
             blockedListeners.onResponse(null);
         }
 
         // Assert number of documents
-        startSearchNode(heartBeatNodeSettings);
+        startSearchNode();
         setReplicaCount(1, indexName);
-        assertFalse(clusterAdmin().prepareHealth(indexName).setWaitForActiveShards(2).get().isTimedOut());
+        assertFalse(clusterAdmin().prepareHealth(TEST_REQUEST_TIMEOUT, indexName).setWaitForActiveShards(2).get().isTimedOut());
         ensureGreen(indexName);
         assertHitCount(prepareSearch(indexName), numDocs);
     }
@@ -694,16 +796,16 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
     }
 
     // test for ES-8431
-    public void testRelocationsWithUploadDelayed() throws Exception {
+    public void testRelocationIsNotBlockedByRefreshes() throws Exception {
         var maxNonUploadedCommits = randomIntBetween(4, 5);
         var nodeSettings = Settings.builder()
-            .put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true)
             .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), maxNonUploadedCommits)
             .build();
         startMasterOnlyNode(nodeSettings);
         startIndexNode(nodeSettings);
         startSearchNode(nodeSettings);
         ensureStableCluster(3);
+        final String[] nodeNames = internalCluster().getNodeNames();
 
         var indexName = randomIdentifier();
         createIndex(indexName, 1, 1);
@@ -718,7 +820,7 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
             while (running.get()) {
                 try {
                     // the refresh is important to provoke the original deadlock issue.
-                    indexDocsAndRefresh(indexName, randomIntBetween(10, 50));
+                    indexDocsAndRefresh(client(randomFrom(nodeNames)), indexName, randomIntBetween(10, 50));
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -728,7 +830,7 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
 
         var searchingThread = new Thread(() -> {
             while (running.get()) {
-                assertResponse(prepareSearch(indexName).setQuery(matchAllQuery()), response -> {});
+                assertResponse(client(randomFrom(nodeNames)).prepareSearch(indexName).setQuery(matchAllQuery()), response -> {});
                 searchingStarted.countDown();
             }
         }, "search-thread");
@@ -756,5 +858,361 @@ public class IndexingShardRelocationIT extends AbstractStatelessIntegTestCase {
         }
         assertThat(indexingThread.isAlive(), is(false));
         assertThat(searchingThread.isAlive(), is(false));
+    }
+
+    public void testPreferredNodeIdsAreUsedDuringRelocation() throws Exception {
+        startMasterOnlyNode();
+
+        int maxNonUploadedCommits = randomIntBetween(1, 4);
+        var nodeSettings = Settings.builder()
+            .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), maxNonUploadedCommits)
+            .put(disableIndexingDiskAndMemoryControllersNodeSettings())
+            .build();
+
+        final var indexNodeSource = startIndexNode(nodeSettings);
+        final var searchNode = startSearchNode(nodeSettings);
+
+        final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        createIndex(
+            indexName,
+            indexSettings(1, 1)
+                // make sure nothing triggers flushes
+                .put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), ByteSizeValue.ofGb(1L))
+                .put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), TimeValue.MINUS_ONE)
+                .put(MaxRetryAllocationDecider.SETTING_ALLOCATION_MAX_RETRY.getKey(), 0)
+                .build()
+        );
+        ensureGreen(indexName);
+
+        int nbUploadedBatchedCommits = between(1, 3);
+        for (int i = 0; i < nbUploadedBatchedCommits; i++) {
+            for (int j = 0; j < maxNonUploadedCommits; j++) {
+                indexDocs(indexName, scaledRandomIntBetween(100, 1_000));
+                flush(indexName);
+            }
+        }
+
+        // block the start of the relocation
+        final var pauseRelocation = new CountDownLatch(1);
+        final var resumeRelocation = new CountDownLatch(1);
+        MockTransportService.getInstance(indexNodeSource)
+            .addRequestHandlingBehavior(START_RELOCATION_ACTION_NAME, (handler, request, channel, task) -> {
+                pauseRelocation.countDown();
+                logger.info("--> relocation is paused");
+                safeAwait(resumeRelocation);
+                logger.info("--> relocation is resumed");
+                handler.messageReceived(request, channel, task);
+            });
+
+        var index = resolveIndex(indexName);
+        var indexShardSource = findIndexShard(index, 0, indexNodeSource);
+        final var primaryTerm = indexShardSource.getOperationPrimaryTerm();
+
+        // start another indexing node
+        var indexNodeTarget = startIndexNode(nodeSettings);
+
+        // last generation on source
+        final var generation = indexShardSource.getEngineOrNull().getLastCommittedSegmentInfos().getGeneration();
+        // expected generation on source when refreshing the index (before relocation completes)
+        final var beforeGeneration = generation + 1L;
+        // expected generation for flush on target (after relocation completes)
+        final var afterGeneration = beforeGeneration + 1L;
+
+        logger.info("--> move index shard from: {} to: {}", indexNodeSource, indexNodeTarget);
+        ClusterRerouteUtils.reroute(client(), new MoveAllocationCommand(indexName, 0, indexNodeSource, indexNodeTarget));
+
+        logger.info("--> wait for relocation to start on source");
+        safeAwait(pauseRelocation);
+
+        logger.info("--> add more docs so that the refresh produces a new commit");
+        indexDocs(indexName, scaledRandomIntBetween(100, 1_000));
+
+        final Queue<CheckedRunnable<Exception>> delayedActions = ConcurrentCollections.newQueue();
+        // check that the source indexing shard sent a new commit notification with the correct generation and node id
+        final var sourceNotificationReceived = new CountDownLatch(1);
+        MockTransportService.getInstance(searchNode)
+            .addRequestHandlingBehavior(TransportNewCommitNotificationAction.NAME + "[u]", (handler, request, channel, task) -> {
+                var notification = asInstanceOf(NewCommitNotificationRequest.class, request);
+                assertThat(notification.getTerm(), equalTo(primaryTerm));
+
+                if (notification.getGeneration() == beforeGeneration) {
+                    assertThat(notification.getNodeId(), equalTo(getNodeId(indexNodeSource)));
+                    // Delayed the uploaded notification to ensure fetching from the indexing node
+                    if (notification.isUploaded()) {
+                        delayedActions.add(() -> handler.messageReceived(request, channel, task));
+                    } else {
+                        sourceNotificationReceived.countDown();
+                        handler.messageReceived(request, channel, task);
+                    }
+                } else {
+                    handler.messageReceived(request, channel, task);
+                }
+            });
+
+        // check that the source indexing shard receives at least one GetVirtualBatchedCompoundCommitChunkRequest
+        final var sourceGetChunkRequestReceived = new CountDownLatch(1);
+        MockTransportService.getInstance(indexNodeSource)
+            .addRequestHandlingBehavior(
+                TransportGetVirtualBatchedCompoundCommitChunkAction.NAME + "[p]",
+                (handler, request, channel, task) -> {
+                    var chunkRequest = asInstanceOf(GetVirtualBatchedCompoundCommitChunkRequest.class, request);
+                    assertThat(chunkRequest.getPrimaryTerm(), equalTo(primaryTerm));
+
+                    if (chunkRequest.getVirtualBatchedCompoundCommitGeneration() == beforeGeneration) {
+                        assertThat(chunkRequest.getPreferredNodeId(), equalTo(getNodeId(indexNodeSource)));
+                        sourceGetChunkRequestReceived.countDown();
+                    }
+                    handler.messageReceived(request, channel, task);
+                }
+            );
+
+        var refreshFuture = admin().indices().prepareRefresh(indexName).execute();
+        safeAwait(sourceNotificationReceived);
+        safeAwait(sourceGetChunkRequestReceived);
+
+        // check that the target indexing shard sent a new commit notification with the correct generation and node id
+        final var targetNotificationReceived = new CountDownLatch(1);
+        MockTransportService.getInstance(searchNode)
+            .addRequestHandlingBehavior(TransportNewCommitNotificationAction.NAME + "[u]", (handler, request, channel, task) -> {
+                var notification = asInstanceOf(NewCommitNotificationRequest.class, request);
+                assertThat(notification.getTerm(), equalTo(primaryTerm));
+
+                if (notification.getGeneration() == afterGeneration) {
+                    assertThat(
+                        "Commit notification " + notification + " has the wrong preferred node id",
+                        notification.getNodeId(),
+                        equalTo(getNodeId(indexNodeTarget))
+                    );
+                    // Delayed the uploaded notification to ensure fetching from the indexing node
+                    if (notification.isUploaded()) {
+                        delayedActions.add(() -> handler.messageReceived(request, channel, task));
+                    } else {
+                        targetNotificationReceived.countDown();
+                        handler.messageReceived(request, channel, task);
+                    }
+                } else {
+                    handler.messageReceived(request, channel, task);
+                }
+            });
+
+        // check that the target indexing shard receives at least one GetVirtualBatchedCompoundCommitChunkRequest
+        final var targetGetChunkRequestReceived = new CountDownLatch(1);
+        MockTransportService.getInstance(indexNodeTarget)
+            .addRequestHandlingBehavior(
+                TransportGetVirtualBatchedCompoundCommitChunkAction.NAME + "[p]",
+                (handler, request, channel, task) -> {
+                    var chunkRequest = asInstanceOf(GetVirtualBatchedCompoundCommitChunkRequest.class, request);
+                    assertThat(chunkRequest.getPrimaryTerm(), equalTo(primaryTerm));
+
+                    if (chunkRequest.getVirtualBatchedCompoundCommitGeneration() == afterGeneration) {
+                        assertThat(
+                            "Chunk request " + chunkRequest + " has the wrong preferred node id",
+                            chunkRequest.getPreferredNodeId(),
+                            equalTo(getNodeId(indexNodeTarget))
+                        );
+                        targetGetChunkRequestReceived.countDown();
+                    }
+                    handler.messageReceived(request, channel, task);
+                }
+            );
+
+        logger.info("--> resume relocation");
+        resumeRelocation.countDown();
+
+        safeAwait(targetNotificationReceived);
+        safeAwait(targetGetChunkRequestReceived);
+        assertThat(refreshFuture.actionGet().getFailedShards(), equalTo(0));
+
+        for (CheckedRunnable<Exception> delayedAction : delayedActions) {
+            delayedAction.run();
+        }
+        // also waits for no relocating shards.
+        ensureGreen(indexName);
+    }
+
+    public static class DisableWarmOnUploadPlugin extends Stateless {
+
+        static final Setting<Boolean> ENABLED_WARMING = Setting.boolSetting(
+            "test.stateless.warm_on_upload_enabled",
+            true,
+            Setting.Property.NodeScope
+        );
+
+        public DisableWarmOnUploadPlugin(Settings settings) {
+            super(settings);
+        }
+
+        @Override
+        public List<Setting<?>> getSettings() {
+            return CollectionUtils.concatLists(super.getSettings(), List.of(ENABLED_WARMING));
+        }
+
+        @Override
+        protected SharedBlobCacheWarmingService createSharedBlobCacheWarmingService(
+            StatelessSharedBlobCacheService cacheService,
+            ThreadPool threadPool,
+            TelemetryProvider telemetryProvider,
+            Settings settings
+        ) {
+            if (ENABLED_WARMING.get(settings)) {
+                return super.createSharedBlobCacheWarmingService(cacheService, threadPool, telemetryProvider, settings);
+            }
+            return new SharedBlobCacheWarmingService(cacheService, threadPool, telemetryProvider, settings) {
+                @Override
+                protected void warmCacheRecovery(
+                    Type type,
+                    IndexShard indexShard,
+                    StatelessCompoundCommit commit,
+                    BlobStoreCacheDirectory directory,
+                    ActionListener<Void> listener
+                ) {
+                    // Makes sure recovery warming is completed before continuing with the shard recovery, so that when the test checks
+                    // the number of written regions in cache after the shard is started we are sure no other regions are likely to be
+                    // warmed afterward.
+                    var subscribableListener = new SubscribableListener<Void>();
+                    super.warmCacheRecovery(type, indexShard, commit, directory, subscribableListener);
+                    safeAwait(subscribableListener);
+                    subscribableListener.addListener(listener);
+                }
+
+                @Override
+                public void warmCacheBeforeUpload(VirtualBatchedCompoundCommit vbcc, ActionListener<Void> listener) {
+                    ActionListener.completeWith(listener, () -> null);
+                }
+            };
+        }
+    }
+
+    public void testRelocatingIndexShardFetchesFirstRegionOnly() throws Exception {
+        startMasterOnlyNode();
+
+        final int initialCommits = randomIntBetween(0, 3);
+        final long approximateInitialCommitSize = 2 * SharedBytes.PAGE_SIZE;
+        final long regionSizeInBytes = Math.max(1, initialCommits) * approximateInitialCommitSize * 2;
+
+        var cacheSize = ByteSizeValue.ofMb(1L);
+        var regionSize = ByteSizeValue.ofBytes(regionSizeInBytes);
+        final var indexNodesSettings = Settings.builder()
+            .put(SharedBlobCacheService.SHARED_CACHE_SIZE_SETTING.getKey(), cacheSize)
+            .put(SharedBlobCacheService.SHARED_CACHE_REGION_SIZE_SETTING.getKey(), regionSize)
+            .put(SharedBlobCacheService.SHARED_CACHE_RANGE_SIZE_SETTING.getKey(), regionSize)
+            .put(SharedBlobCacheWarmingService.PREWARMING_RANGE_MINIMIZATION_STEP.getKey(), regionSize)
+            .put(StatelessCommitService.STATELESS_COMMIT_USE_INTERNAL_FILES_REPLICATED_CONTENT.getKey(), true)
+            .put(StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.getKey(), ByteSizeValue.ofGb(1))
+            .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 100)
+            .put(disableIndexingDiskAndMemoryControllersNodeSettings())
+            .build();
+
+        final var indexNode = startIndexNode(indexNodesSettings);
+        final String indexName = randomIdentifier();
+        assertAcked(
+            prepareCreate(indexName).setSettings(
+                indexSettings(1, 0).put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), ByteSizeValue.ofGb(1L))
+                    .put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), TimeValue.MINUS_ONE)
+                    .put(IndexSettings.INDEX_CHECK_ON_STARTUP.getKey(), "false")
+                    .put(EngineConfig.USE_COMPOUND_FILE, randomBoolean())
+                    .put(MergePolicyConfig.INDEX_MERGE_ENABLED, false)
+                    .build()
+            ).setMapping("""
+                    {
+                        "properties":{
+                            "junk":{"type":"binary","doc_values":false,"store":true}
+                        }
+                    }
+                """)
+        );
+
+        var indexShard = findIndexShard(resolveIndex(indexName), 0);
+        var indexDirectory = IndexDirectory.unwrapDirectory(indexShard.store().directory());
+        var commitService = internalCluster().getInstance(StatelessCommitService.class, indexNode);
+
+        LongSupplier virtualBccTotalSizeInBytes = () -> {
+            var virtualBcc = commitService.getCurrentVirtualBcc(indexShard.shardId());
+            return virtualBcc != null ? virtualBcc.getTotalSizeInBytes() : 0L;
+        };
+
+        logger.debug("--> create {} initial commit(s) to fill less than half of the region", initialCommits);
+        for (int commit = 0; commit < initialCommits; commit++) {
+            long previous = BlobCacheUtils.toPageAlignedSize(virtualBccTotalSizeInBytes.getAsLong());
+
+            // Generates a commit that fits into one or two SharedBytes.PAGE_SIZE, depending on the randomized values of
+            // EngineConfig.USE_COMPOUND_FILE and IndexSettings.BLOOM_FILTER_ID_FIELD_ENABLED_SETTING.
+            indexBinaryDoc(indexName, 1);
+            refresh(indexName);
+
+            assertThat(
+                virtualBccTotalSizeInBytes.getAsLong() - previous,
+                allOf(greaterThan(0L), lessThanOrEqualTo(approximateInitialCommitSize))
+            );
+        }
+
+        final long sizeOfInitialCommits = BlobCacheUtils.toPageAlignedSize(virtualBccTotalSizeInBytes.getAsLong());
+        assertThat("Expect initial commits to fill half of the region", sizeOfInitialCommits, lessThanOrEqualTo(regionSizeInBytes / 2));
+
+        final int largeDocSize = toIntBytes(regionSizeInBytes - sizeOfInitialCommits + randomLongBetween(1L, regionSize.getBytes() * 3));
+        assertThat("Expect last commit to fill the remaining space of the region", (long) largeDocSize, greaterThan(regionSizeInBytes / 2));
+        indexBinaryDoc(indexName, largeDocSize);
+        flush(indexName);
+
+        var batchedCompoundCommit = commitService.getLatestUploadedBcc(indexShard.shardId());
+        assertThat(batchedCompoundCommit, notNullValue());
+
+        long blobLength = getBlobLength(indexDirectory, batchedCompoundCommit.primaryTermAndGeneration());
+        assertThat("Expect blob to be larger than a single region", blobLength, greaterThan(regionSizeInBytes));
+
+        int blobRegionsTotal = computedFetchedRegions(0L, blobLength, regionSize.getBytes(), new HashSet<>()).size();
+        assertThat(blobRegionsTotal, greaterThan(1));
+
+        final var indexNode2 = startIndexNode(
+            Settings.builder()
+                .put(indexNodesSettings)
+                // Disable warm-on-upload since otherwise it populates the cache when uploading the flush after relocation handoff.
+                .put(DisableWarmOnUploadPlugin.ENABLED_WARMING.getKey(), false)
+                .build()
+        );
+        ensureStableCluster(3);
+
+        updateIndexSettings(Settings.builder().put("index.routing.allocation.exclude._name", indexNode), indexName);
+        assertBusy(() -> assertThat(internalCluster().nodesInclude(indexName), not(hasItem(indexNode))));
+        ensureGreen(indexName);
+
+        var cacheService = internalCluster().getInstance(Stateless.SharedBlobCacheServiceSupplier.class, indexNode2).get();
+        assertThat(cacheService.getStats().writeCount(), equalTo(1L));
+        assertThat(cacheService.getStats().numberOfRegions(), greaterThan(1));
+    }
+
+    private static void indexBinaryDoc(String indexName, int size) {
+        var bulkRequest = client().prepareBulk();
+        bulkRequest.add(prepareIndex(indexName).setSource("junk", Base64.getEncoder().encodeToString(randomByteArrayOfLength(size))));
+        assertNoFailures(bulkRequest.get(TimeValue.timeValueSeconds(10L)));
+    }
+
+    /**
+     * Returns the length of the blob stored in the object store.
+     */
+    private static long getBlobLength(IndexDirectory indexDirectory, PrimaryTermAndGeneration primaryTermAndGeneration) throws IOException {
+        var blobName = StatelessCompoundCommit.blobNameFromGeneration(primaryTermAndGeneration.generation());
+        var blobs = IndexBlobStoreCacheDirectory.unwrapDirectory(indexDirectory)
+            .getBlobContainer(primaryTermAndGeneration.primaryTerm())
+            .listBlobsByPrefix(OperationPurpose.INDICES, blobName);
+        assertThat(blobs, notNullValue());
+        assertThat(blobs.size(), equalTo(1));
+        return blobs.get(blobName).length();
+    }
+
+    /**
+     * Computes the number of regions that needs to be fetched to read {@code length} bytes from position {@code offset}.
+     */
+    private static Set<Integer> computedFetchedRegions(long offset, long length, long regionSizeInBytes, Set<Integer> regions) {
+        int regionStart = (int) (offset / regionSizeInBytes);
+        long endOffset = offset + length;
+        int regionEnd;
+        if (endOffset % regionSizeInBytes == 0) {
+            regionEnd = (int) ((endOffset - 1L) / regionSizeInBytes);
+        } else {
+            regionEnd = (int) (endOffset / regionSizeInBytes);
+        }
+        IntStream.rangeClosed(regionStart, regionEnd).forEach(regions::add);
+        return regions;
     }
 }

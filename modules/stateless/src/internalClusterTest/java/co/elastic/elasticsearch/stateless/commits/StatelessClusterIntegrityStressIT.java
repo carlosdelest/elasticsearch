@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.stateless.commits;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
-import co.elastic.elasticsearch.stateless.IndexingDiskController;
 import co.elastic.elasticsearch.stateless.StatelessMockRepositoryPlugin;
 import co.elastic.elasticsearch.stateless.StatelessMockRepositoryStrategy;
 import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessClusterConsistencyService;
@@ -47,7 +46,6 @@ import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
-import org.elasticsearch.core.CheckedConsumer;
 import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.Releasables;
@@ -59,6 +57,7 @@ import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.test.InternalTestCluster;
 import org.elasticsearch.test.disruption.NetworkDisruption;
 import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.test.transport.MockTransportService;
@@ -68,7 +67,7 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportSettings;
 
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -180,9 +179,6 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
         private final int searchChance = 250;
         private final int indexingChance = 1000;
         private final TimeValue defaultTestTimeout = TimeValue.timeValueSeconds(30);
-        private final Settings extraNodeSettings = Settings.builder()
-            .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), -1)
-            .build();
 
         TrackedCluster() {
             final var numberOfIndexingNodes = between(3, 5);
@@ -200,15 +196,15 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
             this.targetUploadsCounter = new AtomicInteger(this.targetUploads);
             this.statelessMockRepositoryStrategy = new StatelessMockRepositoryStrategy() {
                 @Override
-                public void blobContainerWriteMetadataBlob(
-                    CheckedRunnable<IOException> original,
+                public void blobContainerWriteBlobAtomic(
+                    CheckedRunnable<IOException> originalRunnable,
                     OperationPurpose purpose,
                     String blobName,
-                    boolean failIfAlreadyExists,
-                    boolean atomic,
-                    CheckedConsumer<OutputStream, IOException> writer
+                    InputStream inputStream,
+                    long blobSize,
+                    boolean failIfAlreadyExists
                 ) throws IOException {
-                    super.blobContainerWriteMetadataBlob(original, purpose, blobName, failIfAlreadyExists, atomic, writer);
+                    super.blobContainerWriteBlobAtomic(originalRunnable, purpose, blobName, inputStream, blobSize, failIfAlreadyExists);
                     if (StatelessCompoundCommit.startsWithBlobPrefix(blobName)) {
                         if (TrackedCluster.this.targetUploadsCounter.decrementAndGet() == 0) {
                             stopLatch.countDown();
@@ -219,7 +215,7 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
 
             this.nodes = ConcurrentCollections.newConcurrentMap();
             IntStream.range(0, numberOfIndexingNodes)
-                .forEach(ignore -> startMasterAndIndexNode(extraNodeSettings, statelessMockRepositoryStrategy));
+                .forEach(ignore -> startMasterAndIndexNode(Settings.EMPTY, statelessMockRepositoryStrategy));
             startSearchNodes(numberOfSearchNodes).forEach(name -> this.nodes.put(name, new TrackedNode(name, false, false)));
             int totalNodes = numberOfIndexingNodes + numberOfSearchNodes;
             ensureStableCluster(totalNodes);
@@ -326,29 +322,15 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                         .setTrackTotalHits(true),
                     searchResponse -> {
                         assertNoFailures(searchResponse);
-                        assertThat(searchResponse.getHits().getTotalHits().value, greaterThanOrEqualTo((long) docIds.size()));
+                        assertThat(searchResponse.getHits().getTotalHits().value(), greaterThanOrEqualTo((long) docIds.size()));
                     }
                 );
             }
             logger.info("--> end of test");
         }
 
-        Releasable acquirePermitForCluster() {
-            try (var localReleasable = new TransferableReleasables()) {
-                if (clusterPermit.tryAcquire()) {
-                    localReleasable.add(clusterPermit::release);
-                    return localReleasable.transfer();
-                }
-            }
-            return null;
-        }
-
         NamedReleasable acquirePermitsForClusterAndIndexingNode() {
             return acquirePermitsForClusterAndNode(this::nonMasterIndexingNodes);
-        }
-
-        NamedReleasable acquirePermitsForClusterAndSearchNode() {
-            return acquirePermitsForClusterAndNode(this::searchNodes);
         }
 
         NamedReleasable acquirePermitForIndexingNode() {
@@ -421,10 +403,9 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
         public void ensureGreenIgnoreNodeDisconnection(int numNodes, String... indices) throws Exception {
             assertBusy(() -> {
                 try {
-                    final var clusterHealthRequest = new ClusterHealthRequest(indices).waitForStatus(ClusterHealthStatus.GREEN)
-                        .waitForNoInitializingShards(true)
-                        .waitForNoRelocatingShards(true)
-                        .waitForEvents(Priority.LANGUID);
+                    final var clusterHealthRequest = new ClusterHealthRequest(TEST_REQUEST_TIMEOUT, indices).waitForStatus(
+                        ClusterHealthStatus.GREEN
+                    ).waitForNoInitializingShards(true).waitForNoRelocatingShards(true).waitForEvents(Priority.LANGUID);
                     if (numNodes != 0) {
                         clusterHealthRequest.waitForNodes(Integer.toString(numNodes));
                     }
@@ -575,7 +556,11 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                 final int expectedNumberOfDocs = trackedIndex.docIds.size();
                 SearchResponse searchResponse = null;
                 try {
-                    final SearchRequestBuilder searchRequest = client().prepareSearch(indexName).setTrackTotalHits(true);
+                    // TODO: ESIntegTestCase randomize `search.low_level_cancellation` which could trip
+                    // MockSearchService#assertNoInFlightContext when it is set to `false` and coordinating node is stopped
+                    // while a search is ongoing. For now, use the master node as the coordinating node to avoid shutdown
+                    // See also https://github.com/elastic/elasticsearch/issues/115199
+                    final SearchRequestBuilder searchRequest = client(masterNodeName()).prepareSearch(indexName).setTrackTotalHits(true);
                     if (randomBoolean()) {
                         searchRequest.setSize(between(0, expectedNumberOfDocs));
                     }
@@ -589,7 +574,7 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                     searchResponse = searchRequest.get(defaultTestTimeout);
                     // For simplicity, only assert response size if there is no failed shards
                     if (searchResponse.getFailedShards() == 0) {
-                        assertThat(searchResponse.getHits().getTotalHits().value, greaterThanOrEqualTo((long) expectedNumberOfDocs));
+                        assertThat(searchResponse.getHits().getTotalHits().value(), greaterThanOrEqualTo((long) expectedNumberOfDocs));
                     }
                 } catch (Exception e) {
                     // Failure can happen the shard is failed or node restart/replace/isolated concurrently. Just ignore them
@@ -652,11 +637,7 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                 if (between(1, 1000) > shardMovementChance) {
                     return;
                 }
-                // TODO: We should not need lock the entire cluster for relocation
-                final Releasable clusterReleasable = acquirePermitForCluster();
-                if (clusterReleasable == null) {
-                    return;
-                }
+                final Releasable clusterReleasable = () -> {};
                 try (clusterReleasable) {
                     final TrackedIndex trackedIndex = randomFrom(indices.values());
                     final int shardId = between(0, trackedIndex.numberOfShards - 1);
@@ -696,10 +677,9 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                     return;
                 }
                 final boolean searchShard = randomBoolean() && randomBoolean(); // more likely to fail indexing shard
-                // TODO: we should not need to lock the entire cluster for failing shard
                 final Supplier<NamedReleasable> permitSupplier = searchShard
-                    ? this::acquirePermitsForClusterAndSearchNode
-                    : this::acquirePermitsForClusterAndIndexingNode;
+                    ? this::acquirePermitForSearchNode
+                    : this::acquirePermitForIndexingNode;
                 try (var namedReleasable = permitSupplier.get()) {
                     if (namedReleasable == NamedReleasable.EMPTY) {
                         return;
@@ -752,17 +732,26 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                 if (between(1, 1000) > nodeMovementChance) {
                     return;
                 }
-                final boolean restartIndexingNode = randomBoolean();
+                // See also https://github.com/elastic/elasticsearch/issues/115056
+                final boolean restartIndexingNode = true || randomBoolean();
                 Supplier<NamedReleasable> permitSupplier = restartIndexingNode
-                    ? this::acquirePermitsForClusterAndIndexingNode
-                    : this::acquirePermitsForClusterAndSearchNode;
+                    ? this::acquirePermitForIndexingNode
+                    : this::acquirePermitForSearchNode;
                 try (var namedReleasable = permitSupplier.get()) {
                     if (namedReleasable == NamedReleasable.EMPTY) {
                         return;
                     }
                     logger.info("--> restarting {} node [{}]", restartIndexingNode ? "indexing" : "search", namedReleasable.name);
-                    internalCluster().restartNode(namedReleasable.name);
-                    ensureStableCluster(nodes.size(), masterNodeName());
+                    internalCluster().restartNode(namedReleasable.name, new InternalTestCluster.RestartCallback() {
+                        public boolean validateClusterForming() {
+                            return false;
+                        }
+                    });
+                    assertBusy(
+                        () -> ensureStableCluster(nodes.size(), TimeValue.timeValueSeconds(10), false, masterNodeName()),
+                        1,
+                        TimeUnit.MINUTES
+                    );
                     logger.info("--> completed restarting {} node [{}]", restartIndexingNode ? "indexing" : "search", namedReleasable.name);
                 }
             });
@@ -778,8 +767,12 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                         return;
                     }
                     logger.info("--> replacing indexing node [{}]", namedReleasable.name);
-                    final String newNodeName = startMasterAndIndexNode(extraNodeSettings, statelessMockRepositoryStrategy);
-                    ensureStableCluster(nodes.size() + 1, masterNodeName());
+                    final String newNodeName = startMasterAndIndexNode(Settings.EMPTY, statelessMockRepositoryStrategy);
+                    assertBusy(
+                        () -> ensureStableCluster(nodes.size() + 1, TimeValue.timeValueSeconds(10), false, masterNodeName()),
+                        1,
+                        TimeUnit.MINUTES
+                    );
                     logger.info("--> added new indexing node [{}]", newNodeName);
                     final TrackedNode removed = nodes.remove(namedReleasable.name);
                     assertThat(removed.name, equalTo(namedReleasable.name));
@@ -787,7 +780,11 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                     nodes.put(newNodeName, new TrackedNode(newNodeName, false, true));
                     logger.info("--> stopping old indexing node [{}]", namedReleasable.name);
                     internalCluster().stopNode(namedReleasable.name);
-                    ensureStableCluster(nodes.size(), masterNodeName());
+                    assertBusy(
+                        () -> ensureStableCluster(nodes.size(), TimeValue.timeValueSeconds(10), false, masterNodeName()),
+                        1,
+                        TimeUnit.MINUTES
+                    );
                     assertThat(internalCluster().getNodeNames(), not(arrayContaining(removed.name)));
                     logger.info("--> completed replacing indexing node [{}] with [{}]", removed.name, newNodeName);
                 }
@@ -800,22 +797,22 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                     return;
                 }
                 final boolean isolateFromMaster = randomBoolean();
-                final MockTransportService masterTransportService = MockTransportService.getInstance(internalCluster().getMasterName());
+                final MockTransportService masterTransportService = MockTransportService.getInstance(masterNodeName());
                 try (var namedReleasable = acquirePermitsForClusterAndIndexingNode()) {
                     if (namedReleasable == NamedReleasable.EMPTY) {
                         return;
                     }
-                    final PlainActionFuture<Void> removedFuture = new PlainActionFuture<>();
+                    final PlainActionFuture<Void> isolatedFuture = new PlainActionFuture<>();
                     final var masterClusterService = internalCluster().getCurrentMasterNodeInstance(ClusterService.class);
                     masterClusterService.addListener(new ClusterStateListener() {
                         @Override
                         public void clusterChanged(ClusterChangedEvent clusterChangedEvent) {
-                            if (removedFuture.isDone() == false
+                            if (isolatedFuture.isDone() == false
                                 && clusterChangedEvent.nodesDelta()
                                     .removedNodes()
                                     .stream()
                                     .anyMatch(d -> d.getName().equals(namedReleasable.name))) {
-                                removedFuture.onResponse(null);
+                                isolatedFuture.onResponse(null);
                                 masterClusterService.removeListener(this);
                             }
                         }
@@ -842,13 +839,13 @@ public class StatelessClusterIntegrityStressIT extends AbstractStatelessIntegTes
                         internalCluster().setDisruptionScheme(networkDisruption);
                         networkDisruption.startDisrupting();
                     }
-                    removedFuture.actionGet(defaultTestTimeout);
-                    logger.info("--> isolated node [{}] removed", namedReleasable.name);
+                    isolatedFuture.actionGet(defaultTestTimeout);
+                    logger.info("--> isolated node [{}]", namedReleasable.name);
                     try {
-                        final var healthRequest = new ClusterHealthRequest().waitForStatus(ClusterHealthStatus.YELLOW)
+                        final var healthRequest = new ClusterHealthRequest(TEST_REQUEST_TIMEOUT).waitForStatus(ClusterHealthStatus.YELLOW)
                             .waitForEvents(Priority.LANGUID)
-                            .waitForNoRelocatingShards(true)
-                            .waitForNoInitializingShards(true)
+                            .waitForNoRelocatingShards(false)
+                            .waitForNoInitializingShards(false)
                             .waitForNodes(Integer.toString(nodes.size() - 1));
                         client(masterNodeName()).admin().cluster().health(healthRequest).actionGet(defaultTestTimeout);
                         logger.info("--> cluster is stable after node [{}] isolated", namedReleasable.name);

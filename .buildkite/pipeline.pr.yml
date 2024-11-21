@@ -1,0 +1,112 @@
+env:
+  GITOPS_ENV: dev
+  SKIP_DOCKER: "true"
+  BUILDKITE_DIR: ".buildkite"
+  IMAGE_TAG: "git-$IMAGE_TAG_SUFFIX"
+  ES_SERVERLESS_IMAGE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
+  ELASTICSEARCH_SUBMODULE_COMMIT: "${ELASTICSEARCH_SUBMODULE_COMMIT}"
+
+# NOTE: This yaml is processed by .buildkite/pipeline.pr.yml.sh before uploading
+
+steps:
+  - label: ":git: Build info"
+    command: ".buildkite/scripts/show-build-info.sh"
+
+  - label: ":java: Run serverless Elasticsearch functional tests"
+    command: ".buildkite/scripts/run-gradle.sh check -Dtests.upgrade.skip=true"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-64"
+      image: family/elasticsearch-ubuntu-2022
+      buildDirectory: /dev/shm/bk
+      zones: us-central1-a,us-central1-b,us-central1-c
+    env:
+      GRADLE_MAX_WORKERS: "10"
+    notify:
+      - github_commit_status:
+          context: "elasticsearch-serverless/functional tests"
+        if: build.pull_request.id != null
+
+  - label: ":pipeline: :arrow_up: Upload upgrade test steps"
+    command: ".buildkite/scripts/run-upgrade-tests.sh"
+
+  - label: ":s3: Run AWS S3 third party tests"
+    command: ".buildkite/scripts/run-s3-third-party-tests.sh"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
+    notify:
+      - github_commit_status:
+          context: "elasticsearch-serverless/third party tests"
+        if: build.pull_request.id != null
+
+  - label: ":docker: Publish docker images"
+    key: pr-docker-publish
+    cancel_on_build_failing: true
+    command: ".buildkite/scripts/publish-docker-artifacts.sh"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
+
+  - group: ":k8s: Serverless end-to-end tests"
+    steps:
+      - label: ":aws: :java: Test newly created project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        depends_on: pr-docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            DEPLOY_ID: "ess-e2e-ci-${IMAGE_TAG}"
+            REGION_ID: "aws-eu-west-1"
+            IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
+            ELASTICSEARCH_SUBMODULE_COMMIT: "${ELASTICSEARCH_SUBMODULE_COMMIT}"
+      - label: ":aws: :java: Test upgraded project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        depends_on: pr-docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            DEPLOY_ID: "ess-e2e-ci-upgrade-${IMAGE_TAG}"
+            REGION_ID: "aws-eu-west-1"
+            IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
+            ELASTICSEARCH_SUBMODULE_COMMIT: "${ELASTICSEARCH_SUBMODULE_COMMIT}"
+            UPGRADED_PROJECT: true
+      - label: ":azure: :java: Test newly created project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        depends_on: pr-docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            DEPLOY_ID: "ess-e2e-azure-ci-${IMAGE_TAG}"
+            REGION_ID: "azure-eastus2"
+            IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
+            ELASTICSEARCH_SUBMODULE_COMMIT: "${ELASTICSEARCH_SUBMODULE_COMMIT}"
+      - label: ":azure: :java: Test upgraded project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        depends_on: pr-docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            DEPLOY_ID: "ess-e2e-ci-azure-upgrade-${IMAGE_TAG}"
+            REGION_ID: "azure-eastus2"
+            IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
+            ELASTICSEARCH_SUBMODULE_COMMIT: "${ELASTICSEARCH_SUBMODULE_COMMIT}"
+            UPGRADED_PROJECT: true
+    notify:
+      - github_commit_status:
+          context: "elasticsearch-serverless/e2e tests"
+        if: build.pull_request.id != null

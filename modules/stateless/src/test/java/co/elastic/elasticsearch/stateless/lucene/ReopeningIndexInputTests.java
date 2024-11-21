@@ -21,10 +21,6 @@ package co.elastic.elasticsearch.stateless.lucene;
 
 import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
-import co.elastic.elasticsearch.stateless.cache.reader.CacheBlobReaderService;
-import co.elastic.elasticsearch.stateless.cache.reader.MutableObjectStoreUploadTracker;
-import co.elastic.elasticsearch.stateless.commits.BlobLocation;
-import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
 import co.elastic.elasticsearch.stateless.test.FakeStatelessNode;
 
 import org.apache.lucene.store.FilterIndexInput;
@@ -33,9 +29,10 @@ import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.tests.mockfile.FilterFileSystemProvider;
 import org.apache.lucene.tests.mockfile.HandleTrackingFS;
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.blobcache.common.BlobCacheBufferedIndexInput;
 import org.elasticsearch.blobcache.shared.SharedBlobCacheService;
-import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.BlobPath;
 import org.elasticsearch.common.blobstore.OperationPurpose;
@@ -75,13 +72,13 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static co.elastic.elasticsearch.stateless.TestUtils.newCacheService;
+import static co.elastic.elasticsearch.stateless.commits.BlobLocationTestUtils.createBlobFileRanges;
 import static org.elasticsearch.xpack.searchablesnapshots.AbstractSearchableSnapshotsTestCase.randomChecksumBytes;
 import static org.elasticsearch.xpack.searchablesnapshots.AbstractSearchableSnapshotsTestCase.randomIOContext;
 import static org.elasticsearch.xpack.searchablesnapshots.cache.common.TestUtils.pageAligned;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.instanceOf;
-import static org.mockito.Mockito.mock;
 
 public class ReopeningIndexInputTests extends ESIndexInputTestCase {
 
@@ -107,16 +104,12 @@ public class ReopeningIndexInputTests extends ESIndexInputTestCase {
             FsBlobStore blobStore = new FsBlobStore(randomIntBetween(1, 8) * 1024, blobStorePath, false);
             IndexDirectory indexDirectory = new IndexDirectory(
                 newFSDirectory(indexDataPath),
-                new SearchDirectory(
-                    sharedBlobCacheService,
-                    new CacheBlobReaderService(settings, sharedBlobCacheService, mock(Client.class)),
-                    MutableObjectStoreUploadTracker.ALWAYS_UPLOADED,
-                    shardId
-                )
+                new IndexBlobStoreCacheDirectory(sharedBlobCacheService, shardId),
+                null
             )
         ) {
             final FsBlobContainer blobContainer = new FsBlobContainer(blobStore, BlobPath.EMPTY, blobStorePath);
-            indexDirectory.getSearchDirectory().setBlobContainer(value -> blobContainer);
+            indexDirectory.getBlobStoreCacheDirectory().setBlobContainer(value -> blobContainer);
 
             for (int i = 0; i < 100; i++) {
                 final String fileName = "file_" + i + randomFileExtension();
@@ -182,16 +175,12 @@ public class ReopeningIndexInputTests extends ESIndexInputTestCase {
             FsBlobStore blobStore = new FsBlobStore(randomIntBetween(1, 8) * 1024, blobStorePath, false);
             IndexDirectory indexDirectory = new IndexDirectory(
                 newFSDirectory(indexDataPath),
-                new SearchDirectory(
-                    sharedBlobCacheService,
-                    new CacheBlobReaderService(settings, sharedBlobCacheService, mock(Client.class)),
-                    MutableObjectStoreUploadTracker.ALWAYS_UPLOADED,
-                    shardId
-                )
+                new IndexBlobStoreCacheDirectory(sharedBlobCacheService, shardId),
+                null
             )
         ) {
             final FsBlobContainer blobContainer = new FsBlobContainer(blobStore, BlobPath.EMPTY, blobStorePath);
-            indexDirectory.getSearchDirectory().setBlobContainer(value -> blobContainer);
+            indexDirectory.getBlobStoreCacheDirectory().setBlobContainer(value -> blobContainer);
 
             final int fileLength = randomIntBetween(1024, 10240);
             assertThat(fileLength, greaterThanOrEqualTo(BlobCacheBufferedIndexInput.BUFFER_SIZE));
@@ -278,7 +267,7 @@ public class ReopeningIndexInputTests extends ESIndexInputTestCase {
             try (IndexOutput output = indexDirectory.createOutput(fileName, IOContext.DEFAULT)) {
                 output.writeBytes(bytes, bytes.length);
             }
-            indexDirectory.getSearchDirectory()
+            indexDirectory.getBlobStoreCacheDirectory()
                 .getBlobContainer(primaryTerm)
                 .writeBlob(OperationPurpose.INDICES, "stateless_commit_1", BytesReference.fromByteBuffer(ByteBuffer.wrap(bytes)), true);
 
@@ -302,16 +291,10 @@ public class ReopeningIndexInputTests extends ESIndexInputTestCase {
             assertThat(indexDirectory.getDelegate().fileLength(fileName), equalTo((long) bytes.length));
 
             indexDirectory.updateCommit(
-                new StatelessCompoundCommit(
-                    indexDirectory.getSearchDirectory().getShardId(),
-                    1L,
-                    1L,
-                    "_na_",
-                    Map.of(fileName, new BlobLocation(primaryTerm, "stateless_commit_1", 0L, bytes.length)),
-                    bytes.length,
-                    Set.of(fileName)
-                ),
-                Set.of(fileName)
+                1L,
+                bytes.length,
+                Set.of(fileName),
+                Map.of(fileName, createBlobFileRanges(primaryTerm, 1L, 0L, bytes.length))
             );
 
             readNBytes(input, bytes, input.getFilePointer(), 1024);
@@ -340,6 +323,74 @@ public class ReopeningIndexInputTests extends ESIndexInputTestCase {
             input.close();
         } finally {
             PathUtilsForTesting.teardown();
+        }
+    }
+
+    /**
+     * See Lucene change https://github.com/apache/lucene/pull/13535
+     * @throws IOException
+     */
+    public void testMemoryMappedIndexInputOpenedWithReadOnceContext() throws IOException {
+        // we can only verify memory mapped files
+        final String fileName = "file."
+            + randomFrom(
+                Arrays.stream(LuceneFilesExtensions.values())
+                    .filter(LuceneFilesExtensions::shouldMmap)
+                    .map(LuceneFilesExtensions::getExtension)
+                    .toList()
+            );
+
+        final long primaryTerm = randomLongBetween(1L, 1000L);
+        final Path path = PathUtils.get(createTempDir().toString());
+        try (
+            var node = new FakeStatelessNode(
+                settings -> TestEnvironment.newEnvironment(
+                    Settings.builder().put(settings).put(Environment.PATH_HOME_SETTING.getKey(), path.toAbsolutePath()).build()
+                ),
+                settings -> {
+                    var build = Settings.builder().put(settings).put(Environment.PATH_HOME_SETTING.getKey(), path.toAbsolutePath()).build();
+                    return new NodeEnvironment(build, TestEnvironment.newEnvironment(build));
+                },
+                xContentRegistry(),
+                primaryTerm
+            )
+        ) {
+            final var indexDirectory = node.indexingDirectory;
+            final var indexPath = node.environment.dataFiles()[0].resolve(node.shardId.getIndex().getUUID()).resolve("0").resolve("index");
+
+            final byte[] bytes = randomByteArrayOfLength(4096);
+            try (IndexOutput output = indexDirectory.createOutput(fileName, IOContext.DEFAULT)) {
+                output.writeBytes(bytes, bytes.length);
+            }
+
+            var input = indexDirectory.openInput(fileName, IOContext.READONCE);
+            assertThat(input, instanceOf(IndexDirectory.ReopeningIndexInput.class));
+            assertThat(((IndexDirectory.ReopeningIndexInput) input).getDelegate().isCached(), equalTo(false));
+            readNBytes(input, bytes, 0L, 1024);
+
+            var future = new PlainActionFuture<Void>();
+            node.threadPool.generic().execute(() -> ActionListener.completeWith(future, () -> {
+                indexDirectory.getBlobStoreCacheDirectory()
+                    .getBlobContainer(primaryTerm)
+                    .writeBlob(OperationPurpose.INDICES, "stateless_commit_1", BytesReference.fromByteBuffer(ByteBuffer.wrap(bytes)), true);
+
+                indexDirectory.updateCommit(
+                    1L,
+                    bytes.length,
+                    Set.of(fileName),
+                    Map.of(fileName, createBlobFileRanges(primaryTerm, 1L, 0L, bytes.length))
+                );
+                return null;
+            }));
+            safeGet(future);
+
+            readNBytes(input, bytes, input.getFilePointer(), 1024);
+
+            assertThat(Files.exists(indexPath.resolve(fileName)), equalTo(false));
+            expectThrows(NoSuchFileException.class, () -> indexDirectory.getDelegate().fileLength(fileName));
+            assertThat(((IndexDirectory.ReopeningIndexInput) input).getDelegate().isCached(), equalTo(true));
+
+            input.close();
         }
     }
 
@@ -414,16 +465,10 @@ public class ReopeningIndexInputTests extends ESIndexInputTestCase {
                 blobContainer.writeBlob(randomFrom(OperationPurpose.values()), blobName, inputStream, length, randomBoolean());
 
                 directory.updateCommit(
-                    new StatelessCompoundCommit(
-                        directory.getSearchDirectory().getShardId(),
-                        generation,
-                        1L,
-                        "_na_",
-                        Map.of(fileName, new BlobLocation(1L, blobName, 0L, length)),
-                        length,
-                        Set.of(fileName)
-                    ),
-                    null
+                    generation,
+                    length,
+                    Set.of(fileName),
+                    Map.of(fileName, createBlobFileRanges(1L, generation, 0L, length))
                 );
             } catch (IOException e) {
                 throw new AssertionError(e);

@@ -1,8 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-
-# If an explicit commit for the submodule is provided do a checkout
-if [ -n "${ELASTICSEARCH_SUBMODULE_COMMIT:-}" ]; then
-  git -C elasticsearch fetch origin ${ELASTICSEARCH_SUBMODULE_COMMIT}
-  git -C elasticsearch checkout ${ELASTICSEARCH_SUBMODULE_COMMIT}
-fi

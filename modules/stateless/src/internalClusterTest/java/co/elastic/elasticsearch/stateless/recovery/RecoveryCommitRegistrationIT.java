@@ -18,17 +18,18 @@
 package co.elastic.elasticsearch.stateless.recovery;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
-import co.elastic.elasticsearch.stateless.IndexingDiskController;
 import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.TestStateless;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.commits.TestStatelessCommitService;
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
+import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
 
+import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.cluster.reroute.ClusterRerouteUtils;
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
-import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
@@ -39,6 +40,7 @@ import org.elasticsearch.cluster.routing.allocation.decider.EnableAllocationDeci
 import org.elasticsearch.cluster.routing.allocation.decider.MaxRetryAllocationDecider;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.shard.IndexShard;
@@ -47,13 +49,18 @@ import org.elasticsearch.index.shard.ShardNotFoundException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.recovery.RecoveryCommitTooNewException;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.test.disruption.NetworkDisruption;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.transport.TestTransportChannel;
+import org.elasticsearch.transport.TransportService;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
@@ -63,12 +70,17 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static co.elastic.elasticsearch.stateless.recovery.TransportStatelessPrimaryRelocationAction.START_RELOCATION_ACTION_NAME;
+import static org.elasticsearch.cluster.metadata.IndexMetadata.INDEX_ROUTING_EXCLUDE_GROUP_SETTING;
 import static org.elasticsearch.cluster.routing.allocation.decider.EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING;
 import static org.elasticsearch.cluster.routing.allocation.decider.MaxRetryAllocationDecider.SETTING_ALLOCATION_MAX_RETRY;
+import static org.elasticsearch.core.TimeValue.timeValueMillis;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 
 public class RecoveryCommitRegistrationIT extends AbstractStatelessIntegTestCase {
 
@@ -236,7 +248,7 @@ public class RecoveryCommitRegistrationIT extends AbstractStatelessIntegTestCase
      */
     public void testUnpromotableCommitRegistrationDuringUpload() throws InterruptedException {
         startMasterOnlyNode();
-        var indexNodeA = startIndexNode();
+        var indexNodeA = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         startSearchNode();
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         createIndex(indexName, indexSettings(1, 0).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), TimeValue.MINUS_ONE).build());
@@ -283,7 +295,7 @@ public class RecoveryCommitRegistrationIT extends AbstractStatelessIntegTestCase
 
     public void testSearchShardCloseDuringCommitRegistration() throws Exception {
         final String indexNodeA = startMasterAndIndexNode();
-        final String searchNodeA = startSearchNode();
+        startSearchNode();
         ensureStableCluster(2);
         final var indexName = randomIdentifier();
         // Create an index with 2 primary shards to get ShardNotFoundException instead of IndexNotFoundException in the test
@@ -300,7 +312,7 @@ public class RecoveryCommitRegistrationIT extends AbstractStatelessIntegTestCase
         final IndexShard indexShard = indexNodeAIndexService.getShard(0);
 
         final String indexNodeB = startMasterAndIndexNode();
-        final String searchNodeB = startSearchNode();
+        startSearchNode();
         ensureStableCluster(4);
 
         final CyclicBarrier commitRegistrationBarrier = new CyclicBarrier(2);
@@ -345,7 +357,7 @@ public class RecoveryCommitRegistrationIT extends AbstractStatelessIntegTestCase
                 bulkRequestBuilder.add(client(indexNodeB).prepareIndex(indexName).setSource("field", randomAlphaOfLengthBetween(20, 50)));
             }
             bulkRequestBuilder.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
-            final BulkResponse bulkResponse = bulkRequestBuilder.get(TEST_REQUEST_TIMEOUT);
+            bulkRequestBuilder.get(TEST_REQUEST_TIMEOUT);
             safeSleep(randomLongBetween(1, 100));
         }
 
@@ -353,13 +365,11 @@ public class RecoveryCommitRegistrationIT extends AbstractStatelessIntegTestCase
         ensureGreen(indexName);
     }
 
-    public void testSearchShardWillNotRegisterWithOldPrimaryAfterItIsRelocated() throws Exception {
-        final Settings nodeSettings = Settings.builder()
-            .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), -1)
-            .build();
+    public void testSearchShardWillNotRegisterWithOldPrimaryAfterItIsRelocated() {
+        final Settings nodeSettings = disableIndexingDiskAndMemoryControllersNodeSettings();
         startMasterOnlyNode(nodeSettings);
         final String indexNode = startIndexNode(nodeSettings);
-        final String searchNode = startSearchNode(nodeSettings);
+        startSearchNode(nodeSettings);
         ensureStableCluster(3);
         final String indexName = randomIdentifier();
         createIndex(indexName, indexSettings(1, 0).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
@@ -452,5 +462,216 @@ public class RecoveryCommitRegistrationIT extends AbstractStatelessIntegTestCase
         safeAwait(registeredWithNewPrimaryLatch);
 
         ensureGreen(indexName);
+    }
+
+    public void testRegisterCommitForRecoveryThrowsExceptionAndShardGetRelocatedEventually() {
+        var indexNode = startMasterAndIndexNode();
+        startSearchNode();
+        startSearchNode();
+
+        var indexName = randomIdentifier();
+        createIndex(indexName, indexSettings(1, 0).build());
+        ensureGreen(indexName);
+
+        int numDocs = randomIntBetween(1, 100);
+        indexDocs(indexName, numDocs);
+        flushAndRefresh(indexName);
+
+        var failOnce = new AtomicBoolean(false);
+        var expectedNumberOfCalls = new CountDownLatch(2);
+
+        var indexNodeTransportService = MockTransportService.getInstance(indexNode);
+        indexNodeTransportService.addRequestHandlingBehavior(
+            TransportRegisterCommitForRecoveryAction.NAME,
+            (handler, request, channel, task) -> {
+                expectedNumberOfCalls.countDown();
+                if (failOnce.compareAndSet(false, true)) {
+                    logger.info("--> failing first search shard bootstrap so that it got retried");
+                    channel.sendResponse(new ElasticsearchException("simulated failure"));
+                } else {
+                    handler.messageReceived(request, channel, task);
+                }
+            }
+        );
+
+        updateIndexSettings(
+            Settings.builder()
+                .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+                .put(MaxRetryAllocationDecider.SETTING_ALLOCATION_MAX_RETRY.getKey(), 2)    // allow at most 1 allocation failure
+        );
+        ensureGreen(indexName);
+
+        assertThat(failOnce.get(), is(true));
+        safeAwait(expectedNumberOfCalls);
+    }
+
+    public void testRelocatingSearchShardWithSlownessInRegisterCommitForRecovery() {
+        var indexNode = startMasterAndIndexNode();
+        var searchNodeA = startSearchNode();
+        var searchNodeB = startSearchNode();
+
+        var indexName = randomIdentifier();
+        createIndex(indexName, indexSettings(1, 0).put(INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getKey() + "_name", searchNodeB).build());
+        ensureGreen(indexName);
+
+        int numDocs = randomIntBetween(1, 100);
+        indexDocs(indexName, numDocs);
+        flushAndRefresh(indexName);
+
+        // the first request for initial bootstrapped shard, the second - for relocating
+        var registerCommitForRecoveryRequestCount = new CountDownLatch(2);
+
+        var searchNodeIds = Set.of(getNodeId(searchNodeA), getNodeId(searchNodeB));
+        var receivedRequestsFromNodeIds = Collections.synchronizedSet(new HashSet<>());
+
+        var indexNodeTransportService = MockTransportService.getInstance(indexNode);
+        indexNodeTransportService.addRequestHandlingBehavior(
+            TransportRegisterCommitForRecoveryAction.NAME,
+            (handler, request, channel, task) -> {
+                registerCommitForRecoveryRequestCount.countDown();
+                receivedRequestsFromNodeIds.add(((RegisterCommitRequest) request).getNodeId());
+                handler.messageReceived(request, channel, task);
+            }
+        );
+
+        logger.info("--> start delaying network on master/index node");
+        final NetworkDisruption networkDisruption = isolateMasterDisruption(
+            NetworkDisruption.NetworkDelay.random(random(), timeValueMillis(100), timeValueMillis(1000))
+        );
+        internalCluster().setDisruptionScheme(networkDisruption);
+        networkDisruption.startDisrupting();
+
+        // start recovery
+        updateIndexSettings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1));
+        ensureGreen(indexName);
+        assertThat(internalCluster().nodesInclude(indexName), hasItem(searchNodeA));
+        assertThat(internalCluster().nodesInclude(indexName), not(hasItem(searchNodeB)));
+
+        // start relocation
+        updateIndexSettings(Settings.builder().put(INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getKey() + "_name", searchNodeA));
+        ensureGreen(indexName);
+        assertThat(internalCluster().nodesInclude(indexName), not(hasItem(searchNodeA)));
+        assertThat(internalCluster().nodesInclude(indexName), hasItem(searchNodeB));
+
+        safeAwait(registerCommitForRecoveryRequestCount);
+        assertThat(receivedRequestsFromNodeIds, equalTo(searchNodeIds));
+
+        logger.info("--> stop delaying network");
+        networkDisruption.stopDisrupting();
+        internalCluster().clearDisruptionScheme(true);
+
+        var searchShard = findSearchShard(indexName);
+        var directory = SearchDirectory.unwrapDirectory(searchShard.store().directory());
+        var searchShardTermAndGen = directory.getCurrentCommit().primaryTermAndGeneration();
+        var indexingShardTermAndGen = getIndexingShardTermAndGeneration(indexName, 0);
+
+        // check that search shard bootstrapped from most recent commit
+        assertThat(searchShardTermAndGen, equalTo(indexingShardTermAndGen));
+    }
+
+    public void testRetryRecoveryCommitRegistrationIfPrimaryMoves() throws Exception {
+        startMasterOnlyNode();
+
+        var indexNode1 = startIndexNode();
+
+        var indexName = randomIdentifier();
+        // do not retry recovery on allocation level
+        createIndex(indexName, indexSettings(1, 0).put(SETTING_ALLOCATION_MAX_RETRY.getKey(), 0).build());
+        ensureGreen(indexName);
+        int totalDocs = randomIntBetween(1, 10);
+        indexDocs(indexName, totalDocs);
+        flushAndRefresh(indexName);
+
+        var searchNode = startSearchNode();
+
+        var waitForChangesOnIndexingSide = new CountDownLatch(1);
+        var mockTransportServiceSearchNode = (MockTransportService) internalCluster().getInstance(TransportService.class, searchNode);
+        mockTransportServiceSearchNode.addSendBehavior((connection, requestId, action, request, options) -> {
+            if (action.equals(TransportRegisterCommitForRecoveryAction.NAME)) {
+                safeAwait(waitForChangesOnIndexingSide);
+            }
+            connection.sendRequest(requestId, action, request, options);
+        });
+
+        var indexNode2 = startIndexNode();
+
+        var mockTransportServiceIndexNode1 = (MockTransportService) internalCluster().getInstance(TransportService.class, indexNode1);
+
+        // Note that search node is expected to throw "org.elasticsearch.index.engine.EngineException: Engine not started"
+        // since search shard is in the middle of recovery and engine has not started yet
+
+        // request is expected to land on previous indexing node and IndexNotFoundException should be thrown
+        mockTransportServiceIndexNode1.addRequestHandlingBehavior(
+            TransportRegisterCommitForRecoveryAction.NAME,
+            (handler, request, channel, task) -> {
+                handler.messageReceived(request, new TestTransportChannel(new ChannelActionListener<>(channel).delegateResponse((l, e) -> {
+                    assertThat(e, instanceOf(IndexNotFoundException.class));
+                    l.onFailure(e);
+                }).delegateFailure((l, r) -> fail("previous indexing is expected to throw IndexNotFoundException"))), task);
+            }
+        );
+
+        setReplicaCount(1, indexName);
+
+        logger.info("--> primary relocates from {} to {}", indexNode1, indexNode2);
+        updateIndexSettings(Settings.builder().put(INDEX_ROUTING_EXCLUDE_GROUP_SETTING.getKey() + "_name", indexNode1));
+        ensureYellow(indexName);
+        assertThat(internalCluster().nodesInclude(indexName), not(hasItem(indexNode1)));
+
+        logger.info("--> resume recovery commit registration");
+        waitForChangesOnIndexingSide.countDown();
+
+        // note that recovery registration should be successfully retried against new indexing node
+
+        ensureGreen(indexName);
+    }
+
+    public void testFailRecoveryCommitRegistrationIfIndexGetsDeleted() throws Exception {
+
+        var indexNode = startMasterAndIndexNode();
+
+        var indexName = randomIdentifier();
+        // do not retry recovery on allocation level
+        createIndex(indexName, indexSettings(1, 0).put(SETTING_ALLOCATION_MAX_RETRY.getKey(), 0).build());
+        ensureGreen(indexName);
+        int totalDocs = randomIntBetween(1, 10);
+        indexDocs(indexName, totalDocs);
+        flushAndRefresh(indexName);
+
+        var searchNode = startSearchNode();
+
+        var waitForChangesOnIndexingSide = new CountDownLatch(1);
+
+        var mockTransportServiceSearchNode = (MockTransportService) internalCluster().getInstance(TransportService.class, searchNode);
+        mockTransportServiceSearchNode.addSendBehavior((connection, requestId, action, request, options) -> {
+            if (action.equals(TransportRegisterCommitForRecoveryAction.NAME)) {
+                safeAwait(waitForChangesOnIndexingSide);
+            }
+            connection.sendRequest(requestId, action, request, options);
+        });
+
+        var mockTransportServiceIndexNode = (MockTransportService) internalCluster().getInstance(TransportService.class, indexNode);
+
+        mockTransportServiceIndexNode.addRequestHandlingBehavior(
+            TransportRegisterCommitForRecoveryAction.NAME,
+            (handler, request, channel, task) -> {
+                handler.messageReceived(request, new TestTransportChannel(new ChannelActionListener<>(channel).delegateResponse((l, e) -> {
+                    assertThat(e, instanceOf(IndexNotFoundException.class));
+                    l.onFailure(e);
+                }).delegateFailure((l, r) -> fail("Indexing node is expected to throw IndexNotFoundException"))), task);
+            }
+        );
+
+        setReplicaCount(1, indexName);
+
+        logger.info("--> removing index {}", indexName);
+        admin().indices().delete(new DeleteIndexRequest(indexName));
+        awaitClusterState(logger, indexNode, state -> state.getRoutingTable().index(indexName) == null);
+
+        logger.info("--> resume recovery commit registration");
+        waitForChangesOnIndexingSide.countDown();
+
+        // recovery failed at this point and cluster should not have any indices/shards
+        ensureGreen();
     }
 }

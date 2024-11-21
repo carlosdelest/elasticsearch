@@ -32,21 +32,20 @@ public class DefaultServerlessSettingsProvider extends DefaultSettingsProvider {
     @Override
     public Map<String, String> get(LocalClusterSpec.LocalNodeSpec nodeSpec) {
         Map<String, String> defaultSettings = super.get(nodeSpec);
-        initUploadDelayedSettings(defaultSettings);
+        initUploadMaxCommitsSettings(defaultSettings);
         EXCLUDED_SETTINGS.forEach(defaultSettings::remove);
         return defaultSettings;
     }
 
-    private Boolean uploadDelayed;
+    private boolean initialized;
     private int uploadMaxCommits;
 
-    private synchronized void initUploadDelayedSettings(Map<String, String> settings) {
-        if (uploadDelayed == null) {
+    private synchronized void initUploadMaxCommitsSettings(Map<String, String> settings) {
+        if (initialized == false) {
             final Random random = RandomizedContext.current().getRandom();
-            uploadDelayed = random.nextBoolean();
+            initialized = true;
             uploadMaxCommits = random.nextBoolean() ? random.nextInt(1, 10) : 100;
         }
-        settings.put("stateless.upload.delayed", String.valueOf(uploadDelayed));
         settings.put("stateless.upload.max_commits", String.valueOf(uploadMaxCommits));
     }
 }

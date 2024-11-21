@@ -17,7 +17,13 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
+import co.elastic.elasticsearch.metering.MockedClusterStateTestUtils;
+import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledShardInfos;
+import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
+import co.elastic.elasticsearch.metering.sampling.action.TransportCollectClusterSamplesActionTests;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
@@ -68,9 +74,10 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
-import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterState;
-import static co.elastic.elasticsearch.metering.action.TestTransportActionUtils.createMockClusterStateWithPersistentTask;
+import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.createMockClusterState;
+import static co.elastic.elasticsearch.metering.MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
+import static org.elasticsearch.cluster.metadata.IndexMetadata.INDEX_UUID_NA_VALUE;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
 import static org.elasticsearch.test.ClusterServiceUtils.setState;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -98,19 +105,20 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
     private TransportService transportService;
     private IndexNameExpressionResolver indexNameExpressionResolver;
-    private MeteringIndexInfoService meteringIndexInfoService;
+    private SampledClusterMetricsService clusterMetricsService;
 
     private class TestTransportGetMeteringStatsAction extends TransportGetMeteringStatsAction {
-        TestTransportGetMeteringStatsAction(TimeValue meteringShardInfoUpdatePeriod) {
+        TestTransportGetMeteringStatsAction(TimeValue meteringShardInfoUpdatePeriod, boolean projectUsesRaStorageMetric) {
             super(
                 GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
                 transportService,
                 new ActionFilters(Set.of()),
                 clusterService,
                 indexNameExpressionResolver,
-                meteringIndexInfoService,
+                clusterMetricsService,
                 transportService.getThreadPool().executor(TEST_THREAD_POOL_NAME),
-                meteringShardInfoUpdatePeriod
+                meteringShardInfoUpdatePeriod,
+                projectUsesRaStorageMetric
             );
         }
     }
@@ -142,7 +150,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     @BeforeClass
     public static void startThreadPool() {
         THREAD_POOL = new TestThreadPool(
-            TransportCollectMeteringShardInfoActionTests.class.getSimpleName(),
+            TransportCollectClusterSamplesActionTests.class.getSimpleName(),
             new ScalingExecutorBuilder(TEST_THREAD_POOL_NAME, 1, 1, TimeValue.timeValueSeconds(60), true)
         );
     }
@@ -151,13 +159,14 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     public void setUp() throws Exception {
         super.setUp();
         indexNameExpressionResolver = mock(IndexNameExpressionResolver.class);
-        meteringIndexInfoService = mock(MeteringIndexInfoService.class);
+        clusterMetricsService = mock(SampledClusterMetricsService.class);
         clusterService = createClusterService(THREAD_POOL);
     }
 
     private TestTransportGetMeteringStatsAction createActionAndInitTransport(
         CapturingTransport transport,
-        TimeValue meteringShardInfoUpdatePeriod
+        TimeValue meteringShardInfoUpdatePeriod,
+        boolean projectUsesRaStorageMetric
     ) {
         transportService = transport.createTransportService(
             clusterService.getSettings(),
@@ -169,7 +178,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         );
         transportService.start();
         transportService.acceptIncomingRequests();
-        return new TestTransportGetMeteringStatsAction(meteringShardInfoUpdatePeriod);
+        return new TestTransportGetMeteringStatsAction(meteringShardInfoUpdatePeriod, projectUsesRaStorageMetric);
     }
 
     @After
@@ -186,14 +195,14 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNoPersistentTaskNodeRetries() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(20));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(20), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
         when(task.isAssigned()).thenReturn(false, true);
-        when(task.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
+        when(task.getExecutorNode()).thenReturn(MockedClusterStateTestUtils.LOCAL_NODE_ID);
 
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
 
         createMockClusterState(
             clusterService,
@@ -212,7 +221,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNoPersistentTaskNodeEventuallyFails() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5), true);
         createMockClusterState(clusterService);
 
         var request = new GetMeteringStatsAction.Request();
@@ -230,7 +239,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
     public void testRequestExecutedOnPersistentTaskNode() throws InterruptedException, TimeoutException {
         var transport = new CapturingTransport();
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         createMockClusterStateWithPersistentTask(clusterService);
 
@@ -247,19 +256,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testRequestRoutedToPersistentTaskNode() throws InterruptedException, TimeoutException {
-        var node1Response = new GetMeteringStatsAction.Response(10L, 100L, Map.of(), Map.of(), Map.of());
-        var transport = new CapturingTransport() {
-            @Override
-            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
-                super.onSendRequest(requestId, action, request, node);
-                if (node.getId().equals("node_1")) {
-                    handleResponse(requestId, node1Response);
-                } else {
-                    handleError(requestId, new TransportException("invalid node"));
-                }
-            }
-        };
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
+        var transport = createMockCapturingTransport(new GetMeteringStatsAction.Response(10L, 100L, Map.of(), Map.of(), Map.of()));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         setState(clusterService, createMockClusterStateWithPersistentTask("node_1"));
 
@@ -297,7 +295,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 }
             }
         };
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
@@ -305,11 +303,14 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         // Simulate a change in PersistentTask node allocation
         when(task.getExecutorNode()).thenReturn("node_1", "node_2");
 
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
+        );
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -338,32 +339,23 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var node1Response = new GetMeteringStatsAction.Response(10L, 100L, Map.of(), Map.of(), Map.of());
         var node2Response = new GetMeteringStatsAction.Response(20L, 200L, Map.of(), Map.of(), Map.of());
 
-        var invocations = new AtomicInteger(0);
-        var transport = new CapturingTransport() {
-            @Override
-            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
-                super.onSendRequest(requestId, action, request, node);
-                var invocation = invocations.addAndGet(1);
-                if (invocation == 1) {
-                    handleResponse(requestId, node1Response);
-                } else {
-                    handleResponse(requestId, node2Response);
-                }
-            }
-        };
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20));
+        var transport = createMockCapturingTransport(node1Response, node2Response);
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(20), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
-        // Simulate assignement/unassignement/reassignement of PersistentTask node
+        // Simulate assignment/unassignment/reassignment of PersistentTask node
         when(task.isAssigned()).thenReturn(true, false, true);
         when(task.getExecutorNode()).thenReturn("node_1");
 
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
+        );
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -394,20 +386,22 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 handleResponse(requestId, node1Response);
             }
         };
-        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
-        var assignment = mock(PersistentTasksCustomMetadata.Assignment.class);
-        // Simulate assignement/unassignement of PersistentTask node
+        // Simulate assignment/unassignment of PersistentTask node
         when(task.isAssigned()).thenReturn(true, false);
         when(task.getExecutorNode()).thenReturn("node_1");
 
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
-        });
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
+        );
 
         var request = new GetMeteringStatsAction.Request();
         var listener = new TestGetMeteringStatsActionResponseListener();
@@ -428,45 +422,50 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testCreateResponseNoShards() {
-        var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(Map.of(), Set.of());
+        SampledShardInfos mockShardsInfo = mock(invocation -> ShardInfoMetrics.EMPTY);
+
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
         createMockClusterState(clusterService, 3, 2, b -> {});
 
-        var response = TransportGetMeteringStatsAction.createResponse(mockShardsInfo, clusterService.state(), new String[0]);
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[0]);
 
         assertThat(response.totalDocCount, is(0L));
         assertThat(response.totalSizeInBytes, is(0L));
     }
 
     public void testCreateResponseTwoIndices() {
-        var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), false);
+
+        var index1 = new Index("index1", INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
-        var index2 = new Index("index2", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index2 = new Index("index2", INDEX_UUID_NA_VALUE);
         var shardId2 = new ShardId(index2, 0);
 
-        var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
-            Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L))
-            ),
-            Set.of()
+        SampledShardInfos mockShardsInfo = mock();
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 10L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 20L).build()
         );
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.routingTable(
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.routingTable(
                 RoutingTable.builder()
                     .add(addLocalOnlyIndexRouting(index1, shardId1))
                     .add(addLocalOnlyIndexRouting(index2, shardId2))
                     .build()
-            );
-        });
-
-        var response = TransportGetMeteringStatsAction.createResponse(
-            mockShardsInfo,
-            clusterService.state(),
-            new String[] { "index1", "index2" }
+            )
         );
+
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
         assertThat(response.totalDocCount, is(300L));
         assertThat(response.totalSizeInBytes, is(30L));
@@ -477,19 +476,63 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(20L));
     }
 
-    public void testCreateResponseTwoIndicesOneDatastream() {
-        var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
+    public void testCreateResponseTwoIndicesRAStorageProject() {
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
+
+        var index1 = new Index("index1", INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
-        var index2 = new Index("index2", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index2 = new Index("index2", INDEX_UUID_NA_VALUE);
         var shardId2 = new ShardId(index2, 0);
 
-        var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
-            Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L))
-            ),
-            Set.of()
+        SampledShardInfos mockShardsInfo = mock();
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 11L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 22L).build()
+        );
+
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.routingTable(
+                RoutingTable.builder()
+                    .add(addLocalOnlyIndexRouting(index1, shardId1))
+                    .add(addLocalOnlyIndexRouting(index2, shardId2))
+                    .build()
+            )
+        );
+
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
+
+        assertThat(response.totalDocCount, is(300L));
+        assertThat(response.totalSizeInBytes, is(33L));
+        assertThat(response.indexToStatsMap, aMapWithSize(2));
+        assertThat(response.indexToStatsMap.get(index1.getName()).docCount(), is(100L));
+        assertThat(response.indexToStatsMap.get(index2.getName()).docCount(), is(200L));
+        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(11L));
+        assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(22L));
+    }
+
+    public void testCreateResponseTwoIndicesOneDatastream() {
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
+
+        var index1 = new Index("index1", INDEX_UUID_NA_VALUE);
+        var shardId1 = new ShardId(index1, 0);
+
+        var index2 = new Index("index2", INDEX_UUID_NA_VALUE);
+        var shardId2 = new ShardId(index2, 0);
+
+        SampledShardInfos mockShardsInfo = mock();
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 11L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 22L).build()
         );
 
         createMockClusterState(clusterService, 3, 2, b -> {
@@ -515,60 +558,60 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             );
         });
 
-        var response = TransportGetMeteringStatsAction.createResponse(
-            mockShardsInfo,
-            clusterService.state(),
-            new String[] { "index1", "index2" }
-        );
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
         assertThat(response.totalDocCount, is(300L));
-        assertThat(response.totalSizeInBytes, is(30L));
+        assertThat(response.totalSizeInBytes, is(33L));
         assertThat(response.indexToStatsMap, aMapWithSize(2));
         assertThat(response.datastreamToStatsMap, aMapWithSize(1));
         assertThat(response.indexToStatsMap.get(index1.getName()).docCount(), is(100L));
-        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(10L));
+        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(11L));
         assertThat(response.indexToStatsMap.get(index2.getName()).docCount(), is(200L));
         assertThat(response.datastreamToStatsMap.get("dataStream1").docCount(), is(200L));
-        assertThat(response.datastreamToStatsMap.get("dataStream1").sizeInBytes(), is(20L));
+        assertThat(response.datastreamToStatsMap.get("dataStream1").sizeInBytes(), is(22L));
         assertThat(response.indexToDatastreamMap, aMapWithSize(1));
         assertThat(response.indexToDatastreamMap.get(index2.getName()), equalTo("dataStream1"));
     }
 
     public void testNameFiltering() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5), true);
 
-        var index1 = new Index("foo1", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index1 = new Index("foo1", INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
-        var index2 = new Index("foo2", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index2 = new Index("foo2", INDEX_UUID_NA_VALUE);
         var shardId2 = new ShardId(index2, 0);
 
-        var index3 = new Index("bar", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index3 = new Index("bar", INDEX_UUID_NA_VALUE);
         var shardId3 = new ShardId(index3, 0);
 
-        var index4 = new Index("baz", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index4 = new Index("baz", INDEX_UUID_NA_VALUE);
         var shardId4 = new ShardId(index4, 0);
 
-        var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
-            Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L)),
-                Map.entry(shardId3, new MeteringShardInfo(30L, 300L, 0, 0, 30L)),
-                Map.entry(shardId4, new MeteringShardInfo(40L, 400L, 0, 0, 40L))
-            ),
-            Set.of()
+        SampledShardInfos mockShardsInfo = mock();
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 10L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 20L).build()
+        );
+        when(mockShardsInfo.get(shardId3)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(300L, 30L, 0L, 30L).build()
+        );
+        when(mockShardsInfo.get(shardId4)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(400L, 40L, 0L, 40L).build()
         );
 
         var query = new String[] { "foo*", "bar*" };
 
-        when(meteringIndexInfoService.getMeteringShardInfo()).thenReturn(mockShardsInfo);
+        when(clusterMetricsService.getMeteringShardInfo()).thenReturn(mockShardsInfo);
         when(indexNameExpressionResolver.concreteIndexNames(any(), any())).thenReturn(new String[] { "foo1", "foo2", "bar" });
         when(indexNameExpressionResolver.dataStreamNames(any(), any(), eq(query))).thenReturn(List.of());
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
         when(task.isAssigned()).thenReturn(true);
-        when(task.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+        when(task.getExecutorNode()).thenReturn(MockedClusterStateTestUtils.LOCAL_NODE_ID);
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
         createMockClusterState(clusterService, 3, 2, b -> {
             b.routingTable(
                 RoutingTable.builder()
@@ -605,42 +648,46 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testNameFilteringIncludesDatastreams() throws InterruptedException, TimeoutException {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5), true);
 
-        var index1 = new Index("foo1", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index1 = new Index("foo1", INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
-        var index2 = new Index("foo2", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index2 = new Index("foo2", INDEX_UUID_NA_VALUE);
         var shardId2 = new ShardId(index2, 0);
 
-        var index3 = new Index("bar", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index3 = new Index("bar", INDEX_UUID_NA_VALUE);
         var shardId3 = new ShardId(index3, 0);
 
-        var dataStreamIndex = new Index(".ds-foo2", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var dataStreamIndex = new Index(".ds-foo2", INDEX_UUID_NA_VALUE);
         var dsShardId = new ShardId(dataStreamIndex, 0);
 
-        var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
-            Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L)),
-                Map.entry(shardId3, new MeteringShardInfo(30L, 300L, 0, 0, 30L)),
-                Map.entry(dsShardId, new MeteringShardInfo(40L, 400L, 0, 0, 40L))
-            ),
-            Set.of()
+        SampledShardInfos mockShardsInfo = mock();
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 10L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 20L).build()
+        );
+        when(mockShardsInfo.get(shardId3)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(300L, 30L, 0L, 30L).build()
+        );
+        when(mockShardsInfo.get(dsShardId)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(400L, 40L, 0L, 40L).build()
         );
 
         var query = new String[] { "foo*" };
 
-        when(meteringIndexInfoService.getMeteringShardInfo()).thenReturn(mockShardsInfo);
+        when(clusterMetricsService.getMeteringShardInfo()).thenReturn(mockShardsInfo);
         when(indexNameExpressionResolver.concreteIndexNames(any(), any())).thenReturn(new String[] { "foo1", "foo2" });
         when(indexNameExpressionResolver.dataStreamNames(any(), any(), eq(query))).thenReturn(List.of("fooDs"));
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 
         when(task.isAssigned()).thenReturn(true);
-        when(task.getExecutorNode()).thenReturn(TestTransportActionUtils.LOCAL_NODE_ID);
+        when(task.getExecutorNode()).thenReturn(MockedClusterStateTestUtils.LOCAL_NODE_ID);
 
-        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(MeteringIndexInfoTask.TASK_NAME, task));
+        var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
 
         createMockClusterState(clusterService, 3, 2, b -> {
             b.routingTable(
@@ -692,22 +739,28 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testCreateResponseMultipleShards() {
-        var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
+
+        var index1 = new Index("index1", INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
-        var index2 = new Index("index2", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index2 = new Index("index2", INDEX_UUID_NA_VALUE);
         var shardId2 = new ShardId(index2, 0);
 
-        var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
-            Map.ofEntries(
-                Map.entry(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, 10L)),
-                Map.entry(shardId2, new MeteringShardInfo(20L, 200L, 0, 0, 20L))
-            ),
-            Set.of()
+        SampledShardInfos mockShardsInfo = mock();
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 11L).build()
+        );
+        when(mockShardsInfo.get(shardId2)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 22L).build()
         );
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.routingTable(
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.routingTable(
                 RoutingTable.builder()
                     .add(
                         IndexRoutingTable.builder(index1)
@@ -760,57 +813,56 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                             .build()
                     )
                     .build()
-            );
-        });
-
-        var response = TransportGetMeteringStatsAction.createResponse(
-            mockShardsInfo,
-            clusterService.state(),
-            new String[] { "index1", "index2" }
+            )
         );
 
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
+
         assertThat(response.totalDocCount, is(300L));
-        assertThat(response.totalSizeInBytes, is(30L));
+        assertThat(response.totalSizeInBytes, is(33L));
         assertThat(response.indexToStatsMap, aMapWithSize(2));
         assertThat(response.indexToStatsMap.get(index1.getName()).docCount(), is(100L));
         assertThat(response.indexToStatsMap.get(index2.getName()).docCount(), is(200L));
-        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(10L));
-        assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(20L));
+        assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(11L));
+        assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(22L));
     }
 
     public void testCreateResponseShardsWithoutInfo() {
-        var index1 = new Index("index1", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var transport = new CapturingTransport();
+        var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), false);
+
+        var index1 = new Index("index1", INDEX_UUID_NA_VALUE);
         var shardId1 = new ShardId(index1, 0);
 
-        var index2 = new Index("index2", IndexMetadata.INDEX_UUID_NA_VALUE);
+        var index2 = new Index("index2", INDEX_UUID_NA_VALUE);
         var shardId2 = new ShardId(index2, 0);
 
-        var mockShardsInfo = new MeteringIndexInfoService.CollectedMeteringShardInfo(
-            Map.of(shardId1, new MeteringShardInfo(10L, 100L, 0, 0, null)),
-            Set.of()
+        SampledShardInfos mockShardsInfo = mock();
+        when(mockShardsInfo.get(any())).thenReturn(ShardInfoMetrics.EMPTY);
+        when(mockShardsInfo.get(shardId1)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 0).build()
         );
 
-        createMockClusterState(clusterService, 3, 2, b -> {
-            b.routingTable(
+        createMockClusterState(
+            clusterService,
+            3,
+            2,
+            b -> b.routingTable(
                 RoutingTable.builder()
                     .add(addLocalOnlyIndexRouting(index1, shardId1))
                     .add(addLocalOnlyIndexRouting(index2, shardId2))
                     .build()
-            );
-        });
-
-        var response = TransportGetMeteringStatsAction.createResponse(
-            mockShardsInfo,
-            clusterService.state(),
-            new String[] { "index1", "index2" }
+            )
         );
+
+        var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[] { "index1", "index2" });
 
         assertThat(response.totalDocCount, is(100L));
         assertThat(response.totalSizeInBytes, is(10L));
     }
 
     public void testPersistentTaskNodeTransportActionTimeout() {
-        var action = createActionAndInitTransport(new CapturingTransport(), MINIMUM_METERING_INFO_UPDATE_PERIOD);
+        var action = createActionAndInitTransport(new CapturingTransport(), MINIMUM_METERING_INFO_UPDATE_PERIOD, true);
 
         var timeout1 = action.getPersistentTaskNodeTransportActionTimeout();
         action.setMeteringShardInfoUpdatePeriod(TimeValue.ZERO);
@@ -824,7 +876,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     }
 
     public void testInitialRetryBackoffPeriod() {
-        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5));
+        var action = createActionAndInitTransport(new CapturingTransport(), TimeValue.timeValueSeconds(5), true);
 
         var period1 = action.getInitialRetryBackoffPeriod(TimeValue.ZERO);
         var period2 = action.getInitialRetryBackoffPeriod(TimeValue.timeValueSeconds(20));
@@ -857,5 +909,39 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 )
             )
             .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    private static CapturingTransport createMockCapturingTransport(GetMeteringStatsAction.Response node1Response) {
+
+        return new CapturingTransport() {
+            @Override
+            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
+                super.onSendRequest(requestId, action, request, node);
+                if (node.getId().equals("node_1")) {
+                    handleResponse(requestId, node1Response);
+                } else {
+                    handleError(requestId, new TransportException("invalid node"));
+                }
+            }
+        };
+    }
+
+    private static CapturingTransport createMockCapturingTransport(
+        GetMeteringStatsAction.Response node1Response,
+        GetMeteringStatsAction.Response node2Response
+    ) {
+        var invocations = new AtomicInteger(0);
+        return new CapturingTransport() {
+            @Override
+            protected void onSendRequest(long requestId, String action, TransportRequest request, DiscoveryNode node) {
+                super.onSendRequest(requestId, action, request, node);
+                var invocation = invocations.addAndGet(1);
+                if (invocation == 1) {
+                    handleResponse(requestId, node1Response);
+                } else {
+                    handleResponse(requestId, node2Response);
+                }
+            }
+        };
     }
 }

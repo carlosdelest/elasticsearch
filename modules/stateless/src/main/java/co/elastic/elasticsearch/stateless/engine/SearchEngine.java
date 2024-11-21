@@ -66,8 +66,10 @@ import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
@@ -216,8 +218,9 @@ public class SearchEngine extends Engine {
     }
 
     PrimaryTermAndGeneration getCurrentPrimaryTermAndGeneration() {
-        assert this.currentPrimaryTermGeneration.generation() > 0 : currentPrimaryTermGeneration;
-        return this.currentPrimaryTermGeneration;
+        var current = this.currentPrimaryTermGeneration;
+        assert current.generation() > 0 : current;
+        return current;
     }
 
     // visible for testing
@@ -226,11 +229,16 @@ public class SearchEngine extends Engine {
     }
 
     public Set<PrimaryTermAndGeneration> getAcquiredPrimaryTermAndGenerations() {
+        // capture the term/gen used by opened Lucene generational files
+        final var termAndGens = new HashSet<>(directory.getAcquiredGenerationalFileTermAndGenerations());
         // CHM iterators are weakly consistent, meaning that we're not guaranteed to see new insertions while we compute
         // the set of remaining open reader referenced BCCs, that's why we use a regular HashMap with synchronized.
         synchronized (openReaders) {
-            return openReaders.values().stream().flatMap(openReader -> openReader.referencedBCCs().stream()).collect(Collectors.toSet());
+            for (var openReader : openReaders.values()) {
+                termAndGens.addAll(openReader.referencedBCCs());
+            }
         }
+        return Collections.unmodifiableSet(termAndGens);
     }
 
     /**
@@ -248,7 +256,8 @@ public class SearchEngine extends Engine {
             notification.clusterStateVersion()
         );
         var ccTermAndGen = notification.compoundCommit().primaryTermAndGeneration();
-        directory.updateLatestUploadInfo(notification.latestUploadedBatchedCompoundCommitTermAndGen(), ccTermAndGen, notification.nodeId());
+        directory.updateLatestUploadedBcc(notification.latestUploadedBatchedCompoundCommitTermAndGen());
+        directory.updateLatestCommitInfo(ccTermAndGen, notification.nodeId());
         if (addOrExecuteSegmentGenerationListener(ccTermAndGen, listener.map(g -> null))) {
             commitNotifications.add(notification);
             if (pendingCommitNotifications.incrementAndGet() == 1) {
@@ -467,12 +476,12 @@ public class SearchEngine extends Engine {
 
     private void setSequenceNumbers(SegmentInfos segmentInfos) {
         final var commit = SequenceNumbers.loadSeqNoInfoFromLuceneCommit(segmentInfos.userData.entrySet());
-        assert commit.maxSeqNo >= maxSequenceNumber
+        assert commit.maxSeqNo() >= maxSequenceNumber
             : "Commit [" + commit + "] max sequence number less than tracked max sequence number [" + maxSequenceNumber + "]";
-        maxSequenceNumber = commit.maxSeqNo;
-        assert commit.localCheckpoint >= processedLocalCheckpoint
+        maxSequenceNumber = commit.maxSeqNo();
+        assert commit.localCheckpoint() >= processedLocalCheckpoint
             : "Commit [" + commit + "] local checkpoint less than tracked local checkpoint [" + processedLocalCheckpoint + "]";
-        processedLocalCheckpoint = commit.localCheckpoint;
+        processedLocalCheckpoint = commit.localCheckpoint();
     }
 
     @Override
@@ -543,6 +552,8 @@ public class SearchEngine extends Engine {
 
     @Override
     public long getLastSyncedGlobalCheckpoint() {
+        // The indexing shard sends data to the search shard only after they are fully persisted on the object store. So using the processed
+        // local checkpoint is fine. If it is a bit behind, a new refresh will ultimately make the search shard catch up.
         return processedLocalCheckpoint;
     }
 
@@ -662,7 +673,7 @@ public class SearchEngine extends Engine {
     public SeqNoStats getSeqNoStats(long globalCheckpoint) {
         var segmentInfos = segmentInfosAndCommit.segmentInfos();
         var commitInfo = getSequenceNumbersCommitInfo(segmentInfos);
-        return new SeqNoStats(commitInfo.maxSeqNo, commitInfo.localCheckpoint, config().getGlobalCheckpointSupplier().getAsLong());
+        return new SeqNoStats(commitInfo.maxSeqNo(), commitInfo.localCheckpoint(), config().getGlobalCheckpointSupplier().getAsLong());
     }
 
     @Override
@@ -752,7 +763,28 @@ public class SearchEngine extends Engine {
 
     @Override
     public IndexCommitRef acquireLastIndexCommit(boolean flushFirst) throws EngineException {
-        return null;
+        if (flushFirst) {
+            // there might be uncommitted changes on the indexing nodes.
+            throw new IllegalArgumentException("Search engine does not support acquiring last index commit with flush_first");
+        }
+        Searcher searcher = acquireSearcher("acquire_last_commit");
+        try {
+            final IndexCommit indexCommit;
+            try {
+                indexCommit = searcher.getDirectoryReader().getIndexCommit();
+            } catch (IOException e) {
+                throw new EngineException(shardId, "failed to get index commit from searcher", e);
+            }
+            if (indexCommit == null) {
+                assert false : "searcher from search engine should have index commit";
+                throw new EngineException(shardId, "searcher from search engine should have index commit");
+            }
+            var indexCommitRef = new IndexCommitRef(indexCommit, searcher::close);
+            searcher = null;
+            return indexCommitRef;
+        } finally {
+            Releasables.close(searcher);
+        }
     }
 
     @Override
@@ -764,7 +796,7 @@ public class SearchEngine extends Engine {
     public SafeCommitInfo getSafeCommitInfo() {
         var segmentInfos = segmentInfosAndCommit.segmentInfos();
         var sequenceNumbersCommitInfo = getSequenceNumbersCommitInfo(segmentInfos);
-        return new SafeCommitInfo(sequenceNumbersCommitInfo.localCheckpoint, segmentInfos.totalMaxDoc());
+        return new SafeCommitInfo(sequenceNumbersCommitInfo.localCheckpoint(), segmentInfos.totalMaxDoc());
     }
 
     @Override
@@ -820,6 +852,13 @@ public class SearchEngine extends Engine {
     @Override
     public void addPrimaryTermAndGenerationListener(long minPrimaryTerm, long minGeneration, ActionListener<Long> listener) {
         addOrExecuteSegmentGenerationListener(new PrimaryTermAndGeneration(minPrimaryTerm, minGeneration), listener);
+    }
+
+    public void afterRecovery() throws IOException {
+        // Wait-for-checkpoint search requests rely on adding a refresh listener. RefreshListeners.addOrNotify() depends on
+        // checking the lastRefreshedCheckpoint, which unfortunately is not set on a new search shard. For this reason, we
+        // refresh the reader manager for a new search shard to ensure the lastRefreshedCheckpoint is updated.
+        readerManager.maybeRefreshBlocking();
     }
 
     /**

@@ -20,21 +20,26 @@
 package co.elastic.elasticsearch.stateless;
 
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
+import co.elastic.elasticsearch.stateless.action.TransportFetchShardCommitsInUseAction;
 import co.elastic.elasticsearch.stateless.action.TransportGetVirtualBatchedCompoundCommitChunkAction;
 import co.elastic.elasticsearch.stateless.action.TransportNewCommitNotificationAction;
 import co.elastic.elasticsearch.stateless.allocation.StatelessAllocationDecider;
 import co.elastic.elasticsearch.stateless.allocation.StatelessExistingShardsAllocator;
 import co.elastic.elasticsearch.stateless.allocation.StatelessIndexSettingProvider;
 import co.elastic.elasticsearch.stateless.allocation.StatelessShardRoutingRoleStrategy;
+import co.elastic.elasticsearch.stateless.api.DocValuesFormatFactory;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsProvider;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader;
 import co.elastic.elasticsearch.stateless.autoscaling.indexing.AverageWriteLoadSampler;
 import co.elastic.elasticsearch.stateless.autoscaling.indexing.IngestLoadProbe;
 import co.elastic.elasticsearch.stateless.autoscaling.indexing.IngestLoadPublisher;
 import co.elastic.elasticsearch.stateless.autoscaling.indexing.IngestLoadSampler;
 import co.elastic.elasticsearch.stateless.autoscaling.indexing.IngestMetricsService;
 import co.elastic.elasticsearch.stateless.autoscaling.indexing.TransportPublishNodeIngestLoadMetric;
-import co.elastic.elasticsearch.stateless.autoscaling.memory.IndicesMappingSizeCollector;
-import co.elastic.elasticsearch.stateless.autoscaling.memory.IndicesMappingSizePublisher;
+import co.elastic.elasticsearch.stateless.autoscaling.memory.HeapMemoryUsagePublisher;
 import co.elastic.elasticsearch.stateless.autoscaling.memory.MemoryMetricsService;
+import co.elastic.elasticsearch.stateless.autoscaling.memory.ShardsMappingSizeCollector;
 import co.elastic.elasticsearch.stateless.autoscaling.memory.TransportPublishHeapMemoryMetrics;
 import co.elastic.elasticsearch.stateless.autoscaling.search.ReplicasUpdaterService;
 import co.elastic.elasticsearch.stateless.autoscaling.search.SearchMetricsService;
@@ -62,19 +67,25 @@ import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessHeartbea
 import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessPersistedClusterStateService;
 import co.elastic.elasticsearch.stateless.cluster.coordination.TransportConsistentClusterStateReadAction;
 import co.elastic.elasticsearch.stateless.commits.ClosedShardService;
+import co.elastic.elasticsearch.stateless.commits.GetVirtualBatchedCompoundCommitChunksPressure;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitCleaner;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
+import co.elastic.elasticsearch.stateless.engine.MergeMetrics;
 import co.elastic.elasticsearch.stateless.engine.RefreshThrottler;
 import co.elastic.elasticsearch.stateless.engine.RefreshThrottlingService;
 import co.elastic.elasticsearch.stateless.engine.SearchEngine;
+import co.elastic.elasticsearch.stateless.engine.ThreadPoolMergeScheduler;
+import co.elastic.elasticsearch.stateless.engine.translog.TranslogRecoveryMetrics;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
+import co.elastic.elasticsearch.stateless.lucene.IndexBlobStoreCacheDirectory;
 import co.elastic.elasticsearch.stateless.lucene.IndexDirectory;
 import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
 import co.elastic.elasticsearch.stateless.lucene.StatelessCommitRef;
 import co.elastic.elasticsearch.stateless.lucene.stats.GetAllShardSizesAction;
 import co.elastic.elasticsearch.stateless.lucene.stats.GetShardSizeAction;
 import co.elastic.elasticsearch.stateless.lucene.stats.ShardSizeStatsClient;
+import co.elastic.elasticsearch.stateless.lucene.stats.ShardSizeStatsReaderImpl;
 import co.elastic.elasticsearch.stateless.metering.GetBlobStoreStatsRestHandler;
 import co.elastic.elasticsearch.stateless.metering.action.GetBlobStoreStatsNodesResponse;
 import co.elastic.elasticsearch.stateless.metering.action.TransportGetBlobStoreStatsAction;
@@ -100,9 +111,15 @@ import co.elastic.elasticsearch.stateless.xpack.DummyVotingOnlyUsageTransportAct
 import co.elastic.elasticsearch.stateless.xpack.DummyWatcherInfoTransportAction;
 import co.elastic.elasticsearch.stateless.xpack.DummyWatcherUsageTransportAction;
 
+import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.codecs.DocValuesFormat;
+import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.index.IndexCommit;
+import org.apache.lucene.search.ReferenceManager;
+import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.ActionType;
@@ -123,6 +140,7 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RecoverySource;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingRoleStrategy;
+import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.ExistingShardsAllocator;
 import org.elasticsearch.cluster.routing.allocation.allocator.BalancedShardsAllocator;
 import org.elasticsearch.cluster.routing.allocation.decider.AllocationDecider;
@@ -136,6 +154,7 @@ import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.common.settings.SettingsModule;
+import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.Releasables;
@@ -148,6 +167,7 @@ import org.elasticsearch.health.HealthIndicatorService;
 import org.elasticsearch.index.IndexModule;
 import org.elasticsearch.index.IndexSettingProvider;
 import org.elasticsearch.index.IndexSettings;
+import org.elasticsearch.index.codec.CodecProvider;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.EngineConfig;
 import org.elasticsearch.index.engine.EngineFactory;
@@ -157,6 +177,7 @@ import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.store.Store;
 import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.indices.recovery.RecoverySettings;
 import org.elasticsearch.indices.recovery.StatelessPrimaryRelocationAction;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -179,6 +200,7 @@ import org.elasticsearch.repositories.blobstore.BlobStoreRepository;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.telemetry.TelemetryProvider;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.threadpool.ExecutorBuilder;
 import org.elasticsearch.threadpool.ScalingExecutorBuilder;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -190,14 +212,15 @@ import org.elasticsearch.xpack.core.rollup.action.GetRollupIndexCapsAction;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -249,13 +272,20 @@ public class Stateless extends Plugin
         + CLUSTER_STATE_READ_WRITE_THREAD_POOL
         + "_thread_pool";
     public static final String GET_VIRTUAL_BATCHED_COMPOUND_COMMIT_CHUNK_THREAD_POOL = "stateless_get_vbcc_chunk";
+    public static final String FILL_VIRTUAL_BATCHED_COMPOUND_COMMIT_CACHE_THREAD_POOL = "stateless_fill_vbcc_cache";
     public static final String GET_VIRTUAL_BATCHED_COMPOUND_COMMIT_CHUNK_THREAD_POOL_SETTING = "stateless."
         + GET_VIRTUAL_BATCHED_COMPOUND_COMMIT_CHUNK_THREAD_POOL
         + "_thread_pool";
+    public static final String FILL_VIRTUAL_BATCHED_COMPOUND_COMMIT_CHUNK_THREAD_POOL_SETTING = "stateless."
+        + FILL_VIRTUAL_BATCHED_COMPOUND_COMMIT_CACHE_THREAD_POOL
+        + "_thread_pool";
     public static final String PREWARM_THREAD_POOL = BlobStoreRepository.STATELESS_SHARD_PREWARMING_THREAD_NAME;
     public static final String PREWARM_THREAD_POOL_SETTING = "stateless." + PREWARM_THREAD_POOL + "_thread_pool";
+    public static final String MERGE_THREAD_POOL = "stateless.merge";
+    public static final String MERGE_THREAD_POOL_SETTING = "stateless." + MERGE_THREAD_POOL + "_thread_pool";
 
     public static final Set<DiscoveryNodeRole> STATELESS_ROLES = Set.of(DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.SEARCH_ROLE);
+    private final SetOnce<ThreadPool> threadPool = new SetOnce<>();
     private final SetOnce<StatelessCommitService> commitService = new SetOnce<>();
     private final SetOnce<ClosedShardService> closedShardService = new SetOnce<>();
     private final SetOnce<ObjectStoreService> objectStoreService = new SetOnce<>();
@@ -264,14 +294,19 @@ public class Stateless extends Plugin
     private final SetOnce<SharedBlobCacheWarmingService> sharedBlobCacheWarmingService = new SetOnce<>();
     private final SetOnce<BlobStoreHealthIndicator> blobStoreHealthIndicator = new SetOnce<>();
     private final SetOnce<TranslogReplicator> translogReplicator = new SetOnce<>();
+    private final SetOnce<TranslogRecoveryMetrics> translogReplicatorMetrics = new SetOnce<>();
+    private final SetOnce<MergeMetrics> mergeMetrics = new SetOnce<>();
     private final SetOnce<StatelessElectionStrategy> electionStrategy = new SetOnce<>();
     private final SetOnce<StoreHeartbeatService> storeHeartbeatService = new SetOnce<>();
     private final SetOnce<RefreshThrottlingService> refreshThrottlingService = new SetOnce<>();
     private final SetOnce<ShardSizeCollector> shardSizeCollector = new SetOnce<>();
-    private final SetOnce<IndicesMappingSizeCollector> indicesMappingSizeCollector = new SetOnce<>();
+    private final SetOnce<ShardsMappingSizeCollector> shardsMappingSizeCollector = new SetOnce<>();
     private final SetOnce<RecoveryCommitRegistrationHandler> recoveryCommitRegistrationHandler = new SetOnce<>();
     private final SetOnce<RecoveryMetricsCollector> recoveryMetricsCollector = new SetOnce<>();
     private final SetOnce<DocumentParsingProvider> documentParsingProvider = new SetOnce<>();
+    private final SetOnce<BlobCacheMetrics> blobCacheMetrics = new SetOnce<>();
+    private final SetOnce<IndicesService> indicesService = new SetOnce<>();
+    private final SetOnce<Predicate<ShardId>> skipMerges = new SetOnce<>();
     private final boolean sharedCachedSettingExplicitlySet;
 
     private final boolean sharedCacheMmapExplicitlySet;
@@ -280,6 +315,9 @@ public class Stateless extends Plugin
     private final boolean hasIndexRole;
     private final ProjectType projectType;
     private final StatelessIndexSettingProvider statelessIndexSettingProvider;
+
+    // visible for testing
+    protected Function<Codec, Codec> codecWrapper = Function.identity();
 
     private ObjectStoreService getObjectStoreService() {
         return Objects.requireNonNull(this.objectStoreService.get());
@@ -330,6 +368,7 @@ public class Stateless extends Plugin
             new ActionHandler<>(CLEAR_BLOB_CACHE_ACTION, TransportClearBlobCacheAction.class),
             new ActionHandler<>(GET_BLOB_STORE_STATS_ACTION, TransportGetBlobStoreStatsAction.class),
             new ActionHandler<>(TransportNewCommitNotificationAction.TYPE, TransportNewCommitNotificationAction.class),
+            new ActionHandler<>(TransportFetchShardCommitsInUseAction.TYPE, TransportFetchShardCommitsInUseAction.class),
             new ActionHandler<>(
                 TransportGetVirtualBatchedCompoundCommitChunkAction.TYPE,
                 TransportGetVirtualBatchedCompoundCommitChunkAction.class
@@ -385,6 +424,9 @@ public class Stateless extends Plugin
             throw new IllegalArgumentException("Directly setting [" + nodeMemoryAttrName + "] is not permitted - it is reserved.");
         }
         settings.put(CLUSTER_ROUTING_ALLOCATION_DISK_THRESHOLD_ENABLED_SETTING.getKey(), false);
+        // Explicitly disable the recovery source, as it is not needed in stateless mode.
+        settings.put(RecoverySettings.INDICES_RECOVERY_SOURCE_ENABLED_SETTING.getKey(), false);
+        settings.put("cluster.logsdb.enabled", true);
         return settings.build();
     }
 
@@ -392,10 +434,14 @@ public class Stateless extends Plugin
     public Collection<Object> createComponents(PluginServices services) {
         Client client = services.client();
         ClusterService clusterService = services.clusterService();
-        ThreadPool threadPool = services.threadPool();
+        ThreadPool threadPool = setAndGet(this.threadPool, services.threadPool());
         Environment environment = services.environment();
         NodeEnvironment nodeEnvironment = services.nodeEnvironment();
-        IndicesService indicesService = services.indicesService();
+        IndicesService indicesService = setAndGet(this.indicesService, services.indicesService());
+        final var blobCacheMetrics = setAndGet(
+            this.blobCacheMetrics,
+            new BlobCacheMetrics(services.telemetryProvider().getMeterRegistry())
+        );
 
         final Collection<Object> components = new ArrayList<>();
         // use the settings that include additional settings.
@@ -404,11 +450,13 @@ public class Stateless extends Plugin
             this.objectStoreService,
             createObjectStoreService(settings, services.repositoriesService(), threadPool, clusterService)
         );
-        components.add(objectStoreService);
-        var cacheService = createSharedBlobCacheService(services, nodeEnvironment, settings, threadPool);
+        var cacheService = createSharedBlobCacheService(nodeEnvironment, settings, threadPool, blobCacheMetrics);
         var sharedBlobCacheServiceSupplier = new SharedBlobCacheServiceSupplier(setAndGet(this.sharedBlobCacheService, cacheService));
         components.add(sharedBlobCacheServiceSupplier);
-        var cacheBlobReaderService = setAndGet(this.cacheBlobReaderService, new CacheBlobReaderService(settings, cacheService, client));
+        var cacheBlobReaderService = setAndGet(
+            this.cacheBlobReaderService,
+            new CacheBlobReaderService(settings, cacheService, client, threadPool)
+        );
         components.add(cacheBlobReaderService);
         var statelessElectionStrategy = setAndGet(
             this.electionStrategy,
@@ -435,7 +483,9 @@ public class Stateless extends Plugin
             clusterService,
             client,
             commitCleaner,
-            cacheWarmingService
+            cacheService,
+            cacheWarmingService,
+            services.telemetryProvider()
         );
         components.add(commitService);
         var clusterStateCleanupService = new StatelessClusterStateCleanupService(threadPool, objectStoreService, clusterService);
@@ -451,27 +501,42 @@ public class Stateless extends Plugin
             this.translogReplicator,
             new TranslogReplicator(threadPool, settings, objectStoreService, consistencyService)
         );
-        components.add(translogReplicator);
+        setAndGet(this.translogReplicatorMetrics, new TranslogRecoveryMetrics(services.telemetryProvider().getMeterRegistry()));
+        setAndGet(this.mergeMetrics, new MergeMetrics(services.telemetryProvider().getMeterRegistry()));
+        components.add(new StatelessComponents(translogReplicator, objectStoreService));
+
+        var indexShardCacheWarmer = new IndexShardCacheWarmer(
+            objectStoreService,
+            cacheWarmingService,
+            threadPool,
+            commitService.useReplicatedRanges()
+        );
+        components.add(indexShardCacheWarmer);
+
         var refreshThrottlingService = setAndGet(this.refreshThrottlingService, new RefreshThrottlingService(settings, clusterService));
         components.add(refreshThrottlingService);
 
         // autoscaling
         // memory
-        var indexMappingSizePublisher = new IndicesMappingSizePublisher(client);
-        var indicesMappingSizeCollector = setAndGet(
-            this.indicesMappingSizeCollector,
-            IndicesMappingSizeCollector.create(
-                hasIndexRole,
-                clusterService,
-                indicesService,
-                indexMappingSizePublisher,
-                threadPool,
-                settings
-            )
+        var heapMemoryUsagePublisher = new HeapMemoryUsagePublisher(client);
+        var shardsMappingSizeCollector = setAndGet(
+            this.shardsMappingSizeCollector,
+            ShardsMappingSizeCollector.create(hasIndexRole, clusterService, indicesService, heapMemoryUsagePublisher, threadPool, settings)
         );
-        components.add(indicesMappingSizeCollector);
+        components.add(shardsMappingSizeCollector);
 
-        var memoryMetricsService = new MemoryMetricsService(threadPool::relativeTimeInNanos, clusterService.getClusterSettings());
+        var vbccChunksPressure = createVirtualBatchedCompoundCommitChunksPressure(
+            settings,
+            services.telemetryProvider().getMeterRegistry()
+        );
+        components.add(vbccChunksPressure);
+
+        ProjectType projectType = ServerlessSharedSettings.PROJECT_TYPE.get(settings);
+        var memoryMetricsService = new MemoryMetricsService(
+            threadPool::relativeTimeInNanos,
+            clusterService.getClusterSettings(),
+            projectType
+        );
         clusterService.addListener(memoryMetricsService);
         components.add(memoryMetricsService);
 
@@ -495,11 +560,15 @@ public class Stateless extends Plugin
         var ingestMetricService = new IngestMetricsService(
             clusterService.getClusterSettings(),
             threadPool::relativeTimeInNanos,
-            memoryMetricsService
+            memoryMetricsService,
+            services.telemetryProvider().getMeterRegistry()
         );
         clusterService.addListener(ingestMetricService);
         components.add(ingestMetricService);
 
+        components.add(
+            new PluginComponentBinding<>(ShardSizeStatsReader.class, new ShardSizeStatsReaderImpl(clusterService, indicesService))
+        );
         final ShardSizeCollector shardSizeCollector;
         if (hasSearchRole) {
             var averageSearchLoadSampler = AverageSearchLoadSampler.create(threadPool, settings, clusterService.getClusterSettings());
@@ -515,15 +584,12 @@ public class Stateless extends Plugin
             );
             clusterService.addListener(searchLoadSampler);
             components.add(searchLoadSampler);
-            var searchShardSizeCollector = new SearchShardSizeCollector(
-                clusterService.getClusterSettings(),
-                threadPool,
-                new ShardSizeStatsClient(client),
-                new ShardSizesPublisher(client)
-            );
+            var searchShardSizeCollector = createSearchShardSizeCollector(clusterService.getClusterSettings(), threadPool, client);
             clusterService.addListener(searchShardSizeCollector);
+            components.add(new PluginComponentBinding<>(ShardSizeStatsProvider.class, searchShardSizeCollector));
             shardSizeCollector = searchShardSizeCollector;
         } else {
+            components.add(new PluginComponentBinding<>(ShardSizeStatsProvider.class, ShardSizeStatsProvider.NOOP));
             shardSizeCollector = ShardSizeCollector.NOOP;
         }
         components.add(new PluginComponentBinding<>(ShardSizeCollector.class, setAndGet(this.shardSizeCollector, shardSizeCollector)));
@@ -553,7 +619,16 @@ public class Stateless extends Plugin
         );
         components.add(setAndGet(recoveryMetricsCollector, new RecoveryMetricsCollector(services.telemetryProvider())));
         documentParsingProvider.set(services.documentParsingProvider());
+        skipMerges.set(new ShouldSkipMerges(indicesService));
         return components;
+    }
+
+    protected SearchShardSizeCollector createSearchShardSizeCollector(
+        ClusterSettings clusterSettings,
+        ThreadPool threadPool,
+        Client client
+    ) {
+        return new SearchShardSizeCollector(clusterSettings, threadPool, new ShardSizeStatsClient(client), new ShardSizesPublisher(client));
     }
 
     protected ObjectStoreService createObjectStoreService(
@@ -566,18 +641,12 @@ public class Stateless extends Plugin
     }
 
     protected StatelessSharedBlobCacheService createSharedBlobCacheService(
-        PluginServices services,
         NodeEnvironment nodeEnvironment,
         Settings settings,
-        ThreadPool threadPool
+        ThreadPool threadPool,
+        BlobCacheMetrics blobCacheMetrics
     ) {
-        return new StatelessSharedBlobCacheService(
-            nodeEnvironment,
-            settings,
-            threadPool,
-            SHARD_READ_THREAD_POOL,
-            new BlobCacheMetrics(services.telemetryProvider().getMeterRegistry())
-        );
+        return new StatelessSharedBlobCacheService(nodeEnvironment, settings, threadPool, blobCacheMetrics);
     }
 
     public SharedBlobCacheWarmingService getSharedBlobCacheWarmingService() {
@@ -620,7 +689,11 @@ public class Stateless extends Plugin
         final int clusterStateReadWriteMaxThreads;
         final int getVirtualBatchedCompoundCommitChunkCoreThreads;
         final int getVirtualBatchedCompoundCommitChunkMaxThreads;
+        final int fillVirtualBatchedCompoundCommitCacheCoreThreads;
+        final int fillVirtualBatchedCompoundCommitCacheMaxThreads;
         final int prewarmMaxThreads = Math.min(processors * 4, 32);
+        final int mergeCoreThreads;
+        final int mergeMaxThreads;
 
         if (hasIndexRole) {
             shardReadMaxThreads = Math.min(processors * 4, 10);
@@ -632,6 +705,10 @@ public class Stateless extends Plugin
             clusterStateReadWriteMaxThreads = 4;
             getVirtualBatchedCompoundCommitChunkCoreThreads = 1;
             getVirtualBatchedCompoundCommitChunkMaxThreads = Math.min(processors, 4);
+            fillVirtualBatchedCompoundCommitCacheCoreThreads = 0;
+            fillVirtualBatchedCompoundCommitCacheMaxThreads = 1;
+            mergeCoreThreads = 1;
+            mergeMaxThreads = processors;
         } else {
             shardReadMaxThreads = Math.min(processors * 4, 28);
             translogCoreThreads = 0;
@@ -642,6 +719,12 @@ public class Stateless extends Plugin
             clusterStateReadWriteMaxThreads = 1;
             getVirtualBatchedCompoundCommitChunkCoreThreads = 0;
             getVirtualBatchedCompoundCommitChunkMaxThreads = 1;
+            // these threads use a sizeable thread-local direct buffer which might take a while to GC, so we prefer to keep some idle
+            // threads around to reduce churn and re-use the existing buffers more
+            fillVirtualBatchedCompoundCommitCacheCoreThreads = Math.max(processors / 2, 2);
+            fillVirtualBatchedCompoundCommitCacheMaxThreads = Math.max(processors, 2);
+            mergeCoreThreads = 0;
+            mergeMaxThreads = 1;
         }
 
         return new ExecutorBuilder<?>[] {
@@ -687,6 +770,14 @@ public class Stateless extends Plugin
                 GET_VIRTUAL_BATCHED_COMPOUND_COMMIT_CHUNK_THREAD_POOL_SETTING
             ),
             new ScalingExecutorBuilder(
+                FILL_VIRTUAL_BATCHED_COMPOUND_COMMIT_CACHE_THREAD_POOL,
+                fillVirtualBatchedCompoundCommitCacheCoreThreads,
+                fillVirtualBatchedCompoundCommitCacheMaxThreads,
+                TimeValue.timeValueMinutes(5),
+                true,
+                FILL_VIRTUAL_BATCHED_COMPOUND_COMMIT_CHUNK_THREAD_POOL_SETTING
+            ),
+            new ScalingExecutorBuilder(
                 PREWARM_THREAD_POOL,
                 // these threads use a sizeable thread-local direct buffer which might take a while to GC, so we prefer to keep some idle
                 // threads around to reduce churn and re-use the existing buffers more
@@ -695,7 +786,15 @@ public class Stateless extends Plugin
                 TimeValue.timeValueMinutes(5),
                 true,
                 PREWARM_THREAD_POOL_SETTING
-            ) };
+            ),
+            new ScalingExecutorBuilder(
+                MERGE_THREAD_POOL,
+                mergeCoreThreads,
+                mergeMaxThreads,
+                TimeValue.timeValueMinutes(5),
+                true,
+                MERGE_THREAD_POOL_SETTING
+            ), };
     }
 
     /**
@@ -722,9 +821,27 @@ public class Stateless extends Plugin
         ClusterService clusterService,
         Client client,
         StatelessCommitCleaner commitCleaner,
-        SharedBlobCacheWarmingService cacheWarmingService
+        StatelessSharedBlobCacheService cacheService,
+        SharedBlobCacheWarmingService cacheWarmingService,
+        TelemetryProvider telemetryProvider
     ) {
-        return new StatelessCommitService(settings, objectStoreService, clusterService, client, commitCleaner, cacheWarmingService);
+        return new StatelessCommitService(
+            settings,
+            objectStoreService,
+            clusterService,
+            client,
+            commitCleaner,
+            cacheService,
+            cacheWarmingService,
+            telemetryProvider
+        );
+    }
+
+    protected GetVirtualBatchedCompoundCommitChunksPressure createVirtualBatchedCompoundCommitChunksPressure(
+        Settings settings,
+        MeterRegistry meterRegistry
+    ) {
+        return new GetVirtualBatchedCompoundCommitChunksPressure(settings, meterRegistry);
     }
 
     protected StatelessCommitService wrapStatelessCommitService(StatelessCommitService instance) {
@@ -738,6 +855,14 @@ public class Stateless extends Plugin
 
     @Override
     public void close() throws IOException {
+        // We should close the shared blob cache only after we made sure that all shards have been closed.
+        try {
+            if (indicesService.get().awaitClose(1, TimeUnit.MINUTES) == false) {
+                logger.warn("Closing the Stateless services while some shards are still open");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         Releasables.close(sharedBlobCacheService.get());
         try {
             IOUtils.close(blobStoreHealthIndicator.get());
@@ -759,23 +884,30 @@ public class Stateless extends Plugin
             TranslogReplicator.FLUSH_RETRY_INITIAL_DELAY_SETTING,
             TranslogReplicator.FLUSH_INTERVAL_SETTING,
             TranslogReplicator.FLUSH_SIZE_SETTING,
+            ThreadPoolMergeScheduler.MERGE_THREAD_POOL_SCHEDULER,
+            ThreadPoolMergeScheduler.MERGE_PREWARM,
+            ThreadPoolMergeScheduler.MERGE_FORCE_REFRESH_SIZE,
             StatelessClusterConsistencyService.DELAYED_CLUSTER_CONSISTENCY_INTERVAL_SETTING,
             StoreHeartbeatService.HEARTBEAT_FREQUENCY,
             StoreHeartbeatService.MAX_MISSED_HEARTBEATS,
             IngestLoadSampler.SAMPLING_FREQUENCY_SETTING,
-            IndicesMappingSizeCollector.PUBLISHING_FREQUENCY_SETTING,
-            IndicesMappingSizeCollector.CUT_OFF_TIMEOUT_SETTING,
-            IndicesMappingSizeCollector.RETRY_INITIAL_DELAY_SETTING,
+            ShardsMappingSizeCollector.PUBLISHING_FREQUENCY_SETTING,
+            ShardsMappingSizeCollector.CUT_OFF_TIMEOUT_SETTING,
+            ShardsMappingSizeCollector.RETRY_INITIAL_DELAY_SETTING,
             MemoryMetricsService.STALE_METRICS_CHECK_DURATION_SETTING,
             MemoryMetricsService.STALE_METRICS_CHECK_INTERVAL_SETTING,
-            MemoryMetricsService.SHARD_MEMORY_OVERHEAD_SETTING,
+            MemoryMetricsService.FIXED_SHARD_MEMORY_OVERHEAD_SETTING,
             IngestLoadSampler.MAX_TIME_BETWEEN_METRIC_PUBLICATIONS_SETTING,
             IngestLoadSampler.MIN_SENSITIVITY_RATIO_FOR_PUBLICATION_SETTING,
             IngestMetricsService.ACCURATE_LOAD_WINDOW,
             IngestMetricsService.STALE_LOAD_WINDOW,
+            IngestMetricsService.LOW_INGESTION_LOAD_WEIGHT_DURING_SCALING,
+            IngestMetricsService.HIGH_INGESTION_LOAD_WEIGHT_DURING_SCALING,
+            IngestMetricsService.LOAD_ADJUSTMENT_AFTER_SCALING_WINDOW,
             IngestLoadProbe.MAX_TIME_TO_CLEAR_QUEUE,
             IngestLoadProbe.MAX_QUEUE_CONTRIBUTION_FACTOR,
             AverageWriteLoadSampler.WRITE_LOAD_SAMPLER_EWMA_ALPHA_SETTING,
+            AverageWriteLoadSampler.QUEUE_SIZE_SAMPLER_EWMA_ALPHA_SETTING,
             SearchShardSizeCollector.PUSH_INTERVAL_SETTING,
             SearchShardSizeCollector.PUSH_DELTA_THRESHOLD_SETTING,
             SearchLoadSampler.MIN_SENSITIVITY_RATIO_FOR_PUBLICATION_SETTING,
@@ -792,7 +924,6 @@ public class Stateless extends Plugin
             SearchLoadProbe.SHARD_READ_LOAD_THRESHOLD_SETTING,
             StatelessCommitService.SHARD_INACTIVITY_DURATION_TIME_SETTING,
             StatelessCommitService.SHARD_INACTIVITY_MONITOR_INTERVAL_TIME_SETTING,
-            StatelessCommitService.STATELESS_UPLOAD_DELAYED,
             StatelessCommitService.STATELESS_UPLOAD_VBCC_MAX_AGE,
             StatelessCommitService.STATELESS_UPLOAD_MONITOR_INTERVAL,
             StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS,
@@ -801,7 +932,6 @@ public class Stateless extends Plugin
             IndexingDiskController.INDEXING_DISK_RESERVED_BYTES_SETTING,
             BlobStoreHealthIndicator.POLL_INTERVAL_SETTING,
             BlobStoreHealthIndicator.CHECK_TIMEOUT_SETTING,
-            SharedBlobCacheWarmingService.STATELESS_BLOB_CACHE_WARMING_ALLOW_FETCH_FROM_INDEXING,
             StatelessClusterStateCleanupService.CLUSTER_STATE_CLEANUP_DELAY_SETTING,
             StatelessClusterStateCleanupService.RETRY_TIMEOUT_SETTING,
             StatelessClusterStateCleanupService.RETRY_INITIAL_DELAY_SETTING,
@@ -813,7 +943,13 @@ public class Stateless extends Plugin
             StatelessIndexSettingProvider.DEFAULT_NUMBER_OF_SHARDS_FOR_REGULAR_INDICES_SETTING,
             TransportStatelessPrimaryRelocationAction.SLOW_SECONDARY_FLUSH_THRESHOLD_SETTING,
             TransportStatelessPrimaryRelocationAction.SLOW_HANDOFF_WARMING_THRESHOLD_SETTING,
-            TransportStatelessPrimaryRelocationAction.SLOW_RELOCATION_THRESHOLD_SETTING
+            TransportStatelessPrimaryRelocationAction.SLOW_RELOCATION_THRESHOLD_SETTING,
+            GetVirtualBatchedCompoundCommitChunksPressure.CHUNKS_BYTES_LIMIT,
+            CacheBlobReaderService.TRANSPORT_BLOB_READER_CHUNK_SIZE_SETTING,
+            SharedBlobCacheWarmingService.PREWARMING_RANGE_MINIMIZATION_STEP,
+            RecoverySettings.INDICES_RECOVERY_SOURCE_ENABLED_SETTING,
+            StatelessCommitService.STATELESS_COMMIT_USE_INTERNAL_FILES_REPLICATED_CONTENT,
+            StatelessCommitService.STATELESS_COMMIT_HEADER_SIZE_RATIO
         );
     }
 
@@ -824,7 +960,7 @@ public class Stateless extends Plugin
         // register an IndexCommitListener so that stateless is notified of newly created commits on "index" nodes
         if (hasIndexRole) {
 
-            indexModule.addIndexEventListener(indicesMappingSizeCollector.get());
+            indexModule.addIndexEventListener(shardsMappingSizeCollector.get());
 
             indexModule.addIndexEventListener(new IndexEventListener() {
 
@@ -833,12 +969,40 @@ public class Stateless extends Plugin
                     statelessCommitService.register(
                         indexShard.shardId(),
                         indexShard.getOperationPrimaryTerm(),
-                        () -> isInitializingNoSearchShards(indexShard)
+                        () -> isInitializingNoSearchShards(indexShard),
+                        indexShard::addGlobalCheckpointListener,
+                        () -> {
+                            Engine engineOrNull = indexShard.getEngineOrNull();
+                            if (engineOrNull instanceof IndexEngine engine) {
+                                engine.syncTranslogReplicator(ActionListener.noop());
+                            } else if (engineOrNull == null) {
+                                throw new AlreadyClosedException("engine is closed");
+                            } else {
+                                assert false : "Engine is " + engineOrNull;
+                                throw new IllegalStateException("Engine is " + engineOrNull);
+                            }
+                        }
                     );
                     localTranslogReplicator.register(indexShard.shardId(), indexShard.getOperationPrimaryTerm(), seqNo -> {
                         var indexEngine = (IndexEngine) indexShard.getEngineOrNull();
                         if (indexEngine != null) {
                             indexEngine.objectStorePersistedSeqNoConsumer().accept(seqNo);
+                            // The local checkpoint is updated as part of the post-replication actions of ReplicationOperation. However, if
+                            // a bulk request has a refresh included, the post-replication actions happen after the refresh. And the refresh
+                            // may need to wait for the checkpoint to progress in order to send out a new VBCC commit notification. To
+                            // break this stalemate, we update the checkpoint as early as here, when the translog has persisted a seqno.
+                            // We exclude the initializing state since the replication tracker may not yet be in primary mode and the local
+                            // checkpoint is updated as part of recovery. We ignore errors since this is best effort.
+                            try {
+                                if (indexShard.routingEntry().state() != ShardRoutingState.INITIALIZING) {
+                                    indexShard.updateLocalCheckpointForShard(
+                                        indexShard.routingEntry().allocationId().getId(),
+                                        indexEngine.getPersistedLocalCheckpoint()
+                                    );
+                                }
+                            } catch (Exception e) {
+                                logger.debug(() -> "Failed to update local checkpoint", e);
+                            }
                         }
                     });
                     // We are pruning the archive for a given generation, only once we know all search shards are
@@ -848,7 +1012,7 @@ public class Stateless extends Plugin
                     // how we respond to get requests that are not in the live version map (what generation we send back
                     // for the search shard to wait for), it could be safe to trigger the pruning earlier, e.g., once the
                     // commit upload is successful.
-                    statelessCommitService.registerNewCommitSuccessListener(indexShard.shardId(), (gen) -> {
+                    statelessCommitService.registerCommitNotificationSuccessListener(indexShard.shardId(), (gen) -> {
                         var engine = (IndexEngine) indexShard.getEngineOrNull();
                         if (engine != null) {
                             engine.commitSuccess(gen);
@@ -859,7 +1023,7 @@ public class Stateless extends Plugin
                 @Override
                 public void afterIndexShardClosed(ShardId shardId, IndexShard indexShard, Settings indexSettings) {
                     if (indexShard != null) {
-                        statelessCommitService.unregisterNewCommitSuccessListener(shardId);
+                        statelessCommitService.unregisterCommitNotificationSuccessListener(shardId);
                         statelessCommitService.closeShard(shardId);
                     }
                 }
@@ -879,13 +1043,8 @@ public class Stateless extends Plugin
             indexModule.setDirectoryWrapper((in, shardRouting) -> {
                 if (shardRouting.isPromotableToPrimary()) {
                     Lucene.cleanLuceneIndex(in);
-                    SearchDirectory searchDirectory = createSearchDirectory(
-                        sharedBlobCacheService.get(),
-                        cacheBlobReaderService.get(),
-                        MutableObjectStoreUploadTracker.ALWAYS_UPLOADED,
-                        shardRouting.shardId()
-                    );
-                    return new IndexDirectory(in, searchDirectory);
+                    var indexCacheDirectory = createIndexBlobStoreCacheDirectory(sharedBlobCacheService.get(), shardRouting.shardId());
+                    return new IndexDirectory(in, indexCacheDirectory, statelessCommitService::onGenerationalFileDeletion);
                 } else {
                     return in;
                 }
@@ -921,6 +1080,7 @@ public class Stateless extends Plugin
         }
         indexModule.addIndexEventListener(
             new StatelessIndexEventListener(
+                threadPool.get(),
                 statelessCommitService,
                 objectStoreService.get(),
                 localTranslogReplicator,
@@ -936,18 +1096,23 @@ public class Stateless extends Plugin
         TranslogReplicator translogReplicator,
         Function<String, BlobContainer> translogBlobContainer,
         StatelessCommitService statelessCommitService,
+        SharedBlobCacheWarmingService sharedBlobCacheWarmingService,
         RefreshThrottler.Factory refreshThrottlerFactory,
-        DocumentParsingProvider documentParsingProvider
+        DocumentParsingProvider documentParsingProvider,
+        IndexEngine.EngineMetrics engineMetrics
     ) {
         return new IndexEngine(
             engineConfig,
             translogReplicator,
             translogBlobContainer,
             statelessCommitService,
+            sharedBlobCacheWarmingService,
             refreshThrottlerFactory,
             statelessCommitService.getIndexEngineLocalReaderListenerForShard(engineConfig.getShardId()),
             statelessCommitService.getCommitBCCResolverForShard(engineConfig.getShardId()),
-            documentParsingProvider
+            documentParsingProvider,
+            engineMetrics,
+            skipMerges.get()
         );
     }
 
@@ -968,23 +1133,30 @@ public class Stateless extends Plugin
                     (data, seqNo, location) -> replicator.add(translogConfig.getShardId(), data, seqNo, location),
                     false // translog is replicated to the object store, no need fsync that
                 );
+                var collectorRefreshListener = refreshListenerForShardMappingSizeCollector(config.getShardId());
+                var internalRefreshListeners = config.getInternalRefreshListener();
+                if (internalRefreshListeners == null) {
+                    internalRefreshListeners = List.of(collectorRefreshListener);
+                } else {
+                    internalRefreshListeners = CollectionUtils.appendToCopy(internalRefreshListeners, collectorRefreshListener);
+                }
                 EngineConfig newConfig = new EngineConfig(
                     config.getShardId(),
                     config.getThreadPool(),
                     config.getIndexSettings(),
                     config.getWarmer(),
                     config.getStore(),
-                    config.getMergePolicy(),
+                    getMergePolicy(config),
                     config.getAnalyzer(),
                     config.getSimilarity(),
-                    config.getCodecService(),
+                    getCodecProvider(config),
                     config.getEventListener(),
                     config.getQueryCache(),
                     config.getQueryCachingPolicy(),
                     newTranslogConfig,
                     config.getFlushMergesAfter(),
                     config.getExternalRefreshListener(),
-                    config.getInternalRefreshListener(),
+                    internalRefreshListeners,
                     config.getIndexSort(),
                     config.getCircuitBreakerService(),
                     config.getGlobalCheckpointSupplier(),
@@ -1002,13 +1174,70 @@ public class Stateless extends Plugin
                     translogReplicator.get(),
                     getObjectStoreService()::getTranslogBlobContainer,
                     getCommitService(),
+                    sharedBlobCacheWarmingService.get(),
                     refreshThrottlingService.get().createRefreshThrottlerFactory(indexSettings),
-                    documentParsingProvider.get()
+                    documentParsingProvider.get(),
+                    new IndexEngine.EngineMetrics(translogReplicatorMetrics.get(), mergeMetrics.get())
                 );
             } else {
                 return new SearchEngine(config, getClosedShardService());
             }
         });
+    }
+
+    protected CodecProvider getCodecProvider(EngineConfig engineConfig) {
+        final var innerCodecProvider = engineConfig.getCodecProvider();
+        final var availableCodecs = innerCodecProvider.availableCodecs();
+        // Wrap all availableCodecs, so we create just one CodedProvider and one Codec per codec name.
+        final var codecs = Arrays.stream(availableCodecs)
+            .collect(
+                Collectors.toUnmodifiableMap(Function.identity(), codecName -> codecWrapper.apply(innerCodecProvider.codec(codecName)))
+            );
+        return new CodecProvider() {
+            @Override
+            public Codec codec(String name) {
+                var codec = codecs.get(name);
+                assert codec != null;
+                return codec;
+            }
+
+            @Override
+            public String[] availableCodecs() {
+                return availableCodecs;
+            }
+        };
+    }
+
+    protected org.apache.lucene.index.MergePolicy getMergePolicy(EngineConfig engineConfig) {
+        return engineConfig.getMergePolicy();
+    }
+
+    @Override
+    public void loadExtensions(ExtensionLoader loader) {
+        var formatFactories = loader.loadExtensions(DocValuesFormatFactory.class);
+
+        if (formatFactories.size() > 1) {
+            throw new IllegalStateException(DocValuesFormatFactory.class + " may not have multiple implementations");
+        } else if (formatFactories.size() == 1) {
+            var formatFactory = formatFactories.get(0);
+            this.codecWrapper = createCodecWrapper(formatFactory);
+        }
+    }
+
+    // visible for testing
+    protected Function<Codec, Codec> createCodecWrapper(DocValuesFormatFactory formatFactory) {
+        return (parentCodec) -> {
+            var parentCodecDocValuesFormat = parentCodec.docValuesFormat();
+            var extensionDocValuesFormat = formatFactory.createDocValueFormat(parentCodecDocValuesFormat);
+            return new FilterCodec(parentCodec.getName(), parentCodec) {
+                private final DocValuesFormat rawStorageDocValuesFormat = extensionDocValuesFormat;
+
+                @Override
+                public DocValuesFormat docValuesFormat() {
+                    return rawStorageDocValuesFormat;
+                }
+            };
+        };
     }
 
     @Override
@@ -1055,6 +1284,31 @@ public class Stateless extends Plugin
         };
     }
 
+    /**
+     * Creates a refresh listener for an indexing shard. This listener notifies the
+     * {@link ShardsMappingSizeCollector} whenever the underlying segments change,
+     * allowing it to publish the updated estimated heap memory usage to the master node.
+     */
+    protected ReferenceManager.RefreshListener refreshListenerForShardMappingSizeCollector(ShardId shardId) {
+        return new ReferenceManager.RefreshListener() {
+            final ShardsMappingSizeCollector collector = shardsMappingSizeCollector.get();
+            boolean first = true;
+
+            @Override
+            public void beforeRefresh() {
+
+            }
+
+            @Override
+            public void afterRefresh(boolean didRefresh) {
+                if (first || didRefresh) {
+                    collector.updateMappingMetricsForShard(shardId);
+                    first = false;
+                }
+            }
+        };
+    }
+
     // protected to allow tests to override
     protected SearchDirectory createSearchDirectory(
         StatelessSharedBlobCacheService cacheService,
@@ -1063,6 +1317,13 @@ public class Stateless extends Plugin
         ShardId shardId
     ) {
         return new SearchDirectory(cacheService, cacheBlobReaderService, objectStoreUploadTracker, shardId);
+    }
+
+    protected IndexBlobStoreCacheDirectory createIndexBlobStoreCacheDirectory(
+        StatelessSharedBlobCacheService cacheService,
+        ShardId shardId
+    ) {
+        return new IndexBlobStoreCacheDirectory(cacheService, shardId);
     }
 
     private ClosedShardService getClosedShardService() {
@@ -1209,23 +1470,15 @@ public class Stateless extends Plugin
 
     private static void logSettings(final Settings settings) {
         // TODO: Move the logging back to StatelessCommitService#new once ES-8507 is resolved
-        final boolean delayedUploadEnabled = StatelessCommitService.STATELESS_UPLOAD_DELAYED.get(settings);
+        final var bccMaxAmountOfCommits = StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.get(settings);
+        final var bccUploadMaxSize = StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.get(settings);
+        final var virtualBccUploadMaxAge = StatelessCommitService.STATELESS_UPLOAD_VBCC_MAX_AGE.get(settings);
         logger.info(
-            "delayed upload [{}] is [{}]",
-            StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(),
-            delayedUploadEnabled ? "enabled" : "disabled"
+            "delayed upload with [max_commits={}], [max_size={}], [max_age={}]",
+            bccMaxAmountOfCommits,
+            bccUploadMaxSize.getStringRep(),
+            virtualBccUploadMaxAge.getStringRep()
         );
-        if (delayedUploadEnabled) {
-            final var bccMaxAmountOfCommits = StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.get(settings);
-            final var bccUploadMaxSize = StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.get(settings);
-            final var virtualBccUploadMaxAge = StatelessCommitService.STATELESS_UPLOAD_VBCC_MAX_AGE.get(settings);
-            logger.info(
-                "delayed upload with [max_commits={}], [max_size={}], [max_age={}]",
-                bccMaxAmountOfCommits,
-                bccUploadMaxSize.getStringRep(),
-                virtualBccUploadMaxAge.getStringRep()
-            );
-        }
     }
 
     private long getTranslogRecoveryStartFile(Engine.IndexCommitRef indexCommitRef) {
@@ -1256,12 +1509,17 @@ public class Stateless extends Plugin
         }
     }
 
-    protected Clock getClock() {
-        return Clock.systemUTC();
-    }
-
     private boolean isInitializingNoSearchShards(IndexShard shard) {
         ShardRouting shardRouting = shard.routingEntry();
         return shardRouting.initializing() && shardRouting.recoverySource().getType() != RecoverySource.Type.PEER;
+    }
+
+    private record ShouldSkipMerges(IndicesService indicesService) implements Predicate<ShardId> {
+
+        @Override
+        public boolean test(ShardId shardId) {
+            IndexShard indexShard = indicesService.getShardOrNull(shardId);
+            return indexShard == null || indexShard.routingEntry().relocating();
+        }
     }
 }

@@ -17,92 +17,53 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.reports.UsageRecord;
-import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
+import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 
-import org.elasticsearch.action.admin.cluster.settings.ClusterUpdateSettingsRequest;
+import org.elasticsearch.action.DocWriteRequest;
+import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.ingest.PutPipelineRequest;
-import org.elasticsearch.common.bytes.BytesArray;
-import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
-import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.datastreams.DataStreamsPlugin;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.MockScriptEngine;
-import org.elasticsearch.script.MockScriptPlugin;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptType;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.xcontent.XContentType;
-import org.junit.After;
 import org.junit.Before;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Function;
+import java.util.List;
 
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
+import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
 public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
-    protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
-    protected static final int DEFAULT_SEARCH_POWER = 100;
-    protected static final int OVERRIDE_SEARCH_POWER = 150;
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
 
-    Map<String, Object> defaultAttributes = Map.of(
-        "boost_window",
-        (int) DEFAULT_BOOST_WINDOW.seconds(),
-        "search_power",
-        DEFAULT_SEARCH_POWER
-    );
-
-    Map<String, Object> expectedDefaultAttributes = Map.of(
-        "boost_window",
-        (int) DEFAULT_BOOST_WINDOW.seconds(),
-        "search_power",
-        DEFAULT_SEARCH_POWER
-    );
-    Map<String, Object> expectedOverriddenAttributes = Map.of(
-        "boost_window",
-        (int) TimeValue.timeValueDays(3).seconds(),
-        "search_power",
-        OVERRIDE_SEARCH_POWER
-    );
-    Settings.Builder overrideSettings = Settings.builder()
-        .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), TimeValue.timeValueDays(3))
-        .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), OVERRIDE_SEARCH_POWER)
-        .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), OVERRIDE_SEARCH_POWER);
+    static final int PIPELINE_ADDED_FIELDS_SIZE = 5 * ASCII_SIZE;
 
     @Override
-    @SuppressWarnings("unchecked")
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        var list = new ArrayList<Class<? extends Plugin>>();
-        list.addAll(super.nodePlugins());
+        var list = new ArrayList<>(super.nodePlugins());
         list.add(InternalSettingsPlugin.class);
         list.add(IngestCommonPlugin.class);
-        list.add(CustomScriptPlugin.class);
+        list.add(DataStreamsPlugin.class);
+        list.add(TestScriptPlugin.class);
         return list;
-    }
-
-    @Override
-    protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal, otherSettings))
-            .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
-            .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), DEFAULT_SEARCH_POWER)
-            .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), DEFAULT_SEARCH_POWER)
-            .build();
     }
 
     @Before
@@ -110,17 +71,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         createNewFieldPipeline();
     }
 
-    @After
-    public void cleanup() {
-        receivedMetrics().clear();
-        assertAcked(
-            clusterAdmin().prepareUpdateSettings()
-                .setPersistentSettings(Settings.builder().putNull("*"))
-                .setTransientSettings(Settings.builder().putNull("*"))
-        );
-    }
-
-    public void testIngestMetricsAreRecordedThroughBulk() throws InterruptedException, IOException {
+    public void testIngestMetricsAreRecordedThroughBulk() {
         String indexName = "idx1";
         startMasterAndIndexNode();
         startSearchNode();
@@ -128,57 +79,70 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         // size 3*char+int (long size)
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
+        assertUsageRecord(indexName, usageRecord, ASCII_SIZE + NUMBER_SIZE);
 
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
-
-        // change settings propagated to usage records
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.transientSettings(overrideSettings);
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
         receivedMetrics().clear();
 
         // size 3*char+int (long size)
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
-        assertUsageRecord(indexName, usageRecord, expectedOverriddenAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
+        assertUsageRecord(indexName, usageRecord, ASCII_SIZE + NUMBER_SIZE);
+        assertThat(usageRecord, transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue()));
     }
 
-    public void testIngestMetricsAreRecordedThroughIngestPipelines() throws InterruptedException, IOException {
+    public void testIngestMetricsAreRecordedForDataStreams() throws Exception {
+        String indexName = "idx1";
+        String dsName = ".ds-" + indexName;
+
+        startMasterAndIndexNode();
+        startSearchNode();
+
+        createDataStream(indexName);
+
+        // size 16*char+int (long size)
+        client().index(
+            new IndexRequest(indexName).source(XContentType.JSON, "@timestamp", 123, "key", "abc").opType(DocWriteRequest.OpType.CREATE)
+        ).actionGet();
+        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
+
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(dsName);
+        assertUsageRecord(dsName, usageRecord, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertThat(
+            usageRecord,
+            transformedMatch((UsageRecord metric) -> metric.source().metadata().get("datastream"), startsWith(indexName))
+        );
+    }
+
+    public void testIngestMetricsAreRecordedAfterIngestPipelines() {
         String indexName2 = "idx2";
         startMasterIndexAndIngestNode();
         startSearchNode();
         createIndex(indexName2);
 
         client().index(
-            // size 3*char+int (long size), pipeline added fields not included
+            // size char+int (long size)
             new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
         ).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName2));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName2);
-        assertUsageRecord(indexName2, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
+        assertUsageRecord(indexName2, usageRecord, ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
 
-        // change settings propagated to usage records
-        ClusterUpdateSettingsRequest updateSettingsRequest = new ClusterUpdateSettingsRequest();
-        updateSettingsRequest.transientSettings(overrideSettings);
-        assertAcked(client().admin().cluster().updateSettings(updateSettingsRequest).actionGet());
         receivedMetrics().clear();
 
         client().index(
-            // size 3*char+int (long size), pipeline added fields not included
+            // size 3*char+int (long size)
             new IndexRequest(indexName2).setPipeline("new_field_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c")
         ).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName2));
-        usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName2);
-        assertUsageRecord(indexName2, usageRecord, expectedOverriddenAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName2);
+        assertUsageRecord(indexName2, usageRecord, ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
+        assertThat(usageRecord, transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue()));
     }
 
-    public void testDocumentFailingInPipelineNotReported() throws InterruptedException, IOException {
+    public void testDocumentFailingInPipelineNotReported() {
         String indexName3 = "idx3";
         startMasterIndexAndIngestNode();
         startSearchNode();
@@ -193,76 +157,72 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
                 .add(new IndexRequest(indexName3).setPipeline("fail_pipeline").id("1").source(XContentType.JSON, "a", 1, "b", "c"))
         ).actionGet();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName3));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName3);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName3);
         // even though 2 documents were in bulk request, we will only have 1 reported
-        assertUsageRecord(indexName3, usageRecord, expectedDefaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        assertUsageRecord(indexName3, usageRecord, ASCII_SIZE + NUMBER_SIZE + PIPELINE_ADDED_FIELDS_SIZE);
     }
 
-    public void testUpdatesAreMeteredInBulkRawWithPartialDoc() throws InterruptedException, IOException {
+    public void testUpdatesByDocumentAreMetered() throws IOException {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName4 = "update_partial_doc";
         createIndex(indexName4);
-        indexDoc(indexName4, defaultAttributes);
+        indexDoc(indexName4, ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
 
         client().prepareUpdate().setIndex(indexName4).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName4));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName4);
-        assertUsageRecord(indexName4, usageRecord, expectedDefaultAttributes, ASCII_SIZE + NUMBER_SIZE);// partial doc size
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName4);
+        assertUsageRecord(indexName4, usageRecord, 2 * NUMBER_SIZE + ASCII_SIZE);// updated size
     }
 
-    public void testUpdatesViaScriptAreNotMetered() throws InterruptedException, IOException {
+    public void testUpdatesViaScriptAreNotMetered() {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName = "index1";
         createIndex(indexName);
 
         String scriptId = "script1";
-        clusterAdmin().preparePutStoredScript().setId(scriptId).setContent(new BytesArray(Strings.format("""
-            {"script": {"lang": "%s", "source": "ctx._source.b = 'xx'"} }""", MockScriptEngine.NAME)), XContentType.JSON).get();
+        putJsonStoredScript(scriptId, Strings.format("""
+            {"script": {"lang": "%s", "source": "ctx._source.b = 'xx'"} }""", MockScriptEngine.NAME));
 
-        // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
-        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
+        indexDoc(indexName, ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
 
         // update via stored script
         final Script storedScript = new Script(ScriptType.STORED, null, scriptId, Collections.emptyMap());
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).get();
 
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
+        assertUsageRecord(indexName, usageRecord, 2 * ASCII_SIZE + NUMBER_SIZE); // updated size
+        receivedMetrics().clear();
+
         // update via inlined script
         String scriptCode = "ctx._source.b = 'xx'";
-        final Script script = new Script(ScriptType.INLINE, CustomScriptPlugin.NAME, scriptCode, Collections.emptyMap());
+        final Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, scriptCode, Collections.emptyMap());
         client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).get();
 
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
-
-        assertUsageRecord(indexName, usageRecord, defaultAttributes, 3 * ASCII_SIZE + NUMBER_SIZE);
+        usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
+        assertUsageRecord(indexName, usageRecord, 2 * ASCII_SIZE + NUMBER_SIZE); // updated size
         receivedMetrics().clear();
     }
 
-    private void indexDoc(String indexName, Map<String, Object> settings) throws InterruptedException {
-        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
+    private void indexDoc(String indexName, int expectedIngestSize, Object... source) {
+        client().index(new IndexRequest(indexName).id("1").source(XContentType.JSON, source)).actionGet();
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
-        UsageRecord usageRecord = pollReceivedRecordsAndGetFirst("ingested-doc:" + indexName);
-
-        assertUsageRecord(indexName, usageRecord, settings, 3 * ASCII_SIZE + NUMBER_SIZE);
+        UsageRecord usageRecord = pollReceivedRAIRecordsAndGetFirst(indexName);
+        assertUsageRecord(indexName, usageRecord, expectedIngestSize);
         receivedMetrics().clear();
     }
 
-    private static void assertUsageRecord(String indexName, UsageRecord metric, Map<String, Object> settings, int expectedQuantity) {
+    private static void assertUsageRecord(String indexName, UsageRecord metric, int expectedQuantity) {
         String id = "ingested-doc:" + indexName;
         assertThat(metric.id(), startsWith(id));
         assertThat(metric.usage().type(), equalTo("es_raw_data"));
         assertThat(metric.usage().quantity(), equalTo((long) expectedQuantity));
-        assertThat(metric.source().metadata(), equalTo(Map.of("index", indexName)));
-        settings.forEach((k, v) -> assertThat(metric.usage().es().get(k), equalTo(v)));
+        assertThat(metric.source().metadata(), hasEntry(equalTo("index"), startsWith(indexName)));
     }
 
     private void createFailPipeline() {
-        final BytesReference pipelineBody = new BytesArray("""
+        putJsonPipeline("fail_pipeline", """
             {
               "processors": [
                 {
@@ -273,11 +233,10 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
               ]
             }
             """);
-        clusterAdmin().putPipeline(new PutPipelineRequest("fail_pipeline", pipelineBody, XContentType.JSON)).actionGet();
     }
 
-    private void createNewFieldPipeline() {
-        final BytesReference pipelineBody = new BytesArray("""
+    static void createNewFieldPipeline() {
+        putJsonPipeline("new_field_pipeline", """
             {
               "processors": [
                 {
@@ -295,27 +254,12 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
               ]
             }
             """);
-        clusterAdmin().putPipeline(new PutPipelineRequest("new_field_pipeline", pipelineBody, XContentType.JSON)).actionGet();
     }
 
-    public static class CustomScriptPlugin extends MockScriptPlugin {
-
-        @Override
-        @SuppressWarnings("unchecked")
-        protected Map<String, Function<Map<String, Object>, Object>> pluginScripts() {
-            Map<String, Function<Map<String, Object>, Object>> scripts = new HashMap<>();
-            scripts.put("ctx._source.b = 'xx'", vars -> srcScript(vars, source -> { return source.replace("b", "xx"); }));
-            return scripts;
-        }
-
-        @SuppressWarnings("unchecked")
-        static Object srcScript(Map<String, Object> vars, Function<Map<String, Object>, Object> f) {
-            Map<?, ?> ctx = (Map<?, ?>) vars.get("ctx");
-
-            Map<String, Object> source = (Map<String, Object>) ctx.get("_source");
-            return f.apply(source);
-        }
-
+    private UsageRecord pollReceivedRAIRecordsAndGetFirst(String indexName) {
+        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
+        List<UsageRecord> usageRecords = new ArrayList<>();
+        pollReceivedRecords(usageRecords);
+        return usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).findFirst().get();
     }
-
 }

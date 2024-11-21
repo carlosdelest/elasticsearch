@@ -63,7 +63,7 @@ public class StoreStatsIT extends AbstractStatelessIntegTestCase {
 
     public void testStoreStats() throws Exception {
         startMasterOnlyNode();
-        final String indexNode = startIndexNode();
+        final String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         createIndex(
             indexName,
@@ -97,7 +97,7 @@ public class StoreStatsIT extends AbstractStatelessIntegTestCase {
         indexDocs(indexName, 1_000);
 
         // block index shard uploads to object store
-        var mockRepository = getObjectStoreMockRepository(internalCluster().getInstance(ObjectStoreService.class, indexNode));
+        var mockRepository = getObjectStoreMockRepository(getObjectStoreService(indexNode));
         mockRepository.setBlockOnAnyFiles();
 
         stats = shardStoreStats(indexName, ShardRouting.Role.INDEX_ONLY);

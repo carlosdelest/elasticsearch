@@ -26,13 +26,17 @@ import org.elasticsearch.xcontent.XContentBuilder;
 
 import java.io.IOException;
 
-public record NodeIngestLoadSnapshot(double load, MetricQuality metricQuality) implements AutoscalingMetrics {
+public record NodeIngestLoadSnapshot(String nodeId, String nodeName, double load, MetricQuality metricQuality)
+    implements
+        AutoscalingMetrics {
     public NodeIngestLoadSnapshot(StreamInput in) throws IOException {
-        this(in.readDouble(), MetricQuality.readFrom(in));
+        this(in.readString(), in.readString(), in.readDouble(), MetricQuality.readFrom(in));
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
+        out.writeString(nodeId);
+        out.writeString(nodeName);
         out.writeDouble(load);
         metricQuality.writeTo(out);
     }
@@ -42,4 +46,5 @@ public record NodeIngestLoadSnapshot(double load, MetricQuality metricQuality) i
         serializeMetric(builder, load, metricQuality);
         return builder;
     }
+
 }

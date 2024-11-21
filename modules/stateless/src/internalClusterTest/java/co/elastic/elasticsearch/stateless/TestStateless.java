@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.stateless;
 
 import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
+import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitCleaner;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.commits.TestStatelessCommitService;
@@ -29,6 +30,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.node.PluginComponentBinding;
+import org.elasticsearch.telemetry.TelemetryProvider;
 
 import java.util.Collection;
 
@@ -59,8 +61,19 @@ public class TestStateless extends Stateless {
         ClusterService clusterService,
         Client client,
         StatelessCommitCleaner commitCleaner,
-        SharedBlobCacheWarmingService cacheWarmingService
+        StatelessSharedBlobCacheService cacheService,
+        SharedBlobCacheWarmingService cacheWarmingService,
+        TelemetryProvider telemetryProvider
     ) {
-        return new TestStatelessCommitService(settings, objectStoreService, clusterService, client, commitCleaner, cacheWarmingService);
+        return new TestStatelessCommitService(
+            settings,
+            objectStoreService,
+            clusterService,
+            client,
+            commitCleaner,
+            cacheService,
+            cacheWarmingService,
+            telemetryProvider
+        );
     }
 }

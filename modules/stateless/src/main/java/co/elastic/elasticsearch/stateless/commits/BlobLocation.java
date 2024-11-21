@@ -53,8 +53,16 @@ public record BlobLocation(BlobFile blobFile, long offset, long fileLength) impl
         assert fileLength > 0 : "fileLength " + fileLength + " <= 0";
     }
 
-    public BlobLocation(long primaryTerm, String blobName, long offset, long fileLength) {
-        this(new BlobFile(primaryTerm, blobName), offset, fileLength);
+    // private access only for deserialization
+    private BlobLocation(long primaryTerm, String blobName, long offset, long fileLength) {
+        this(
+            new BlobFile(
+                blobName,
+                new PrimaryTermAndGeneration(primaryTerm, StatelessCompoundCommit.parseGenerationFromBlobName(blobName))
+            ),
+            offset,
+            fileLength
+        );
     }
 
     public long primaryTerm() {
@@ -69,11 +77,11 @@ public record BlobLocation(BlobFile blobFile, long offset, long fileLength) impl
      * @return parse the generation from the blob name
      */
     public long compoundFileGeneration() {
-        return StatelessCompoundCommit.parseGenerationFromBlobName(blobName());
+        return blobFile.generation();
     }
 
     public PrimaryTermAndGeneration getBatchedCompoundCommitTermAndGeneration() {
-        return new PrimaryTermAndGeneration(primaryTerm(), compoundFileGeneration());
+        return blobFile.termAndGeneration();
     }
 
     /**
@@ -121,8 +129,6 @@ public record BlobLocation(BlobFile blobFile, long offset, long fileLength) impl
         return builder.startObject()
             .field("primary_term", primaryTerm())
             .field("blob_name", blobName())
-            // TODO: Remove writing blobLength to object store. Need it for now since an old node may read the commit
-            .field("blob_length", Long.MIN_VALUE)
             .field("offset", offset)
             .field("file_length", fileLength)
             .endObject();

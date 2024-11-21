@@ -36,11 +36,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.PREDEFINED_ROLE_METADATA_ALLOWLIST;
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.PUBLIC_METADATA_KEY;
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.RESERVED_ROLE_NAME_PREFIX;
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.SUPPORTED_APPLICATION_NAMES;
+import static com.carrotsearch.randomizedtesting.RandomizedTest.randomAsciiAlphanumOfLengthBetween;
 import static org.elasticsearch.xpack.core.security.support.Validation.Roles.MAX_DESCRIPTION_LENGTH;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -128,14 +130,106 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
         assertThat(validator.validatePredefinedRole(role), is(nullValue()));
     }
 
+    public void testInvalidCustomRoleName() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+
+        Map.ofEntries(
+            Map.entry("superuser", containsString("is reserved and may not be used")),
+            Map.entry("", containsString("role name must be at least 1 and no more than 507 characters")),
+            Map.entry(randomAlphaOfLength(508), containsString("role name must be at least 1 and no more than 507 characters")),
+            Map.entry(
+                randomFrom("_", ".", "-", " ", "*", "#") + randomAlphaOfLength(30),
+                containsString("role name must begin with a letter or digit")
+            ),
+            Map.entry("this role name has spaces", containsString("can only contain letters, digits and the characters '_', '-', and '.'")),
+            Map.entry(
+                "111sdcd32<bajadsklasdsadasda",
+                containsString("can only contain letters, digits and the characters '_', '-', and '.'")
+            ),
+            Map.entry("*%&*#^()@^#(*)<>|![]`~", containsString("can only contain letters, digits and the characters '_', '-', and '.'"))
+        ).entrySet().forEach(testCase -> {
+            final String roleName = testCase.getKey();
+            final Matcher<String> validationErrorMatcher = testCase.getValue();
+
+            final ActionRequestValidationException ex = validator.validateCustomRole(
+                new RoleDescriptor(roleName, null, null, null, null, null, Map.of(), Map.of(), null, null, null, null)
+            );
+            assertThat("validating role name: " + roleName, ex, is(notNullValue()));
+            assertThat(ex.validationErrors(), containsInAnyOrder(validationErrorMatcher));
+        });
+
+    }
+
+    public void testValidCustomRoleName() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        Set.of(
+            "my-role.123_45",
+            randomAlphaOfLength(1),
+            "123846198498317",
+            UUID.randomUUID().toString(),
+            randomAsciiAlphanumOfLengthBetween(1, 5) + randomFrom("_", ".", "-") + randomAsciiAlphanumOfLengthBetween(5, 10),
+            String.valueOf(System.currentTimeMillis()),
+            randomFrom("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+        ).forEach(roleName -> {
+            final ActionRequestValidationException ex = validator.validateCustomRole(
+                new RoleDescriptor(roleName, null, null, null, null, null, Map.of(), Map.of(), null, null, null, null)
+            );
+            assertThat("validating role name: " + roleName, ex, is(nullValue()));
+        });
+
+    }
+
+    public void testValidReservedRoleName() {
+        Set.of(
+            "superuser",
+            "viewer",
+            "remote_monitoring_agent",
+            "t1_analyst",
+            "threat_intelligence_analyst",
+            "_elastic_pod_autoscaler",
+            "12846123796498123",
+            "_my-reserved-role.123",
+            randomFrom("_", ".", "-") + randomAsciiAlphanumOfLengthBetween(5, 10),
+            randomAsciiAlphanumOfLengthBetween(1, 20),
+            String.valueOf(System.currentTimeMillis()),
+            randomAlphaOfLength(1),
+            randomFrom("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+        ).forEach(roleName -> {
+            var validationError = ServerlessRoleValidator.validateRoleName(roleName, true);
+            assertThat("while validating role: " + roleName, validationError, is(nullValue()));
+        });
+    }
+
+    public void testInvalidReservedRoleName() {
+        Map.ofEntries(
+            Map.entry("", containsString("role name must be at least 1 and no more than 507 characters")),
+            Map.entry(randomAlphaOfLength(508), containsString("role name must be at least 1 and no more than 507 characters")),
+            Map.entry("this role name has spaces", containsString("can only contain letters, digits and the characters '_', '-', and '.'")),
+            Map.entry(
+                "111sdcd32~bajadsklasdsadasda",
+                containsString("can only contain letters, digits and the characters '_', '-', and '.'")
+            ),
+            Map.entry("*%&*#^()@^#(*)<>|![]`~", containsString("can only contain letters, digits and the characters '_', '-', and '.'"))
+        ).entrySet().forEach(testCase -> {
+            final String roleName = testCase.getKey();
+            final Matcher<String> validationErrorMatcher = testCase.getValue();
+
+            var validationError = ServerlessRoleValidator.validateRoleName(roleName, true);
+            assertThat(validationError, is(notNullValue()));
+            assertThat("validating role name: " + roleName, validationError, validationErrorMatcher);
+        });
+
+    }
+
     public void testInvalidCustomRole() {
         final ServerlessRoleValidator validator = new ServerlessRoleValidator();
 
-        final int roleNameCaseNo = randomIntBetween(0, 2);
+        final int roleNameCaseNo = randomIntBetween(0, 3);
         final String roleName = switch (roleNameCaseNo) {
             case 0 -> randomAlphaOfLength(30); // valid
             case 1 -> "superuser"; // reserved
             case 2 -> "_" + randomAlphaOfLength(30); // invalid prefix
+            case 3 -> "this role name has spaces"; // spaces are not allowed
             default -> throw new IllegalStateException("Unexpected value: " + roleNameCaseNo);
         };
         final boolean invalidRoleName = roleNameCaseNo != 0;
@@ -240,7 +334,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             case 1 -> {
                 itemMatchers.add(containsString("is reserved and may not be used"));
             }
-            case 2 -> itemMatchers.add(containsString("role name may not start with [_]"));
+            case 2, 3 -> itemMatchers.add(containsString("can only contain letters, digits and the characters '_', '-', and '.'"));
         }
         if (unknownClusterPrivilege) {
             itemMatchers.add(

@@ -23,7 +23,6 @@ steps:
           provider: "gcp"
           machineType: "n1-standard-16"
           image: family/elasticsearch-ubuntu-2022
-          diskSizeGb: 250
 
       - label: ":kibana: Kibana serverless tests"
         trigger: appex-qa-serverless-kibana-ftr-tests # https://buildkite.com/elastic/appex-qa-serverless-kibana-ftr-tests
@@ -54,9 +53,10 @@ steps:
             SERVICE: elasticsearch
             SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
             SERVICE_VERSION: ${SERVICE_VERSION:0:12}
-            SERVICE_TYPE_FIELD: kubernetes.container.name
+            SERVICE_TYPE_FIELD: data_stream.dataset
             CHECK_ALERTS: true
             CHECK_SLO: true
             CHECK_SLO_TAG: "quality-gate"
             CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
             CHECK_ALERTS_TRANSIENT_LOOKBACK: 30m # 30 minutes is the default lookback for transient alerts
+            DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}

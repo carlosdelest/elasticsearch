@@ -19,13 +19,15 @@
 
 package co.elastic.elasticsearch.stateless.cache.reader;
 
+import co.elastic.elasticsearch.stateless.lucene.BlobCacheIndexInput;
+
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.blobcache.common.ByteRange;
 
-import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Used by {@link co.elastic.elasticsearch.stateless.lucene.SearchIndexInput} to read data from the blob store or from the primary shard
+ * Used by {@link BlobCacheIndexInput} to read data from the blob store or from the primary shard
  * in order to populate the cache for a specific blob.
  */
 public interface CacheBlobReader {
@@ -53,10 +55,12 @@ public interface CacheBlobReader {
      *
      * It is OK for the {@link InputStream} to return less data than specified length (even no data).
      *
+     * Some implementations may throw a special exception if the data is not available in the primary shard and the fetch needs to be
+     * retried from the object store.
+     *
      * @param position the position of the blob to fetch data from
      * @param length the length to read from the blob starting from position
-     * @return the input stream to fetch the data from
+     * @param listener listener for the input stream to fetch the data from
      */
-    InputStream getRangeInputStream(long position, int length) throws IOException;
-
+    void getRangeInputStream(long position, int length, ActionListener<InputStream> listener);
 }

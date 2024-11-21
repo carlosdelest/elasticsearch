@@ -29,12 +29,14 @@ import java.util.Objects;
 public class PublishNodeIngestLoadRequest extends MasterNodeRequest<PublishNodeIngestLoadRequest> {
 
     private final String nodeId;
+    private final String nodeName;
     private final long seqNo;
     private final double ingestionLoad;
 
-    public PublishNodeIngestLoadRequest(String nodeId, long seqNo, double ingestionLoad) {
+    public PublishNodeIngestLoadRequest(String nodeId, String nodeName, long seqNo, double ingestionLoad) {
         super(TimeValue.MINUS_ONE);
         this.nodeId = nodeId;
+        this.nodeName = nodeName;
         this.seqNo = seqNo;
         this.ingestionLoad = ingestionLoad;
     }
@@ -42,6 +44,7 @@ public class PublishNodeIngestLoadRequest extends MasterNodeRequest<PublishNodeI
     public PublishNodeIngestLoadRequest(StreamInput in) throws IOException {
         super(in);
         this.nodeId = in.readString();
+        this.nodeName = in.readString();
         this.seqNo = in.readLong();
         this.ingestionLoad = in.readDouble();
     }
@@ -50,12 +53,17 @@ public class PublishNodeIngestLoadRequest extends MasterNodeRequest<PublishNodeI
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeString(nodeId);
+        out.writeString(nodeName);
         out.writeLong(seqNo);
         out.writeDouble(ingestionLoad);
     }
 
     public String getNodeId() {
         return nodeId;
+    }
+
+    public String getNodeName() {
+        return nodeName;
     }
 
     public long getSeqNo() {
@@ -76,16 +84,27 @@ public class PublishNodeIngestLoadRequest extends MasterNodeRequest<PublishNodeI
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         PublishNodeIngestLoadRequest that = (PublishNodeIngestLoadRequest) o;
-        return seqNo == that.seqNo && Double.compare(that.ingestionLoad, ingestionLoad) == 0 && Objects.equals(nodeId, that.nodeId);
+        return seqNo == that.seqNo
+            && Double.compare(that.ingestionLoad, ingestionLoad) == 0
+            && Objects.equals(nodeId, that.nodeId)
+            && Objects.equals(nodeName, that.nodeName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(nodeId, seqNo, ingestionLoad);
+        return Objects.hash(nodeId, seqNo, ingestionLoad, nodeName);
     }
 
     @Override
     public String toString() {
-        return "PublishNodeIngestLoadRequest{nodeId='" + nodeId + "', seqNo=" + seqNo + ", ingestionLoad=" + ingestionLoad + '}';
+        return "PublishNodeIngestLoadRequest{nodeId='"
+            + nodeId
+            + "', nodeName='"
+            + nodeName
+            + "', seqNo="
+            + seqNo
+            + ", ingestionLoad="
+            + ingestionLoad
+            + '}';
     }
 }

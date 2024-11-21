@@ -21,7 +21,9 @@ package co.elastic.elasticsearch.stateless.test;
 
 import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.TestUtils;
+import co.elastic.elasticsearch.stateless.action.FetchShardCommitsInUseAction;
 import co.elastic.elasticsearch.stateless.action.NewCommitNotificationResponse;
+import co.elastic.elasticsearch.stateless.action.TransportFetchShardCommitsInUseAction;
 import co.elastic.elasticsearch.stateless.action.TransportNewCommitNotificationAction;
 import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
 import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
@@ -32,6 +34,7 @@ import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessClusterC
 import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessElectionStrategy;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitCleaner;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
+import co.elastic.elasticsearch.stateless.lucene.IndexBlobStoreCacheDirectory;
 import co.elastic.elasticsearch.stateless.lucene.IndexDirectory;
 import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
 import co.elastic.elasticsearch.stateless.lucene.StatelessCommitRef;
@@ -42,19 +45,23 @@ import org.apache.lucene.analysis.core.KeywordAnalyzer;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.KeywordField;
 import org.apache.lucene.document.NumericDocValuesField;
+import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexCommit;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.NoDeletionPolicy;
+import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.tests.util.LuceneTestCase;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.ActionType;
 import org.elasticsearch.client.internal.node.NodeClient;
+import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
@@ -118,6 +125,10 @@ import static org.elasticsearch.env.Environment.PATH_REPO_SETTING;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * This is a test harness that sets up a collection of stateless components.
+ * Tests can use, or add to, what it provides to set up stateless component unit tests.
+ */
 public class FakeStatelessNode implements Closeable {
     public final DiscoveryNode node;
     public final Path pathHome;
@@ -162,6 +173,7 @@ public class FakeStatelessNode implements Closeable {
         this(environmentSupplier, nodeEnvironmentSupplier, xContentRegistry, 1);
     }
 
+    @SuppressWarnings("this-escape")
     public FakeStatelessNode(
         Function<Settings, Environment> environmentSupplier,
         CheckedFunction<Settings, NodeEnvironment, IOException> nodeEnvironmentSupplier,
@@ -220,22 +232,6 @@ public class FakeStatelessNode implements Closeable {
             sharedCacheService = createCacheService(nodeEnvironment, nodeSettings, threadPool);
             localCloseables.add(sharedCacheService);
             cacheBlobReaderService = createCacheBlobReaderService(sharedCacheService);
-            indexingDirectory = localCloseables.add(
-                new IndexDirectory(
-                    new FsDirectoryFactory().newDirectory(indexSettings, indexingShardPath),
-                    createSearchDirectory(
-                        sharedCacheService,
-                        shardId,
-                        cacheBlobReaderService,
-                        MutableObjectStoreUploadTracker.ALWAYS_UPLOADED
-                    )
-                )
-            );
-            indexingStore = localCloseables.add(new Store(shardId, indexSettings, indexingDirectory, new DummyShardLock(shardId)));
-            searchDirectory = localCloseables.add(
-                createSearchDirectory(sharedCacheService, shardId, cacheBlobReaderService, new AtomicMutableObjectStoreUploadTracker())
-            );
-            searchStore = localCloseables.add(new Store(shardId, indexSettings, searchDirectory, new DummyShardLock(shardId)));
 
             transportService = transport.createTransportService(
                 nodeSettings,
@@ -292,9 +288,24 @@ public class FakeStatelessNode implements Closeable {
             warmingService = new SharedBlobCacheWarmingService(sharedCacheService, threadPool, telemetryProvider, nodeSettings);
             commitService = createCommitService();
             commitService.start();
-            commitService.register(shardId, getPrimaryTerm(), () -> false);
+            commitService.register(shardId, getPrimaryTerm(), () -> false, (checkpoint, gcpListener, timeout) -> {
+                gcpListener.accept(Long.MAX_VALUE, null);
+            }, () -> {});
             localCloseables.add(commitService);
-            indexingDirectory.getSearchDirectory().setBlobContainer(term -> objectStoreService.getBlobContainer(shardId, term));
+            indexingDirectory = localCloseables.add(
+                new IndexDirectory(
+                    new FsDirectoryFactory().newDirectory(indexSettings, indexingShardPath),
+                    new IndexBlobStoreCacheDirectory(sharedCacheService, shardId),
+                    commitService::onGenerationalFileDeletion
+                )
+            );
+            indexingStore = localCloseables.add(new Store(shardId, indexSettings, indexingDirectory, new DummyShardLock(shardId)));
+            indexingDirectory.getBlobStoreCacheDirectory().setBlobContainer(term -> objectStoreService.getBlobContainer(shardId, term));
+            searchDirectory = localCloseables.add(
+                createSearchDirectory(sharedCacheService, shardId, cacheBlobReaderService, new AtomicMutableObjectStoreUploadTracker())
+            );
+            searchDirectory.setBlobContainer(term -> objectStoreService.getBlobContainer(shardId, term));
+            searchStore = localCloseables.add(new Store(shardId, indexSettings, searchDirectory, new DummyShardLock(shardId)));
 
             closeables = localCloseables.transfer();
         }
@@ -322,18 +333,78 @@ public class FakeStatelessNode implements Closeable {
     }
 
     protected CacheBlobReaderService createCacheBlobReaderService(StatelessSharedBlobCacheService cacheService) {
-        return new CacheBlobReaderService(nodeSettings, cacheService, client);
+        return new CacheBlobReaderService(nodeSettings, cacheService, client, threadPool);
     }
 
     public List<StatelessCommitRef> generateIndexCommits(int commitsNumber) throws IOException {
-        return generateIndexCommits(commitsNumber, false, generation -> {});
+        return generateIndexCommits(commitsNumber, false, true, generation -> {});
+    }
+
+    public List<StatelessCommitRef> generateIndexCommitsWithoutMergeOrDeletion(int commitsNumber) throws IOException {
+        return generateIndexCommits(commitsNumber, false, false, generation -> {});
     }
 
     public List<StatelessCommitRef> generateIndexCommits(int commitsNumber, boolean merge) throws IOException {
-        return generateIndexCommits(commitsNumber, merge, generation -> {});
+        return generateIndexCommits(commitsNumber, merge, true, generation -> {});
     }
 
-    public List<StatelessCommitRef> generateIndexCommits(int commitsNumber, boolean merge, LongConsumer onCommitClosed) throws IOException {
+    /**
+     * Generates {@code commitsNumber} commits where each commit is composed of 1 or more segments whose cumulative files sizes is larger
+     * than {@code minSize}.
+     */
+    public List<StatelessCommitRef> generateIndexCommitsWithMinSegmentSize(int commitsNumber, long minSize) throws IOException {
+        List<StatelessCommitRef> commits = new ArrayList<>(commitsNumber);
+        Set<String> previousCommit;
+        final var indexWriterConfig = new IndexWriterConfig(new KeywordAnalyzer());
+        indexWriterConfig.setIndexDeletionPolicy(NoDeletionPolicy.INSTANCE);
+        indexWriterConfig.setMergePolicy(NoMergePolicy.INSTANCE);
+        indexWriterConfig.setRAMBufferSizeMB(1.0);
+        var indexDirectory = IndexDirectory.unwrapDirectory(indexingStore.directory());
+        try (var indexWriter = new IndexWriter(indexDirectory, indexWriterConfig)) {
+            try (var indexReader = DirectoryReader.open(indexingStore.directory())) {
+                previousCommit = new HashSet<>(indexReader.getIndexCommit().getFileNames());
+            }
+            for (int i = 0; i < commitsNumber; i++) {
+                final long initialSizeInBytes = indexDirectory.estimateSizeInBytes();
+
+                while (indexDirectory.estimateSizeInBytes() - initialSizeInBytes < minSize) {
+                    // generate a segment with files ~4KiB
+                    for (int doc = 0; doc < 1024; doc++) {
+                        LuceneDocument document = new LuceneDocument();
+                        document.add(new StringField("bytes", new BytesRef(ESTestCase.randomByteArrayOfLength(1)), Field.Store.NO));
+                        indexWriter.addDocument(document.getFields());
+                    }
+                    indexWriter.flush();
+                }
+                indexWriter.setLiveCommitData(Map.of(SequenceNumbers.MAX_SEQ_NO, Integer.toString(i)).entrySet());
+                indexWriter.commit();
+                try (var indexReader = DirectoryReader.open(indexingStore.directory())) {
+                    IndexCommit indexCommit = indexReader.getIndexCommit();
+                    Set<String> commitFiles = new HashSet<>(indexCommit.getFileNames());
+                    Set<String> additionalFiles = Sets.difference(commitFiles, previousCommit);
+                    previousCommit = commitFiles;
+
+                    StatelessCommitRef statelessCommitRef = new StatelessCommitRef(
+                        shardId,
+                        new Engine.IndexCommitRef(indexCommit, () -> {}),
+                        commitFiles,
+                        additionalFiles,
+                        primaryTerm,
+                        0
+                    );
+                    commits.add(statelessCommitRef);
+                }
+            }
+        }
+        return commits;
+    }
+
+    public List<StatelessCommitRef> generateIndexCommits(
+        int commitsNumber,
+        boolean merge,
+        boolean includeDeletions,
+        LongConsumer onCommitClosed
+    ) throws IOException {
         List<StatelessCommitRef> commits = new ArrayList<>(commitsNumber);
         Set<String> previousCommit;
 
@@ -350,7 +421,7 @@ public class FakeStatelessNode implements Closeable {
                 LuceneDocument document = new LuceneDocument();
                 document.add(new KeywordField("field0", "term", Field.Store.YES));
                 indexWriter.addDocument(document.getFields());
-                if (ESTestCase.randomBoolean()) {
+                if (includeDeletions && ESTestCase.randomBoolean()) {
                     final ParsedDocument tombstone = ParsedDocument.deleteTombstone(deleteId);
                     LuceneDocument delete = tombstone.docs().get(0);
                     NumericDocValuesField field = Lucene.newSoftDeletesField();
@@ -414,7 +485,9 @@ public class FakeStatelessNode implements Closeable {
             clusterService.threadPool(),
             client,
             commitCleaner,
-            warmingService
+            sharedCacheService,
+            warmingService,
+            telemetryProvider
         );
     }
 
@@ -432,8 +505,16 @@ public class FakeStatelessNode implements Closeable {
                 Request request,
                 ActionListener<Response> listener
             ) {
-                assert action == TransportNewCommitNotificationAction.TYPE;
-                ((ActionListener<NewCommitNotificationResponse>) listener).onResponse(new NewCommitNotificationResponse(Set.of()));
+                assert action == TransportNewCommitNotificationAction.TYPE || action == TransportFetchShardCommitsInUseAction.TYPE;
+                if (action == TransportNewCommitNotificationAction.TYPE) {
+                    ((ActionListener<NewCommitNotificationResponse>) listener).onResponse(new NewCommitNotificationResponse(Set.of()));
+                } else if (action == TransportFetchShardCommitsInUseAction.TYPE) {
+                    ((ActionListener<FetchShardCommitsInUseAction.Response>) listener).onResponse(
+                        new FetchShardCommitsInUseAction.Response(new ClusterName("fake-cluster-name"), List.of(), List.of())
+                    );
+                } else {
+                    assert false : "Unexpected request type: " + action;
+                }
             }
         };
     }

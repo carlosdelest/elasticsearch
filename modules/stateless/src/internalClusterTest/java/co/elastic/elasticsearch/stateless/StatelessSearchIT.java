@@ -19,8 +19,8 @@ package co.elastic.elasticsearch.stateless;
 
 import co.elastic.elasticsearch.stateless.action.TransportNewCommitNotificationAction;
 import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
+import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.cache.action.ClearBlobCacheNodesRequest;
-import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessClusterConsistencyService;
 import co.elastic.elasticsearch.stateless.commits.ClosedShardService;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitCleaner;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
@@ -29,15 +29,19 @@ import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.IndexEngineTestUtils;
 import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
 import co.elastic.elasticsearch.stateless.engine.SearchEngine;
+import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
 import co.elastic.elasticsearch.stateless.lucene.StatelessCommitRef;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
+import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreTestUtils;
 
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexCommit;
+import org.apache.lucene.store.Directory;
+import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequestValidationException;
-import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeRequest;
-import org.elasticsearch.action.admin.indices.refresh.TransportUnpromotableShardRefreshAction;
+import org.elasticsearch.action.admin.indices.diskusage.AnalyzeIndexDiskUsageRequest;
+import org.elasticsearch.action.admin.indices.diskusage.TransportAnalyzeIndexDiskUsageAction;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
@@ -47,8 +51,9 @@ import org.elasticsearch.action.get.TransportGetFromTranslogAction;
 import org.elasticsearch.action.get.TransportMultiGetAction;
 import org.elasticsearch.action.get.TransportShardMultiGetFomTranslogAction;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.search.ClearScrollResponse;
+import org.elasticsearch.action.search.SearchRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.action.search.SearchScrollRequest;
 import org.elasticsearch.action.search.SearchTransportService;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.action.search.TransportSearchAction;
@@ -63,6 +68,7 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.util.iterable.Iterables;
 import org.elasticsearch.core.TimeValue;
@@ -72,6 +78,7 @@ import org.elasticsearch.index.IndexSortConfig;
 import org.elasticsearch.index.engine.DocumentMissingException;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.store.Store;
@@ -85,6 +92,8 @@ import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchResponseUtils;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.snapshots.mockstore.MockRepository;
+import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.transport.ConnectTransportException;
@@ -94,9 +103,11 @@ import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
 import org.junit.Before;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -104,7 +115,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -114,22 +124,26 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static co.elastic.elasticsearch.stateless.Stateless.CLEAR_BLOB_CACHE_ACTION;
+import static co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectoryTestUtils.getCacheService;
 import static org.elasticsearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
 import static org.elasticsearch.action.support.WriteRequest.RefreshPolicy.NONE;
 import static org.elasticsearch.action.support.WriteRequest.RefreshPolicy.WAIT_UNTIL;
 import static org.elasticsearch.index.engine.LiveVersionMapTestUtils.isUnsafe;
 import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
+import static org.elasticsearch.search.aggregations.AggregationBuilders.sum;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailures;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailuresAndResponse;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertResponse;
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertScrollResponsesAndHitCount;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.in;
 import static org.hamcrest.Matchers.instanceOf;
@@ -195,9 +209,20 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
             ClusterService clusterService,
             Client client,
             StatelessCommitCleaner commitCleaner,
-            SharedBlobCacheWarmingService cacheWarmingService
+            StatelessSharedBlobCacheService cacheService,
+            SharedBlobCacheWarmingService cacheWarmingService,
+            TelemetryProvider telemetryProvider
         ) {
-            return new TestStatelessCommitService(settings, objectStoreService, clusterService, client, commitCleaner, cacheWarmingService);
+            return new TestStatelessCommitService(
+                settings,
+                objectStoreService,
+                clusterService,
+                client,
+                commitCleaner,
+                cacheService,
+                cacheWarmingService,
+                telemetryProvider
+            );
         }
 
         private int getCreatedCommits() {
@@ -216,9 +241,20 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
             ClusterService clusterService,
             Client client,
             StatelessCommitCleaner commitCleaner,
-            SharedBlobCacheWarmingService cacheWarmingService
+            StatelessSharedBlobCacheService cacheService,
+            SharedBlobCacheWarmingService cacheWarmingService,
+            TelemetryProvider telemetryProvider
         ) {
-            super(settings, objectStoreService, clusterService, client, commitCleaner, cacheWarmingService);
+            super(
+                settings,
+                objectStoreService,
+                clusterService,
+                client,
+                commitCleaner,
+                cacheService,
+                cacheWarmingService,
+                telemetryProvider
+            );
         }
 
         @Override
@@ -237,9 +273,17 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         }
     }
 
+    protected Settings.Builder nodeSettings() {
+        return super.nodeSettings().put(ObjectStoreService.TYPE_SETTING.getKey(), ObjectStoreService.ObjectStoreType.MOCK);
+    }
+
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return super.nodePlugins().stream().map(c -> c.equals(Stateless.class) ? TestStateless.class : c).toList();
+        var plugins = new ArrayList<>(super.nodePlugins());
+        plugins.remove(Stateless.class);
+        plugins.add(TestStateless.class);
+        plugins.add(MockRepository.Plugin.class);
+        return plugins;
     }
 
     private static int getNumberOfCreatedCommits() {
@@ -358,7 +402,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
     }
 
     public void testSearchShardsNotifiedOnNewCommits() throws Exception {
-        startIndexNodes(numShards);
+        startIndexNodes(numShards, disableIndexingDiskAndMemoryControllersNodeSettings());
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         createIndex(indexName, indexSettings(numShards, 0).build());
         ensureGreen(indexName);
@@ -400,9 +444,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         }
 
         assertBusy(() -> {
-            final int nonUploadedNotification = STATELESS_UPLOAD_DELAYED
-                ? (getNumberOfCreatedCommits() - beginningNumberOfCreatedCommits) * numReplicas
-                : 0;
+            final int nonUploadedNotification = (getNumberOfCreatedCommits() - beginningNumberOfCreatedCommits) * numReplicas;
             final int uploadedNotification = numberOfUploadedBCCs.get() * numReplicas;
             assertThat(
                 "Search shard notifications should be equal to the number of created commits multiplied by the number of replicas.",
@@ -414,7 +456,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
     // TODO move this test to a separate test class for refresh cost optimization
     public void testDifferentiateForFlushByRefresh() {
-        final String indexNode = startIndexNode();
+        final String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         startSearchNode();
         final String indexName = randomIdentifier();
         createIndex(indexName, indexSettings(1, 1).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
@@ -469,7 +511,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
     // TODO move this test to a separate test class for refresh cost optimization
     public void testRefreshWillSetMaxUploadGenForFlushThatDoesNotWait() throws Exception {
-        final String indexNode = startIndexNode();
+        final String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         startSearchNode();
         final String indexName = randomIdentifier();
         createIndex(indexName, indexSettings(1, 1).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
@@ -507,7 +549,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
     // TODO move this test to a separate test class for refresh cost optimization
     public void testConcurrentFlushAndMultipleRefreshesWillSetMaxUploadGen() throws Exception {
-        final String indexNode = startIndexNode();
+        final String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         startSearchNode();
         final String indexName = randomIdentifier();
         createIndex(indexName, indexSettings(1, 1).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
@@ -575,7 +617,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
             previousGeneration = generation;
         }
         // The last commit may be a refresh and not uploaded when BCC can contain more than 1 CC
-        if (STATELESS_UPLOAD_DELAYED && getUploadMaxCommits() > 1) {
+        if (getUploadMaxCommits() > 1) {
             flushNoForceNoWait(indexName);
             assertThat(indexShard.getEngineOrNull().getLastCommittedSegmentInfos().getGeneration(), equalTo(previousGeneration));
         }
@@ -586,7 +628,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
     // TODO move this test to a separate test class for refresh cost optimization
     public void testConcurrentAppendAndFreezeForVirtualBcc() throws Exception {
-        final String indexNode = startIndexNode();
+        final String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         startSearchNode();
         final String indexName = randomIdentifier();
         createIndex(indexName, indexSettings(1, 1).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
@@ -598,7 +640,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         final var indexShard = indexService.getShard(shardId.id());
         final var indexEngine = (IndexEngine) indexShard.getEngineOrNull();
         final var statelessCommitService = (TestStatelessCommitService) indexEngine.getStatelessCommitService();
-        final ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        final ObjectStoreService objectStoreService = getObjectStoreService(indexNode);
         final BlobContainer blobContainer = objectStoreService.getBlobContainer(shardId, indexShard.getOperationPrimaryTerm());
 
         final AtomicLong currentGeneration = new AtomicLong(indexEngine.getLastCommittedSegmentInfos().getGeneration());
@@ -643,39 +685,19 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         thread.join();
     }
 
-    public void testRefreshNoFastRefresh() throws Exception {
+    public void testRefresh() throws Exception {
         startIndexNodes(numShards);
         startSearchNodes(numReplicas);
 
-        testRefresh(false);
-    }
-
-    public void testRefreshFastRefresh() throws Exception {
-        startIndexNodes(numShards);
-        startSearchNodes(numReplicas);
-
-        final AtomicInteger unpromotableRefreshActions = new AtomicInteger(0);
-        for (var transportService : internalCluster().getInstances(TransportService.class)) {
-            MockTransportService mockTransportService = (MockTransportService) transportService;
-            mockTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
-                if (action.startsWith(TransportUnpromotableShardRefreshAction.NAME)) {
-                    unpromotableRefreshActions.incrementAndGet();
-                }
-                connection.sendRequest(requestId, action, request, options);
-            });
-        }
-
-        testRefresh(true);
-
-        assertThat(unpromotableRefreshActions.get(), equalTo(0));
-    }
-
-    private void testRefresh(boolean fastRefresh) throws InterruptedException, ExecutionException {
         assert cluster().numDataNodes() > 0 : "Should have already started nodes";
         final String indexName = SYSTEM_INDEX_NAME;
-        createSystemIndex(
-            indexSettings(numShards, numReplicas).put(IndexSettings.INDEX_FAST_REFRESH_SETTING.getKey(), fastRefresh).build()
-        );
+        if (randomBoolean()) {
+            createSystemIndex(
+                indexSettings(numShards, numReplicas).put(IndexSettings.INDEX_FAST_REFRESH_SETTING.getKey(), randomBoolean()).build()
+            );
+        } else {
+            createIndex(indexName, indexSettings(numShards, numReplicas).build());
+        }
         ensureGreen(indexName);
 
         List<WriteRequest.RefreshPolicy> refreshPolicies = shuffledList(List.of(NONE, WAIT_UNTIL, IMMEDIATE));
@@ -716,7 +738,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
                 searchResponse -> assertEquals(
                     "Failed search hit count refresh test for bulk refresh policy: " + refreshPolicy,
                     finalTotalDocs,
-                    searchResponse.getHits().getTotalHits().value
+                    searchResponse.getHits().getTotalHits().value()
                 )
             );
         }
@@ -745,7 +767,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
         assertNoFailuresAndResponse(
             prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()),
-            searchResponse -> assertEquals(docsToIndex, searchResponse.getHits().getTotalHits().value)
+            searchResponse -> assertEquals(docsToIndex, searchResponse.getHits().getTotalHits().value())
         );
     }
 
@@ -764,7 +786,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
         assertNoFailuresAndResponse(
             prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()),
-            searchResponse -> assertEquals(numDocs, searchResponse.getHits().getTotalHits().value)
+            searchResponse -> assertEquals(numDocs, searchResponse.getHits().getTotalHits().value())
         );
     }
 
@@ -802,7 +824,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
         assertNoFailuresAndResponse(
             prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()),
-            searchResponse -> assertEquals(docsToIndex, searchResponse.getHits().getTotalHits().value)
+            searchResponse -> assertEquals(docsToIndex, searchResponse.getHits().getTotalHits().value())
         );
     }
 
@@ -829,7 +851,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         assertNoFailuresAndResponse(
             prepareSearch().setQuery(QueryBuilders.matchAllQuery()).setSize(scrollSize).setScroll(TimeValue.timeValueMinutes(2)),
             scrollSearchResponse -> {
-                assertThat(scrollSearchResponse.getHits().getTotalHits().value, equalTo((long) bulk1DocsToIndex));
+                assertThat(scrollSearchResponse.getHits().getTotalHits().value(), equalTo((long) bulk1DocsToIndex));
                 Arrays.stream(scrollSearchResponse.getHits().getHits()).map(SearchHit::getId).forEach(scrollSearchDocsSeen::add);
                 currentScrollId.set(scrollSearchResponse.getScrollId());
             }
@@ -850,13 +872,13 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
                 final long expectedDocs = docsIndexed - docsDeleted;
                 assertNoFailuresAndResponse(
                     prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()),
-                    searchResponse -> assertEquals(expectedDocs, searchResponse.getHits().getTotalHits().value)
+                    searchResponse -> assertEquals(expectedDocs, searchResponse.getHits().getTotalHits().value())
                 );
                 // fetch next scroll
                 assertNoFailuresAndResponse(
                     client().prepareSearchScroll(currentScrollId.get()).setScroll(TimeValue.timeValueMinutes(2)),
                     scrollSearchResponse -> {
-                        assertThat(scrollSearchResponse.getHits().getTotalHits().value, equalTo((long) bulk1DocsToIndex));
+                        assertThat(scrollSearchResponse.getHits().getTotalHits().value(), equalTo((long) bulk1DocsToIndex));
                         scrollSearchDocsSeen.addAll(
                             Arrays.stream(scrollSearchResponse.getHits().getHits()).map(SearchHit::getId).collect(Collectors.toSet())
                         );
@@ -871,7 +893,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
     }
 
     public void testAcquiredPrimaryTermAndGenerations() {
-        startIndexNode();
+        startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         startSearchNode();
 
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
@@ -906,7 +928,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
         final AtomicReference<String> firstScrollId = new AtomicReference<>();
         assertNoFailuresAndResponse(prepareSearch().setScroll(TimeValue.timeValueHours(1L)), firstScroll -> {
-            assertThat(firstScroll.getHits().getTotalHits().value, equalTo(100L));
+            assertThat(firstScroll.getHits().getTotalHits().value(), equalTo(100L));
             firstScrollId.set(firstScroll.getScrollId());
         });
 
@@ -918,7 +940,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
         final AtomicReference<String> secondScrollId = new AtomicReference<>();
         assertNoFailuresAndResponse(prepareSearch().setScroll(TimeValue.timeValueHours(1L)), secondScroll -> {
-            assertThat(secondScroll.getHits().getTotalHits().value, equalTo(200L));
+            assertThat(secondScroll.getHits().getTotalHits().value(), equalTo(200L));
             secondScrollId.set(secondScroll.getScrollId());
         });
 
@@ -933,7 +955,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         flushAndRefresh(indexName);
 
         assertNoFailuresAndResponse(prepareSearch().setScroll(TimeValue.timeValueHours(1L)), thirdScroll -> {
-            assertThat(thirdScroll.getHits().getTotalHits().value, equalTo(300L));
+            assertThat(thirdScroll.getHits().getTotalHits().value(), equalTo(300L));
 
             var thirdScrollPrimaryTermAndGenerations = latestPrimaryTermAndGenerationDependencies.get();
             assertThat(secondScrollPrimaryTermAndGenerations, everyItem(is(in(searchEngine.getAcquiredPrimaryTermAndGenerations()))));
@@ -991,7 +1013,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         client(coordinatingSearchNode).prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).execute(new ActionListener<>() {
             @Override
             public void onResponse(SearchResponse searchResponse) {
-                assertThat(searchResponse.getHits().getTotalHits().value, equalTo((long) bulk1DocsToIndex));
+                assertThat(searchResponse.getHits().getTotalHits().value(), equalTo((long) bulk1DocsToIndex));
                 searchFinished.countDown();
             }
 
@@ -1009,7 +1031,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
                 .setSize(0)  // Avoid a FETCH phase
                 .setQuery(QueryBuilders.matchAllQuery()),
             search2Response -> {
-                assertEquals(bulk1DocsToIndex + bulk2DocsToIndex, search2Response.getHits().getTotalHits().value);
+                assertEquals(bulk1DocsToIndex + bulk2DocsToIndex, search2Response.getHits().getTotalHits().value());
                 secondBulkIndexed.countDown();
             }
         );
@@ -1043,7 +1065,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         int max = Collections.max(data);
         var cacheMiss = countDocsInRange(client, indexName, min, max);
         try {
-            assertThat(cacheMiss.getHits().getTotalHits().value, equalTo((long) data.size()));
+            assertThat(cacheMiss.getHits().getTotalHits().value(), equalTo((long) data.size()));
         } finally {
             cacheMiss.decRef();
         }
@@ -1053,7 +1075,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         for (int i = 0; i < nbSearchesWithCacheHits; i++) {
             var cacheHit = countDocsInRange(client, indexName, min, max);
             try {
-                assertThat(cacheHit.getHits().getTotalHits().value, equalTo((long) data.size()));
+                assertThat(cacheHit.getHits().getTotalHits().value(), equalTo((long) data.size()));
                 assertRequestCacheStats(client, indexName, greaterThan(0L), i + 1, 1);
             } finally {
                 cacheHit.decRef();
@@ -1070,7 +1092,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
         var cacheMissDueRefresh = countDocsInRange(client, indexName, min, max);
         try {
-            assertThat(cacheMissDueRefresh.getHits().getTotalHits().value, equalTo((long) (data.size() + moreData.size())));
+            assertThat(cacheMissDueRefresh.getHits().getTotalHits().value(), equalTo((long) (data.size() + moreData.size())));
         } finally {
             cacheMissDueRefresh.decRef();
         }
@@ -1175,16 +1197,39 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         assertThat(exception.getMessage(), containsString("disabling [track_total_hits] is not allowed in a scroll context"));
     }
 
-    public void testSearchWithWaitForCheckpoint() throws ExecutionException, InterruptedException {
-        startMasterOnlyNode();
-        var indexNode = startIndexNodes(1).get(0);
-        startSearchNodes(1);
+    public void testSearchWithWaitForUnissuedCheckpoint() {
+        var nodeSettings = disableIndexingDiskAndMemoryControllersNodeSettings();
+        startMasterOnlyNode(nodeSettings);
+        startIndexNode(nodeSettings);
+        startSearchNode(nodeSettings);
+        String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        createIndex(indexName, indexSettings(1, 1).build());
+        ensureGreen(indexName);
+        indexDocs(indexName, randomIntBetween(1, 100));
+        if (randomBoolean()) {
+            refresh(indexName);
+        }
+
+        var exception = expectThrows(
+            Exception.class,
+            () -> client().prepareSearch(indexName)
+                .setWaitForCheckpoints(Map.of(indexName, new long[] { Long.MAX_VALUE }))
+                .setWaitForCheckpointsTimeout(TimeValue.timeValueMinutes(2))
+                .get()
+        );
+        assertThat(exception.getCause().getMessage(), containsString("Cannot wait for unissued seqNo checkpoint"));
+    }
+
+    public void testSearchWithWaitForCheckpoint() {
+        startMasterOnlyNode(disableIndexingDiskAndMemoryControllersNodeSettings());
+        var indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
+        startSearchNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         createIndex(indexName, indexSettings(1, 1).build());
         ensureGreen(indexName);
         final int docCount = randomIntBetween(1, 100);
         indexDocs(indexName, docCount);
-        final Index index = clusterAdmin().prepareState().get().getState().metadata().index(indexName).getIndex();
+        final Index index = clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT).get().getState().metadata().index(indexName).getIndex();
         var seqNoStats = clusterAdmin().prepareNodesStats(indexNode)
             .setIndices(true)
             .get()
@@ -1197,20 +1242,140 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         boolean refreshBefore = randomBoolean();
         if (refreshBefore) {
             refresh(indexName);
-            // TODO Revisit the following flush call once ES-8275 is resolved
-            flushNoForceNoWait(indexName);
         }
         var searchFuture = client().prepareSearch(indexName)
             .setWaitForCheckpoints(Map.of(indexName, new long[] { seqNoStats.getGlobalCheckpoint() }))
             .execute();
         if (refreshBefore == false) {
             refresh(indexName);
-            // TODO Revisit the following flush call once ES-8275 is resolved
-            flushNoForceNoWait(indexName);
         }
         assertHitCount(searchFuture, docCount);
     }
 
+    public void testSearchWithWaitForCheckpointWithTranslogDelay() throws Exception {
+        // To test that non-uploaded commit notifications wait for the GCP, we ensure VBCC is not immediately frozen.
+        var nodeSettings = Settings.builder()
+            .put(disableIndexingDiskAndMemoryControllersNodeSettings())
+            .put(StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.getKey(), ByteSizeValue.ofGb(1))
+            .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 100)
+            .put(StatelessCommitService.STATELESS_UPLOAD_VBCC_MAX_AGE.getKey(), TimeValue.timeValueHours(1))
+            .build();
+        startMasterOnlyNode(nodeSettings);
+        final var indexNode = startIndexNode(nodeSettings);
+        startSearchNode(nodeSettings);
+        String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        createIndex(indexName, indexSettings(1, 1).build());
+        ensureGreen(indexName);
+        IndexShard indexShard = findIndexShard(indexName);
+
+        // Repeatedly fail translog uploads
+        ObjectStoreService objectStoreService = getObjectStoreService(indexNode);
+        MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
+        repository.setRandomControlIOExceptionRate(1.0);
+        repository.setRandomDataFileIOExceptionRate(1.0);
+        repository.setMaximumNumberOfFailures(Long.MAX_VALUE);
+        repository.setRandomIOExceptionPattern(".*translog.*");
+
+        var bulkRequest = client().prepareBulk();
+        final long docCount = randomLongBetween(1, 100);
+        for (var i = 0; i < docCount; i++) {
+            bulkRequest.add(new IndexRequest(indexName).source("field", randomUnicodeOfCodepointLengthBetween(1, 25)));
+        }
+        bulkRequest.setRefreshPolicy(WriteRequest.RefreshPolicy.IMMEDIATE);
+        ActionFuture<BulkResponse> bulkFuture = bulkRequest.execute();
+
+        // Wait until the documents are processed
+        IndexEngine engine = (IndexEngine) indexShard.getEngineOrNull();
+        assertBusy(() -> assertThat(engine.getProcessedLocalCheckpoint(), greaterThanOrEqualTo(0L)));
+        assertThat(engine.getPersistedLocalCheckpoint(), equalTo(SequenceNumbers.NO_OPS_PERFORMED));
+
+        // Assert that any new commit notification should be sent after the translog is persisted.
+        // Also, make a latch to control whether to delay when the new commit notification is sent.
+        boolean sendNewCommitNotificationAfterSearch = randomBoolean();
+        CountDownLatch newCommitNotificationLatch = new CountDownLatch(sendNewCommitNotificationAfterSearch ? 1 : 0);
+        var mockTransportService = (MockTransportService) internalCluster().getInstance(TransportService.class, indexNode);
+        mockTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
+            if (action.equals(TransportNewCommitNotificationAction.NAME + "[u]")) {
+                assertThat(engine.getPersistedLocalCheckpoint(), greaterThanOrEqualTo(0L));
+                mockTransportService.getThreadPool().generic().execute(() -> {
+                    try {
+                        safeAwait(newCommitNotificationLatch);
+                        connection.sendRequest(requestId, action, request, options);
+                    } catch (Exception e) {
+                        assert false : e;
+                        throw new RuntimeException(e);
+                    }
+                });
+            } else {
+                connection.sendRequest(requestId, action, request, options);
+            }
+        });
+
+        // Fire a refresh, which triggers a new commit notification
+        var refreshRequest = indicesAdmin().prepareRefresh(indexName).execute();
+
+        // Let translog pass through and wait for global checkpoint to increase
+        repository.setRandomControlIOExceptionRate(0.0);
+        repository.setRandomDataFileIOExceptionRate(0.0);
+        AtomicLong globalCheckpoint = new AtomicLong(-1);
+        assertBusy(() -> {
+            globalCheckpoint.set(engine.getLastSyncedGlobalCheckpoint());
+            assertThat(globalCheckpoint.get(), greaterThanOrEqualTo(docCount - 1));
+        });
+
+        // Issue a search waiting for the global checkpoint
+        var searchFuture = client().prepareSearch(indexName)
+            .setWaitForCheckpoints(Map.of(indexName, new long[] { globalCheckpoint.get() }))
+            .execute();
+        newCommitNotificationLatch.countDown();
+        assertHitCount(searchFuture, docCount);
+
+        assertNoFailures(bulkFuture.get());
+        assertNoFailures(refreshRequest.get());
+    }
+
+    public void testSearchWithWaitForCheckpointOnNewSearchShard() throws Exception {
+        startMasterOnlyNode(disableIndexingDiskAndMemoryControllersNodeSettings());
+        final var indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
+        startSearchNode(disableIndexingDiskAndMemoryControllersNodeSettings());
+        String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        createIndex(indexName, indexSettings(1, 0).build());
+        ensureGreen(indexName);
+
+        final int docCount = randomIntBetween(100, 100);
+        if (docCount > 0) {
+            indexDocs(indexName, docCount);
+            if (randomBoolean()) {
+                flush(indexName);
+            } else if (randomBoolean()) {
+                refresh(indexName);
+            } else {
+                // In this case, we expect the scheduled refresh to trigger the wait-for-checkpoint search
+            }
+        }
+
+        setReplicaCount(1, indexName);
+        ensureGreen(indexName);
+
+        final Index index = clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT).get().getState().metadata().index(indexName).getIndex();
+        var seqNoStats = clusterAdmin().prepareNodesStats(indexNode)
+            .setIndices(true)
+            .get()
+            .getNodes()
+            .get(0)
+            .getIndices()
+            .getShardStats(index)
+            .get(0)
+            .getShards()[0].getSeqNoStats();
+
+        // Issue a search waiting for the global checkpoint
+        var searchFuture = client().prepareSearch(indexName)
+            .setWaitForCheckpoints(Map.of(indexName, new long[] { seqNoStats.getGlobalCheckpoint() }))
+            .execute();
+        assertHitCount(searchFuture, docCount);
+    }
+
+    // TODO: Remove redundant test with ES-9563
     public void testFastRefreshSearch() throws Exception {
         startIndexNodes(numShards);
         startSearchNodes(numReplicas);
@@ -1224,7 +1389,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
             MockTransportService mockTransportService = (MockTransportService) transportService;
             mockTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
                 if (action.contains(TransportSearchAction.NAME)) {
-                    assertThat(connection.getNode().getRoles(), contains(DiscoveryNodeRole.INDEX_ROLE));
+                    assertThat(connection.getNode().getRoles(), contains(DiscoveryNodeRole.SEARCH_ROLE));
                 }
                 connection.sendRequest(requestId, action, request, options);
             });
@@ -1232,10 +1397,11 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
         assertNoFailuresAndResponse(
             prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()),
-            searchResponse -> assertEquals(docsToIndex, searchResponse.getHits().getTotalHits().value)
+            searchResponse -> assertEquals(docsToIndex, searchResponse.getHits().getTotalHits().value())
         );
     }
 
+    // TODO: Remove redundant test with ES-9563
     public void testFastRefreshGetAndMGet() {
         startIndexNodes(numShards);
         startSearchNodes(numReplicas);
@@ -1255,16 +1421,15 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         BulkResponse bulkResponse = bulkRequest.get();
         assertNoFailures(bulkResponse);
 
-        final AtomicInteger fromTranslogActionsSent = new AtomicInteger(0);
         for (var transportService : internalCluster().getInstances(TransportService.class)) {
             MockTransportService mockTransportService = (MockTransportService) transportService;
             mockTransportService.addSendBehavior((connection, requestId, action, request, options) -> {
-                if (action.startsWith(TransportGetAction.TYPE.name()) || action.startsWith(TransportMultiGetAction.NAME)) {
-                    assertThat(connection.getNode().getRoles(), contains(DiscoveryNodeRole.INDEX_ROLE));
-                } else if (action.startsWith(TransportGetFromTranslogAction.NAME)
+                if (action.startsWith(TransportGetFromTranslogAction.NAME)
                     || action.startsWith(TransportShardMultiGetFomTranslogAction.NAME)) {
-                        fromTranslogActionsSent.incrementAndGet();
-                    }
+                    assertThat(connection.getNode().getRoles(), contains(DiscoveryNodeRole.INDEX_ROLE));
+                } else if (action.startsWith(TransportGetAction.TYPE.name()) || action.startsWith(TransportMultiGetAction.NAME)) {
+                    assertThat(connection.getNode().getRoles(), contains(DiscoveryNodeRole.SEARCH_ROLE));
+                }
                 connection.sendRequest(requestId, action, request, options);
             });
         }
@@ -1301,81 +1466,227 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
                 assertThat(response.getResponses()[id].getId(), equalTo(stringIds[id]));
             });
         }
-
-        assertThat(fromTranslogActionsSent.get(), equalTo(0));
     }
 
-    /**
-     * Tests that an index shard will not retain commits in the blob store for active readers on search nodes that no longer own the search
-     * shard. The index shard only tracks commits in use by search nodes that own a shard, not search nodes that used to own a shard replica
-     * and still have active readers depending on old shard commits.
-     *
-     * This is behavior that ES-6685 will change / fix.
-     */
-    public void testRetainCommitForReadersAfterShardMovedAway() throws Exception {
-        final String indexNode = startMasterAndIndexNode(
-            Settings.builder()
-                .put(StatelessClusterConsistencyService.DELAYED_CLUSTER_CONSISTENCY_INTERVAL_SETTING.getKey(), "100ms")
-                .build()
-        );
-        final String searchNodeA = startSearchNode();
-        final String searchNodeB = startSearchNode();
+    public void testConcurrentIndexingAndSearches() throws Exception {
 
-        final String indexName = randomIdentifier();
-        createIndex(
-            indexName,
-            indexSettings(1, 1)
-                // Start with the shard replica on searchNodeA.
-                .put("index.routing.allocation.exclude._name", searchNodeB)
+        int maxNonUploadedCommits = randomIntBetween(1, 20);
+        startIndexNode(
+            Settings.builder()
+                .put(StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.getKey(), ByteSizeValue.ofGb(1))
+                .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), maxNonUploadedCommits)
                 .build()
         );
+        startSearchNode();
+
+        final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        createIndex(indexName, indexSettings(1, 1).build());
         ensureGreen(indexName);
 
-        // Set up some data to be read.
-        final int numDocsToIndex = randomIntBetween(5, 100);
-        indexDocsAndRefresh(indexName, numDocsToIndex);
+        // abort all indexing and searching threads if any of them encounter error
+        var erroneousStop = new AtomicBoolean(false);
+        var threads = new ArrayList<Thread>();
 
-        // Start a scroll to pin the reader state on the search node until the scroll is exhausted / released.
-        final var scrollSearchResponse = client().prepareSearch(indexName)
-            .setQuery(QueryBuilders.matchAllQuery())
-            .setSize(1)
-            .setScroll(TimeValue.timeValueMinutes(2))
-            .get();
-        try {
-            assertThat(scrollSearchResponse.getScrollId(), Matchers.is(notNullValue()));
+        int indexingThreadsNumber = randomIntBetween(1, 5);
+        var runningIndexingThreadsCount = new CountDownLatch(indexingThreadsNumber);
 
-            // Move shard away from searchNodeA while the search is still active and using the latest shard commit.
-            logger.info("--> moving shards in index [{}] away from node [{}]", indexName, searchNodeA);
-            updateIndexSettings(Settings.builder().put("index.routing.allocation.exclude._name", searchNodeA), indexName);
-            assertBusy(() -> assertThat(internalCluster().nodesInclude(indexName), not(hasItem(searchNodeA))));
-            logger.info("--> shards in index [{}] have been moved off of node [{}]", indexName, searchNodeA);
-
-            // Run some indexing and create a new commit. Then force merge down to a single segment (in another new commit). Newer commits
-            // can reference information in older commit, rather than copying everything: force merge will ensure older commits are not
-            // retained for this reason.
-            // The indexNode should then delete the prior commits because searchNodeB is not using them, and searchNodeA is ignored because
-            // the routing indicates it has no shard.
-            indexDocsAndRefresh(indexName, numDocsToIndex);
-            client().admin().indices().forceMerge(new ForceMergeRequest(indexName).maxNumSegments(1)).actionGet();
-            refresh(indexName);
-
-            // Evict data from all node blob caches. This should force the scroll on searchNodeA to fetch data from the remote blob store.
-            client().execute(CLEAR_BLOB_CACHE_ACTION, new ClearBlobCacheNodesRequest()).get();
-
-            // Try to fetch more data from the scroll, which should throw an error because the remote blob store no longer has the commit
-            // that the reader is using.
-            assertHitCount(scrollSearchResponse, numDocsToIndex);
-            assertThat(scrollSearchResponse.getHits().getHits().length, equalTo(1));
-            assertBusy(
-                () -> assertThrows(
-                    ExecutionException.class,
-                    () -> client().searchScroll(new SearchScrollRequest(scrollSearchResponse.getScrollId())).get().decRef()
-                )
-            );
-        } finally {
-            // There's an implicit incRef in prepareSearch(), so call decRef() to release the response object back into the resource pool.
-            scrollSearchResponse.decRef();
+        final Runnable indexer = () -> {
+            try {
+                var bulkCount = randomIntBetween(1, 10);
+                for (int bulk = 0; bulk < bulkCount && erroneousStop.get() == false; bulk++) {
+                    indexQueryableDocs(indexName, scaledRandomIntBetween(10, 50));
+                    if (rarely()) {
+                        flush(indexName);
+                    }
+                    safeSleep(randomLongBetween(100, 200));
+                }
+            } catch (Exception e) {
+                erroneousStop.set(true);
+                throw new AssertionError(e);
+            } finally {
+                runningIndexingThreadsCount.countDown();
+            }
+        };
+        for (int i = 0; i < indexingThreadsNumber; i++) {
+            threads.add(new Thread(indexer));
         }
+
+        int searchThreadsNumber = randomIntBetween(1, 5);
+        var runningSearchingThreadsCount = new CountDownLatch(searchThreadsNumber);
+
+        final Runnable searcher = () -> {
+            try {
+                while (runningIndexingThreadsCount.getCount() > 0 && erroneousStop.get() == false) {
+                    if (rarely()) {
+                        if (randomBoolean()) {
+                            // fan out to all nodes
+                            client().execute(CLEAR_BLOB_CACHE_ACTION, new ClearBlobCacheNodesRequest()).get();
+                        } else {
+                            // clear cache on just searching node
+                            evictSearchShardCache(indexName);
+                        }
+                    }
+
+                    var searchType = randomFrom(TestSearchType.values());
+                    var searchRequest = prepareSearch(indexName, searchType).setTimeout(TimeValue.timeValueMinutes(60));
+                    if (searchType != TestSearchType.SCROLL) {
+                        assertNoFailures(searchRequest);
+                    } else {
+                        assertScrollResponses(searchRequest);
+                    }
+                    safeSleep(randomLongBetween(100, 200));
+                }
+            } catch (Exception e) {
+                erroneousStop.set(true);
+                throw new AssertionError(e);
+            } finally {
+                runningSearchingThreadsCount.countDown();
+            }
+        };
+        for (int i = 0; i < searchThreadsNumber; i++) {
+            threads.add(new Thread(searcher));
+        }
+
+        threads.forEach(Thread::start);
+
+        for (Thread thread : threads) {
+            thread.join(10_000);
+        }
+
+        safeAwait(runningIndexingThreadsCount);
+        safeAwait(runningSearchingThreadsCount);
+    }
+
+    public void testConcurrentReadAfterWrite() {
+        int maxNonUploadedCommits = randomIntBetween(1, 5);
+        startIndexNode(
+            Settings.builder()
+                .put(StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.getKey(), ByteSizeValue.ofGb(1))
+                .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), maxNonUploadedCommits)
+                .build()
+        );
+        startSearchNode();
+
+        var indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        createIndex(indexName, indexSettings(1, 1).build());
+        ensureGreen(indexName);
+
+        var threads = new ArrayList<Thread>();
+        var numReadWriteTaskPairs = randomIntBetween(1, 5);
+        var threadCounter = new CountDownLatch(2 * numReadWriteTaskPairs);
+
+        for (int i = 0; i < numReadWriteTaskPairs; i++) {
+
+            final int customValue = randomInt();
+            final int docsNum = randomIntBetween(1, 10);
+            final int commitsNum = randomIntBetween(1, 2 * maxNonUploadedCommits);
+            final CountDownLatch latch = new CountDownLatch(1);
+
+            threads.add(new Thread(() -> {
+                for (int c = 0; c < commitsNum; c++) {
+                    // every indexing-search task works on its own set of documents to be able to guarantee doc count checks
+                    indexDocsWithCustomValue(indexName, docsNum, customValue);
+                    refresh(indexName);
+                }
+                latch.countDown();
+                threadCounter.countDown();
+            }));
+
+            threads.add(new Thread(() -> {
+
+                safeAwait(latch);
+
+                if (rarely()) {
+                    evictSearchShardCache(indexName);
+                }
+                long expectedDocsNum = (long) docsNum * commitsNum;
+                var search = prepareSearch(indexName).setQuery(QueryBuilders.termQuery("custom", customValue));
+                if (randomBoolean()) {
+                    // Set a large size to retrieve all documents to force reading all relevant search data
+                    assertHitCount(search.setSize(10_000), expectedDocsNum);
+                } else {
+                    assertScrollResponsesAndHitCount(
+                        client(),
+                        TimeValue.timeValueSeconds(60),
+                        search.setSize(randomIntBetween(1, (int) expectedDocsNum)),
+                        (int) expectedDocsNum,
+                        (respNum, response) -> assertNoFailures(response)
+                    );
+                }
+                threadCounter.countDown();
+            }));
+        }
+
+        Collections.shuffle(threads, random());
+
+        threads.forEach(Thread::start);
+
+        safeAwait(threadCounter);
+    }
+
+    private void assertScrollResponses(SearchRequestBuilder searchRequestBuilder) {
+        var responses = new ArrayList<SearchResponse>();
+        var scrollResponse = searchRequestBuilder.get();
+        assertNoFailures(scrollResponse);
+        responses.add(scrollResponse);
+        try {
+            while (scrollResponse.getHits().getHits().length > 0) {
+                scrollResponse = client().prepareSearchScroll(scrollResponse.getScrollId()).setScroll(TimeValue.timeValueSeconds(60)).get();
+                assertNoFailures(scrollResponse);
+                responses.add(scrollResponse);
+            }
+        } finally {
+            ClearScrollResponse clearResponse = client().prepareClearScroll()
+                .setScrollIds(Arrays.asList(scrollResponse.getScrollId()))
+                .get();
+            responses.forEach(SearchResponse::decRef);
+            assertThat(clearResponse.isSucceeded(), Matchers.equalTo(true));
+        }
+    }
+
+    private void evictSearchShardCache(String indexName) {
+        IndexShard shard = findSearchShard(indexName);
+        Directory directory = shard.store().directory();
+        SearchDirectory searchDirectory = SearchDirectory.unwrapDirectory(directory);
+        getCacheService(searchDirectory).forceEvict((key) -> true);
+    }
+
+    private void indexQueryableDocs(String indexName, int numDocs) {
+        var bulkRequest = client().prepareBulk();
+        for (int i = 0; i < numDocs; i++) {
+            Map<String, Object> doc = new HashMap<>();
+            doc.put("field", randomUnicodeOfCodepointLengthBetween(1, 25));
+            if (randomBoolean()) {
+                doc.put("number", randomInt());
+            }
+            if (randomBoolean()) {
+                doc.put("custom", "value");
+            }
+            bulkRequest.add(new IndexRequest(indexName).source(doc));
+        }
+        var refreshPolicy = rarely() ? WAIT_UNTIL : randomFrom(NONE, IMMEDIATE);
+        logger.info("--> indexing [{}] docs with refresh_policy [{}]", numDocs, refreshPolicy);
+        bulkRequest.setRefreshPolicy(refreshPolicy).setTimeout(TimeValue.timeValueSeconds(60));
+        assertNoFailures(bulkRequest.get());
+    }
+
+    private enum TestSearchType {
+        MATCH_ALL,
+        MATCH_CUSTOM,
+        SUM,
+        SCROLL
+    }
+
+    static SearchRequestBuilder prepareSearch(String indexName, TestSearchType testSearchType) {
+        // Set a large size to retrieve all documents to force reading all relevant search data
+        return switch (testSearchType) {
+            case MATCH_ALL -> prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()).setSize(10_000);
+            case MATCH_CUSTOM -> prepareSearch(indexName).setQuery(QueryBuilders.termQuery("custom", "value")).setSize(10_000);
+            case SUM -> prepareSearch(indexName).addAggregation(sum("sum").field("number")).setSize(10_000);
+            case SCROLL -> prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery())
+                .setSize(randomIntBetween(10, 1000))
+                .setScroll(TimeValue.timeValueSeconds(60));
+        };
     }
 
     private static SearchResponse countDocsInRange(Client client, String index, int min, int max) {
@@ -1403,6 +1714,14 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
 
     private static void indexDocWithRange(String index, String id, int value) {
         assertThat(client().prepareIndex(index).setId(id).setSource("f", value).get().status(), equalTo(RestStatus.CREATED));
+    }
+
+    private void indexDocsWithCustomValue(String indexName, int numDocs, int customValue) {
+        var bulkRequest = client().prepareBulk();
+        for (int i = 0; i < numDocs; i++) {
+            bulkRequest.add(new IndexRequest(indexName).source("custom", customValue));
+        }
+        assertNoFailures(bulkRequest.get());
     }
 
     private Set<String> indexDocsWithRefreshAndGetIds(String indexName, int numDocs) throws Exception {
@@ -1433,7 +1752,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
     private static ShardRouting searchShard(String indexName) {
         return client().admin()
             .cluster()
-            .prepareState()
+            .prepareState(TEST_REQUEST_TIMEOUT)
             .clear()
             .setRoutingTable(true)
             .get()
@@ -1464,7 +1783,7 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
      * closure.
      */
     public void testShardClosureMovesActiveReaderCommitTrackingToClosedShardService() throws Exception {
-        final String indexNode = startMasterAndIndexNode();
+        startMasterAndIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         final String searchNodeA = startSearchNode();
         final String searchNodeB = startSearchNode();
 
@@ -1518,4 +1837,20 @@ public class StatelessSearchIT extends AbstractStatelessIntegTestCase {
         }
     }
 
+    public void testAnalyzeDiskUsage() {
+        startIndexNodes(numShards);
+        startSearchNodes(numShards * numReplicas);
+        final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        createIndex(indexName, indexSettings(numShards, numReplicas).build());
+        ensureGreen(indexName);
+        var request = new AnalyzeIndexDiskUsageRequest(
+            new String[] { indexName },
+            AnalyzeIndexDiskUsageRequest.DEFAULT_INDICES_OPTIONS,
+            false
+        );
+        var resp = client().execute(TransportAnalyzeIndexDiskUsageAction.TYPE, request).actionGet();
+        assertThat(resp.getTotalShards(), equalTo(numShards));
+        assertThat(resp.getFailedShards(), equalTo(0));
+        assertThat(resp.getSuccessfulShards(), equalTo(numShards));
+    }
 }

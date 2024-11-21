@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.stateless.recovery.metering;
 
+import co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectory;
 import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
 
 import org.elasticsearch.action.ActionListener;
@@ -38,6 +39,8 @@ import java.util.Map;
 public class RecoveryMetricsCollector implements IndexEventListener {
 
     private static final Logger logger = LogManager.getLogger(RecoveryMetricsCollector.class);
+
+    public static final String RECOVERY_TOTAL_COUNT_METRIC = "es.recovery.shard.count.total";
     public static final String RECOVERY_TOTAL_TIME_METRIC = "es.recovery.shard.total.time";
     public static final String RECOVERY_INDEX_TIME_METRIC = "es.recovery.shard.index.time";
     public static final String RECOVERY_TRANSLOG_TIME_METRIC = "es.recovery.shard.translog.time";
@@ -46,6 +49,7 @@ public class RecoveryMetricsCollector implements IndexEventListener {
     public static final String RECOVERY_BYTES_WARMED_FROM_INDEXING_METRIC = "es.recovery.shard.indexing_node.bytes_warmed.total";
     public static final String RECOVERY_BYTES_WARMED_FROM_OBJECT_STORE_METRIC = "es.recovery.shard.object_store.bytes_warmed.total";
 
+    private final LongCounter shardRecoveryTotalMetric;
     private final LongHistogram shardRecoveryTotalTimeMetric;
     private final LongHistogram shardRecoveryIndexTimeMetric;
     private final LongHistogram shardRecoveryTranslogTimeMetric;
@@ -56,6 +60,11 @@ public class RecoveryMetricsCollector implements IndexEventListener {
 
     public RecoveryMetricsCollector(TelemetryProvider telemetryProvider) {
         final MeterRegistry meterRegistry = telemetryProvider.getMeterRegistry();
+        shardRecoveryTotalMetric = meterRegistry.registerLongCounter(
+            RECOVERY_TOTAL_COUNT_METRIC,
+            "Number of times shard recovery has happened",
+            "unit"
+        );
         shardRecoveryTotalTimeMetric = meterRegistry.registerLongHistogram(
             RECOVERY_TOTAL_TIME_METRIC,
             "Total elapsed shard recovery time in millis",
@@ -100,27 +109,35 @@ public class RecoveryMetricsCollector implements IndexEventListener {
                 final RecoveryState recoveryState = indexShard.recoveryState();
                 assert recoveryState != null;
                 if (recoveryState.getStage() == RecoveryState.Stage.DONE) {
+                    shardRecoveryTotalMetric.increment();
                     final Map<String, Object> metricLabels = recoveryMetricLabels(indexShard);
                     shardRecoveryTotalTimeMetric.record(recoveryState.getTimer().time(), metricLabels);
                     shardRecoveryIndexTimeMetric.record(recoveryState.getIndex().time(), metricLabels);
                     shardRecoveryTranslogTimeMetric.record(recoveryState.getTranslog().time(), metricLabels);
 
                     final Store store = indexShard.store();
-                    final SearchDirectory searchDirectory = SearchDirectory.unwrapDirectory(store.directory());
                     // TODO: ideally read/warmed metrics should be emitted right after corresponding operation is finished (ES-8709)
-                    shardRecoveryTotalBytesReadFromIndexingMetric.incrementBy(searchDirectory.totalBytesReadFromIndexing(), metricLabels);
+                    if (indexShard.routingEntry().isPromotableToPrimary() == false) {
+                        final SearchDirectory searchDirectory = SearchDirectory.unwrapDirectory(store.directory());
+                        shardRecoveryTotalBytesReadFromIndexingMetric.incrementBy(
+                            searchDirectory.totalBytesReadFromIndexing(),
+                            metricLabels
+                        );
+                        shardRecoveryTotalBytesWarmedFromIndexingMetric.incrementBy(
+                            searchDirectory.totalBytesWarmedFromIndexing(),
+                            metricLabels
+                        );
+                    }
+                    var blobStoreCacheDirectory = BlobStoreCacheDirectory.unwrapDirectory(store.directory());
                     shardRecoveryTotalBytesReadFromObjectStoreMetric.incrementBy(
-                        searchDirectory.totalBytesReadFromObjectStore(),
-                        metricLabels
-                    );
-                    shardRecoveryTotalBytesWarmedFromIndexingMetric.incrementBy(
-                        searchDirectory.totalBytesWarmedFromIndexing(),
+                        blobStoreCacheDirectory.totalBytesReadFromObjectStore(),
                         metricLabels
                     );
                     shardRecoveryTotalBytesWarmedFromObjectStoreMetric.incrementBy(
-                        searchDirectory.totalBytesWarmedFromObjectStore(),
+                        blobStoreCacheDirectory.totalBytesWarmedFromObjectStore(),
                         metricLabels
                     );
+
                 }
             }
         } catch (Exception e) {
@@ -133,24 +150,12 @@ public class RecoveryMetricsCollector implements IndexEventListener {
     private static Map<String, Object> recoveryMetricLabels(IndexShard indexShard) {
         return Maps.copyMapWithAddedEntry(
             commonMetricLabels(indexShard),
-            "recoveryType",
+            "recovery_type",
             indexShard.recoveryState().getRecoverySource().getType().name()
         );
     }
 
     public static Map<String, Object> commonMetricLabels(IndexShard indexShard) {
-        return Map.of(
-            "indexName",
-            indexShard.shardId().getIndex().getName(),
-            "indexUuid",
-            indexShard.shardId().getIndex().getUUID(),
-            "shardId",
-            indexShard.shardId().id(),
-            "primary",
-            indexShard.routingEntry().primary(),
-            "allocationId",
-            indexShard.routingEntry().allocationId() != null ? indexShard.routingEntry().allocationId().getId() : "null"
-        );
+        return Map.of("primary", indexShard.routingEntry().primary());
     }
-
 }

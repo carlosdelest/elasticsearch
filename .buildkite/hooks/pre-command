@@ -7,9 +7,35 @@ export TESTCONTAINERS_RYUK_DISABLED=true
 source ./.buildkite/java-versions.properties
 
 # Resolve JAVA_HOME
-export JAVA_HOME="/usr/java/${ES_BUILD_JAVA}"
+export JAVA_HOME="/${HOME}/.java/${ES_BUILD_JAVA}"
 
 if [[ "${USE_GITHUB_CREDENTIALS:-}" == "true" ]]; then
   GITHUB_TOKEN=$(vault read -field=token secret/ci/elastic-elasticsearch-serverless/github_api_credentials)
   export GITHUB_TOKEN
+fi
+
+BUILDKITE_API_TOKEN=$(vault read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
+export BUILDKITE_API_TOKEN
+
+source .buildkite/scripts/utils/submodule-commit.sh
+
+if [[ "$BUILDKITE_AGENT_META_DATA_PROVIDER" != *"k8s"* ]]; then
+  # Run in the background, while the job continues
+  nohup .buildkite/scripts/setup-monitoring.sh </dev/null >/dev/null 2>&1 &
+fi
+
+# Initialize the build scan and gobld annotations with empty/open <details> tags
+# This ensures that they are collapsible when they get appended to
+if [[ "${BUILDKITE_LABEL:-}" == *"Pipeline upload"* || "${BUILDKITE_LABEL:-}" == *"Upload Pipeline"* ]]; then
+  cat << EOF | buildkite-agent annotate --context "gradle-build-scans" --style "info"
+<details>
+
+<summary>Gradle build scan links</summary>
+EOF
+
+  cat << EOF | buildkite-agent annotate --context "ctx-gobld-metrics" --style "info"
+<details>
+
+<summary>Agent information from gobld</summary>
+EOF
 fi

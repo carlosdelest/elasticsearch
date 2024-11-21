@@ -17,9 +17,11 @@
 
 package co.elastic.elasticsearch.stateless.autoscaling.memory;
 
+import co.elastic.elasticsearch.serverless.constants.ProjectType;
 import co.elastic.elasticsearch.stateless.autoscaling.MetricQuality;
 
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.routing.ShardRouting;
@@ -30,6 +32,7 @@ import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.gateway.GatewayService;
 import org.elasticsearch.index.Index;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.AutoscalingMissedIndicesUpdateException;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -54,19 +57,39 @@ public class MemoryMetricsService implements ClusterStateListener {
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
-    // let each shard use 6MB by default, which matches what we see in heap dumps (with a bit of margin).
-    public static final ByteSizeValue SHARD_MEMORY_OVERHEAD_DEFAULT = ByteSizeValue.ofMb(6);
-    public static final Setting<ByteSizeValue> SHARD_MEMORY_OVERHEAD_SETTING = Setting.byteSizeSetting(
+
+    /**
+     * Two methods to estimate the memory usage of IndexShard instances:
+     * 1. Fixed Method: Assigns a default value of 6MB per shard. This method may overestimate memory usage for shards with minimal data
+     * and underestimate it for shards with many segments and fields.
+     * 2. Adaptive Method: Estimates memory usage based on the actual number of segments and fields in segments. While generally more
+     * accurate, this method can still occasionally overestimate or underestimate memory usage.
+     * <p>
+     * By default, the Fixed Method is used. To switch to the Adaptive Method, explicitly set
+     * the `serverless.autoscaling.memory_metrics.shard_memory_overhead` setting to -1.
+     */
+    public static final ByteSizeValue FIXED_SHARD_MEMORY_OVERHEAD_DEFAULT = ByteSizeValue.ofMb(6);
+    public static final Setting<ByteSizeValue> FIXED_SHARD_MEMORY_OVERHEAD_SETTING = Setting.byteSizeSetting(
         "serverless.autoscaling.memory_metrics.shard_memory_overhead",
-        SHARD_MEMORY_OVERHEAD_DEFAULT,
+        FIXED_SHARD_MEMORY_OVERHEAD_DEFAULT,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
+
+    volatile ByteSizeValue fixedShardMemoryOverhead;
+    // The memory overhead of each IndexShard instance used in the adaptive estimate
+    static final ByteSizeValue ADAPTIVE_SHARD_MEMORY_OVERHEAD = ByteSizeValue.ofKb(75);
+    // The memory overhead of each Lucene segment, including maps for postings, doc_values, and stored_fields producers
+    static final ByteSizeValue ADAPTIVE_SEGMENT_MEMORY_OVERHEAD = ByteSizeValue.ofKb(55);
+    // The memory overhead of each field found in Lucene segments
+    static final ByteSizeValue ADAPTIVE_FIELD_MEMORY_OVERHEAD = ByteSizeValue.ofBytes(1024);
+    // For the adaptive method, add an additional overhead of 50% of the estimate
+    static final int ADAPTIVE_EXTRA_OVERHEAD_PERCENT = 50;
+
     private static final Logger logger = LogManager.getLogger(MemoryMetricsService.class);
-    private static final int SENDING_PRIMARY_SHARD_ID = 0;
     // visible for testing
     static final long INDEX_MEMORY_OVERHEAD = ByteSizeValue.ofKb(350).getBytes();
-    // visible for testing
+
     /**
      * See:
      * https://www.elastic.co/guide/en/elasticsearch/reference/current/size-your-shards.html#_consider_additional_heap_overheads
@@ -76,29 +99,29 @@ public class MemoryMetricsService implements ClusterStateListener {
     // cap node mem request to 48Gb. All current instance types have max size beyond that and none have a size 2x that.
     private static final long MAX_NODE_MEMORY = ByteSizeValue.ofGb(48).getBytes();
     private volatile boolean initialized = false;
-    private final Map<Index, IndexMemoryMetrics> indicesMemoryMetrics = new ConcurrentHashMap<>();
-    private volatile int totalNumberOfShards;
+    private final Map<ShardId, ShardMemoryMetrics> shardMemoryMetrics = new ConcurrentHashMap<>();
+    private volatile int totalIndices;
 
     private final LongSupplier relativeTimeInNanosSupplier;
+    private final ProjectType projectType;
     private volatile TimeValue staleMetricsCheckDuration;
 
     private volatile long lastStaleMetricsCheckTimeNs = Long.MIN_VALUE;
     private volatile TimeValue staleMetricsCheckInterval;
-    // visible for testing
-    volatile ByteSizeValue shardMemoryOverhead;
+    private volatile long clusterStateVersion = ClusterState.UNKNOWN_VERSION;
 
-    public MemoryMetricsService(LongSupplier relativeTimeInNanosSupplier, ClusterSettings clusterSettings) {
+    public MemoryMetricsService(LongSupplier relativeTimeInNanosSupplier, ClusterSettings clusterSettings, ProjectType projectType) {
         this.relativeTimeInNanosSupplier = relativeTimeInNanosSupplier;
+        this.projectType = projectType;
         clusterSettings.initializeAndWatch(STALE_METRICS_CHECK_DURATION_SETTING, value -> staleMetricsCheckDuration = value);
         clusterSettings.initializeAndWatch(STALE_METRICS_CHECK_INTERVAL_SETTING, value -> staleMetricsCheckInterval = value);
-        clusterSettings.initializeAndWatch(SHARD_MEMORY_OVERHEAD_SETTING, value -> shardMemoryOverhead = value);
+        clusterSettings.initializeAndWatch(FIXED_SHARD_MEMORY_OVERHEAD_SETTING, value -> fixedShardMemoryOverhead = value);
     }
 
     public MemoryMetrics getMemoryMetrics() {
-        final var totalIndicesMappingSize = calculateTotalIndicesMappingSize();
 
         final long nodeMemoryInBytes = Math.min(
-            HeapToSystemMemory.dataNode(INDEX_MEMORY_OVERHEAD * indicesCount() + WORKLOAD_MEMORY_OVERHEAD),
+            HeapToSystemMemory.dataNode(INDEX_MEMORY_OVERHEAD * totalIndices + WORKLOAD_MEMORY_OVERHEAD, projectType),
             MAX_NODE_MEMORY
         );
 
@@ -116,28 +139,16 @@ public class MemoryMetricsService implements ClusterStateListener {
         //
         // https://github.com/elastic/elasticsearch-autoscaler/blob/72ac2692f900dc8fe5220b53b1ab20b88008ef7e/internal/autoscaler/
         // elasticsearch/autoscaling/recommender/search.go#L142
-        final long tierMemoryInBytes = HeapToSystemMemory.tier(
-            totalIndicesMappingSize.sizeInBytes + shardMemoryOverhead.getBytes() * totalNumberOfShards()
-        );
-
-        return new MemoryMetrics(nodeMemoryInBytes, tierMemoryInBytes, totalIndicesMappingSize.metricQuality);
+        final var estimateMemoryUsage = estimateTierMemoryUsage();
+        final long tierMemoryInBytes = HeapToSystemMemory.tier(estimateMemoryUsage.totalBytes, projectType);
+        return new MemoryMetrics(nodeMemoryInBytes, tierMemoryInBytes, estimateMemoryUsage.metricQuality);
     }
 
-    private int indicesCount() {
-        return indicesMemoryMetrics.size(); // since mapping is Index -> IndexMemoryMetrics
-    }
+    // Estimate of total mapping size of all known indices and IndexShard instances
+    record TierEstimateMemoryUsage(long totalBytes, MetricQuality metricQuality) {}
 
-    // Visible for testing
-    int totalNumberOfShards() {
-        return totalNumberOfShards;
-    }
-
-    // Total mapping size of all known indices, and whether it is exact or not.
-    record TotalIndicesMappingsSize(long sizeInBytes, MetricQuality metricQuality) {}
-
-    // Calculates rolling sum & metric quality of all known indices, if any of qualities is not `EXACT` report the whole batch as such.
-    TotalIndicesMappingsSize calculateTotalIndicesMappingSize() {
-        long sizeInBytes = 0;
+    // Calculates sum & metric quality of all known indices and shards, if any of qualities is not `EXACT` report the whole batch as such.
+    TierEstimateMemoryUsage estimateTierMemoryUsage() {
         MetricQuality metricQuality = MetricQuality.EXACT;
         // Can't control the frequency in which getTotalIndicesMappingSize is called, so we need to make sure we run the stale check
         // at a regular interval to avoid flooding logs with stale index warnings
@@ -145,78 +156,140 @@ public class MemoryMetricsService implements ClusterStateListener {
         if (checkStaleMetrics) {
             lastStaleMetricsCheckTimeNs = relativeTimeInNanos();
         }
-        for (var indexMemoryMetrics : indicesMemoryMetrics.entrySet()) {
-            var memoryMetrics = indexMemoryMetrics.getValue();
-            sizeInBytes += memoryMetrics.sizeInBytes;
-            metricQuality = memoryMetrics.getMetricQuality() == MetricQuality.EXACT ? metricQuality : memoryMetrics.getMetricQuality();
+        long mappingSizeInBytes = 0;
+        long totalSegments = 0;
+        long totalFields = 0;
+        for (var entry : shardMemoryMetrics.entrySet()) {
+            var metric = entry.getValue();
+            // once per index
+            if (entry.getKey().id() == 0) {
+                mappingSizeInBytes += metric.mappingSizeInBytes;
+            }
+            totalSegments += metric.getNumSegments();
+            totalFields += metric.getTotalFields();
+            metricQuality = metric.getMetricQuality() == MetricQuality.EXACT ? metricQuality : metric.getMetricQuality();
             if (checkStaleMetrics
-                && memoryMetrics.getMetricQuality() != MetricQuality.EXACT
-                && relativeTimeInNanos() - staleMetricsCheckDuration.nanos() > memoryMetrics.getUpdateTimestampNanos()) {
-                logger.warn("Memory metrics are stale for index {}", indexMemoryMetrics);
+                && metric.getMetricQuality() != MetricQuality.EXACT
+                && relativeTimeInNanos() - staleMetricsCheckDuration.nanos() > metric.getUpdateTimestampNanos()) {
+                logger.warn("Memory metrics are stale for shard {}", entry);
             }
         }
-        return new TotalIndicesMappingsSize(sizeInBytes, metricQuality);
+        final long shardMemoryInBytes = estimateShardMemoryUsageInBytes(shardMemoryMetrics.size(), totalSegments, totalFields);
+        return new TierEstimateMemoryUsage(mappingSizeInBytes + shardMemoryInBytes, metricQuality);
+    }
+
+    long estimateShardMemoryUsageInBytes(int numShards, long numSegments, long numFields) {
+        final var fixedShardOverhead = this.fixedShardMemoryOverhead;
+        if (fixedShardOverhead.getBytes() > 0) {
+            return fixedShardOverhead.getBytes() * numShards;
+        }
+        long estimateBytes = numShards * ADAPTIVE_SHARD_MEMORY_OVERHEAD.getBytes() + numSegments * ADAPTIVE_SEGMENT_MEMORY_OVERHEAD
+            .getBytes() + numFields * ADAPTIVE_FIELD_MEMORY_OVERHEAD.getBytes();
+        long extraBytes = estimateBytes * ADAPTIVE_EXTRA_OVERHEAD_PERCENT / 100;
+        return estimateBytes + extraBytes;
     }
 
     // visible for testing
-    Map<Index, IndexMemoryMetrics> getIndicesMemoryMetrics() {
-        return indicesMemoryMetrics;
+    Map<ShardId, ShardMemoryMetrics> getShardMemoryMetrics() {
+        return shardMemoryMetrics;
     }
 
-    void updateIndicesMappingSize(final HeapMemoryUsage heapMemoryUsage) {
-        List<Index> missedUpdates = new ArrayList<>();
-        for (var entry : heapMemoryUsage.indicesMappingSize().entrySet()) {
-            Index index = entry.getKey();
-            IndexMappingSize indexMappingSize = entry.getValue();
+    /**
+     * Apply the received {@link HeapMemoryUsage}
+     *
+     * NOTE: We may be concurrently applying a cluster state (see comment on {@link #clusterChanged(ClusterChangedEvent)})
+     * so we perform the should-retry-on-conflict check before attempting to update any of the metrics. This is so the
+     * stale-ness check is conservatively performed using the last cluster state version applied before we start processing
+     * the updates.
+     *
+     * This prevents the following sequence of events:
+     * <ol>
+     *     <li>Received metrics for cluster state version 5 are applied, conflicts are detected because local state is
+     *          representative of version 4 (and a shard primary changed)</li>
+     *     <li>Cluster state 5 is applied, version is bumped</li>
+     *     <li>Retry check performed, indicates we should silently ignore conflicts because local state version >= update version</li>
+     *     <li>Valid updates silently ignored</li>
+     * </ol>
+     */
+    void updateShardsMappingSize(final HeapMemoryUsage heapMemoryUsage) {
+        final boolean shouldRequestRetryOnConflict = shouldRequestRetryForHeapMemoryMetrics(heapMemoryUsage);
+        List<ShardId> missedUpdates = new ArrayList<>();
+        for (var entry : heapMemoryUsage.shardMappingSizes().entrySet()) {
+            ShardId shardId = entry.getKey();
+            ShardMappingSize shardMappingSize = entry.getValue();
             boolean applied = false;
-            IndexMemoryMetrics indexMemoryMetrics = indicesMemoryMetrics.get(index);
-            if (indexMemoryMetrics != null) {
-                applied = indexMemoryMetrics.update(
-                    indexMappingSize.sizeInBytes(),
+            ShardMemoryMetrics shardMemoryMetrics = this.shardMemoryMetrics.get(shardId);
+            if (shardMemoryMetrics != null) {
+                applied = shardMemoryMetrics.update(
+                    shardMappingSize.mappingSizeInBytes(),
+                    shardMappingSize.numSegments(),
+                    shardMappingSize.totalFields(),
                     heapMemoryUsage.publicationSeqNo(),
-                    indexMappingSize.metricShardNodeId(),
+                    shardMappingSize.nodeId(),
                     relativeTimeInNanos()
                 );
             }
             if (applied == false) {
-                missedUpdates.add(index);
+                missedUpdates.add(shardId);
             }
         }
-        if (missedUpdates.size() > 0) {
+        if (missedUpdates.size() > 0 && shouldRequestRetryOnConflict) {
             throw new AutoscalingMissedIndicesUpdateException(
-                "Failed to fully apply " + heapMemoryUsage + " due to missed indices: " + missedUpdates
+                "Failed to fully apply " + heapMemoryUsage + " due to missed shards: " + missedUpdates
             );
         }
     }
 
+    /**
+     * Update our map of {@link ShardMemoryMetrics} to represent the new cluster state. This includes:
+     *
+     * <ul>
+     *     <li>Creating instances for new shards</li>
+     *     <li>Removing instances for deleted shards</li>
+     *     <li>Updating {@link ShardMemoryMetrics#getMetricShardNodeId()} to reflect changes in the location of the primary</li>
+     *     <li>Setting quality to {@link MetricQuality#MINIMUM} when mapping changes are applied</li>
+     *     <li>Populating the whole map on a new master</li>
+     *     <li>Clearing the map on a demoted master</li>
+     * </ul>
+     *
+     * We update the {@link #clusterStateVersion} only once the cluster state has been fully processed. This means it always reflects
+     * the last cluster state version fully reflected in the state of the map (i.e. not a version that we might be currently processing).
+     */
     @Override
     public void clusterChanged(ClusterChangedEvent event) {
-
         if (event.localNodeMaster() == false || event.state().blocks().hasGlobalBlock(GatewayService.STATE_NOT_RECOVERED_BLOCK)) {
-            indicesMemoryMetrics.clear();
+            shardMemoryMetrics.clear();
             initialized = false;
+            // Set the cluster state to unknown so we don't ignore valid updates that arrive during our next promotion
+            clusterStateVersion = ClusterState.UNKNOWN_VERSION;
             return;
         }
-
-        totalNumberOfShards = event.state().metadata().indices().values().stream().mapToInt(IndexMetadata::getNumberOfShards).sum();
+        this.totalIndices = event.state().metadata().indices().size();
 
         // new master use case: no indices exist in internal map
         if (event.nodesDelta().masterNodeChanged() || initialized == false) {
             for (IndexMetadata indexMetadata : event.state().metadata()) {
-                IndexMemoryMetrics indexMemoryMetrics = new IndexMemoryMetrics(
-                    0,
-                    MetricQuality.MISSING,
-                    relativeTimeInNanosSupplier.getAsLong()
-                );
-
-                // new master should track the current assigned primary shard node in order to accept updates from such nodes
-                var shardRouting = getPrimaryShardRouting(event, indexMetadata.getIndex());
-                if (shardRouting.assignedToNode()) {
-                    indexMemoryMetrics.update(shardRouting.currentNodeId(), relativeTimeInNanos());
+                for (int id = 0; id < indexMetadata.getNumberOfShards(); id++) {
+                    var shardMemoryMetrics = new ShardMemoryMetrics(
+                        0L,
+                        0,
+                        0,
+                        0L,
+                        MetricQuality.MISSING,
+                        null,
+                        relativeTimeInNanosSupplier.getAsLong()
+                    );
+                    // new master should track the current assigned primary shard node in order to accept updates from such nodes
+                    ShardId shardId = new ShardId(indexMetadata.getIndex(), id);
+                    ShardRouting shardRouting = event.state().routingTable().shardRoutingTable(shardId).primaryShard();
+                    if (shardRouting.assignedToNode()) {
+                        shardMemoryMetrics.update(shardRouting.currentNodeId(), relativeTimeInNanos());
+                    }
+                    this.shardMemoryMetrics.put(shardId, shardMemoryMetrics);
                 }
-                indicesMemoryMetrics.put(indexMetadata.getIndex(), indexMemoryMetrics);
             }
             initialized = true;
+            clusterStateVersion = event.state().version();
             return;
         }
 
@@ -224,19 +297,21 @@ public class MemoryMetricsService implements ClusterStateListener {
 
             // index delete use case
             for (Index deletedIndex : event.indicesDeleted()) {
-                indicesMemoryMetrics.remove(deletedIndex);
+                int numberOfShards = event.previousState().metadata().index(deletedIndex).getNumberOfShards();
+                for (int id = 0; id < numberOfShards; id++) {
+                    shardMemoryMetrics.remove(new ShardId(deletedIndex, id));
+                }
             }
 
             for (IndexMetadata indexMetadata : event.state().metadata()) {
-
                 final Index index = indexMetadata.getIndex();
-
-                // index created use case, EXACT values will be sent by index node
-                indicesMemoryMetrics.putIfAbsent(
-                    index,
-                    new IndexMemoryMetrics(0, MetricQuality.MISSING, relativeTimeInNanosSupplier.getAsLong())
-                );
-
+                for (int id = 0; id < indexMetadata.getNumberOfShards(); id++) {
+                    // index created use case, EXACT values will be sent by index node
+                    shardMemoryMetrics.putIfAbsent(
+                        new ShardId(index, id),
+                        new ShardMemoryMetrics(0L, 0, 0, 0L, MetricQuality.MISSING, null, relativeTimeInNanosSupplier.getAsLong())
+                    );
+                }
                 // index mapping update use case
                 final IndexMetadata oldIndexMetadata = event.previousState().metadata().index(index);
                 final IndexMetadata newIndexMetadata = event.state().metadata().index(index);
@@ -246,65 +321,97 @@ public class MemoryMetricsService implements ClusterStateListener {
                     && ClusterChangedEvent.indexMetadataChanged(oldIndexMetadata, newIndexMetadata)) {
                     if (oldIndexMetadata.getMappingVersion() < newIndexMetadata.getMappingVersion()) {
                         // set last known value as MINIMUM, EXACT value will be sent by index node
-                        IndexMemoryMetrics indexMemoryMetrics = indicesMemoryMetrics.get(index);
-                        assert indexMemoryMetrics != null;
-                        indexMemoryMetrics.update(MetricQuality.MINIMUM, relativeTimeInNanos());
+                        for (int id = 0; id < indexMetadata.getNumberOfShards(); id++) {
+                            shardMemoryMetrics.get(new ShardId(index, id)).update(MetricQuality.MINIMUM, relativeTimeInNanos());
+                        }
                     }
                 }
 
-                // moving shard use case
+                // moving shards use case
                 if (event.indexRoutingTableChanged(index.getName())) {
-                    final ShardRouting newShardRouting = getPrimaryShardRouting(event, index);
-                    if (newShardRouting.assignedToNode()) {
-                        final IndexMemoryMetrics indexMemoryMetrics = indicesMemoryMetrics.get(index);
-                        assert indexMemoryMetrics != null;
-                        final String lastKnownShardNodeId = indexMemoryMetrics.getMetricShardNodeId();
-                        final String newShardNodeId = newShardRouting.currentNodeId();
-                        if (newShardNodeId.equals(lastKnownShardNodeId) == false) {
-                            // preserve last-known value, since shard has moved and no mapping change happened
-                            indexMemoryMetrics.update(newShardRouting.currentNodeId(), relativeTimeInNanos());
+                    for (int id = 0; id < indexMetadata.getNumberOfShards(); id++) {
+                        ShardId shardId = new ShardId(indexMetadata.getIndex(), id);
+                        ShardRouting newShardRouting = event.state().routingTable().shardRoutingTable(shardId).primaryShard();
+                        final ShardMemoryMetrics shardMemoryMetrics = this.shardMemoryMetrics.get(shardId);
+                        if (newShardRouting.assignedToNode()) {
+                            assert shardMemoryMetrics != null;
+                            final String lastKnownShardNodeId = shardMemoryMetrics.getMetricShardNodeId();
+                            final String newShardNodeId = newShardRouting.currentNodeId();
+                            if (newShardNodeId.equals(lastKnownShardNodeId) == false) {
+                                // preserve last-known value, since shard has moved and no mapping change happened
+                                shardMemoryMetrics.update(newShardRouting.currentNodeId(), relativeTimeInNanos());
+                            }
+                        } else {
+                            shardMemoryMetrics.update(MetricQuality.MINIMUM, relativeTimeInNanos());
                         }
                     }
                 }
             }
         }
+
+        clusterStateVersion = event.state().version();
+    }
+
+    /**
+     * Should we request a retry for a {@link HeapMemoryUsage} that failed to fully process?
+     *
+     * @param heapMemoryUsage The heapMemoryUsage
+     * @return true if it may be correctly applied on retry, false otherwise
+     */
+    private boolean shouldRequestRetryForHeapMemoryMetrics(HeapMemoryUsage heapMemoryUsage) {
+        return heapMemoryUsage.clusterStateVersion() == ClusterState.UNKNOWN_VERSION
+            || clusterStateVersion == ClusterState.UNKNOWN_VERSION
+            || clusterStateVersion < heapMemoryUsage.clusterStateVersion();
     }
 
     private long relativeTimeInNanos() {
         return relativeTimeInNanosSupplier.getAsLong();
     }
 
-    private static ShardRouting getPrimaryShardRouting(ClusterChangedEvent event, Index indexMetadata) {
-        return event.state().routingTable().shardRoutingTable(indexMetadata.getName(), SENDING_PRIMARY_SHARD_ID).primaryShard();
-    }
-
-    static class IndexMemoryMetrics {
-        private long sizeInBytes;
+    static class ShardMemoryMetrics {
+        private long mappingSizeInBytes;
+        private int numSegments = 0;
+        private int totalFields = 0;
         private long seqNo;
         private MetricQuality metricQuality;
         private String metricShardNodeId;   // node id which hosts sending primary 0-shard
         private long updateTimestampNanos;
 
-        IndexMemoryMetrics(long sizeInBytes, MetricQuality metricQuality, long updateTimestampNanos) {
-            this(sizeInBytes, 0, metricQuality, null, updateTimestampNanos);
-        }
-
-        IndexMemoryMetrics(long sizeInBytes, long seqNo, MetricQuality metricQuality, String metricShardNodeId, long updateTimestampNanos) {
-            this.sizeInBytes = sizeInBytes;
+        ShardMemoryMetrics(
+            long mappingSizeInBytes,
+            int numSegments,
+            int totalFields,
+            long seqNo,
+            MetricQuality metricQuality,
+            String metricShardNodeId,
+            long updateTimestampNanos
+        ) {
+            this.mappingSizeInBytes = mappingSizeInBytes;
+            this.numSegments = numSegments;
+            this.totalFields = totalFields;
             this.seqNo = seqNo;
             this.metricQuality = metricQuality;
             this.metricShardNodeId = metricShardNodeId;
             this.updateTimestampNanos = updateTimestampNanos;
         }
 
-        synchronized boolean update(long sizeInBytes, long seqNo, String metricShardNodeId, long updateTime) {
+        synchronized boolean update(
+            long mappingSizeInBytes,
+            int numSegments,
+            int totalFields,
+            long seqNo,
+            String metricShardNodeId,
+            long updateTime
+        ) {
             assert metricShardNodeId != null;
             // drop messages which were sent from unknown nodes
             // e.g. message late arrival from previously allocated node (where primary 0-shard used to be)
             if (Objects.equals(this.metricShardNodeId, metricShardNodeId)) {
                 if (this.seqNo < seqNo) { // handle reordered messages which were sent from the same node
                     this.seqNo = seqNo;
-                    this.sizeInBytes = sizeInBytes;
+                    this.mappingSizeInBytes = mappingSizeInBytes;
+                    this.numSegments = numSegments;
+                    this.totalFields = totalFields;
                     this.metricQuality = MetricQuality.EXACT;
                     this.metricShardNodeId = metricShardNodeId;
                     this.updateTimestampNanos = updateTime;
@@ -326,8 +433,8 @@ public class MemoryMetricsService implements ClusterStateListener {
         }
 
         // visible for testing
-        synchronized long getSizeInBytes() {
-            return sizeInBytes;
+        synchronized long getMappingSizeInBytes() {
+            return mappingSizeInBytes;
         }
 
         // visible for testing
@@ -345,6 +452,14 @@ public class MemoryMetricsService implements ClusterStateListener {
             return seqNo;
         }
 
+        synchronized int getNumSegments() {
+            return numSegments;
+        }
+
+        synchronized int getTotalFields() {
+            return totalFields;
+        }
+
         synchronized long getUpdateTimestampNanos() {
             return updateTimestampNanos;
         }
@@ -352,8 +467,11 @@ public class MemoryMetricsService implements ClusterStateListener {
         @Override
         public String toString() {
             return Strings.format(
-                "IndexMemoryMetrics{sizeInBytes=%d, seqNo=%d, metricQuality=%s, metricShardNodeId='%s', updateTimestampNanos='%d'}",
-                sizeInBytes,
+                "ShardMemoryMetrics{mappingSizeInBytes=%d, numSegments=%d, totalFields=%d, seqNo=%d, "
+                    + "metricQuality=%s, metricShardNodeId='%s', updateTimestampNanos='%d'}",
+                mappingSizeInBytes,
+                numSegments,
+                totalFields,
                 seqNo,
                 metricQuality,
                 metricShardNodeId,

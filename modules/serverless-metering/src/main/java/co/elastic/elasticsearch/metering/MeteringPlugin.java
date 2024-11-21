@@ -17,31 +17,40 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.action.CollectMeteringShardInfoAction;
-import co.elastic.elasticsearch.metering.action.GetMeteringShardInfoAction;
 import co.elastic.elasticsearch.metering.action.GetMeteringStatsAction;
-import co.elastic.elasticsearch.metering.action.LocalNodeMeteringShardInfoCache;
-import co.elastic.elasticsearch.metering.action.MeteringIndexInfoService;
-import co.elastic.elasticsearch.metering.action.SampledMetricsMetadata;
-import co.elastic.elasticsearch.metering.action.TransportCollectMeteringShardInfoAction;
-import co.elastic.elasticsearch.metering.action.TransportGetMeteringShardInfoAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForPrimaryUserAction;
 import co.elastic.elasticsearch.metering.action.TransportGetMeteringStatsForSecondaryUserAction;
-import co.elastic.elasticsearch.metering.action.TransportUpdateSampledMetricsMetadataAction;
-import co.elastic.elasticsearch.metering.action.UpdateSampledMetricsMetadataAction;
-import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentParsingProvider;
-import co.elastic.elasticsearch.metering.reports.HttpMeteringUsageRecordPublisher;
-import co.elastic.elasticsearch.metering.reports.MeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.activitytracking.ActivityTrackerActionFilter;
+import co.elastic.elasticsearch.metering.activitytracking.DefaultActionTierMapper;
+import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskParams;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
+import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
+import co.elastic.elasticsearch.metering.sampling.action.GetNodeSamplesAction;
+import co.elastic.elasticsearch.metering.sampling.action.TransportCollectClusterSamplesAction;
+import co.elastic.elasticsearch.metering.sampling.action.TransportGetNodeSamplesAction;
 import co.elastic.elasticsearch.metering.stats.rest.RestGetMeteringStatsAction;
-import co.elastic.elasticsearch.metrics.CounterMetricsCollector;
-import co.elastic.elasticsearch.metrics.SampledMetricsCollector;
+import co.elastic.elasticsearch.metering.usagereports.UsageReportService;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
+import co.elastic.elasticsearch.metering.usagereports.action.TransportUpdateSampledMetricsMetadataAction;
+import co.elastic.elasticsearch.metering.usagereports.action.UpdateSampledMetricsMetadataAction;
+import co.elastic.elasticsearch.metering.usagereports.publisher.HttpMeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.usagereports.publisher.MeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.xcontent.MeteringDocumentParsingProvider;
+import co.elastic.elasticsearch.metrics.CounterMetricsProvider;
+import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
+import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
+import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.NamedDiff;
+import org.elasticsearch.cluster.SafeClusterStateSupplier;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
@@ -60,6 +69,7 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.features.NodeFeature;
+import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -69,6 +79,7 @@ import org.elasticsearch.persistent.PersistentTasksExecutor;
 import org.elasticsearch.persistent.PersistentTasksService;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.ExtensiblePlugin;
+import org.elasticsearch.plugins.MapperPlugin;
 import org.elasticsearch.plugins.PersistentTaskPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
@@ -82,9 +93,12 @@ import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ParseField;
 
 import java.io.IOException;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -94,30 +108,27 @@ import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSett
 /**
  * Plugin responsible for starting up all serverless metering classes.
  */
-public class MeteringPlugin extends Plugin implements ExtensiblePlugin, DocumentParsingProviderPlugin, PersistentTaskPlugin, ActionPlugin {
+public class MeteringPlugin extends Plugin
+    implements
+        ExtensiblePlugin,
+        DocumentParsingProviderPlugin,
+        PersistentTaskPlugin,
+        ActionPlugin,
+        MapperPlugin {
 
     private static final Logger log = LogManager.getLogger(MeteringPlugin.class);
 
     private static final String METERING_REPORTER_THREAD_POOL_NAME = "metering_reporter";
 
-    static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
-    static final NodeFeature SAMPLED_METRICS_METADATA = new NodeFeature("metering.sampled-metrics-metadata");
-
-    public static final Setting<Boolean> NEW_IX_METRIC_SETTING = Setting.boolSetting(
-        "metering.new-index-size.enabled",
-        true,
-        Setting.Property.NodeScope
-    );
     private final ProjectType projectType;
 
-    private MeteringIndexInfoTaskExecutor meteringIndexInfoTaskExecutor;
+    private SampledClusterMetricsSchedulingTaskExecutor clusterMetricsSchedulingTaskExecutor;
     private final boolean hasSearchRole;
-    private List<SampledMetricsCollector> sampledMetricsCollectors;
-    private List<CounterMetricsCollector> counterMetricsCollectors;
-    private MeteringUsageRecordPublisher usageRecordPublisher;
-    private MeteringReportingService reportingService;
-
-    private volatile IngestMetricsCollector ingestMetricsCollector;
+    private List<SampledMetricsProvider> sampledMetricsProviders;
+    private List<CounterMetricsProvider> counterMetricsProviders;
+    private UsageReportService usageReportService;
+    public final SetOnce<List<ActionFilter>> actionFilters = new SetOnce<>();
+    private volatile IngestMetricsProvider ingestMetricsCollector;
     private volatile SystemIndices systemIndices;
 
     public MeteringPlugin(Settings settings) {
@@ -128,19 +139,25 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     @Override
     public List<Setting<?>> getSettings() {
         return List.of(
-            MeteringReportingService.REPORT_PERIOD,
+            UsageReportService.REPORT_PERIOD,
             HttpMeteringUsageRecordPublisher.METERING_URL,
             HttpMeteringUsageRecordPublisher.BATCH_SIZE,
-            MeteringIndexInfoTaskExecutor.ENABLED_SETTING,
-            MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING,
-            NEW_IX_METRIC_SETTING
+            HttpMeteringUsageRecordPublisher.REQUEST_TIMEOUT,
+            SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING,
+            SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING,
+            TaskActivityTracker.COOL_DOWN_PERIOD
         );
     }
 
     @Override
     public void loadExtensions(ExtensionLoader loader) {
-        sampledMetricsCollectors = loader.loadExtensions(SampledMetricsCollector.class);
-        counterMetricsCollectors = loader.loadExtensions(CounterMetricsCollector.class);
+        sampledMetricsProviders = loader.loadExtensions(SampledMetricsProvider.class);
+        counterMetricsProviders = loader.loadExtensions(CounterMetricsProvider.class);
+    }
+
+    @Override
+    public Collection<ActionFilter> getActionFilters() {
+        return actionFilters.get();
     }
 
     @Override
@@ -159,6 +176,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
 
     @Override
     public Collection<?> createComponents(PluginServices services) {
+
         this.systemIndices = services.systemIndices();
         ClusterService clusterService = services.clusterService();
         ThreadPool threadPool = services.threadPool();
@@ -168,64 +186,66 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         String projectId = PROJECT_ID.get(environment.settings());
         log.info("Initializing MeteringPlugin using node id [{}], project id [{}]", nodeEnvironment.nodeId(), projectId);
 
-        boolean useNewIndexSizeMetric = NEW_IX_METRIC_SETTING.get(environment.settings());
-        log.info("Using new IX metric: [{}]", useNewIndexSizeMetric);
+        var clusterStateSupplier = new SafeClusterStateSupplier();
+        clusterService.addListener(clusterStateSupplier);
+        ingestMetricsCollector = new IngestMetricsProvider(nodeEnvironment.nodeId(), clusterStateSupplier);
 
-        ingestMetricsCollector = new IngestMetricsCollector(
-            nodeEnvironment.nodeId(),
-            clusterService.getClusterSettings(),
-            environment.settings()
-        );
+        var clusterMetricsService = new SampledClusterMetricsService(clusterService, services.telemetryProvider().getMeterRegistry());
 
-        var indexSizeService = new MeteringIndexInfoService();
-        clusterService.addListener(indexSizeService);
-
-        List<CounterMetricsCollector> builtInCounterMetrics = new ArrayList<>();
-        List<SampledMetricsCollector> builtInSampledMetrics = new ArrayList<>();
+        List<CounterMetricsProvider> builtInCounterMetrics = new ArrayList<>();
+        List<SampledMetricsProvider> builtInSampledMetrics = new ArrayList<>();
         List<DiscoveryNodeRole> discoveryNodeRoles = NodeRoleSettings.NODE_ROLES_SETTING.get(environment.settings());
         if (discoveryNodeRoles.contains(DiscoveryNodeRole.INGEST_ROLE) || discoveryNodeRoles.contains(DiscoveryNodeRole.INDEX_ROLE)) {
             builtInCounterMetrics.add(ingestMetricsCollector);
         }
 
-        TimeValue reportPeriod = MeteringReportingService.REPORT_PERIOD.get(environment.settings());
+        var activityTracker = TaskActivityTracker.build(
+            Clock.systemUTC(),
+            Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis()),
+            hasSearchRole,
+            threadPool.getThreadContext(),
+            DefaultActionTierMapper.INSTANCE,
+            services.taskManager()
+        );
+        actionFilters.set(List.of(new ActivityTrackerActionFilter(activityTracker)));
 
-        // TODO[ES-7639]: remove this choice when migration to IX in ES is completed
-        if (useNewIndexSizeMetric) {
-            builtInSampledMetrics.add(indexSizeService.createIndexSizeMetricsCollector(clusterService, environment.settings()));
-        } else {
-            if (discoveryNodeRoles.contains(DiscoveryNodeRole.SEARCH_ROLE)) {
-                builtInSampledMetrics.add(
-                    new IndexSizeMetricsCollector(services.indicesService(), clusterService.getClusterSettings(), environment.settings())
-                );
-            }
-        }
+        builtInCounterMetrics.addAll(counterMetricsProviders);
+        builtInSampledMetrics.add(clusterMetricsService.createSampledStorageMetricsProvider());
+        builtInSampledMetrics.add(clusterMetricsService.createSampledVCUMetricsProvider(nodeEnvironment));
+        builtInSampledMetrics.addAll(sampledMetricsProviders);
 
-        builtInCounterMetrics.addAll(counterMetricsCollectors);
-        builtInSampledMetrics.addAll(sampledMetricsCollectors);
-
+        MeteringUsageRecordPublisher usageRecordPublisher;
         if (projectId.isEmpty()) {
             log.warn(PROJECT_ID.getKey() + " is not set, metric reporting is disabled");
             usageRecordPublisher = MeteringUsageRecordPublisher.NOOP_REPORTER;
         } else {
-            usageRecordPublisher = new HttpMeteringUsageRecordPublisher(environment.settings(), threadPool);
+            usageRecordPublisher = new HttpMeteringUsageRecordPublisher(
+                environment.settings(),
+                services.telemetryProvider().getMeterRegistry()
+            );
         }
 
-        reportingService = new MeteringReportingService(
+        TimeValue reportPeriod = UsageReportService.REPORT_PERIOD.get(environment.settings());
+        usageReportService = new UsageReportService(
             nodeEnvironment.nodeId(),
             projectId,
             builtInCounterMetrics,
             builtInSampledMetrics,
-            new ClusterStateSampledMetricsTimeCursor(clusterService, services.featureService(), services.client()),
+            clusterStateSupplier,
+            clusterService.getSettings(),
+            services.featureService(),
+            services.client(),
             reportPeriod,
             usageRecordPublisher,
             threadPool,
-            threadPool.executor(METERING_REPORTER_THREAD_POOL_NAME)
+            threadPool.executor(METERING_REPORTER_THREAD_POOL_NAME),
+            services.telemetryProvider().getMeterRegistry()
         );
 
         List<Object> cs = new ArrayList<>();
-        cs.add(usageRecordPublisher);
-        cs.add(reportingService);
-        cs.add(indexSizeService);
+        cs.add(activityTracker);
+        cs.add(usageReportService);
+        cs.add(clusterMetricsService);
         cs.addAll(builtInCounterMetrics);
         cs.addAll(builtInSampledMetrics);
 
@@ -233,20 +253,16 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         // via services or via PersistentTaskPlugin#getPersistentTasksExecutor. See elasticsearch#105662
         var persistentTasksService = new PersistentTasksService(clusterService, threadPool, services.client());
 
-        meteringIndexInfoTaskExecutor = MeteringIndexInfoTaskExecutor.create(
+        clusterMetricsSchedulingTaskExecutor = SampledClusterMetricsSchedulingTaskExecutor.create(
             services.client(),
             clusterService,
             persistentTasksService,
             services.featureService(),
             threadPool,
-            indexSizeService,
+            clusterMetricsService,
             environment.settings()
         );
-        cs.add(meteringIndexInfoTaskExecutor);
-        if (hasSearchRole) {
-            cs.add(new LocalNodeMeteringShardInfoCache());
-        }
-
+        cs.add(clusterMetricsSchedulingTaskExecutor);
         return cs;
     }
 
@@ -265,12 +281,21 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         return List.of(new RestGetMeteringStatsAction());
     }
 
-    @Override
-    public void close() throws IOException {
-        IOUtils.close(usageRecordPublisher, reportingService);
+    public static boolean isRaStorageMeteringEnabled(ProjectType projectType) {
+        return projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY;
     }
 
-    IngestMetricsCollector getIngestMetricsCollector() {
+    @Override
+    public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
+        return Map.of(RaStorageMetadataFieldMapper.FIELD_NAME, RaStorageMetadataFieldMapper.PARSER);
+    }
+
+    @Override
+    public void close() throws IOException {
+        IOUtils.close(usageReportService);
+    }
+
+    IngestMetricsProvider getIngestMetricsCollector() {
         return ingestMetricsCollector;
     }
 
@@ -286,7 +311,11 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
      */
     @Override
     public DocumentParsingProvider getDocumentParsingProvider() {
-        return new MeteringDocumentParsingProvider(projectType, this::getIngestMetricsCollector, this::getSystemIndices);
+        return new MeteringDocumentParsingProvider(
+            isRaStorageMeteringEnabled(projectType),
+            this::getIngestMetricsCollector,
+            this::getSystemIndices
+        );
     }
 
     @Override
@@ -297,7 +326,7 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         SettingsModule settingsModule,
         IndexNameExpressionResolver expressionResolver
     ) {
-        return List.of(meteringIndexInfoTaskExecutor);
+        return List.of(clusterMetricsSchedulingTaskExecutor);
     }
 
     @Override
@@ -305,8 +334,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         return List.of(
             new NamedXContentRegistry.Entry(
                 PersistentTaskParams.class,
-                new ParseField(MeteringIndexInfoTask.TASK_NAME),
-                MeteringIndexInfoTaskParams::fromXContent
+                new ParseField(SampledClusterMetricsSchedulingTask.TASK_NAME),
+                SampledClusterMetricsSchedulingTaskParams::fromXContent
             )
         );
     }
@@ -316,8 +345,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
         return List.of(
             new NamedWriteableRegistry.Entry(
                 PersistentTaskParams.class,
-                MeteringIndexInfoTask.TASK_NAME,
-                reader -> MeteringIndexInfoTaskParams.INSTANCE
+                SampledClusterMetricsSchedulingTask.TASK_NAME,
+                reader -> SampledClusterMetricsSchedulingTaskParams.INSTANCE
             ),
             new NamedWriteableRegistry.Entry(ClusterState.Custom.class, SampledMetricsMetadata.TYPE, SampledMetricsMetadata::new),
             new NamedWriteableRegistry.Entry(NamedDiff.class, SampledMetricsMetadata.TYPE, SampledMetricsMetadata::readDiffFrom)
@@ -327,8 +356,8 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
     @Override
     public Collection<ActionPlugin.ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
         var collectMeteringShardInfo = new ActionPlugin.ActionHandler<>(
-            CollectMeteringShardInfoAction.INSTANCE,
-            TransportCollectMeteringShardInfoAction.class
+            CollectClusterSamplesAction.INSTANCE,
+            TransportCollectClusterSamplesAction.class
         );
         var getMeteringStatsSecondaryUser = new ActionPlugin.ActionHandler<>(
             GetMeteringStatsAction.FOR_SECONDARY_USER_INSTANCE,
@@ -342,25 +371,13 @@ public class MeteringPlugin extends Plugin implements ExtensiblePlugin, Document
             UpdateSampledMetricsMetadataAction.INSTANCE,
             TransportUpdateSampledMetricsMetadataAction.class
         );
-        if (hasSearchRole) {
-            var getMeteringShardInfo = new ActionPlugin.ActionHandler<>(
-                GetMeteringShardInfoAction.INSTANCE,
-                TransportGetMeteringShardInfoAction.class
-            );
-            return List.of(
-                getMeteringShardInfo,
-                getMeteringStatsSecondaryUser,
-                getMeteringStatsPrimaryUser,
-                collectMeteringShardInfo,
-                updateSampledMetricsMetadata
-            );
-        } else {
-            return List.of(
-                getMeteringStatsSecondaryUser,
-                getMeteringStatsPrimaryUser,
-                collectMeteringShardInfo,
-                updateSampledMetricsMetadata
-            );
-        }
+        var getMeteringShardInfo = new ActionPlugin.ActionHandler<>(GetNodeSamplesAction.INSTANCE, TransportGetNodeSamplesAction.class);
+        return List.of(
+            getMeteringShardInfo,
+            getMeteringStatsSecondaryUser,
+            getMeteringStatsPrimaryUser,
+            collectMeteringShardInfo,
+            updateSampledMetricsMetadata
+        );
     }
 }

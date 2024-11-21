@@ -17,17 +17,25 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.reports.HttpClientThreadFilter;
-import co.elastic.elasticsearch.metering.reports.HttpMeteringUsageRecordPublisher;
-import co.elastic.elasticsearch.metering.reports.UsageRecord;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
+import co.elastic.elasticsearch.metering.usagereports.UsageReportService;
+import co.elastic.elasticsearch.metering.usagereports.publisher.HttpClientThreadFilter;
+import co.elastic.elasticsearch.metering.usagereports.publisher.HttpMeteringUsageRecordPublisher;
+import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
+import co.elastic.elasticsearch.stateless.autoscaling.search.SearchShardSizeCollector;
 
 import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
+import org.elasticsearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
+import org.elasticsearch.action.datastreams.CreateDataStreamAction;
+import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
+import org.elasticsearch.cluster.metadata.Template;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
+import org.elasticsearch.common.compress.CompressedXContent;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentParserUtils;
 import org.elasticsearch.core.SuppressForbidden;
@@ -47,19 +55,20 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
 @ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
 public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessIntegTestCase {
-
+    protected static final TimeValue REPORT_PERIOD = TimeValue.timeValueSeconds(3);
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
 
     private final BlockingQueue<List<UsageRecord>> received = new LinkedBlockingQueue<>();
+    private final String projectId = randomAlphaOfLength(8);
     private HttpServer server;
 
     @Before
@@ -100,14 +109,19 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     }
 
     protected BlockingQueue<List<UsageRecord>> receivedMetrics() {
+        List<UsageRecord> invalid = received.stream().flatMap(List::stream).filter(r -> r.id().contains(projectId) == false).toList();
+        assertTrue("Expected usage record ids to contain project id, but got: " + invalid, invalid.isEmpty());
         return received;
     }
 
     @Override
     protected Settings nodeSettings(int nodeOrdinal, Settings otherSettings) {
-        return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId")
+        return super.nodeSettings().put(ServerlessSharedSettings.PROJECT_ID.getKey(), projectId)
             .put(HttpMeteringUsageRecordPublisher.METERING_URL.getKey(), "http://localhost:" + server.getAddress().getPort())
-            .put(MeteringReportingService.REPORT_PERIOD.getKey(), TimeValue.timeValueSeconds(5)) // speed things up a bit
+            // speed things up a bit
+            .put(UsageReportService.REPORT_PERIOD.getKey(), REPORT_PERIOD.toString())
+            .put(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING.getKey(), "1s")
+            .put(SearchShardSizeCollector.PUSH_INTERVAL_SETTING.getKey(), "500ms")
             .put("xpack.searchable.snapshot.shared_cache.size", "16MB")
             .put("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
             .build();
@@ -117,11 +131,6 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         return internalCluster().startNode(
             settingsForRoles(DiscoveryNodeRole.MASTER_ROLE, DiscoveryNodeRole.INDEX_ROLE, DiscoveryNodeRole.INGEST_ROLE)
         );
-    }
-
-    @Override
-    protected Settings.Builder settingsForRoles(DiscoveryNodeRole... roles) {
-        return super.settingsForRoles(roles).put(ServerlessSharedSettings.PROJECT_ID.getKey(), "testProjectId");
     }
 
     @After
@@ -137,26 +146,50 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         return receivedMetrics().stream().flatMap(List::stream).anyMatch(m -> m.id().startsWith(prefix));
     }
 
-    protected UsageRecord pollReceivedRecordsAndGetFirst(String prefix) {
-        List<UsageRecord> usageRecordStream = pollReceivedRecords();
-        return filterByIdStartsWith(usageRecordStream, prefix);
-    }
-
-    protected UsageRecord filterByIdStartsWith(List<UsageRecord> usageRecordStream, String prefix) {
-        return usageRecordStream.stream().filter(m -> m.id().startsWith(prefix)).findFirst().get();
-    }
-
-    protected List<UsageRecord> pollReceivedRecords() {
+    protected void pollReceivedRecords(List<UsageRecord> usageRecords) {
         List<List<UsageRecord>> recordLists = new ArrayList<>();
         receivedMetrics().drainTo(recordLists);
-
-        return recordLists.stream().flatMap(List::stream).collect(Collectors.toList());
+        recordLists.stream().flatMap(List::stream).forEach(usageRecords::add);
     }
 
-    protected List<UsageRecord> pollReceivedRecords(String prefix) {
-        List<List<UsageRecord>> recordLists = new ArrayList<>();
-        receivedMetrics().drainTo(recordLists);
+    protected static void createDataStreamAndTemplate(String dataStreamName, String mapping) throws IOException {
+        client().execute(
+            TransportPutComposableIndexTemplateAction.TYPE,
+            new TransportPutComposableIndexTemplateAction.Request(dataStreamName + "_template").indexTemplate(
+                ComposableIndexTemplate.builder()
+                    .indexPatterns(Collections.singletonList(dataStreamName))
+                    .template(new Template(null, new CompressedXContent(mapping), null))
+                    .dataStreamTemplate(new ComposableIndexTemplate.DataStreamTemplate())
+                    .build()
+            )
+        ).actionGet();
+        client().execute(
+            CreateDataStreamAction.INSTANCE,
+            new CreateDataStreamAction.Request(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, dataStreamName)
+        ).actionGet();
+    }
 
-        return recordLists.stream().flatMap(List::stream).filter(m -> m.id().startsWith(prefix)).toList();
+    protected void createDataStream(String indexName) throws IOException {
+        String mapping = mappingWithTimestamp();
+        createDataStreamAndTemplate(indexName, mapping);
+    }
+
+    protected static String emptyMapping() {
+        return """
+            {
+                  "properties": {
+                 }
+            }""";
+    }
+
+    protected static String mappingWithTimestamp() {
+        return """
+            {
+                  "properties": {
+                    "@timestamp": {
+                      "type": "date"
+                    }
+                 }
+            }""";
     }
 }

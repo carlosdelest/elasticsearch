@@ -66,9 +66,11 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
 
         assertAcked(indicesAdmin().prepareClose(indexName));
 
-        final RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap")
-            .setWaitForCompletion(true)
-            .get();
+        final RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot(
+            TEST_REQUEST_TIMEOUT,
+            "test-repo",
+            "test-snap"
+        ).setWaitForCompletion(true).get();
         assertThat(restoreSnapshotResponse.getRestoreInfo().successfulShards(), equalTo(1));
         assertThat(restoreSnapshotResponse.getRestoreInfo().failedShards(), equalTo(0));
         ensureGreen(indexName);
@@ -76,7 +78,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         assertDocCount(indexName, numDocs);
     }
 
-    public void testRenameOnRestore() throws Exception {
+    public void testRenameOnRestore() {
         startIndexNodes(1);
         startSearchNode();
         Client client = client();
@@ -107,7 +109,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         logger.info("--> restore indices with different names");
         RestoreSnapshotResponse restoreSnapshotResponse = client.admin()
             .cluster()
-            .prepareRestoreSnapshot("test-repo", "test-snap")
+            .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
             .setRenamePattern("(.+)")
             .setRenameReplacement("$1-copy")
             .setWaitForCompletion(true)
@@ -125,7 +127,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         logger.info("--> and try to restore these indices again");
         restoreSnapshotResponse = client.admin()
             .cluster()
-            .prepareRestoreSnapshot("test-repo", "test-snap")
+            .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
             .setRenamePattern("(.+)")
             .setRenameReplacement("$1-copy")
             .setWaitForCompletion(true)
@@ -143,7 +145,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         logger.info("--> restore indices with different names");
         restoreSnapshotResponse = client.admin()
             .cluster()
-            .prepareRestoreSnapshot("test-repo", "test-snap")
+            .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
             .setRenamePattern("(.+-2)")
             .setRenameReplacement("$1-copy")
             .setWaitForCompletion(true)
@@ -158,7 +160,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         try {
             client.admin()
                 .cluster()
-                .prepareRestoreSnapshot("test-repo", "test-snap")
+                .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
                 .setRenamePattern("(.+)")
                 .setRenameReplacement("same-name")
                 .setWaitForCompletion(true)
@@ -173,7 +175,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         try {
             client.admin()
                 .cluster()
-                .prepareRestoreSnapshot("test-repo", "test-snap")
+                .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
                 .setRenamePattern("test-idx-2")
                 .setRenameReplacement("test-idx-1")
                 .setWaitForCompletion(true)
@@ -188,7 +190,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         try {
             client.admin()
                 .cluster()
-                .prepareRestoreSnapshot("test-repo", "test-snap")
+                .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
                 .setIndices("test-idx-1")
                 .setRenamePattern(".+")
                 .setRenameReplacement("__WRONG__")
@@ -204,7 +206,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         try {
             client.admin()
                 .cluster()
-                .prepareRestoreSnapshot("test-repo", "test-snap")
+                .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
                 .setIndices("test-idx-1")
                 .setRenamePattern(".+")
                 .setRenameReplacement("alias-3")
@@ -220,7 +222,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         try {
             client.admin()
                 .cluster()
-                .prepareRestoreSnapshot("test-repo", "test-snap")
+                .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
                 .setIndices("test-idx-1")
                 .setRenamePattern("test-idx")
                 .setRenameReplacement("alias")
@@ -236,7 +238,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         try {
             client.admin()
                 .cluster()
-                .prepareRestoreSnapshot("test-repo", "test-snap")
+                .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
                 .setIndices("test-idx-1", "test-idx-2")
                 .setRenamePattern("test-idx-1")
                 .setRenameReplacement("alias-2")
@@ -251,7 +253,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
         logger.info("--> try renaming indices into existing alias of itself, but don't restore aliases ");
         restoreSnapshotResponse = client.admin()
             .cluster()
-            .prepareRestoreSnapshot("test-repo", "test-snap")
+            .prepareRestoreSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", "test-snap")
             .setIndices("test-idx-1")
             .setRenamePattern("test-idx")
             .setRenameReplacement("alias")
@@ -277,7 +279,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
             }
         }
 
-        final IndexMetadata indexMetadata = clusterAdmin().prepareState()
+        final IndexMetadata indexMetadata = clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT)
             .clear()
             .setIndices(indexName)
             .setMetadata(true)
@@ -296,14 +298,16 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
 
         assertAcked(indicesAdmin().prepareClose(indexName));
 
-        final RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot("test-repo", "test-snap")
-            .setWaitForCompletion(true)
-            .get();
+        final RestoreSnapshotResponse restoreSnapshotResponse = clusterAdmin().prepareRestoreSnapshot(
+            TEST_REQUEST_TIMEOUT,
+            "test-repo",
+            "test-snap"
+        ).setWaitForCompletion(true).get();
         assertThat(restoreSnapshotResponse.getRestoreInfo().successfulShards(), equalTo(numPrimaries));
         assertThat(restoreSnapshotResponse.getRestoreInfo().failedShards(), equalTo(0));
         ensureGreen(indexName);
 
-        final IndexMetadata restoredIndexMetadata = clusterAdmin().prepareState()
+        final IndexMetadata restoredIndexMetadata = clusterAdmin().prepareState(TEST_REQUEST_TIMEOUT)
             .clear()
             .setIndices(indexName)
             .setMetadata(true)
@@ -318,7 +322,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
     }
 
     private static void createSnapshot(String repositoryName, String snapshot, List<String> indices) {
-        final CreateSnapshotResponse response = clusterAdmin().prepareCreateSnapshot(repositoryName, snapshot)
+        final CreateSnapshotResponse response = clusterAdmin().prepareCreateSnapshot(TEST_REQUEST_TIMEOUT, repositoryName, snapshot)
             .setIndices(indices.toArray(Strings.EMPTY_ARRAY))
             .setWaitForCompletion(true)
             .get();
@@ -327,7 +331,7 @@ public class StatelessRestoreIT extends AbstractStatelessIntegTestCase {
     private static void assertDocCount(String indexName, long numDocs) {
         assertResponse(prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()), searchResponse -> {
             assertNoFailures(searchResponse);
-            assertEquals(numDocs, searchResponse.getHits().getTotalHits().value);
+            assertEquals(numDocs, searchResponse.getHits().getTotalHits().value());
         });
     }
 }

@@ -21,19 +21,33 @@ if [ -z "${PROMOTED_COMMIT}" ]; then
   PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
 
   echo "Promoted build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --style "info" --context "promoted-build-url"
+  echo "Lock/Unlock qa / staging environnment https://argo-workflows.cd.internal.qa.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.qa.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-qa-staging"
+  echo "Lock/Unlock canary / non canary prod environment https://argo-workflows.cd.internal.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-prod"
 fi
 
 if [ -z "${PREVIOUS_PROMOTED_COMMIT}" ]; then
   echo "--- Determining current prod version"
   SERVICE_VERSION_YAML=$(curl -H "Authorization: Bearer ${GITHUB_TOKEN}" https://raw.githubusercontent.com/elastic/serverless-gitops/main/services/elasticsearch/versions.yaml)
-  PREVIOUS_PROMOTED_COMMIT=$(echo "${SERVICE_VERSION_YAML}" | yq e '.services.elasticsearch.versions.production-noncanary' -)
+  PREVIOUS_PROMOTED_COMMIT=$(echo "${SERVICE_VERSION_YAML}" | yq e '.services.elasticsearch.versions.production-noncanary-ds-1' -)
 fi
 echo "Promoting from commit '$PREVIOUS_PROMOTED_COMMIT' to commit '${PROMOTED_COMMIT}'"
 
 echo "--- Trigger release build"
 cat <<EOF | buildkite-agent pipeline upload
 steps:
+  - label: ":github: Check Promotion Blocker"
+    key: "checkblocker"
+    command: |
+          .buildkite/scripts/run-gradle.sh checkPromotionBlocker
+    env:
+        USE_GITHUB_CREDENTIALS: "true"
+        BLOCK_ON_ISSUES_UNTRIAGED: ${BLOCK_ON_ISSUES_UNTRIAGED}
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
   - label: ":argo: Trigger serverless Elasticsearch release"
+    depends_on: "checkblocker"
     trigger: elasticsearch-serverless-intake
     build:
       commit: "${PROMOTED_COMMIT}"
@@ -44,10 +58,11 @@ steps:
   - label: ":github: Generate Report"
     command: |
           .buildkite/scripts/run-gradle.sh generatePromotionReport --previousGitHash=${PREVIOUS_PROMOTED_COMMIT} -Dcurrent.promoted.version=${PROMOTED_COMMIT}
-          buildkite-agent artifact upload "build/reports/serverless-promotion-report.html"
+          buildkite-agent artifact upload "build/reports/promotion/serverless-promotion-report.html"
+          buildkite-agent artifact upload "build/reports/promotion/serverless-promotion-report.json"
           cat << EOF | buildkite-agent annotate --style "info" --context "promotion-report"
             ### Promotion Report for ${PROMOTED_COMMIT}
-            <a href="artifact://build/reports/serverless-promotion-report.html">serverless-promotion-report.html</a>
+            <a href="artifact://build/reports/promotion/serverless-promotion-report.html">serverless-promotion-report.html</a>
           EOF
     env:
       USE_GITHUB_CREDENTIALS: "true"

@@ -22,6 +22,7 @@ dependencies {
     compileOnly(xpackModule("core"))
     compileOnly(xpackModule("ml"))
     compileOnly(project(":modules:stateless"))
+    compileOnly(project(":libs:serverless-shared-constants"))
 
     internalClusterTestImplementation(testArtifact(xpackModule("ml")))
 }

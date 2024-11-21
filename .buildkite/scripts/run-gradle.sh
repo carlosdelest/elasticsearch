@@ -1,6 +1,7 @@
 #!/bin/bash
 # drop page cache and kernel slab objects on linux
-GRADLEW="./gradlew --parallel --build-cache --no-watch-fs -Dorg.elasticsearch.build.cache.url=https://gradle-enterprise.elastic.co/cache/ -Dorg.elasticsearch.build.cache.push=true"
+GRADLEW="./gradlew --console=plain --parallel --build-cache --no-watch-fs -Dorg.elasticsearch.build.cache.url=https://gradle-enterprise.elastic.co/cache/ -Dorg.elasticsearch.build.cache.push=true -Ddevelocity.deprecation.captureOrigin=true"
+
 [[ -x /usr/local/sbin/drop-caches ]] && sudo /usr/local/sbin/drop-caches
 rm -Rfv ~/.gradle/init.d
 mkdir -p ~/.gradle/init.d && cp -v .buildkite/init.gradle ~/.gradle/init.d
@@ -24,6 +25,8 @@ fi
 
 # Export glibc version as environment variable since some BWC tests are incompatible with later versions
 export GLIBC_VERSION=$(ldd --version | grep '^ldd' | sed 's/.* \([1-9]\.[0-9]*\).*/\1/')
+
+MAX_WORKERS=${GRADLE_MAX_WORKERS:-$MAX_WORKERS}
 
 set -e
 $GRADLEW -S --max-workers=$MAX_WORKERS $@

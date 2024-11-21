@@ -11,7 +11,7 @@ echo "Tagging commit ${BUILDKITE_COMMIT}"
 git config user.name "elasticsearchmachine"
 git config user.email "infra-root+elasticsearchmachine@elastic.co"
 git tag -f ${TAG_NAME} ${BUILDKITE_COMMIT}
-git push -f origin ${TAG_NAME}
+VAULT_GITHUB_TOKEN="$GITHUB_TOKEN" git push -f origin ${TAG_NAME}
 
 echo "--- Tag and push Docker image manifest"
 GIT_ABBREV_COMMIT="${IMAGE_TAG:-git-${BUILDKITE_COMMIT:0:12}}"

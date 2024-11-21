@@ -20,7 +20,6 @@
 package co.elastic.elasticsearch.stateless.commits;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
-import co.elastic.elasticsearch.stateless.IndexingDiskController;
 import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.action.GetVirtualBatchedCompoundCommitChunkRequest;
 import co.elastic.elasticsearch.stateless.action.TransportGetVirtualBatchedCompoundCommitChunkAction;
@@ -29,10 +28,11 @@ import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.RefreshThrottler;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
-import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
+import co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectory;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 
 import org.apache.lucene.store.Directory;
+import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.admin.indices.close.CloseIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
@@ -42,28 +42,35 @@ import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.TriConsumer;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.engine.EngineConfig;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.shard.GlobalCheckpointListeners;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndexClosedException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.PluginComponentBinding;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.aggregations.metrics.Sum;
+import org.elasticsearch.telemetry.Measurement;
 import org.elasticsearch.telemetry.TelemetryProvider;
+import org.elasticsearch.telemetry.TestTelemetryPlugin;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -77,20 +84,28 @@ import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static co.elastic.elasticsearch.stateless.lucene.SearchDirectoryTestUtils.getCacheService;
+import static co.elastic.elasticsearch.stateless.commits.GetVirtualBatchedCompoundCommitChunksPressure.CHUNK_REQUESTS_REJECTED_METRIC;
+import static co.elastic.elasticsearch.stateless.commits.GetVirtualBatchedCompoundCommitChunksPressure.CURRENT_CHUNKS_BYTES_METRIC;
+import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.BCC_ELAPSED_TIME_BEFORE_FREEZE_HISTOGRAM_METRIC;
+import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.BCC_NUMBER_COMMITS_HISTOGRAM_METRIC;
+import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.BCC_TOTAL_SIZE_HISTOGRAM_METRIC;
+import static co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectoryTestUtils.getCacheService;
 import static co.elastic.elasticsearch.stateless.recovery.TransportStatelessPrimaryRelocationAction.START_RELOCATION_ACTION_NAME;
 import static org.elasticsearch.action.search.SearchTransportService.QUERY_ACTION_NAME;
 import static org.elasticsearch.blobcache.shared.SharedBlobCacheService.SHARED_CACHE_REGION_SIZE_SETTING;
+import static org.elasticsearch.blobcache.shared.SharedBlobCacheService.SHARED_CACHE_SIZE_SETTING;
 import static org.elasticsearch.blobcache.shared.SharedBytes.PAGE_SIZE;
 import static org.elasticsearch.common.util.concurrent.EsExecutors.NODE_PROCESSORS_SETTING;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.sum;
@@ -103,7 +118,9 @@ import static org.hamcrest.Matchers.either;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.not;
 
@@ -120,7 +137,6 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
      * </ul>
      */
     public static class TestStateless extends Stateless {
-        public volatile TestStatelessCommitService statelessCommitService;
 
         public TestStateless(Settings settings) {
             super(settings);
@@ -132,18 +148,22 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
             TranslogReplicator translogReplicator,
             Function<String, BlobContainer> translogBlobContainer,
             StatelessCommitService statelessCommitService,
+            SharedBlobCacheWarmingService sharedBlobCacheWarmingService,
             RefreshThrottler.Factory refreshThrottlerFactory,
-            DocumentParsingProvider documentParsingProvider
+            DocumentParsingProvider documentParsingProvider,
+            IndexEngine.EngineMetrics engineMetrics
         ) {
             return new IndexEngine(
                 engineConfig,
                 translogReplicator,
                 translogBlobContainer,
                 statelessCommitService,
+                sharedBlobCacheWarmingService,
                 refreshThrottlerFactory,
                 statelessCommitService.getIndexEngineLocalReaderListenerForShard(engineConfig.getShardId()),
                 statelessCommitService.getCommitBCCResolverForShard(engineConfig.getShardId()),
-                documentParsingProvider
+                documentParsingProvider,
+                engineMetrics
             ) {
                 @Override
                 public void readVirtualBatchedCompoundCommitChunk(
@@ -177,17 +197,20 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
             ClusterService clusterService,
             Client client,
             StatelessCommitCleaner commitCleaner,
-            SharedBlobCacheWarmingService cacheWarmingService
+            StatelessSharedBlobCacheService cacheService,
+            SharedBlobCacheWarmingService cacheWarmingService,
+            TelemetryProvider telemetryProvider
         ) {
-            statelessCommitService = new TestStatelessCommitService(
+            return new TestStatelessCommitService(
                 settings,
                 objectStoreService,
                 clusterService,
                 client,
                 commitCleaner,
-                cacheWarmingService
+                cacheService,
+                cacheWarmingService,
+                telemetryProvider
             );
-            return statelessCommitService;
         }
 
         @Override
@@ -203,24 +226,45 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
 
     public static class TestStatelessCommitService extends StatelessCommitService {
 
+        private final AtomicReference<Consumer<VirtualBatchedCompoundCommit>> uploadingVbccConsumerRef = new AtomicReference<>();
+
         public TestStatelessCommitService(
             Settings settings,
             ObjectStoreService objectStoreService,
             ClusterService clusterService,
             Client client,
             StatelessCommitCleaner commitCleaner,
-            SharedBlobCacheWarmingService cacheWarmingService
+            StatelessSharedBlobCacheService cacheService,
+            SharedBlobCacheWarmingService cacheWarmingService,
+            TelemetryProvider telemetryProvider
         ) {
-            super(settings, objectStoreService, clusterService, client, commitCleaner, cacheWarmingService);
+            super(
+                settings,
+                objectStoreService,
+                clusterService,
+                client,
+                commitCleaner,
+                cacheService,
+                cacheWarmingService,
+                telemetryProvider
+            );
         }
 
         @Override
         protected ShardCommitState createShardCommitState(
             ShardId shardId,
             long primaryTerm,
-            BooleanSupplier inititalizingNoSearchSupplier
+            BooleanSupplier inititalizingNoSearchSupplier,
+            TriConsumer<Long, GlobalCheckpointListeners.GlobalCheckpointListener, TimeValue> addGlobalCheckpointListenerFunction,
+            Runnable triggerTranslogReplicator
         ) {
-            return new ShardCommitState(shardId, primaryTerm, inititalizingNoSearchSupplier) {
+            return new ShardCommitState(
+                shardId,
+                primaryTerm,
+                inititalizingNoSearchSupplier,
+                addGlobalCheckpointListenerFunction,
+                triggerTranslogReplicator
+            ) {
                 @Override
                 protected boolean shouldUploadVirtualBcc(VirtualBatchedCompoundCommit virtualBcc) {
                     // uploads must be triggered explicitly in tests
@@ -235,36 +279,36 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
         var plugins = new ArrayList<>(super.nodePlugins());
         plugins.remove(Stateless.class);
         plugins.add(TestStateless.class);
+        plugins.add(TestTelemetryPlugin.class);
         return plugins;
     }
 
     @Override
     protected Settings.Builder nodeSettings() {
-        return super.nodeSettings().put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1L))
-            .put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true)
-            .put(StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.getKey(), ByteSizeValue.ofGb(1))
+        return super.nodeSettings().put(StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.getKey(), ByteSizeValue.ofGb(1))
             .put(StatelessCommitService.STATELESS_UPLOAD_VBCC_MAX_AGE.getKey(), TimeValue.timeValueDays(1))
-            .put(StatelessCommitService.STATELESS_UPLOAD_MONITOR_INTERVAL.getKey(), TimeValue.timeValueDays(1));
+            .put(StatelessCommitService.STATELESS_UPLOAD_MONITOR_INTERVAL.getKey(), TimeValue.timeValueDays(1))
+            .put(disableIndexingDiskAndMemoryControllersNodeSettings());
     }
 
     private void evictSearchShardCache(String indexName) {
         IndexShard shard = findSearchShard(indexName);
         Directory directory = shard.store().directory();
-        SearchDirectory searchDirectory = SearchDirectory.unwrapDirectory(directory);
-        getCacheService(searchDirectory).forceEvict((key) -> true);
+        BlobStoreCacheDirectory blobStoreCacheDirectory = BlobStoreCacheDirectory.unwrapDirectory(directory);
+        getCacheService(blobStoreCacheDirectory).forceEvict((key) -> true);
     }
 
     private record IndexedDocs(int numDocs, int customDocs, long sum) {}
 
     /**
-     * Indexes a number of documents until the directory has a size of at least a few pages, and refreshes the index. The mappings are:
+     * Indexes a number of documents until the directory has a size of at least a few pages. The mappings are:
      * - "field" with a random string of length between 1 and 25
      * - "number" with a random long between 0 and the current index
      * - "custom" with a value "value" for customDocs number of docs. customDocs will be less or equal to numDocs.
      *
      * @return a {@link IndexedDocs} object with the number of docs, the number of custom docs and the sum of the numbers.
      */
-    private IndexedDocs indexDocsAndRefresh(String indexName) throws Exception {
+    private IndexedDocs indexDocs(String indexName) throws Exception {
         int totalDocs = 0;
         int totalCustomDocs = 0;
         long sum = 0;
@@ -311,16 +355,15 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
             indexName
         );
 
-        assertNoFailures(client().admin().indices().prepareRefresh(indexName).execute().get());
-        logger.info(
-            "--> indexed {} docs in {} with {} custom docs, sum {}, directory size {}",
-            totalDocs,
-            indexName,
-            totalCustomDocs,
-            sum,
-            getDirectorySize(directory)
-        );
+        logger.info("--> indexed {} docs in {} with {} custom docs, sum {}", totalDocs, indexName, totalCustomDocs, sum);
         return new IndexedDocs(totalDocs, totalCustomDocs, sum);
+    }
+
+    private IndexedDocs indexDocsAndRefresh(String indexName) throws Exception {
+        final var indexedDocs = indexDocs(indexName);
+        assertNoFailures(client().admin().indices().prepareRefresh(indexName).execute().get());
+        logger.info("--> directory size {}", getDirectorySize(findIndexShard(indexName).store().directory()));
+        return indexedDocs;
     }
 
     private long getDirectorySize(Directory directory) throws IOException {
@@ -349,8 +392,8 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
     static Consumer<SearchResponse> getSearchResponseValidator(TestSearchType testSearchType, IndexedDocs indexedDocs) {
         // We avoid setSize(0) with the below statements, because we want the searches to fetch some chunks.
         return switch (testSearchType) {
-            case MATCH_ALL -> searchResponse -> assertEquals(indexedDocs.numDocs, searchResponse.getHits().getTotalHits().value);
-            case MATCH_CUSTOM -> searchResponse -> assertEquals(indexedDocs.customDocs, searchResponse.getHits().getTotalHits().value);
+            case MATCH_ALL -> searchResponse -> assertEquals(indexedDocs.numDocs, searchResponse.getHits().getTotalHits().value());
+            case MATCH_CUSTOM -> searchResponse -> assertEquals(indexedDocs.customDocs, searchResponse.getHits().getTotalHits().value());
             case SUM -> searchResponse -> {
                 Sum sum = searchResponse.getAggregations().get("sum");
                 assertEquals(indexedDocs.sum, sum.value(), 0.001);
@@ -671,7 +714,8 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
                     channel.sendResponse(
                         randomFrom(
                             new ConnectTransportException(transportService.getLocalNode(), "simulated"),
-                            new CircuitBreakingException("Simulated", CircuitBreaker.Durability.TRANSIENT)
+                            new CircuitBreakingException("Simulated", CircuitBreaker.Durability.TRANSIENT),
+                            new EsRejectedExecutionException("simulated")
                         )
                     );
                 } else {
@@ -807,7 +851,6 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
         // waiting for a cache chunk to force the deadlock
         int searchThreadPoolSize = nodeProcessors * 4;
         var nodeSettings = Settings.builder()
-            .put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true)
             .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 100)
             .put(StatelessCommitService.STATELESS_UPLOAD_MAX_SIZE.getKey(), ByteSizeValue.ofMb(16))
             .put(NODE_PROCESSORS_SETTING.getKey(), nodeProcessors)
@@ -1022,9 +1065,222 @@ public class VirtualBatchedCompoundCommitsIT extends AbstractStatelessIntegTestC
             }
         );
 
-        // We should retry indefinitely on CircuitBreakingException during indexing, eventually make progress and and
+        // We should retry indefinitely on CircuitBreakingException during indexing, eventually make progress and
         // don't fail the search shard
         indexDocsAndRefresh(indexName);
         ensureSearchable(indexName);
+    }
+
+    public void testVirtualBatchedCompoundCommitChunksPressure() {
+        // The test admits a first refresh that requests a 1-page chunk, and halts it mid-way before returning the chunk response.
+        // Then, a second refresh comes in, that requests another 1-page chunk. It is rejected two times in a row, and the third retry
+        // attempt is halted mid-way before processing the chunk request (and thus is not yet counted by the pressure). Then, we complete
+        // the first refresh, which resets the pressure, and allow the second refresh to complete successfully.
+
+        startMasterOnlyNode();
+        final var indexNode = startIndexNode(
+            Settings.builder()
+                .put(disableIndexingDiskAndMemoryControllersNodeSettings())
+                .put(GetVirtualBatchedCompoundCommitChunksPressure.CHUNKS_BYTES_LIMIT.getKey(), (PAGE_SIZE + 1) + "b")
+                // We need at least 2 vbcc chunk threads to be able to reject the second refresh requests.
+                .put(NODE_PROCESSORS_SETTING.getKey(), 2)
+                .build()
+        );
+        startSearchNode(
+            Settings.builder()
+                // We need at least 2 refresh threads to be able to reject the second refresh requests.
+                .put(NODE_PROCESSORS_SETTING.getKey(), 2)
+                // We need enough free regions so that the search node is able to request pages/regions when refreshing an index.
+                .put(SHARED_CACHE_REGION_SIZE_SETTING.getKey(), ByteSizeValue.ofBytes(PAGE_SIZE))
+                .put(SHARED_CACHE_SIZE_SETTING.getKey(), ByteSizeValue.ofBytes(32 * PAGE_SIZE))
+                .build()
+        );
+        final var indexSettings = indexSettings(1, 1).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), TimeValue.MINUS_ONE)
+            .build();
+        final String indexName1 = randomIdentifier();
+        createIndex(indexName1, indexSettings);
+        final String indexName2 = randomIdentifier();
+        createIndex(indexName2, indexSettings);
+        ensureGreen(indexName1, indexName2);
+        final var index1shardId = findIndexShard(indexName1).shardId();
+        final var index2shardId = findIndexShard(indexName2).shardId();
+        final TestTelemetryPlugin metricsPlugin = internalCluster().getInstance(PluginsService.class, indexNode)
+            .filterPlugins(TestTelemetryPlugin.class)
+            .findFirst()
+            .orElseThrow();
+        metricsPlugin.resetMeter();
+        final var vbccChunksPressure = internalCluster().getInstance(GetVirtualBatchedCompoundCommitChunksPressure.class, indexNode);
+
+        // Index only 1 doc for each index
+        indexDoc(indexName1, "1", "f", "v");
+        indexDoc(indexName2, "1", "f", "v");
+
+        // serve Lucene files from the indexing node
+        evictSearchShardCache(indexName1);
+        evictSearchShardCache(indexName2);
+
+        // Infrastructure to be able to catch the chunks of the refreshes mid-way.
+        AtomicInteger pagesRead = new AtomicInteger(0);
+        CountDownLatch chunk1ResponseProduced = new CountDownLatch(1); // chunk of first refresh counted by pressure, and halted mid-way
+        CountDownLatch chunk1ToSendResponse = new CountDownLatch(1); // to send the response for the first refresh and release the pressure
+        CountDownLatch chunk2Attempts = new CountDownLatch(3); // to count the chunk requests of the second refresh before halting
+        CountDownLatch chunk2ToProcess = new CountDownLatch(1); // to halt before processing the third request of the second refresh
+        final var indexNodeTransportService = MockTransportService.getInstance(indexNode);
+        indexNodeTransportService.addRequestHandlingBehavior(
+            TransportGetVirtualBatchedCompoundCommitChunkAction.NAME + "[p]",
+            (handler, request, channel, task) -> {
+                var r = (GetVirtualBatchedCompoundCommitChunkRequest) request;
+                if (r.getShardId().equals(index1shardId)) {
+                    handler.messageReceived(request, new TransportChannel() {
+                        @Override
+                        public void sendResponse(Exception exception) {
+                            channel.sendResponse(exception);
+                        }
+
+                        @Override
+                        public String getProfileName() {
+                            return channel.getProfileName();
+                        }
+
+                        @Override
+                        public void sendResponse(TransportResponse response) {
+                            chunk1ResponseProduced.countDown();
+                            safeAwait(chunk1ToSendResponse);
+                            channel.sendResponse(response);
+                            pagesRead.incrementAndGet();
+                        }
+                    }, task);
+                } else if (r.getShardId().equals(index2shardId)) {
+                    chunk2Attempts.countDown();
+                    if (chunk2Attempts.getCount() == 0) {
+                        // halt the third attempt of the second refresh
+                        safeAwait(chunk2ToProcess);
+                    }
+                    handler.messageReceived(request, new TransportChannel() {
+                        @Override
+                        public void sendResponse(Exception exception) {
+                            assertThat(chunk2Attempts.getCount(), greaterThan(0L));
+                            final var rejectedException = ExceptionsHelper.unwrap(exception, EsRejectedExecutionException.class);
+                            assertNotNull(rejectedException);
+                            assertThat(
+                                rejectedException.getMessage(),
+                                containsString(
+                                    "rejected execution of VBCC chunk request [current_chunks_bytes=4096, "
+                                        + "request=4096, chunks_bytes_limit=4097]"
+                                )
+                            );
+                            channel.sendResponse(exception);
+                        }
+
+                        @Override
+                        public String getProfileName() {
+                            return channel.getProfileName();
+                        }
+
+                        @Override
+                        public void sendResponse(TransportResponse response) {
+                            assertThat(chunk2Attempts.getCount(), equalTo(0L));
+                            channel.sendResponse(response);
+                        }
+                    }, task);
+                } else {
+                    assert false : "unexpected shard id: " + r.getShardId();
+                }
+            }
+        );
+
+        // Refresh first index
+        var refresh1 = client().admin().indices().prepareRefresh(indexName1).execute();
+        safeAwait(chunk1ResponseProduced);
+        logger.info("--> chunk produced for the first refresh");
+        assertThat(vbccChunksPressure.getCurrentChunksBytes(), equalTo((long) PAGE_SIZE));
+
+        logger.info("--> issuing second refresh");
+        var refresh2 = client().admin().indices().prepareRefresh(indexName2).execute();
+
+        // wait until the third attempt of the second refresh is halted
+        safeAwait(chunk2Attempts);
+
+        logger.info("--> continuing sending chunk for the first refresh");
+        chunk1ToSendResponse.countDown();
+        assertNoFailures(safeGet(refresh1));
+        assertThat(vbccChunksPressure.getCurrentChunksBytes(), equalTo(0L));
+
+        logger.info("--> continuing processing chunk for the second refresh");
+        chunk2ToProcess.countDown();
+        assertNoFailures(safeGet(refresh2));
+        assertThat(vbccChunksPressure.getCurrentChunksBytes(), equalTo(0L));
+
+        // Confirm that the pressure metrics were correctly set
+        final int pages = pagesRead.get();
+        var measurements = metricsPlugin.getLongUpDownCounterMeasurement(CURRENT_CHUNKS_BYTES_METRIC);
+        assertThat(measurements.size(), equalTo(pages * 4));
+        for (int p = 0; p < pages; p++) {
+            // The first refresh results in two measurements (one that adds bytes, and one that removes bytes) for each page chunk request
+            assertMeasurement(measurements.get(p * 2), PAGE_SIZE);
+            assertMeasurement(measurements.get(p * 2 + 1), -PAGE_SIZE);
+            // The second refresh had the same amount of measurements, that appear after the first refresh's measurements
+            assertMeasurement(measurements.get(pages * 2 + p * 2), PAGE_SIZE);
+            assertMeasurement(measurements.get(pages * 2 + p * 2 + 1), -PAGE_SIZE);
+        }
+
+        measurements = metricsPlugin.getLongCounterMeasurement(CHUNK_REQUESTS_REJECTED_METRIC);
+        assertThat(measurements.size(), equalTo(2));
+        assertRejectionMeasurement(measurements.get(0));
+        assertRejectionMeasurement(measurements.get(1));
+    }
+
+    public void testVirtualBatchedCompoundCommitUploadMetrics() throws Exception {
+        final var indexNode = startMasterAndIndexNode(
+            Settings.builder().put(disableIndexingDiskAndMemoryControllersNodeSettings()).build()
+        );
+
+        final var indexName = randomIdentifier();
+        createIndex(indexName, indexSettings(1, 0).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
+
+        var shardId = findIndexShard(indexName).shardId();
+        var statelessCommitService = internalCluster().getInstance(StatelessCommitService.class, indexNode);
+        var threadPool = internalCluster().getInstance(ThreadPool.class, indexNode);
+        final var metricsPlugin = findPlugin(indexNode, TestTelemetryPlugin.class);
+        metricsPlugin.resetMeter();
+
+        final int numberCommits = between(5, 8);
+        for (int i = 0; i < numberCommits; i++) {
+            indexDocsAndRefresh(indexName);
+            if (randomBoolean() || i == numberCommits - 1) {
+                final VirtualBatchedCompoundCommit virtualBcc = statelessCommitService.getCurrentVirtualBcc(shardId);
+                final long minAge = threadPool.relativeTimeInMillis() - virtualBcc.getCreationTimeInMillis();
+                // Trigger upload
+                flush(indexName);
+
+                final List<Measurement> sizeMeasurements = metricsPlugin.getLongHistogramMeasurement(BCC_TOTAL_SIZE_HISTOGRAM_METRIC);
+                assertThat(sizeMeasurements, hasSize(1));
+                assertMeasurement(sizeMeasurements.get(0), ByteSizeUnit.BYTES.toMB(virtualBcc.getTotalSizeInBytes()));
+
+                final List<Measurement> nCommitsMeasurements = metricsPlugin.getLongHistogramMeasurement(
+                    BCC_NUMBER_COMMITS_HISTOGRAM_METRIC
+                );
+                assertThat(nCommitsMeasurements, hasSize(1));
+                assertMeasurement(nCommitsMeasurements.get(0), virtualBcc.size());
+
+                final List<Measurement> ageMeasurements = metricsPlugin.getLongHistogramMeasurement(
+                    BCC_ELAPSED_TIME_BEFORE_FREEZE_HISTOGRAM_METRIC
+                );
+                assertThat(ageMeasurements, hasSize(1));
+                assertThat(ageMeasurements.get(0).attributes(), equalTo(Map.of()));
+                // The exact value of age is not important as long as it is greater or equal than the minimum age
+                // that is measured before creating the upload task
+                assertThat(ageMeasurements.get(0).getLong(), greaterThanOrEqualTo(minAge));
+                metricsPlugin.resetMeter();
+            }
+        }
+    }
+
+    private void assertMeasurement(Measurement measurement, long value) {
+        assertThat(measurement.getLong(), equalTo(value));
+    }
+
+    private void assertRejectionMeasurement(Measurement measurement) {
+        assertMeasurement(measurement, 1L);
     }
 }

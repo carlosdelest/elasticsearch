@@ -19,6 +19,8 @@
 
 package co.elastic.elasticsearch.stateless.engine;
 
+import co.elastic.elasticsearch.stateless.Stateless;
+import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
 import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.cache.reader.CacheBlobReaderService;
 import co.elastic.elasticsearch.stateless.cache.reader.MutableObjectStoreUploadTracker;
@@ -26,6 +28,7 @@ import co.elastic.elasticsearch.stateless.commits.BlobLocation;
 import co.elastic.elasticsearch.stateless.commits.ClosedShardService;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommit;
+import co.elastic.elasticsearch.stateless.engine.translog.TranslogRecoveryMetrics;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
 import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
 import co.elastic.elasticsearch.stateless.lucene.StatelessCommitRef;
@@ -41,6 +44,7 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.blobcache.BlobCacheMetrics;
+import org.elasticsearch.blobcache.BlobCacheUtils;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.blobstore.BlobContainer;
@@ -77,7 +81,7 @@ import org.elasticsearch.index.translog.TranslogConfig;
 import org.elasticsearch.indices.IndexingMemoryController;
 import org.elasticsearch.indices.breaker.NoneCircuitBreakerService;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
-import org.elasticsearch.plugins.internal.DocumentSizeObserver;
+import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 import org.elasticsearch.test.DummyShardLock;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.IndexSettingsModule;
@@ -103,6 +107,7 @@ import java.util.function.LongSupplier;
 import static co.elastic.elasticsearch.stateless.Stateless.SHARD_READ_THREAD_POOL;
 import static co.elastic.elasticsearch.stateless.Stateless.SHARD_READ_THREAD_POOL_SETTING;
 import static java.util.Collections.emptyList;
+import static org.elasticsearch.blobcache.shared.SharedBlobCacheService.SHARED_CACHE_REGION_SIZE_SETTING;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.mockito.ArgumentMatchers.any;
@@ -128,6 +133,8 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
         super.setUp();
         threadPools = ConcurrentCollections.newConcurrentMap();
         sharedBlobCacheService = mock(StatelessSharedBlobCacheService.class);
+        int cacheRegionSize = BlobCacheUtils.toIntBytes(SHARED_CACHE_REGION_SIZE_SETTING.get(Settings.EMPTY).getBytes());
+        when(sharedBlobCacheService.getRegionSize()).thenReturn(cacheRegionSize);
         // setup `real` blob container since test expect write/read from/to compound commits
         blobStorePath = PathUtils.get(createTempDir().toString());
         blobContainer = new FsBlobContainer(
@@ -187,10 +194,6 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
         when(commitService.getCommitBCCResolverForShard(any(ShardId.class))).thenReturn(
             generation -> Set.of(new PrimaryTermAndGeneration(1, generation))
         );
-        if (StatelessCommitService.STATELESS_UPLOAD_DELAYED.get(settings)) {
-            when(commitService.isStatelessUploadDelayed()).thenReturn(true);
-        }
-
         return commitService;
     }
 
@@ -200,7 +203,15 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
         final ObjectStoreService objectStoreService,
         final StatelessCommitService commitService
     ) {
-        return newIndexEngine(indexConfig, translogReplicator, objectStoreService, commitService, DocumentParsingProvider.EMPTY_INSTANCE);
+        return newIndexEngine(
+            indexConfig,
+            translogReplicator,
+            objectStoreService,
+            commitService,
+            mock(SharedBlobCacheWarmingService.class),
+            DocumentParsingProvider.EMPTY_INSTANCE,
+            new IndexEngine.EngineMetrics(TranslogRecoveryMetrics.NOOP, MergeMetrics.NOOP)
+        );
     }
 
     protected IndexEngine newIndexEngine(
@@ -208,17 +219,21 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
         TranslogReplicator translogReplicator,
         ObjectStoreService objectStoreService,
         StatelessCommitService commitService,
-        DocumentParsingProvider documentParsingProvider
+        SharedBlobCacheWarmingService sharedBlobCacheWarmingService,
+        DocumentParsingProvider documentParsingProvider,
+        IndexEngine.EngineMetrics engineMetrics
     ) {
         var indexEngine = new IndexEngine(
             indexConfig,
             translogReplicator,
             objectStoreService::getTranslogBlobContainer,
             commitService,
+            sharedBlobCacheWarmingService,
             RefreshThrottler.Noop::new,
             commitService.getIndexEngineLocalReaderListenerForShard(indexConfig.getShardId()),
             commitService.getCommitBCCResolverForShard(indexConfig.getShardId()),
-            documentParsingProvider
+            documentParsingProvider,
+            engineMetrics
         ) {
 
             @Override
@@ -273,7 +288,9 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
         var indexSettings = IndexSettingsModule.newIndexSettings(shardId.getIndex(), settings, nodeSettings);
         var translogConfig = new TranslogConfig(shardId, createTempDir(), indexSettings, BigArrays.NON_RECYCLING_INSTANCE);
         var indexWriterConfig = newIndexWriterConfig();
-        var threadPool = registerThreadPool(new TestThreadPool(getTestName() + "[" + shardId + "][index]"));
+        var threadPool = registerThreadPool(
+            new TestThreadPool(getTestName() + "[" + shardId + "][index]", Stateless.statelessExecutorBuilders(Settings.EMPTY, true))
+        );
         var directory = newDirectory();
         if (Lucene.indexExists(directory)) {
             throw new AssertionError("Lucene index already exist for shard " + shardId);
@@ -346,13 +363,12 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
             nodeEnvironment,
             indexSettings.getSettings(),
             threadPool,
-            SHARD_READ_THREAD_POOL,
             BlobCacheMetrics.NOOP,
             System::nanoTime
         );
         var directory = new SearchDirectory(
             cache,
-            new CacheBlobReaderService(indexSettings.getSettings(), cache, mock(Client.class)),
+            new CacheBlobReaderService(indexSettings.getSettings(), cache, mock(Client.class), threadPool),
             MutableObjectStoreUploadTracker.ALWAYS_UPLOADED,
             shardId
         );
@@ -424,7 +440,7 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
         );
         var directory = new SearchDirectory(
             sharedBlobCacheService,
-            new CacheBlobReaderService(indexSettings.getSettings(), sharedBlobCacheService, mock(Client.class)),
+            new CacheBlobReaderService(indexSettings.getSettings(), sharedBlobCacheService, mock(Client.class), threadPool),
             objectStoreUploadTracker,
             shardId
         );
@@ -487,7 +503,7 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
             source,
             XContentType.JSON,
             null,
-            DocumentSizeObserver.EMPTY_INSTANCE
+            XContentMeteringParserDecorator.UNKNOWN_SIZE
         );
         return new Engine.Index(Uid.encodeId(id), 1L, doc);
     }
@@ -526,7 +542,9 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
                     primaryTerm,
                     indexCommitRef.getIndexCommit().getGeneration(),
                     fileName -> uploadedBlobLocations.get(fileName),
-                    ESTestCase::randomNonNegativeLong
+                    ESTestCase::randomNonNegativeLong,
+                    sharedBlobCacheService.getRegionSize(),
+                    randomDoubleBetween(0.0d, 1.0d, true)
                 );
 
                 vbcc.appendCommit(
@@ -537,12 +555,21 @@ public abstract class AbstractEngineTestCase extends ESTestCase {
                         additionalFiles,
                         primaryTerm,
                         0   // not used, stubbing value for translogRecoveryStartFile
-                    )
+                    ),
+                    randomBoolean()
                 );
 
                 vbcc.freeze();
 
-                blobContainer.writeMetadataBlob(OperationPurpose.INDICES, vbcc.getBlobName(), false, true, vbcc::writeToStore);
+                try (var vbccInputStream = vbcc.getFrozenInputStreamForUpload()) {
+                    blobContainer.writeBlobAtomic(
+                        OperationPurpose.INDICES,
+                        vbcc.getBlobName(),
+                        vbccInputStream,
+                        vbcc.getTotalSizeInBytes(),
+                        false
+                    );
+                }
 
                 var scc = vbcc.lastCompoundCommit();
 

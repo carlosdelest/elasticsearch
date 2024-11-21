@@ -17,9 +17,10 @@
 
 package co.elastic.elasticsearch.stateless.objectstore;
 
-import co.elastic.elasticsearch.stateless.IndexingDiskController;
+import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.action.NewCommitNotificationRequest;
 import co.elastic.elasticsearch.stateless.action.TransportNewCommitNotificationAction;
+import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import fixture.s3.S3HttpHandler;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -28,25 +29,35 @@ import com.sun.net.httpserver.HttpHandler;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.LogEvent;
 import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.MockSecureSettings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.SuppressForbidden;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexSettings;
+import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.repositories.RepositoriesService;
 import org.elasticsearch.repositories.RepositoryStats;
 import org.elasticsearch.repositories.blobstore.ESMockAPIBasedRepositoryIntegTestCase;
 import org.elasticsearch.repositories.s3.S3RepositoryPlugin;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.test.MockLog;
 import org.elasticsearch.test.transport.MockTransportService;
+import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportChannel;
 import org.elasticsearch.transport.TransportResponse;
+import org.junit.Before;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.NoSuchFileException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +66,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -62,6 +74,7 @@ import java.util.stream.Stream;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
 import static org.hamcrest.Matchers.anEmptyMap;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -73,6 +86,7 @@ public class S3ObjectStoreTests extends AbstractMockObjectStoreIntegTestCase {
 
     private static final Set<String> EXPECTED_MAIN_STORE_REQUEST_NAMES;
     private static final Set<String> EXPECTED_OBS_REQUEST_NAMES;
+    private static final ByteSizeValue MULTIPART_UPLOAD_BUFFER_SIZE = ByteSizeValue.ofMb(5);
 
     static {
         final var mainStorePurposeNames = Set.of("ClusterState", "Indices", "Translog");
@@ -98,16 +112,27 @@ public class S3ObjectStoreTests extends AbstractMockObjectStoreIntegTestCase {
 
     @SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
     private InterceptableS3HttpHandler s3HttpHandler;
+    private int maxRetries;
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return Stream.concat(super.nodePlugins().stream(), List.of(S3RepositoryPlugin.class).stream()).toList();
+        var plugins = new ArrayList<>(super.nodePlugins());
+        plugins.remove(Stateless.class);
+        plugins.add(TestStateless.class);
+        plugins.add(S3RepositoryPlugin.class);
+        return plugins;
     }
 
     @Override
     protected Map<String, HttpHandler> createHttpHandlers() {
         s3HttpHandler = new InterceptableS3HttpHandler("bucket");
         return Map.of("/bucket", s3HttpHandler);
+    }
+
+    @Before
+    public void setupMaxRetries() {
+        // max_retries set rarely to more than 1, so that we can test more retries within reasonable backoff
+        maxRetries = rarely() ? randomIntBetween(2, 3) : 1;
     }
 
     @Override
@@ -119,7 +144,7 @@ public class S3ObjectStoreTests extends AbstractMockObjectStoreIntegTestCase {
             .put(ObjectStoreService.TYPE_SETTING.getKey(), ObjectStoreService.ObjectStoreType.S3)
             .put(ObjectStoreService.BUCKET_SETTING.getKey(), "bucket")
             .put(ObjectStoreService.CLIENT_SETTING.getKey(), "test")
-            .put("s3.client.test.max_retries", 1) // default to 1 so that we can test more retries within reasonable backoff
+            .put("s3.client.test.max_retries", maxRetries)
             .setSecureSettings(mockSecureSettings);
     }
 
@@ -169,8 +194,9 @@ public class S3ObjectStoreTests extends AbstractMockObjectStoreIntegTestCase {
     }
 
     public void testShouldRetryMoreThanMaxRetriesForIndicesData() throws IOException {
+        // More than the max retries by s3 client itself (1 original + maxRetries)
+        final int errorsPerRequest = randomIntBetween(maxRetries + 1, maxRetries + 4);
         s3HttpHandler.setInterceptor(new Interceptor() {
-            private final int errorsPerRequest = randomIntBetween(3, 5); // More than the default attempts of 2 (1 original + 1 retry)
             private final Map<String, AtomicInteger> requestPathErrorCount = ConcurrentCollections.newConcurrentMap();
 
             @SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
@@ -200,9 +226,7 @@ public class S3ObjectStoreTests extends AbstractMockObjectStoreIntegTestCase {
             }
         });
 
-        final Settings nodeSettings = Settings.builder()
-            .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), -1)
-            .build();
+        final Settings nodeSettings = disableIndexingDiskAndMemoryControllersNodeSettings();
         final String masterAndIndexNode = startMasterAndIndexNode(nodeSettings);
         final String searchNode = startSearchNode(nodeSettings);
 
@@ -350,9 +374,7 @@ public class S3ObjectStoreTests extends AbstractMockObjectStoreIntegTestCase {
     }
 
     public void testShouldNotRetryForNoSuchFileException() throws Exception {
-        final Settings nodeSettings = Settings.builder()
-            .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), -1)
-            .build();
+        final Settings nodeSettings = disableIndexingDiskAndMemoryControllersNodeSettings();
         final String masterAndIndexNode = startMasterAndIndexNode(nodeSettings);
         final String searchNode = startSearchNode(nodeSettings);
 
@@ -433,6 +455,214 @@ public class S3ObjectStoreTests extends AbstractMockObjectStoreIntegTestCase {
         }
     }
 
+    public void testUploadIndicesDataWithRetries() throws Exception {
+        s3HttpHandler.setInterceptor(new Interceptor() {
+            private final int errorsPerRequest = randomIntBetween(3, 5);
+            private final Map<String, AtomicInteger> requestPathErrorCount = ConcurrentCollections.newConcurrentMap();
+
+            @SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
+            @Override
+            public boolean intercept(HttpExchange exchange) throws IOException {
+                final String request = exchange.getRequestMethod() + " " + exchange.getRequestURI().toString();
+                if (request.contains("PUT") && request.contains("indices/")) {
+                    // request format: /bucket/base_path/indices/UUID/0/1/stateless_commit_N?x-purpose=Indices for single part uploads,
+                    // while for multi-part uploads: .../stateless_commit_N?uploadId=UUID&partNumber=N&x-purpose=Indices where the
+                    // upload UUID changes with every retry.
+                    long gen = Long.parseLong(request.substring(request.lastIndexOf('_') + 1, request.lastIndexOf('?')));
+                    long part = 1;
+                    if (request.contains("partNumber")) {
+                        part = Long.parseLong(
+                            request.substring(request.indexOf("partNumber") + "partNumber=".length(), request.lastIndexOf('&'))
+                        );
+                    }
+                    String genAndPart = gen + "/" + part;
+                    final AtomicInteger numberOfErrors = requestPathErrorCount.computeIfAbsent(genAndPart, k -> new AtomicInteger(0));
+                    if (numberOfErrors.getAndIncrement() >= errorsPerRequest) {
+                        return false;
+                    }
+                    try (exchange) {
+                        ESMockAPIBasedRepositoryIntegTestCase.drainInputStream(exchange.getRequestBody());
+                        exchange.sendResponseHeaders(
+                            randomFrom(
+                                RestStatus.INTERNAL_SERVER_ERROR,
+                                RestStatus.TOO_MANY_REQUESTS,
+                                RestStatus.BAD_GATEWAY,
+                                RestStatus.GATEWAY_TIMEOUT
+                            ).getStatus(),
+                            -1
+                        );
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
+
+        final Settings nodeSettings = disableIndexingDiskAndMemoryControllersNodeSettings();
+        final String masterAndIndexNode = startMasterAndIndexNode(nodeSettings);
+        final String searchNode = startSearchNode(nodeSettings);
+
+        try {
+            final String indexName = randomIdentifier();
+            createIndex(indexName, indexSettings(1, 0).build());
+            ensureGreen(indexName);
+            IndexShard indexShard = findIndexShard(indexName);
+            IndexEngine shardEngine = getShardEngine(indexShard, IndexEngine.class);
+
+            // Index enough 1 MiB documents to produce a >5MiB Lucene compound segment file, to ensure S3 multi-part upload
+            int numDocs = randomIntBetween(8, 10);
+            for (int i = 0; i < numDocs; i++) {
+                indexDoc(indexName, "doc_" + i, "field", randomByteArrayOfLength((int) ByteSizeValue.ofMb(1).getBytes()));
+            }
+
+            flush(indexName);
+
+            setReplicaCount(1, indexName);
+            ensureGreen(indexName);
+            assertHitCount(prepareSearch(indexName), numDocs);
+        } finally {
+            // Stop the node otherwise the test can fail because node tries to publish cluster state to a closed HTTP handler
+            internalCluster().stopNode(searchNode);
+            internalCluster().stopNode(masterAndIndexNode);
+        }
+    }
+
+    public void testRetryOn403ForPutAndPost() throws IOException {
+        final Set<String> requestsErroredFor403 = ConcurrentCollections.newConcurrentSet();
+        s3HttpHandler.setInterceptor(new Interceptor() {
+            @SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
+            @Override
+            public boolean intercept(HttpExchange exchange) throws IOException {
+                final String request = exchange.getRequestMethod() + " " + exchange.getRequestURI().toString();
+                if ((request.startsWith("PUT /") || request.startsWith("POST /")) && requestsErroredFor403.add(request)) {
+                    try (exchange) {
+                        final byte[] response = Strings.format("""
+                            <?xml version="1.0" encoding="UTF-8"?>
+                            <Error>
+                              <Code>InvalidAccessKeyId</Code>
+                              <Message>The AWS Access Key Id you provided does not exist in our records.</Message>
+                              <RequestId>%s</RequestId>
+                            </Error>""", randomUUID()).getBytes(StandardCharsets.UTF_8);
+                        exchange.getResponseHeaders().add("Content-Type", "application/xml");
+                        exchange.sendResponseHeaders(403, response.length);
+                        exchange.getResponseBody().write(response);
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        final String masterAndIndexNode = startMasterAndIndexNode();
+        final String searchNode = startSearchNode();
+        ensureStableCluster(2);
+        try {
+            final String indexName = randomIdentifier();
+            createIndex(indexName, indexSettings(1, 1).build());
+            ensureGreen(indexName);
+            final int batches = between(5, 20);
+            for (int i = 0; i < batches; i++) {
+                indexDocs(indexName, between(1, 10));
+                refresh(indexName);
+            }
+            ensureGreen(indexName);
+            // The test passes as long as the cluster forms successfully and completes some normal activities
+            assertThat(requestsErroredFor403, not(empty()));
+        } finally {
+            internalCluster().stopNode(searchNode);
+            internalCluster().stopNode(masterAndIndexNode);
+        }
+    }
+
+    public void testRetryOn403ForGet() throws Exception {
+        final Set<String> requestsErroredFor403 = ConcurrentCollections.newConcurrentSet();
+        var getBlob = new AtomicReference<String>();
+        var listBlobs = new AtomicReference<String>();
+        s3HttpHandler.setInterceptor(new Interceptor() {
+            @SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
+            @Override
+            public boolean intercept(HttpExchange exchange) throws IOException {
+                final String request = exchange.getRequestMethod() + " " + exchange.getRequestURI().toString();
+                if (getBlob.get() != null
+                    && listBlobs.get() != null
+                    && (request.startsWith(getBlob.get()) || request.startsWith(listBlobs.get()))
+                    && requestsErroredFor403.add(request)) {
+                    try (exchange) {
+                        final byte[] response = Strings.format("""
+                            <?xml version="1.0" encoding="UTF-8"?>
+                            <Error>
+                              <Code>InvalidAccessKeyId</Code>
+                              <Message>The AWS Access Key Id you provided does not exist in our records.</Message>
+                              <RequestId>%s</RequestId>
+                            </Error>""", randomUUID()).getBytes(StandardCharsets.UTF_8);
+                        exchange.getResponseHeaders().add("Content-Type", "application/xml");
+                        exchange.sendResponseHeaders(403, response.length);
+                        exchange.getResponseBody().write(response);
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        final String masterNode = startMasterAndIndexNode();
+        final String indexNode1 = startIndexNode();
+        final String searchNode = startSearchNode();
+        ensureStableCluster(3);
+
+        String indexNode2 = null;
+        try {
+            var indexName = randomIdentifier();
+            createIndex(
+                indexName,
+                indexSettings(1, 0).put(IndexMetadata.INDEX_ROUTING_INCLUDE_GROUP_PREFIX + "._name", indexNode1).build()
+            );
+            var indexUuid = resolveIndex(indexName).getUUID();
+
+            var basePath = getCurrentMasterObjectStoreService().getObjectStore().basePath().buildAsString().replaceAll("/", "%2F");
+            listBlobs.set("GET /bucket/?prefix=" + basePath + "indices%2F" + indexUuid + "%2F");
+            getBlob.set("GET /bucket/base_path/indices/" + indexUuid + "/0/");
+
+            int iters = between(1, 5);
+            for (int i = 0; i < iters; i++) {
+                indexDocs(indexName, between(1, 10));
+                flush(indexName);
+                internalCluster().restartNode(indexNode1);
+                ensureGreen(indexName);
+
+                assertThat(requestsErroredFor403, not(empty()));
+                requestsErroredFor403.clear();
+            }
+
+            indexNode2 = startIndexNode();
+            ensureStableCluster(4);
+
+            updateIndexSettings(
+                Settings.builder().putList(IndexMetadata.INDEX_ROUTING_INCLUDE_GROUP_PREFIX + "._name", indexNode2),
+                indexName
+            );
+            ensureGreen(indexName);
+
+            assertThat(requestsErroredFor403, not(empty()));
+            requestsErroredFor403.clear();
+
+            updateIndexSettings(
+                Settings.builder()
+                    .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 1)
+                    .putList(IndexMetadata.INDEX_ROUTING_INCLUDE_GROUP_PREFIX + "._name", List.of(indexNode2, searchNode)),
+                indexName
+            );
+            ensureGreen(indexName);
+            // The test passes as long as the cluster forms successfully and completes some normal activities
+            assertThat(requestsErroredFor403, not(empty()));
+        } finally {
+            internalCluster().stopNode(searchNode);
+            internalCluster().stopNode(indexNode1);
+            internalCluster().stopNode(indexNode2);
+            internalCluster().stopNode(masterNode);
+        }
+    }
+
     @SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
     private static class InterceptableS3HttpHandler extends S3HttpHandler {
         private volatile Interceptor interceptor;
@@ -456,5 +686,39 @@ public class S3ObjectStoreTests extends AbstractMockObjectStoreIntegTestCase {
     @SuppressForbidden(reason = "this test uses a HttpServer to emulate an S3 endpoint")
     interface Interceptor {
         boolean intercept(HttpExchange exchange) throws IOException;
+    }
+
+    public static class TestStateless extends Stateless {
+
+        public TestStateless(Settings settings) {
+            super(settings);
+        }
+
+        @Override
+        protected ObjectStoreService createObjectStoreService(
+            Settings settings,
+            RepositoriesService repositoriesService,
+            ThreadPool threadPool,
+            ClusterService clusterService
+        ) {
+            return new TestObjectStoreService(settings, repositoriesService, threadPool, clusterService);
+        }
+    }
+
+    public static class TestObjectStoreService extends ObjectStoreService {
+
+        public TestObjectStoreService(
+            Settings settings,
+            RepositoriesService repositoriesService,
+            ThreadPool threadPool,
+            ClusterService clusterService
+        ) {
+            super(settings, repositoriesService, threadPool, clusterService);
+        }
+
+        @Override
+        protected Settings getRepositorySettings(ObjectStoreType type) {
+            return Settings.builder().put(super.getRepositorySettings(type)).put("buffer_size", MULTIPART_UPLOAD_BUFFER_SIZE).build();
+        }
     }
 }

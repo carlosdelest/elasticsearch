@@ -37,6 +37,7 @@ import org.elasticsearch.index.store.Store;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.PluginsService;
+import org.elasticsearch.xpack.logsdb.LogsDBPlugin;
 import org.junit.After;
 import org.junit.Before;
 
@@ -201,12 +202,13 @@ public class StatelessIndexCommitListenerIT extends AbstractStatelessIntegTestCa
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(BlobCachePlugin.class, TestStateless.class);
+        return List.of(BlobCachePlugin.class, TestStateless.class, LogsDBPlugin.class);
     }
 
     @Override
     protected Settings.Builder nodeSettings() {
-        return super.nodeSettings().put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.ZERO);
+        // tests in this suite expect a precise number of commits
+        return super.nodeSettings().put(disableIndexingDiskAndMemoryControllersNodeSettings());
     }
 
     private String indexNode;

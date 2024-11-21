@@ -22,7 +22,6 @@ import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.store.OutputStreamDataOutput;
 import org.elasticsearch.TransportVersion;
-import org.elasticsearch.common.UUIDs;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.ByteArrayStreamInput;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
@@ -39,39 +38,32 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
+import static co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommitTestUtils.randomNonZeroPositiveLong;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 
 public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCase<StatelessCompoundCommit> {
 
     @Override
     protected StatelessCompoundCommit createTestInstance() {
-        Map<String, BlobLocation> commitFiles = randomCommitFiles();
-        return new StatelessCompoundCommit(
-            randomShardId(),
-            new PrimaryTermAndGeneration(randomNonZeroPositiveLong(), randomNonZeroPositiveLong()),
-            randomNonZeroPositiveLong(),
-            randomNodeEphemeralId(),
-            commitFiles,
-            randomNonZeroPositiveLong(),
-            Set.copyOf(randomSubsetOf(commitFiles.keySet()))
-        );
+        return StatelessCompoundCommitTestUtils.randomCompoundCommit();
     }
 
     @Override
     protected StatelessCompoundCommit mutateInstance(StatelessCompoundCommit instance) throws IOException {
-        return switch (randomInt(6)) {
+        return switch (randomInt(8)) {
             case 0 -> new StatelessCompoundCommit(
-                randomValueOtherThan(instance.shardId(), StatelessCompoundCommitTests::randomShardId),
+                randomValueOtherThan(instance.shardId(), StatelessCompoundCommitTestUtils::randomShardId),
                 instance.primaryTermAndGeneration(),
                 instance.translogRecoveryStartFile(),
                 instance.nodeEphemeralId(),
                 instance.commitFiles(),
                 instance.sizeInBytes(),
-                instance.internalFiles()
+                instance.internalFiles(),
+                instance.headerSizeInBytes(),
+                instance.internalFilesReplicatedRanges()
             );
             case 1 -> new StatelessCompoundCommit(
                 instance.shardId(),
@@ -83,28 +75,34 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
                 instance.nodeEphemeralId(),
                 instance.commitFiles(),
                 instance.sizeInBytes(),
-                instance.internalFiles()
+                instance.internalFiles(),
+                instance.headerSizeInBytes(),
+                instance.internalFilesReplicatedRanges()
             );
             case 2 -> new StatelessCompoundCommit(
                 instance.shardId(),
                 instance.primaryTermAndGeneration(),
-                randomValueOtherThan(instance.translogRecoveryStartFile(), StatelessCompoundCommitTests::randomNonZeroPositiveLong),
+                randomValueOtherThan(instance.translogRecoveryStartFile(), StatelessCompoundCommitTestUtils::randomNonZeroPositiveLong),
                 instance.nodeEphemeralId(),
                 instance.commitFiles(),
                 instance.sizeInBytes(),
-                instance.internalFiles()
+                instance.internalFiles(),
+                instance.headerSizeInBytes(),
+                instance.internalFilesReplicatedRanges()
             );
             case 3 -> new StatelessCompoundCommit(
                 instance.shardId(),
                 instance.primaryTermAndGeneration(),
                 instance.translogRecoveryStartFile(),
-                randomValueOtherThan(instance.nodeEphemeralId(), StatelessCompoundCommitTests::randomNodeEphemeralId),
+                randomValueOtherThan(instance.nodeEphemeralId(), StatelessCompoundCommitTestUtils::randomNodeEphemeralId),
                 instance.commitFiles(),
                 instance.sizeInBytes(),
-                instance.internalFiles()
+                instance.internalFiles(),
+                instance.headerSizeInBytes(),
+                instance.internalFilesReplicatedRanges()
             );
             case 4 -> {
-                var commitFiles = randomValueOtherThan(instance.commitFiles(), StatelessCompoundCommitTests::randomCommitFiles);
+                var commitFiles = randomValueOtherThan(instance.commitFiles(), StatelessCompoundCommitTestUtils::randomCommitFiles);
                 yield new StatelessCompoundCommit(
                     instance.shardId(),
                     instance.primaryTermAndGeneration(),
@@ -112,7 +110,9 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
                     instance.nodeEphemeralId(),
                     commitFiles,
                     instance.sizeInBytes(),
-                    Set.copyOf(randomSubsetOf(commitFiles.keySet()))
+                    Set.copyOf(randomSubsetOf(commitFiles.keySet())),
+                    instance.headerSizeInBytes(),
+                    instance.internalFilesReplicatedRanges()
                 );
             }
             case 5 -> new StatelessCompoundCommit(
@@ -121,12 +121,14 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
                 instance.translogRecoveryStartFile(),
                 instance.nodeEphemeralId(),
                 instance.commitFiles(),
-                randomValueOtherThan(instance.sizeInBytes(), StatelessCompoundCommitTests::randomNonZeroPositiveLong),
-                instance.internalFiles()
+                randomValueOtherThan(instance.sizeInBytes(), StatelessCompoundCommitTestUtils::randomNonZeroPositiveLong),
+                instance.internalFiles(),
+                instance.headerSizeInBytes(),
+                instance.internalFilesReplicatedRanges()
             );
             case 6 -> {
                 Map<String, BlobLocation> commitFiles = instance.commitFiles().isEmpty()
-                    ? randomValueOtherThan(Map.of(), StatelessCompoundCommitTests::randomCommitFiles)
+                    ? randomValueOtherThan(Map.of(), StatelessCompoundCommitTestUtils::randomCommitFiles)
                     : instance.commitFiles();
                 yield new StatelessCompoundCommit(
                     instance.shardId(),
@@ -135,9 +137,36 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
                     instance.nodeEphemeralId(),
                     commitFiles,
                     instance.sizeInBytes(),
-                    randomValueOtherThan(instance.internalFiles(), () -> Set.copyOf(randomSubsetOf(commitFiles.keySet())))
+                    randomValueOtherThan(instance.internalFiles(), () -> Set.copyOf(randomSubsetOf(commitFiles.keySet()))),
+                    instance.headerSizeInBytes(),
+                    instance.internalFilesReplicatedRanges()
                 );
             }
+            case 7 -> new StatelessCompoundCommit(
+                instance.shardId(),
+                instance.primaryTermAndGeneration(),
+                instance.translogRecoveryStartFile(),
+                instance.nodeEphemeralId(),
+                instance.commitFiles(),
+                instance.sizeInBytes(),
+                instance.internalFiles(),
+                randomValueOtherThan(instance.headerSizeInBytes(), StatelessCompoundCommitTestUtils::randomNonZeroPositiveLong),
+                instance.internalFilesReplicatedRanges()
+            );
+            case 8 -> new StatelessCompoundCommit(
+                instance.shardId(),
+                instance.primaryTermAndGeneration(),
+                instance.translogRecoveryStartFile(),
+                instance.nodeEphemeralId(),
+                instance.commitFiles(),
+                instance.sizeInBytes(),
+                instance.internalFiles(),
+                instance.headerSizeInBytes(),
+                randomValueOtherThan(
+                    instance.internalFilesReplicatedRanges(),
+                    StatelessCompoundCommitTestUtils::randomInternalFilesReplicatedRanges
+                )
+            );
             default -> throw new AssertionError("Unexpected value");
         };
     }
@@ -153,7 +182,7 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
         try (BytesStreamOutput output = new BytesStreamOutput()) {
             PositionTrackingOutputStreamStreamOutput positionTracking = new PositionTrackingOutputStreamStreamOutput(output);
 
-            Map<String, BlobLocation> referencedCommitBlobsWithoutBlobLength = randomCommitFiles();
+            Map<String, BlobLocation> referencedCommitBlobsWithoutBlobLength = StatelessCompoundCommitTestUtils.randomCommitFiles();
             List<StatelessCompoundCommit.InternalFile> internalFiles = new ArrayList<>();
             int internalFileCount = randomIntBetween(1, 10);
             for (int i = 0; i < internalFileCount; i++) {
@@ -175,8 +204,11 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
             var headerOffset = positionTracking.position();
             var totalSize = headerOffset + internalFiles.stream().mapToLong(StatelessCompoundCommit.InternalFile::length).sum();
             var expectedCommitFiles = StatelessCompoundCommit.combineCommitFiles(
-                StatelessCompoundCommit.blobNameFromGeneration(testInstance.generation()),
-                testInstance.primaryTerm(),
+                new BlobFile(
+                    StatelessCompoundCommit.blobNameFromGeneration(testInstance.generation()),
+                    new PrimaryTermAndGeneration(testInstance.primaryTerm(), testInstance.generation())
+                ),
+                InternalFilesReplicatedRanges.EMPTY,
                 internalFiles,
                 referencedCommitBlobsWithoutBlobLength,
                 0,
@@ -191,7 +223,9 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
                 testInstance.nodeEphemeralId(),
                 expectedCommitFiles,
                 totalSize,
-                internalFiles.stream().map(StatelessCompoundCommit.InternalFile::name).collect(Collectors.toSet())
+                internalFiles.stream().map(StatelessCompoundCommit.InternalFile::name).collect(Collectors.toSet()),
+                headerOffset,
+                InternalFilesReplicatedRanges.EMPTY
             );
 
             try (StreamInput in = output.bytes().streamInput()) {
@@ -255,8 +289,10 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
                 0,
                 commitFiles,
                 List.of(),
+                InternalFilesReplicatedRanges.EMPTY,
                 StatelessCompoundCommit.CURRENT_VERSION,
-                new PositionTrackingOutputStreamStreamOutput(output)
+                new PositionTrackingOutputStreamStreamOutput(output),
+                randomBoolean()
             );
             // flip one byte anywhere
             byte[] bytes = BytesReference.toBytes(output.bytes());
@@ -275,29 +311,38 @@ public class StatelessCompoundCommitTests extends AbstractWireSerializingTestCas
         }
     }
 
-    private static ShardId randomShardId() {
-        return new ShardId(randomAlphaOfLength(20), UUIDs.randomBase64UUID(), randomIntBetween(0, 25));
-    }
+    public void testShouldReadHeaderRegardlessFeatureFlagState() throws IOException {
+        StatelessCompoundCommit testInstance = createTestInstance();
+        var writerFeatureFlag = randomBoolean();
 
-    private static Long randomNonZeroPositiveLong() {
-        return randomLongBetween(1L, Long.MAX_VALUE - 1L);
-    }
+        byte[] bytes;
 
-    private static String randomNodeEphemeralId() {
-        return randomAlphaOfLength(10);
-    }
-
-    private static Map<String, BlobLocation> randomCommitFiles() {
-        final int entries = randomInt(50);
-        if (entries == 0) {
-            return Map.of();
+        try (BytesStreamOutput output = new BytesStreamOutput()) {
+            StatelessCompoundCommit.writeXContentHeader(
+                testInstance.shardId(),
+                testInstance.generation(),
+                testInstance.primaryTerm(),
+                testInstance.nodeEphemeralId(),
+                testInstance.translogRecoveryStartFile(),
+                testInstance.commitFiles(),
+                List.of(),
+                InternalFilesReplicatedRanges.EMPTY,
+                StatelessCompoundCommit.CURRENT_VERSION,
+                new PositionTrackingOutputStreamStreamOutput(output),
+                writerFeatureFlag
+            );
+            bytes = BytesReference.toBytes(output.bytes());
         }
-        return IntStream.range(0, entries + 1)
-            .mapToObj(operand -> UUIDs.randomBase64UUID())
-            .collect(Collectors.toMap(Function.identity(), s -> {
-                long fileLength = randomLongBetween(100, 1000);
-                long offset = randomLongBetween(0, 200);
-                return new BlobLocation(randomLongBetween(1, 10), randomAlphaOfLength(10), offset, fileLength);
-            }));
+
+        try (StreamInput in = new ByteArrayStreamInput(bytes)) {
+            var copy = StatelessCompoundCommit.readFromStore(in);
+
+            assertThat(copy.shardId(), equalTo(testInstance.shardId()));
+            assertThat(copy.generation(), equalTo(testInstance.generation()));
+            assertThat(copy.primaryTerm(), equalTo(testInstance.primaryTerm()));
+            assertThat(copy.nodeEphemeralId(), equalTo(testInstance.nodeEphemeralId()));
+            assertThat(copy.translogRecoveryStartFile(), equalTo(testInstance.translogRecoveryStartFile()));
+            assertThat(copy.commitFiles(), equalTo(testInstance.commitFiles()));
+        }
     }
 }

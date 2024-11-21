@@ -24,9 +24,9 @@ public class PullRequest {
     private final String title;
     private final String url;
     private final String mergedAt;
-    private final List<PullRequest.Label> labels;
+    private final List<Label> labels;
 
-    public PullRequest(String repository, String title, String url, String mergedAt, List<PullRequest.Label> labels) {
+    public PullRequest(String repository, String title, String url, String mergedAt, List<Label> labels) {
         this.repository = repository;
         this.title = title;
         this.url = url;
@@ -50,25 +50,8 @@ public class PullRequest {
         return mergedAt;
     }
 
-    public List<PullRequest.Label> getLabels() {
+    public List<Label> getLabels() {
         return labels;
     }
 
-    public static final class Label {
-        private final String name;
-        private final String color;
-
-        public Label(String name, String color) {
-            this.name = name;
-            this.color = color;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getColor() {
-            return color;
-        }
-    }
 }

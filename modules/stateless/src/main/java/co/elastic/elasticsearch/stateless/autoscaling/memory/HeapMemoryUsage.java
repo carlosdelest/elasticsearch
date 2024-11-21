@@ -20,20 +20,29 @@ package co.elastic.elasticsearch.stateless.autoscaling.memory;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
-import org.elasticsearch.index.Index;
+import org.elasticsearch.index.shard.ShardId;
 
 import java.io.IOException;
 import java.util.Map;
 
-public record HeapMemoryUsage(long publicationSeqNo, Map<Index, IndexMappingSize> indicesMappingSize) implements Writeable {
+import static org.elasticsearch.cluster.ClusterState.UNKNOWN_VERSION;
 
-    public HeapMemoryUsage(StreamInput in) throws IOException {
-        this(in.readVLong(), in.readMap(Index::new, IndexMappingSize::new));
+public record HeapMemoryUsage(long publicationSeqNo, Map<ShardId, ShardMappingSize> shardMappingSizes, long clusterStateVersion)
+    implements
+        Writeable {
+
+    HeapMemoryUsage(long publicationSeqNo, Map<ShardId, ShardMappingSize> shardMappingSizes) {
+        this(publicationSeqNo, shardMappingSizes, UNKNOWN_VERSION);
+    }
+
+    public static HeapMemoryUsage from(StreamInput in) throws IOException {
+        return new HeapMemoryUsage(in.readVLong(), in.readMap(ShardId::new, ShardMappingSize::from), in.readLong());
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeVLong(publicationSeqNo);
-        out.writeMap(indicesMappingSize, (o, index) -> index.writeTo(o), (o, indexMappingSize) -> indexMappingSize.writeTo(o));
+        out.writeMap(shardMappingSizes, StreamOutput::writeWriteable, StreamOutput::writeWriteable);
+        out.writeLong(clusterStateVersion);
     }
 }

@@ -14,14 +14,6 @@
  * this material is strictly forbidden unless prior written
  * permission is obtained from Elasticsearch B.V.
  */
-
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Elastic License
- * 2.0; you may not use this file except in compliance with the Elastic License
- * 2.0.
- */
-
 package co.elastic.elasticsearch.serverless.shutdown;
 
 import org.apache.logging.log4j.LogManager;
@@ -64,6 +56,7 @@ public class SigtermShutdownCleanupService implements ClusterStateListener {
 
     ConcurrentHashMap<String, Scheduler.ScheduledCancellable> cleanups = new ConcurrentHashMap<>();
 
+    @SuppressWarnings("this-escape")
     public SigtermShutdownCleanupService(ClusterService clusterService) {
         this.threadPool = clusterService.threadPool();
         this.executor = threadPool.generic();

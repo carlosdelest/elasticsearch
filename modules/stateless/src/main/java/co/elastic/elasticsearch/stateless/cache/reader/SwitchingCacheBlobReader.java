@@ -20,35 +20,45 @@
 package co.elastic.elasticsearch.stateless.cache.reader;
 
 import co.elastic.elasticsearch.stateless.cache.reader.ObjectStoreUploadTracker.UploadInfo;
+import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.ResourceAlreadyUploadedException;
 import org.elasticsearch.ResourceNotFoundException;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.blobcache.common.ByteRange;
 import org.elasticsearch.core.Strings;
 
-import java.io.IOException;
 import java.io.InputStream;
 
 /**
  * Switches between two {@link CacheBlobReader} implementations based on whether the batched compound commit has been uploaded to the
- * object store. The info of whether the commit has been uploaded is provided by a {@link ObjectStoreUploadTracker}.
+ * object store. The info of whether the commit has been uploaded is provided by a {@link MutableObjectStoreUploadTracker}.
+ * May throw {@link org.elasticsearch.ResourceAlreadyUploadedException} if the fetch from the indexing node resulted in a
+ * {@link org.elasticsearch.ResourceNotFoundException} that the commit has been uploaded in the meantime, in which case the
+ * {@link MutableObjectStoreUploadTracker} is updated, and the fetch needs to be re-tried (this time from the object store).
  */
 public class SwitchingCacheBlobReader implements CacheBlobReader {
 
     private static final Logger logger = LogManager.getLogger(SwitchingCacheBlobReader.class);
 
+    private final MutableObjectStoreUploadTracker tracker;
+    private final PrimaryTermAndGeneration locationPrimaryTermAndGeneration;
     private final UploadInfo latestUploadInfo;
     private final CacheBlobReader cacheBlobReaderForUploaded;
     private final CacheBlobReader cacheBlobReaderForNonUploaded;
 
     public SwitchingCacheBlobReader(
-        UploadInfo latestUploadInfo,
+        MutableObjectStoreUploadTracker tracker,
+        PrimaryTermAndGeneration locationPrimaryTermAndGeneration,
         CacheBlobReader cacheBlobReaderForUploaded,
         CacheBlobReader cacheBlobReaderForNonUploaded
     ) {
-        this.latestUploadInfo = latestUploadInfo;
+        this.tracker = tracker;
+        this.locationPrimaryTermAndGeneration = locationPrimaryTermAndGeneration;
+        this.latestUploadInfo = tracker.getLatestUploadInfo(locationPrimaryTermAndGeneration);
         this.cacheBlobReaderForUploaded = cacheBlobReaderForUploaded;
         this.cacheBlobReaderForNonUploaded = cacheBlobReaderForNonUploaded;
     }
@@ -63,30 +73,32 @@ public class SwitchingCacheBlobReader implements CacheBlobReader {
     }
 
     @Override
-    public InputStream getRangeInputStream(long position, int length) throws IOException {
+    public void getRangeInputStream(long position, int length, ActionListener<InputStream> listener) {
         if (latestUploadInfo.isUploaded()) {
-            return cacheBlobReaderForUploaded.getRangeInputStream(position, length);
+            cacheBlobReaderForUploaded.getRangeInputStream(position, length, listener);
         } else {
-            try {
-                return cacheBlobReaderForNonUploaded.getRangeInputStream(position, length);
-            } catch (Exception ex) {
-                // TODO ideally use ShardReadThread pool here again. (ES-8155)
-                // TODO ideally use a region-aligned range to write. (ES-8225)
-                // TODO remove ResourceAlreadyUploadedException from core ES
-                if (ExceptionsHelper.unwrapCause(ex) instanceof ResourceNotFoundException) {
-                    logger.debug(
-                        () -> Strings.format(
-                            "switching blob reading from [%s] to [%s] due to exception",
-                            cacheBlobReaderForNonUploaded,
-                            cacheBlobReaderForUploaded
-                        ),
-                        ex
+            cacheBlobReaderForNonUploaded.getRangeInputStream(position, length, listener.delegateResponse((l, ex) -> {
+                final var resourceNotFoundException = ExceptionsHelper.unwrap(ex, ResourceNotFoundException.class);
+                if (resourceNotFoundException != null) {
+                    final var message = Strings.format(
+                        "[%s] replied that [%s] is not found",
+                        cacheBlobReaderForNonUploaded,
+                        locationPrimaryTermAndGeneration
                     );
-                    return cacheBlobReaderForUploaded.getRangeInputStream(position, length);
+                    logger.debug(() -> message, ex);
+
+                    // Update the tracker so that next attempts will not try to read from the VBCC, but from the uploaded BCC.
+                    tracker.updateLatestUploadedBcc(locationPrimaryTermAndGeneration);
+
+                    // Throw an exception to indicate that the VBCC was uploaded and the read should be attempted again so that it
+                    // reaches out to the BCC on the object store. Note that multiple concurrent reads may fail at this point, but they
+                    // should be able to retry reading successfully from the object store.
+                    // TODO think about a higher level abstraction that could hide/enforce the exception bubbling and/or the retry (ES-9052)
+                    l.onFailure(new ResourceAlreadyUploadedException(message, ex));
                 } else {
-                    throw ex;
+                    l.onFailure(ex);
                 }
-            }
+            }));
         }
     }
 }

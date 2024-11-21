@@ -17,7 +17,10 @@
 
 package co.elastic.elasticsearch.metering.action;
 
-import co.elastic.elasticsearch.metering.MeteringIndexInfoTask;
+import co.elastic.elasticsearch.metering.MeteringPlugin;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
+import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -37,6 +40,7 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.persistent.NotPersistentTaskNodeException;
 import org.elasticsearch.persistent.PersistentTaskNodeNotAssignedException;
 import org.elasticsearch.tasks.Task;
@@ -57,9 +61,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
-import static co.elastic.elasticsearch.metering.MeteringIndexInfoTaskExecutor.POLL_INTERVAL_SETTING;
-import static co.elastic.elasticsearch.metering.action.utils.PersistentTaskUtils.findPersistentTaskNode;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING;
+import static co.elastic.elasticsearch.metering.sampling.utils.PersistentTaskUtils.findPersistentTaskNode;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_TYPE;
 
 abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
     GetMeteringStatsAction.Request,
@@ -72,8 +77,9 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
 
     private final ClusterService clusterService;
     private final IndexNameExpressionResolver indexNameExpressionResolver;
-    private final MeteringIndexInfoService meteringIndexInfoService;
+    private final SampledClusterMetricsService clusterMetricsService;
     private final ExecutorService executor;
+    private final boolean meterRaStorage;
     private final TransportService transportService;
     private final String persistentTaskName;
 
@@ -85,7 +91,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         ActionFilters actionFilters,
         ClusterService clusterService,
         IndexNameExpressionResolver indexNameExpressionResolver,
-        MeteringIndexInfoService meteringIndexInfoService
+        SampledClusterMetricsService clusterMetricsService
     ) {
         this(
             actionName,
@@ -93,9 +99,10 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
             actionFilters,
             clusterService,
             indexNameExpressionResolver,
-            meteringIndexInfoService,
+            clusterMetricsService,
             transportService.getThreadPool().executor(ThreadPool.Names.MANAGEMENT),
-            POLL_INTERVAL_SETTING.get(clusterService.getSettings())
+            POLL_INTERVAL_SETTING.get(clusterService.getSettings()),
+            MeteringPlugin.isRaStorageMeteringEnabled(PROJECT_TYPE.get(clusterService.getSettings()))
         );
 
         clusterService.getClusterSettings().addSettingsUpdateConsumer(POLL_INTERVAL_SETTING, this::setMeteringShardInfoUpdatePeriod);
@@ -107,17 +114,19 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         ActionFilters actionFilters,
         ClusterService clusterService,
         IndexNameExpressionResolver indexNameExpressionResolver,
-        MeteringIndexInfoService meteringIndexInfoService,
+        SampledClusterMetricsService clusterMetricsService,
         ExecutorService executor,
-        TimeValue meteringShardInfoUpdatePeriod
+        TimeValue meteringShardInfoUpdatePeriod,
+        boolean meterRaStorage
     ) {
         super(actionName, transportService, actionFilters, GetMeteringStatsAction.Request::new, executor);
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.indexNameExpressionResolver = indexNameExpressionResolver;
-        this.meteringIndexInfoService = meteringIndexInfoService;
+        this.clusterMetricsService = clusterMetricsService;
         this.executor = executor;
-        this.persistentTaskName = MeteringIndexInfoTask.TASK_NAME;
+        this.meterRaStorage = meterRaStorage;
+        this.persistentTaskName = SampledClusterMetricsSchedulingTask.TASK_NAME;
         this.meteringShardInfoUpdatePeriod = meteringShardInfoUpdatePeriod;
     }
 
@@ -161,7 +170,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         } else if (localNode.getId().equals(persistentTaskNode.getId())) {
             executor.execute(() -> {
                 try {
-                    final var shardsInfo = meteringIndexInfoService.getMeteringShardInfo();
+                    final var shardsInfo = clusterMetricsService.getMeteringShardInfo();
                     final var concreteIndicesNames = indexNameExpressionResolver.concreteIndexNames(clusterState, request);
                     final var dataStreamConcreteIndicesNames = DataStreamsActionUtil.resolveConcreteIndexNames(
                         indexNameExpressionResolver,
@@ -275,8 +284,27 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         }
     }
 
-    static GetMeteringStatsAction.Response createResponse(
-        MeteringIndexInfoService.CollectedMeteringShardInfo shardsInfo,
+    /**
+     * Returns the size used for billing purposes.
+     * This API is meant for returning metering stats. It was meant to provide a snapshot of the state of metering, without any
+     * interpretation.
+     * We provisionally add an extra "size" field, which is chosen internally from IX/RA-S based on the project type, to be consumed by
+     * the UI. This method is immediately deprecated, as it is meant as a stopgap measure until we add a new user facing API.
+     *
+     * @return the size to display, based on the project type
+     */
+    @Deprecated
+    long getSizeToDisplay(ShardId shardId, ShardInfoMetrics shardInfo) {
+        if (meterRaStorage) {
+            logger.trace("display _rastorage [{}] for [{}:{}]", shardInfo.rawStoredSizeInBytes(), shardId.getIndexName(), shardId.getId());
+            return shardInfo.rawStoredSizeInBytes();
+        }
+        logger.trace("display IX [{}] for [{}:{}]", shardInfo.totalSizeInBytes(), shardId.getIndexName(), shardId.getId());
+        return shardInfo.totalSizeInBytes();
+    }
+
+    GetMeteringStatsAction.Response createResponse(
+        SampledClusterMetricsService.SampledShardInfos shardInfos,
         ClusterState clusterState,
         String[] indicesNames
     ) {
@@ -293,13 +321,13 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
             .collect(Collectors.toSet());
 
         for (var shardId : shardIds) {
-            var shardInfo = shardsInfo.getMeteringShardInfoMap(shardId);
+            var shardInfo = shardInfos.get(shardId);
 
             String indexName = shardId.getIndexName();
             IndexAbstraction indexAbstraction = metadata.getIndicesLookup().get(indexName);
 
             long currentCount = shardInfo.docCount();
-            long currentSize = shardInfo.sizeInBytes();
+            long currentSize = getSizeToDisplay(shardId, shardInfo);
             workingTotalDocCount += currentCount;
             workingTotalSizeInBytes += currentSize;
 

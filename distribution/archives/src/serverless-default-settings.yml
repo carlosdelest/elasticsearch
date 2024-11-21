@@ -2,12 +2,14 @@ stateless.enabled: true
 search.query_phase_parallel_collection_enabled: true
 # TODO remove the following line once we are confident that there are no file deletions issues
 logger.co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService.shard_files_deletes: DEBUG
+# TODO remove the following line once we are confident that shard snapshots are not stalling during shutdown
+logger.org.elasticsearch.repositories.blobstore.BlobStoreRepository.ShutdownLogger: DEBUG
 
 # allow more concurrent recoveries in serverless, since we wait for object store during recovery.
-cluster.routing.allocation.node_concurrent_recoveries: 10
+cluster.routing.allocation.node_concurrent_recoveries: 6
 # also raise this for same reason, though we accept that translog replay may take a short while, requiring mainly
 # CPU/IO.
-cluster.routing.allocation.node_initial_primaries_recoveries: 10
+cluster.routing.allocation.node_initial_primaries_recoveries: 6
 # increase to 5K in serverless. This is not unheard of on frozen, so should work. Also, stats is not available to
 # users so we have some control. Finally, if this does not work, we would likely like to investigate it.
 cluster.max_shards_per_node: 5000
@@ -23,7 +25,7 @@ indices.merge.policy.max_time_based_merged_segment: 20gb
 # Force-termination happens after 1h, see ES-8164, so if we haven't shut down
 # by then we try and time out just before that in order to record the failure
 # in the logs.
-serverless.sigterm.timeout: 3590s
+serverless.sigterm.timeout: 3540s
 
 serverless.sigterm.poll_interval: 30s
 
@@ -52,9 +54,978 @@ indices.recovery.use_snapshots: false
 cluster.fault_detection.follower_check.timeout: 20m
 cluster.follower_lag.timeout: 1h
 
+# In serverless, only index nodes can be the master, but the search nodes could
+# happen to boot first, in which case it is expected and normal that the cluster
+# would spend some time without a master until at least one index node arrives.
+discovery.initial_state_timeout: 10m
+
 # Lots of threads read from the blob store in parallel, and we don't want any
 # of them to fail just because the connection pool is exhausted. See comments
 # on ES-8103 for the current (at time of writing) threadpool sizes for
 # different node sizes. This value just has to be large enough to accommodate
 # one connection per thread, it's ok if we set it to a larger value.
 s3.client.default.max_connections: 150
+
+# We see occasional requests to S3 just fail to get a response for the full 50s
+# default timeout, and then get an immediate success on a retry. Yet almost all
+# requests complete in well under 1s. Thus we can profitably time out and retry
+# sooner. See ES-9719.
+s3.client.default.read_timeout: 10s
+
+# In serverless we want to set this higher than the coordinating limit (10%) to
+# attempt to move forward with indexing data if the we have received it.
+# Autoscaling should kick in and increase resources if nodes are overloaded
+indexing_pressure.memory.primary.limit: 15%
+
+# Maximum amount of time to wait for outstanding reindexing tasks on a node
+# before shutting down. The wait happens during prepare for close.
+node.maximum_reindexing_grace_period: 10m
+
+# Only allow certain scripted metric aggregations necessary for our solutions.
+# Generally, scripted metric aggs can become resource intensive enough to bring down a cluster.
+search.aggs.only_allowed_metric_scripts: true
+search.aggs.allowed_inline_metric_scripts:
+  # Security
+  ## Endpoint metadata united
+  ## https://github.com/elastic/endpoint-package/blob/main/package/endpoint/elasticsearch/transform/metadata_united/default.json
+  - "state.docs = []"
+  - "state.docs.add(new HashMap(params['_source']))"
+  - "return state.docs"
+  - "def ret = new HashMap(); for (s in states) { for (d in s) { if (d.containsKey('Endpoint')) { ret.endpoint = d } else { ret.agent = d } }} return ret"
+  ## Risk scoring
+  ## https://github.com/elastic/kibana/blob/main/x-pack/plugins/security_solution/server/lib/entity_analytics/risk_score/painless/index.test.ts
+  - "state.inputs = []"
+  - "Map fields = new HashMap();fields.put('id', doc['kibana.alert.uuid'].value);fields.put('index', doc['_index'].value);fields.put('time', doc['@timestamp'].value);fields.put('rule_name', doc['kibana.alert.rule.name'].value);fields.put('category', doc['event.kind'].value);fields.put('score', doc['kibana.alert.risk_score'].value);state.inputs.add(fields); "
+  - "return state;"
+  - "Map results = new HashMap();results['notes'] = [];results['category_1_score'] = 0.0;results['category_1_count'] = 0;results['risk_inputs'] = [];results['score'] = 0.0;def inputs = states[0].inputs;Collections.sort(inputs, (a, b) -> b.get('score').compareTo(a.get('score')));for (int i = 0; i < inputs.length; i++) { double current_score = inputs[i].score / Math.pow(i + 1, params.p); if (i < 10) { inputs[i]['contribution'] = current_score / params.risk_cap; results['risk_inputs'].add(inputs[i]); } results['category_1_score'] += current_score; results['category_1_count'] += 1; results['score'] += current_score;}results['score'] *= params.global_identifier_type_weight;results['normalized_score'] = results['score'] / params.risk_cap;return results;"
+  # Observability
+  ## APM critical path
+  ## https://github.com/elastic/kibana/blob/main/x-pack/plugins/observability_solution/apm/server/routes/traces/get_aggregated_critical_path.ts
+  - "\
+     \n                state.eventsById = [:];\
+     \n                state.metadataByOperationId = [:];\
+     \n              "
+  - "\
+     \n                String toHash (def item) {\
+     \n                  long FNV_32_INIT = 0x811c9dc5L;\
+     \n                  long FNV_32_PRIME = 0x01000193L;\
+     \n                  char[] chars = item.toString().toCharArray();\
+     \n                  long rv = FNV_32_INIT;\
+     \n                  int len = chars.length;\
+     \n                  for(int i = 0; i < len; i++) {\
+     \n                      byte bt = (byte) chars[i];\
+     \n                      rv ^= bt;\
+     \n                      rv *= FNV_32_PRIME;\
+     \n                  }\
+     \n                  return rv.toString();\
+     \n                }\
+     \n                \
+     \n                def id;\
+     \n                double duration;\
+     \n                \
+     \n                def operationMetadata = [\
+     \n                  \"service.name\": $('service.name', ''),\
+     \n                  \"processor.event\": $('processor.event', ''),\
+     \n                  \"agent.name\": $('agent.name', '')\
+     \n                ];\
+     \n\
+     \n                def spanName = $('span.name', null);\
+     \n                id = $('span.id', null);\
+     \n                if (id != null && spanName != null) {\
+     \n                  operationMetadata.put('span.name', spanName);\
+     \n                  def spanType = $('span.type', '');\
+     \n                  if (spanType != '') {\
+     \n                    operationMetadata.put('span.type', spanType);\
+     \n                  }\
+     \n                  def spanSubtype = $('span.subtype', '');\
+     \n                  if (spanSubtype != '') {\
+     \n                    operationMetadata.put('span.subtype', spanSubtype);\
+     \n                  }\
+     \n                  duration = $('span.duration.us', 0);\
+     \n                } else {\
+     \n                  id = $('transaction.id', '');\
+     \n                  operationMetadata.put('transaction.name', $('transaction.name', ''));\
+     \n                  operationMetadata.put('transaction.type', $('transaction.type', ''));\
+     \n                  duration = $('transaction.duration.us', 0);\
+     \n                }\
+     \n                 \
+     \n                String operationId = toHash(operationMetadata);\
+     \n                \
+     \n                def map = [\
+     \n                  \"traceId\": $('trace.id', ''),\
+     \n                  \"id\": id,\
+     \n                  \"parentId\": $('parent.id', null),\
+     \n                  \"operationId\": operationId,\
+     \n                  \"timestamp\": $('timestamp.us', 0),\
+     \n                  \"duration\": duration\
+     \n                ];\
+     \n                \
+     \n                if (state.metadataByOperationId[operationId] == null) {\
+     \n                  state.metadataByOperationId.put(operationId, operationMetadata);\
+     \n                }\
+     \n                state.eventsById.put(id, map);\
+     \n              "
+  - "return state;"
+  - "\
+     \n                String toHash (def item) {\
+     \n                  long FNV_32_INIT = 0x811c9dc5L;\
+     \n                  long FNV_32_PRIME = 0x01000193L;\
+     \n                  char[] chars = item.toString().toCharArray();\
+     \n                  long rv = FNV_32_INIT;\
+     \n                  int len = chars.length;\
+     \n                  for(int i = 0; i < len; i++) {\
+     \n                      byte bt = (byte) chars[i];\
+     \n                      rv ^= bt;\
+     \n                      rv *= FNV_32_PRIME;\
+     \n                  }\
+     \n                  return rv.toString();\
+     \n                }\
+     \n                \
+     \n                def processEvent (def context, def event) {\
+     \n                  if (context.processedEvents[event.id] != null) {\
+     \n                    return context.processedEvents[event.id];\
+     \n                  }\
+     \n                  \
+     \n                  def processedEvent = [\
+     \n                    \"children\": []\
+     \n                  ];\
+     \n                  \
+     \n                  if(event.parentId != null) {\
+     \n                    def parent = context.events[event.parentId];\
+     \n                    if (parent == null) {\
+     \n                      return null;\
+     \n                    }\
+     \n                    def processedParent = processEvent(context, parent);\
+     \n                    if (processedParent == null) {\
+     \n                      return null;\
+     \n                    }\
+     \n                    processedParent.children.add(processedEvent);\
+     \n                  }\
+     \n                  \
+     \n                  context.processedEvents.put(event.id, processedEvent);\
+     \n                  \
+     \n                  processedEvent.putAll(event);\
+     \n\
+     \n                  if (context.params.serviceName != null && context.params.transactionName != null) {\
+     \n                    \
+     \n                    def metadata = context.metadata[event.operationId];\
+     \n                    \
+     \n                    if (metadata != null\
+     \n                      && context.params.serviceName == metadata['service.name']\
+     \n                      && metadata['transaction.name'] != null \
+     \n                      && context.params.transactionName == metadata['transaction.name']\
+     \n                    ) {\
+     \n                      context.entryTransactions.add(processedEvent);\
+     \n                    }\
+     \n\
+     \n                  } else if (event.parentId == null) {\
+     \n                    context.entryTransactions.add(processedEvent);\
+     \n                  }\
+     \n                  \
+     \n                  return processedEvent;\
+     \n                }\
+     \n                \
+     \n                double getClockSkew (def context, def item, def parent ) {\
+     \n                  if (parent == null) {\
+     \n                    return 0;\
+     \n                  }\
+     \n                  \
+     \n                  def processorEvent = context.metadata[item.operationId]['processor.event'];\
+     \n                  \
+     \n                  def isTransaction = processorEvent == 'transaction';\
+     \n                  \
+     \n                  if (!isTransaction) {\
+     \n                    return parent.skew;\
+     \n                  }\
+     \n                  \
+     \n                  double parentStart = parent.timestamp + parent.skew;\
+     \n                  double offsetStart = parentStart - item.timestamp;\
+     \n                  if (offsetStart > 0) {\
+     \n                    double latency = Math.round(Math.max(parent.duration - item.duration, 0) / 2);\
+     \n                    return offsetStart + latency;\
+     \n                  }\
+     \n                  \
+     \n                  return 0;\
+     \n                }\
+     \n                \
+     \n                void setOffsetAndSkew ( def context, def event, def parent, def startOfTrace ) {\
+     \n                  event.skew = getClockSkew(context, event, parent);\
+     \n                  event.offset = event.timestamp - startOfTrace;\
+     \n                  for(child in event.children) {\
+     \n                    setOffsetAndSkew(context, child, event, startOfTrace);\
+     \n                  }\
+     \n                  event.end = event.offset + event.skew + event.duration;\
+     \n                }\
+     \n                \
+     \n                void count ( def context, def nodeId, def duration ) {\
+     \n                  context.timeByNodeId[nodeId] = (context.timeByNodeId[nodeId] ?: 0) + duration;\
+     \n                }\
+     \n                \
+     \n                void scan ( def context, def item, def start, def end, def path ) {\
+     \n                  \
+     \n                  def nodeId = toHash(path);\
+     \n        \
+     \n                  def childNodes = context.nodes[nodeId] != null ? context.nodes[nodeId] : [];\
+     \n                  \
+     \n                  context.nodes[nodeId] = childNodes;\
+     \n                  \
+     \n                  context.operationIdByNodeId[nodeId] = item.operationId;\
+     \n                  \
+     \n                  if (item.children.size() == 0) {\
+     \n                    count(context, nodeId, end - start);\
+     \n                    return;\
+     \n                  }\
+     \n                  \
+     \n                  item.children.sort((a, b) -> {\
+     \n                    if (b.end === a.end) {\
+     \n                      return 0;\
+     \n                    }\
+     \n                    if (b.end > a.end) {\
+     \n                      return 1;\
+     \n                    }\
+     \n                    return -1;\
+     \n                  });\
+     \n                  \
+     \n                  def scanTime = end;\
+     \n                  \
+     \n                  for(child in item.children) {\
+     \n                    double normalizedChildStart = Math.max(child.offset + child.skew, start);\
+     \n                    double childEnd = child.offset + child.skew + child.duration;\
+     \n                    \
+     \n                    double normalizedChildEnd = Math.min(childEnd, scanTime);\
+     \n              \
+     \n                    def isOnCriticalPath = !(\
+     \n                      normalizedChildStart >= scanTime ||\
+     \n                      normalizedChildEnd < start ||\
+     \n                      childEnd > scanTime\
+     \n                    );\
+     \n                    \
+     \n                    if (!isOnCriticalPath) {\
+     \n                      continue;\
+     \n                    }\
+     \n                    \
+     \n                    def childPath = path.clone();\
+     \n                    \
+     \n                    childPath.add(child.operationId);\
+     \n                    \
+     \n                    def childId = toHash(childPath);\
+     \n                    \
+     \n                    if(!childNodes.contains(childId)) {\
+     \n                      childNodes.add(childId);\
+     \n                    }\
+     \n                    \
+     \n                    if (normalizedChildEnd < (scanTime - 1000)) {\
+     \n                      count(context, nodeId, scanTime - normalizedChildEnd); \
+     \n                    }\
+     \n                    \
+     \n                    scan(context, child, normalizedChildStart, childEnd, childPath);\
+     \n                    \
+     \n                    scanTime = normalizedChildStart;\
+     \n                  }\
+     \n                  \
+     \n                  if (scanTime > start) {\
+     \n                    count(context, nodeId, scanTime - start);\
+     \n                  }\
+     \n                  \
+     \n                }\
+     \n              \
+     \n                def events = [:];\
+     \n                def metadata = [:];\
+     \n                def processedEvents = [:];\
+     \n                def entryTransactions = [];\
+     \n                def timeByNodeId = [:];\
+     \n                def nodes = [:];\
+     \n                def rootNodes = [];\
+     \n                def operationIdByNodeId = [:];\
+     \n                \
+     \n                \
+     \n                def context = [\
+     \n                  \"events\": events,\
+     \n                  \"metadata\": metadata,\
+     \n                  \"processedEvents\": processedEvents,\
+     \n                  \"entryTransactions\": entryTransactions,\
+     \n                  \"timeByNodeId\": timeByNodeId,\
+     \n                  \"nodes\": nodes,\
+     \n                  \"operationIdByNodeId\": operationIdByNodeId,\
+     \n                  \"params\": params\
+     \n                ];\
+     \n              \
+     \n                for(state in states) {\
+     \n                  if (state.eventsById != null) {\
+     \n                    events.putAll(state.eventsById);\
+     \n                  }\
+     \n                  if (state.metadataByOperationId != null) {\
+     \n                    metadata.putAll(state.metadataByOperationId);\
+     \n                  }\
+     \n                }\
+     \n                \
+     \n                \
+     \n                for(def event: events.values()) {\
+     \n                  processEvent(context, event);\
+     \n                }\
+     \n                \
+     \n                for(transaction in context.entryTransactions) {\
+     \n                  transaction.skew = 0;\
+     \n                  transaction.offset = 0;\
+     \n                  setOffsetAndSkew(context, transaction, null, transaction.timestamp);\
+     \n                  \
+     \n                  def path = [];\
+     \n                  def parent = transaction;\
+     \n                  while (parent != null) {\
+     \n                    path.add(parent.operationId);\
+     \n                    if (parent.parentId == null) {\
+     \n                      break;\
+     \n                    }\
+     \n                    parent = context.processedEvents[parent.parentId];\
+     \n                  }\
+     \n\
+     \n                  Collections.reverse(path);\
+     \n\
+     \n                  def nodeId = toHash(path);\
+     \n                  \
+     \n                  scan(context, transaction, 0, transaction.duration, path);\
+     \n                  \
+     \n                  if (!rootNodes.contains(nodeId)) {\
+     \n                    rootNodes.add(nodeId);\
+     \n                  }\
+     \n                  \
+     \n                }\
+     \n                \
+     \n                return [\
+     \n                  \"timeByNodeId\": timeByNodeId,\
+     \n                  \"metadata\": metadata,\
+     \n                  \"nodes\": nodes,\
+     \n                  \"rootNodes\": rootNodes,\
+     \n                  \"operationIdByNodeId\": operationIdByNodeId\
+     \n                ];"
+  ## APM service map
+  ## https://github.com/elastic/kibana/blob/main/x-pack/plugins/observability_solution/apm/server/routes/service_map/fetch_service_paths_from_trace_ids.ts
+  - "\n            state.docCount = 0;\
+     \n            state.limit = params.limit;\
+     \n            state.eventsById = new HashMap();\
+     \n            state.fieldsToCopy = params.fieldsToCopy;"
+  - "\n            if (state.docCount >= state.limit) {\
+     \n              // Stop processing if the document limit is reached\
+     \n              return; \
+     \n            }\
+     \n\
+     \n            def id = $('span.id', null);\
+     \n            if (id == null) {\
+     \n              id = $('transaction.id', null);\
+     \n            }\
+     \n\
+     \n            // Ensure same event isn't processed twice\
+     \n            if (id != null && !state.eventsById.containsKey(id)) {\
+     \n              def copy = new HashMap();\
+     \n              copy.id = id;\
+     \n\
+     \n              for(key in state.fieldsToCopy) {\
+     \n                def value = $(key, null);\
+     \n                if (value != null) {\
+     \n                  copy[key] = value;\
+     \n                }\
+     \n              }\
+     \n\
+     \n              state.eventsById[id] = copy;\
+     \n              state.docCount++;\
+     \n            }\
+     \n          "
+  - "return state;"
+  ### APM service map reduce_script: can be removed as soon as Kibana is on newer version in all environments
+  - "\n            def getDestination(def event) {\
+     \n              def destination = new HashMap();\
+     \n              destination['span.destination.service.resource'] = event['span.destination.service.resource'];\
+     \n              destination['span.type'] = event['span.type'];\
+     \n              destination['span.subtype'] = event['span.subtype'];\
+     \n              return destination;\
+     \n            }\
+     \n      \
+     \n            def processAndReturnEvent(def context, def eventId) {\
+     \n              def stack = new Stack();\
+     \n              def reprocessQueue = new LinkedList();\
+     \n\
+     \n              // Avoid reprocessing the same event\
+     \n              def visited = new HashSet();\
+     \n\
+     \n              stack.push(eventId);\
+     \n\
+     \n              while (!stack.isEmpty()) {\
+     \n                def currentEventId = stack.pop();\
+     \n                def event = context.eventsById.get(currentEventId);\
+     \n\
+     \n                if (event == null || context.processedEvents.get(currentEventId) != null) {\
+     \n                  continue;\
+     \n                }\
+     \n                visited.add(currentEventId);\
+     \n\
+     \n                def service = new HashMap();\
+     \n                service['service.name'] = event['service.name'];\
+     \n                service['service.environment'] = event['service.environment'];\
+     \n                service['agent.name'] = event['agent.name'];\
+     \n                \
+     \n                def basePath = new ArrayList();\
+     \n                def parentId = event['parent.id'];\
+     \n\
+     \n                if (parentId != null && !parentId.equals(currentEventId)) {\
+     \n                  def parent = context.processedEvents.get(parentId);\
+     \n                  \
+     \n                  if (parent == null) {\
+     \n                    \
+     \n                    // Only adds the parentId to the stack if it hasn't been visited to prevent infinite loop scenarios\
+     \n                    // if the parent is null, it means it hasn't been processed yet or it could also mean that the current event\
+     \n                    // doesn't have a parent, in which case we should skip it\
+     \n                    if (!visited.contains(parentId)) {\
+     \n                      stack.push(parentId);\
+     \n                      // Add currentEventId to be reprocessed once its parent is processed\
+     \n                      reprocessQueue.add(currentEventId); \
+     \n                    }\
+     \n\
+     \n\
+     \n                    continue;\
+     \n                  }\
+     \n\
+     \n                  // copy the path from the parent\
+     \n                  basePath.addAll(parent.path);\
+     \n                  // flag parent path for removal, as it has children\
+     \n                  context.locationsToRemove.add(parent.path);\
+     \n      \
+     \n                  // if the parent has 'span.destination.service.resource' set, and the service is different, we've discovered a service\
+     \n                  if (parent['span.destination.service.resource'] != null\
+     \n                    && !parent['span.destination.service.resource'].equals(\"\")\
+     \n                    && (!parent['service.name'].equals(event['service.name'])\
+     \n                      || !parent['service.environment'].equals(event['service.environment'])\
+     \n                    )\
+     \n                  ) {\
+     \n                    def parentDestination = getDestination(parent);\
+     \n                    context.externalToServiceMap.put(parentDestination, service);\
+     \n                  }\
+     \n                }\
+     \n          \
+     \n                def lastLocation = basePath.size() > 0 ? basePath[basePath.size() - 1] : null;\
+     \n                def currentLocation = service;\
+     \n        \
+     \n                // only add the current location to the path if it's different from the last one\
+     \n                if (lastLocation == null || !lastLocation.equals(currentLocation)) {\
+     \n                  basePath.add(currentLocation);\
+     \n                }\
+     \n        \
+     \n                // if there is an outgoing span, create a new path\
+     \n                if (event['span.destination.service.resource'] != null\
+     \n                  && !event['span.destination.service.resource'].equals(\"\")) {\
+     \n\
+     \n                  def outgoingLocation = getDestination(event);\
+     \n                  def outgoingPath = new ArrayList(basePath);\
+     \n                  outgoingPath.add(outgoingLocation);\
+     \n                  context.paths.add(outgoingPath);\
+     \n                }\
+     \n        \
+     \n                event.path = basePath;\
+     \n                context.processedEvents[currentEventId] = event;\
+     \n\
+     \n                // reprocess events which were waiting for their parents to be processed\
+     \n                while (!reprocessQueue.isEmpty()) {\
+     \n                  stack.push(reprocessQueue.remove());\
+     \n                }\
+     \n              }\
+     \n\
+     \n              return null;\
+     \n            }\
+     \n      \
+     \n            def context = new HashMap();\
+     \n      \
+     \n            context.processedEvents = new HashMap();\
+     \n            context.eventsById = new HashMap();\
+     \n            context.paths = new HashSet();\
+     \n            context.externalToServiceMap = new HashMap();\
+     \n            context.locationsToRemove = new HashSet();\
+     \n      \
+     \n            for (state in states) {\
+     \n              context.eventsById.putAll(state.eventsById);\
+     \n              state.eventsById.clear();\
+     \n            }\
+     \n\
+     \n            states.clear();\
+     \n            \
+     \n            for (entry in context.eventsById.entrySet()) {\
+     \n              processAndReturnEvent(context, entry.getKey());\
+     \n            }\
+     \n\
+     \n            context.processedEvents.clear();\
+     \n            context.eventsById.clear();\
+     \n      \
+     \n            def response = new HashMap();\
+     \n            response.paths = new HashSet();\
+     \n            response.discoveredServices = new HashSet();\
+     \n      \
+     \n            for (foundPath in context.paths) {\
+     \n              if (!context.locationsToRemove.contains(foundPath)) {\
+     \n                response.paths.add(foundPath);\
+     \n              }\
+     \n            }\
+     \n\
+     \n            context.locationsToRemove.clear();\
+     \n            context.paths.clear();\
+     \n      \
+     \n            for (entry in context.externalToServiceMap.entrySet()) {\
+     \n              def map = new HashMap();\
+     \n              map.from = entry.getKey();\
+     \n              map.to = entry.getValue();\
+     \n              response.discoveredServices.add(map);\
+     \n            }\
+     \n\
+     \n            context.externalToServiceMap.clear();\
+     \n\
+     \n            return response;\
+     \n          "
+  ### APM service map reduce_script: current version
+  - "\n            def getDestination(def event) {\
+     \n              def destination = new HashMap();\
+     \n              destination['span.destination.service.resource'] = event['span.destination.service.resource'];\
+     \n              destination['span.type'] = event['span.type'];\
+     \n              destination['span.subtype'] = event['span.subtype'];\
+     \n              return destination;\
+     \n            }\
+     \n      \
+     \n            def processAndReturnEvent(def context, def eventId) {\
+     \n              def stack = new Stack();\
+     \n              def reprocessQueue = new LinkedList();\
+     \n\
+     \n              // Avoid reprocessing the same event\
+     \n              def visited = new HashSet();\
+     \n\
+     \n              stack.push(eventId);\
+     \n\
+     \n              while (!stack.isEmpty()) {\
+     \n                def currentEventId = stack.pop();\
+     \n                def event = context.eventsById.get(currentEventId);\
+     \n\
+     \n                if (event == null || context.processedEvents.get(currentEventId) != null) {\
+     \n                  continue;\
+     \n                }\
+     \n                visited.add(currentEventId);\
+     \n\
+     \n                def service = new HashMap();\
+     \n                service['service.name'] = event['service.name'];\
+     \n                service['service.environment'] = event['service.environment'];\
+     \n                service['agent.name'] = event['agent.name'];\
+     \n                \
+     \n                def basePath = new ArrayList();\
+     \n                def parentId = event['parent.id'];\
+     \n\
+     \n                if (parentId != null && !parentId.equals(currentEventId)) {\
+     \n                  def parent = context.processedEvents.get(parentId);\
+     \n                  \
+     \n                  if (parent == null) {\
+     \n                    \
+     \n                    // Only adds the parentId to the stack if it hasn't been visited to prevent infinite loop scenarios\
+     \n                    // if the parent is null, it means it hasn't been processed yet or it could also mean that the current event\
+     \n                    // doesn't have a parent, in which case we should skip it\
+     \n                    if (!visited.contains(parentId)) {\
+     \n                      stack.push(parentId);\
+     \n                      // Add currentEventId to be reprocessed once its parent is processed\
+     \n                      reprocessQueue.add(currentEventId); \
+     \n                    }\
+     \n\
+     \n\
+     \n                    continue;\
+     \n                  }\
+     \n\
+     \n                  // copy the path from the parent\
+     \n                  basePath.addAll(parent.path);\
+     \n                  // flag parent path for removal, as it has children\
+     \n                  context.locationsToRemove.add(parent.path);\
+     \n      \
+     \n                  // if the parent has 'span.destination.service.resource' set, and the service is different, we've discovered a service\
+     \n                  if (parent['span.destination.service.resource'] != null\
+     \n                    && parent['span.destination.service.resource'] != \"\"\
+     \n                    && (parent['service.name'] != event['service.name']\
+     \n                      || parent['service.environment'] != event['service.environment'])\
+     \n                  ) {\
+     \n                    def parentDestination = getDestination(parent);\
+     \n                    context.externalToServiceMap.put(parentDestination, service);\
+     \n                  }\
+     \n                }\
+     \n          \
+     \n                def lastLocation = basePath.size() > 0 ? basePath[basePath.size() - 1] : null;\
+     \n                def currentLocation = service;\
+     \n        \
+     \n                // only add the current location to the path if it's different from the last one\
+     \n                if (lastLocation == null || !lastLocation.equals(currentLocation)) {\
+     \n                  basePath.add(currentLocation);\
+     \n                }\
+     \n        \
+     \n                // if there is an outgoing span, create a new path\
+     \n                if (event['span.destination.service.resource'] != null\
+     \n                  && !event['span.destination.service.resource'].equals(\"\")) {\
+     \n\
+     \n                  def outgoingLocation = getDestination(event);\
+     \n                  def outgoingPath = new ArrayList(basePath);\
+     \n                  outgoingPath.add(outgoingLocation);\
+     \n                  context.paths.add(outgoingPath);\
+     \n                }\
+     \n        \
+     \n                event.path = basePath;\
+     \n                context.processedEvents[currentEventId] = event;\
+     \n\
+     \n                // reprocess events which were waiting for their parents to be processed\
+     \n                while (!reprocessQueue.isEmpty()) {\
+     \n                  stack.push(reprocessQueue.remove());\
+     \n                }\
+     \n              }\
+     \n\
+     \n              return null;\
+     \n            }\
+     \n      \
+     \n            def context = new HashMap();\
+     \n      \
+     \n            context.processedEvents = new HashMap();\
+     \n            context.eventsById = new HashMap();\
+     \n            context.paths = new HashSet();\
+     \n            context.externalToServiceMap = new HashMap();\
+     \n            context.locationsToRemove = new HashSet();\
+     \n      \
+     \n            for (state in states) {\
+     \n              context.eventsById.putAll(state.eventsById);\
+     \n              state.eventsById.clear();\
+     \n            }\
+     \n\
+     \n            states.clear();\
+     \n            \
+     \n            for (entry in context.eventsById.entrySet()) {\
+     \n              processAndReturnEvent(context, entry.getKey());\
+     \n            }\
+     \n\
+     \n            context.processedEvents.clear();\
+     \n            context.eventsById.clear();\
+     \n      \
+     \n            def response = new HashMap();\
+     \n            response.paths = new HashSet();\
+     \n            response.discoveredServices = new HashSet();\
+     \n      \
+     \n            for (foundPath in context.paths) {\
+     \n              if (!context.locationsToRemove.contains(foundPath)) {\
+     \n                response.paths.add(foundPath);\
+     \n              }\
+     \n            }\
+     \n\
+     \n            context.locationsToRemove.clear();\
+     \n            context.paths.clear();\
+     \n      \
+     \n            for (entry in context.externalToServiceMap.entrySet()) {\
+     \n              def map = new HashMap();\
+     \n              map.from = entry.getKey();\
+     \n              map.to = entry.getValue();\
+     \n              response.discoveredServices.add(map);\
+     \n            }\
+     \n\
+     \n            context.externalToServiceMap.clear();\
+     \n\
+     \n            return response;\
+     \n          "
+  # SecurityML
+  ## Beaconing integration
+  ## https://github.com/elastic/integrations/blob/main/packages/beaconing/elasticsearch/transform/pivot_transform/transform.yml
+  - "return state"
+  - "// The parameter number_buckets_in_range equals the search range (6h) divided by the parameter time_bucket_length.\
+     \nstate.counts = new int[params[\"number_buckets_in_range\"]];\
+     \nstate.sourceBytes = new int[params[\"number_buckets_in_range\"]];\
+     \nstate.destinationBytes = new int[params[\"number_buckets_in_range\"]];\
+     \nstate.destinationIps = new HashMap();"
+  - "// Build beaconing counts and bytes vectors, and map of destination IPs\
+     \nint bucket = (int)((System.currentTimeMillis() / 1000 - doc[params[\"time_field\"]].value.toEpochSecond()) / params[\"time_bucket_length\"]);\
+     \nif (bucket >= 0 && bucket < state.counts.length) {\
+     \n    state.counts[bucket]++;\
+     \n    if (doc.containsKey(params[\"source_bytes\"]) && !doc[params[\"source_bytes\"]].isEmpty()) {\
+     \n        state.sourceBytes[bucket] += doc[params[\"source_bytes\"]].value;\
+     \n    }\
+     \n    if (doc.containsKey(params[\"destination_bytes\"]) && !doc[params[\"destination_bytes\"]].isEmpty()) {\
+     \n        state.destinationBytes[bucket] += doc[params[\"destination_bytes\"]].value;\
+     \n    }\
+     \n    // Getting only the top 2 * number_of_destination_ips dest ips\
+     \n    if (doc.containsKey(params[\"destination_ip\"]) && !doc[params[\"destination_ip\"]].isEmpty()) {\
+     \n        def destIp = doc[params[\"destination_ip\"]].value.toString();\
+     \n        if (state.destinationIps.containsKey(destIp)) {\
+     \n            state.destinationIps[destIp] += 1\
+     \n        }\
+     \n        else if (!state.destinationIps.containsKey(destIp) && state.destinationIps.size() < (2 * params[\"number_destination_ips\"])) {\
+     \n            state.destinationIps[destIp] = 1\
+     \n        }\
+     \n        else {\
+     \n            String minKey = Collections.min(state.destinationIps.entrySet(), Map.Entry.comparingByValue()).getKey();\
+     \n            state.destinationIps.put(destIp, state.destinationIps.remove(minKey) + 1);\
+     \n        }\
+     \n    }\
+     \n}"
+  - "int firstComplete(def counts) {\
+     \n    int i = 0;\
+     \n    for (; i < counts.length && counts[i] == 0; i++) {}\
+     \n    return i;\
+     \n}\
+     \nint lastComplete(def counts) {\
+     \n    int i = counts.length;\
+     \n    for (; i > 0 && counts[i - 1] == 0; i--) {}\
+     \n    return i;\
+     \n}\
+     \ndef countIfNot(int a, int b, int stride, Function skip) {\
+     \n    int result = 0;\
+     \n    for (int i = a; i < b; i += stride) {\
+     \n        result += skip.apply(i) ? 0 : 1;\
+     \n    }\
+     \n    return result;\
+     \n}\
+     \ndef percentiles(def percents, def values, Function skip) {\
+     \n    def orderedValues = new ArrayList();\
+     \n    for (int i = 0; i < values.length; i++) {\
+     \n        if (!skip.apply(i)) {\
+     \n            orderedValues.add(values[i]);\
+     \n        }\
+     \n    }\
+     \n    Collections.sort(orderedValues);\
+     \n    def n = orderedValues.size();\
+     \n    def result = new double[percents.length];\
+     \n    for (int i = 0; i < result.length; ++i) {\
+     \n        result[i] = orderedValues[(int)Math.min((int)(percents[i] * (double)(n) + 0.5), (int)(n - 1))];\
+     \n    }\
+     \n    return result;\
+     \n}\
+     \ndouble mean(int a, int b, int stride, def values, Function skip) {\
+     \n    double m = 0;\
+     \n    double n = 0;\
+     \n    for (int i = a; i < b; i = i + stride) {\
+     \n        if (!skip.apply(i)) {\
+     \n            m += values[i];\
+     \n            n += 1;\
+     \n        }\
+     \n    }\
+     \n    return n > 0 ? m / n : 0.0;\
+     \n}\
+     \ndouble variance(double mean, int a, int b, int stride, def values, Function skip) {\
+     \n    double v = 0;\
+     \n    double n = 0;\
+     \n    for (int i = a; i < b; i = i + stride) {\
+     \n        if (!skip.apply(i)) {\
+     \n            double x = values[i];\
+     \n            v += (x - mean) * (x - mean);\
+     \n            n += 1;\
+     \n        }\
+     \n    }\
+     \n    return n > 0 ? v / n : 0.0;\
+     \n}\
+     \nint max(int a, int b, def values) {\
+     \n    int imax = a;\
+     \n    double max = values[a];\
+     \n    for (int i = a + 1; i < b; i++) {\
+     \n        if (values[i] > max) {\
+     \n            imax = i; max = values[i];\
+     \n        }\
+     \n    }\
+     \n    return imax;\
+     \n}\
+     \n\
+     \n// Aggregate the range window bucket counts\
+     \ndef counts = new double[params[\"number_buckets_in_range\"]];\
+     \ndef sourceBytes = new double[params[\"number_buckets_in_range\"]];\
+     \ndef destinationBytes = new double[params[\"number_buckets_in_range\"]];\
+     \ndef destinationIps = new HashMap();\
+     \n\
+     \n// In a scripted metric aggregation the states variable is a list of the\
+     \n// objects returned by the combine script from each shard.\
+     \nfor (state in states) {\
+     \n    for (int i = 0; i < counts.length; i++) {\
+     \n        counts[i] += (double)(state.counts[i]);\
+     \n        sourceBytes[i] += (double)(state.sourceBytes[i]);\
+     \n        destinationBytes[i] += (double)(state.destinationBytes[i]);\
+     \n    }\
+     \n    for (entry in state.destinationIps.entrySet()) {\
+     \n        destinationIps.putIfAbsent(entry.getKey(), 0);\
+     \n        destinationIps[entry.getKey()] += entry.getValue();\
+     \n    }\
+     \n}\
+     \n\
+     \nfor (int i = 0; i < counts.length; i++) {\
+     \n    if (counts[i] > 0) {\
+     \n        sourceBytes[i] /= (double)(counts[i]);\
+     \n        destinationBytes[i] /= (double)(counts[i]);\
+     \n    }\
+     \n}\
+     \n\
+     \ndef topDestinationIps = new ArrayList();\
+     \nif (destinationIps.size() > params[\"number_destination_ips\"]) {\
+     \n    def topDestinationIpList = destinationIps.entrySet().stream().sorted(Map.Entry.comparingByValue().reversed()).collect(Collectors.toList()).stream().map(e -> e.getKey()).collect(Collectors.toList());\
+     \n    topDestinationIps = topDestinationIpList.subList(0, params[\"number_destination_ips\"]);\
+     \n}\
+     \nelse {\
+     \n    topDestinationIps = destinationIps.keySet().stream().collect(Collectors.toList());\
+     \n}\
+     \n\
+     \nint a = firstComplete(counts);\
+     \nint b = lastComplete(counts);\
+     \nint notEmpty = countIfNot(a, b, 1, (int i) -> counts[i] == 0);\
+     \n\
+     \n// We want to see at least min_number_periods repeats therefore we need\
+     \n// twice this observed interval given the minimum period is two and at\
+     \n// at least minimum repeats docs + 1.\
+     \nif (b - a < 2 * params[\"min_number_periods\"] || notEmpty < params[\"min_number_periods\"] + 1) {\
+     \n    return [\"is_beaconing\": false, \"interval\": b - a, \"non_empty_buckets\": notEmpty];\
+     \n}\
+     \n\
+     \nint notEmptySource = countIfNot(a, b, 1, (int i) -> sourceBytes[i] == 0);\
+     \nint notEmptyDestination = countIfNot(a, b, 1, (int i) -> destinationBytes[i] == 0);\
+     \n\
+     \n// If there coefficient of variation of the source bytes is too high this is\
+     \n// not characterised as a beacon.\
+     \ndef lowSourceBytesCOV = false;\
+     \ndef percentilesSourceBytes = [0.0, 0.0];\
+     \ndef meanSourceBytes = 0.0;\
+     \ndef varSourceBytes = 0.0;\
+     \nif (notEmptySource > params[\"min_number_periods\"]) {\
+     \n    percentilesSourceBytes = percentiles(params[\"truncate_at\"], sourceBytes, (int i) -> sourceBytes[i] == 0);\
+     \n    meanSourceBytes = mean(a, b, 1, sourceBytes, (int i) -> sourceBytes[i] < percentilesSourceBytes[0] || sourceBytes[i] > percentilesSourceBytes[1]);\
+     \n    varSourceBytes = variance(meanSourceBytes, a, b, 1, sourceBytes, (int i) -> sourceBytes[i] < percentilesSourceBytes[0] || sourceBytes[i] > percentilesSourceBytes[1]);\
+     \n    lowSourceBytesCOV = (Math.sqrt(varSourceBytes) <= params[\"max_beaconing_bytes_cov\"] * Math.abs(meanSourceBytes));\
+     \n}\
+     \n\
+     \n// If there coefficient of variation of the destination bytes is too high this is\
+     \n// not characterised as a beacon.\
+     \ndef lowDestBytesCOV = false;\
+     \ndef percentilesDestBytes = [0.0, 0.0];\
+     \ndef meanDestBytes = 0.0;\
+     \ndef varDestBytes = 0.0;\
+     \nif (notEmptyDestination > params[\"min_number_periods\"]) {\
+     \n    percentilesDestBytes = percentiles(params[\"truncate_at\"], destinationBytes, (int i) -> destinationBytes[i] == 0);\
+     \n    meanDestBytes = mean(a, b, 1, destinationBytes, (int i) -> destinationBytes[i] < percentilesDestBytes[0] || destinationBytes[i] > percentilesDestBytes[1]);\
+     \n    varDestBytes = variance(meanDestBytes, a, b, 1, destinationBytes, (int i) -> destinationBytes[i] < percentilesDestBytes[0] || destinationBytes[i] > percentilesDestBytes[1]);\
+     \n    lowDestBytesCOV = (Math.sqrt(varDestBytes) <= params[\"max_beaconing_bytes_cov\"] * Math.abs(meanDestBytes));\
+     \n}\
+     \n\
+     \n// If the period less than the bucket interval then we expect to see\
+     \n// low variation in the count per bucket. For Poisson process we expect\
+     \n// the variance to be equal to the mean so this condition on the relative\
+     \n// variance implies that the signal is much more regular than a Poisson\
+     \n// process.\
+     \ndef lowCountRV = false;\
+     \ndef percentilesCounts = [0.0, 0.0];\
+     \ndef meanCounts = 0.0;\
+     \ndef varCounts = 0.0;\
+     \nif (notEmpty > (int)(params[\"min_not_empty\"] * (b-a))) {\
+     \n    percentilesCounts = percentiles(params[\"truncate_at\"], counts, (int i) -> counts[i] == 0);\
+     \n    meanCounts = mean(a, b, 1, counts, (int i) -> counts[i] < percentilesCounts[0] || counts[i] > percentilesCounts[1]);\
+     \n    varCounts = variance(meanCounts, a, b, 1, counts, (int i) -> counts[i] < percentilesCounts[0] || counts[i] > percentilesCounts[1]);\
+     \n    lowCountRV = (Math.sqrt(varCounts) <= params[\"max_beaconing_count_rv\"] * Math.abs(meanCounts));\
+     \n}\
+     \n\
+     \n// If the period is greater than the bucket interval we can check for a\
+     \n// periodic pattern in the bucket counts. We do this by looking for high\
+     \n// values of the autocovariance function.\
+     \n\
+     \nint maxPeriod = (int)((b - a) / params[\"min_number_periods\"]);\
+     \n\
+     \ndouble[] nCounts     = new double[maxPeriod - 1];\
+     \ndouble[] xyCovCounts = new double[maxPeriod - 1];\
+     \n\
+     \nfor (int period = 2; period <= maxPeriod; period++) {\
+     \n\
+     \n    // Allow for jitter <= params[\"max_jitter\"] fraction of period.\
+     \n    int maxJitter = (int)(params[\"max_jitter\"] * period);\
+     \n\
+     \n    int a_ = a + maxJitter;\
+     \n    int b_ = b - 2 * period;\
+     \n\
+     \n    double meanCountsPeriod = mean(a_ + period, a_ + period * (int)((b_ + 1 - a_) / period), 1, counts, (int i) -> false);\
+     \n\
+     \n    double[] xVarCountsPeriod  = new double[period - 1];\
+     \n    double[] yVarCountsPeriod  = new double[period - 1];\
+     \n    double[] xyCovCountsPeriod = new double[period - 1];\
+     \n\
+     \n    for (int i = a_; i < b_ + 1; i += period) {\
+     \n        double xVarCountsPeriodi    = 0.0;\
+     \n        double[] yVarCountsPeriodi  = new double[2 * maxJitter + 1];\
+     \n        double[] xyCovCountsPeriodi = new double[2 * maxJitter + 1];\
+     \n        for (int j = i + period; j < i + 2 * period; j++) {\
+     \n            xVarCountsPeriodi += (counts[j] - meanCountsPeriod) * (counts[j] - meanCountsPeriod);\
+     \n        }\
+     \n        for (int jitter = -maxJitter; jitter <= maxJitter; jitter++) {\
+     \n            for (int j = i + period; j < i + 2 * period; j++) {\
+     \n                yVarCountsPeriodi[maxJitter + jitter]  += (counts[j - period - jitter] - meanCountsPeriod) *\
+     \n                                                        (counts[j - period - jitter] - meanCountsPeriod);\
+     \n                xyCovCountsPeriodi[maxJitter + jitter] += (counts[j - period - jitter] - meanCountsPeriod) *\
+     \n                                                        (counts[j] - meanCountsPeriod);\
+     \n            }\
+     \n        }\
+     \n\
+     \n        // We are interested in maximizing the correlation coefficient.\
+     \n        // In general, we don't know at this point which choice will\
+     \n        // maximize the total correlation: we'd need to maximize over\
+     \n        // all possible choices for each period. This is not readily\
+     \n        // tractable so a good heuristic is greedy: choose the jitter\
+     \n        // which maximizes autocorrelation for each period.\
+     \n        double[] sigma = new double[2 * maxJitter + 1] ;\
+     \n        for (int j = 0; j < 2 * maxJitter + 1; j++) {\
+     \n            double Z = Math.sqrt(xVarCountsPeriodi * yVarCountsPeriodi[j]);\
+     \n            sigma[j] = Z == 0.0 ? 1.0 : xyCovCountsPeriodi[j] / Z;\
+     \n        }\
+     \n\
+     \n        int j = max(0, 2 * maxJitter + 1, sigma);\
+     \n\
+     \n        xVarCountsPeriod[period - 2]  += xVarCountsPeriodi;\
+     \n        yVarCountsPeriod[period - 2]  += yVarCountsPeriodi[j];\
+     \n        xyCovCountsPeriod[period - 2] += xyCovCountsPeriodi[j];\
+     \n\
+     \n        for (int period_ = 2; period_ < period / 2; period_++) {\
+     \n            if (period % period_ == 0) {\
+     \n                int k = max(maxJitter - (int)(params[\"max_jitter\"] * period_),\
+     \n                            maxJitter + (int)(params[\"max_jitter\"] * period_) + 1,\
+     \n                            xyCovCountsPeriodi);\
+     \n                xVarCountsPeriod[period_ - 2]  += xVarCountsPeriodi;\
+     \n                yVarCountsPeriod[period_ - 2]  += yVarCountsPeriodi[k];\
+     \n                xyCovCountsPeriod[period_ - 2] += xyCovCountsPeriodi[k];\
+     \n            }\
+     \n        }\
+     \n    }\
+     \n\
+     \n    double Z = Math.sqrt(xVarCountsPeriod[period - 2] * yVarCountsPeriod[period - 2]);\
+     \n\
+     \n    nCounts[period - 2]    += 1;\
+     \n    xyCovCounts[period - 2] = Z == 0.0 ? 1.0 : xyCovCountsPeriod[period - 2] / Z;\
+     \n\
+     \n    // We use the fact that if a signal is periodic with period p it will\
+     \n    // have high autocovariance for any shift i * p for integer i. So we\
+     \n    // average over the autocovariance for multiples of the period. This\
+     \n    // works around the fact that smoothly varying signals will have high\
+     \n    // autocovariance for small shifts.\
+     \n    for (int period_ = 2; period_ < period / 2; period_++) {\
+     \n        if (period % period_ == 0) {\
+     \n            double n     = nCounts[period_ - 2] + 1;\
+     \n            double Z_    = Math.sqrt(xVarCountsPeriod[period_ - 2] * yVarCountsPeriod[period_ - 2]);\
+     \n            double xyCov = Z_ == 0.0 ? 1.0 : xyCovCountsPeriod[period_ - 2] / Z_;\
+     \n            nCounts[period_ - 2]    += 1;\
+     \n            xyCovCounts[period_ - 2] = ((n - 1) * xyCovCounts[period_ - 2] + xyCov) / n;\
+     \n        }\
+     \n    }\
+     \n}\
+     \n\
+     \nint period = max(0, xyCovCounts.length, xyCovCounts) + 2;\
+     \ndouble maxCovCount = xyCovCounts[period - 2];\
+     \n\
+     \ndef highCov = (maxCovCount >= params[\"min_beaconing_count_autocovariance\"]);\
+     \n\
+     \nreturn [\"is_beaconing\": lowSourceBytesCOV || lowDestBytesCOV || lowCountRV || highCov,\
+     \n        \"beaconing_score\": (lowCountRV || highCov?1:0) + (lowSourceBytesCOV?1:0) + (lowDestBytesCOV?1:0),\
+     \n        \"low_source_bytes_variation\": lowSourceBytesCOV,\
+     \n        \"low_destination_bytes_variation\": lowDestBytesCOV,\
+     \n        \"low_count_variation\": lowCountRV,\
+     \n        \"periodic\": highCov,\
+     \n        \"interval\": b - a,\
+     \n        \"non_empty_buckets\": notEmpty,\
+     \n        \"mean_source_bytes\": meanSourceBytes,\
+     \n        \"std_dev_source_bytes\": Math.sqrt(varSourceBytes),\
+     \n        \"source_bytes_percentiles\": percentilesSourceBytes,\
+     \n        \"mean_destination_bytes\": meanDestBytes,\
+     \n        \"std_dev_destination_bytes\": Math.sqrt(varDestBytes),\
+     \n        \"destination_bytes_percentiles\": percentilesDestBytes,\
+     \n        \"mean_counts\": meanCounts,\
+     \n        \"variance_counts\": varCounts,\
+     \n        \"counts_percentiles\": percentilesCounts,\
+     \n        \"autocovariance\": maxCovCount,\
+     \n        \"max_autocovariance_period\": period,\
+     \n        \"destination_ips\": topDestinationIps];"

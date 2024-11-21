@@ -5,7 +5,9 @@ import org.elasticsearch.gradle.internal.conventions.info.GitInfo
 import org.elasticsearch.gradle.internal.docker.DockerBuildTask
 import org.elasticsearch.gradle.internal.docker.DockerSupportPlugin
 import org.elasticsearch.gradle.internal.docker.DockerSupportService
+import org.elasticsearch.gradle.internal.info.BuildParameterExtension
 import org.elasticsearch.gradle.internal.info.BuildParams
+import org.elasticsearch.gradle.internal.util.ParamsUtils.loadBuildParams
 import org.elasticsearch.gradle.util.GradleUtils
 
 plugins {
@@ -52,7 +54,7 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
     val upstreamContext = configurations.detachedConfiguration(dependencies.create("org.elasticsearch:docker")).apply {
         attributes {
             attribute(Attribute.of(Architecture::class.java), architecture)
-            attribute(Attribute.of(DockerBase::class.java), DockerBase.DEFAULT)
+            attribute(Attribute.of(DockerBase::class.java), DockerBase.WOLFI)
         }
     }
 
@@ -88,7 +90,7 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
 
     tasks.register<DockerBuildTask>("build${baseName}DockerImage") {
         dockerContext.fileProvider(transformTask.map { it.destinationDir })
-        isNoCache = BuildParams.isCi()
+        isNoCache = isCi()
         baseImages = arrayOf(DockerBase.DEFAULT.image)
         platforms = setOf(architecture.dockerPlatform)
         tags = if (architecture == Architecture.current()) {
@@ -112,7 +114,9 @@ tasks {
     yamlRestTest {
         dependsOn(dockerBuildTasks[Architecture.current()])
         systemProperty("tests.rest.blacklist", listOf(
-            "indices.create/20_synthetic_source/*"
+            "indices.create/20_synthetic_source/*",
+            "indices.create/21_synthetic_source_stored/*",
+            "indices.create/10_basic/Create lookup index*"
         ).joinToString(","))
     }
 }

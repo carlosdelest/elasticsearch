@@ -20,7 +20,7 @@ echo "Kibana: $KIBANA_COMMIT / $KIBANA_BRANCH" | buildkite-agent annotate --styl
 echo "--- Trigger kibana e2e tests"
 cat <<EOF | buildkite-agent pipeline upload
 steps:
-    - label: ":pipeline: Trigger Kibana E2E with current ES Serverless"
+    - label: ":rocket: Run Kibana E2E with current ES Serverless"
       trigger: kibana-elasticsearch-serverless-verify-and-promote
       depends_on: docker-publish
       build:

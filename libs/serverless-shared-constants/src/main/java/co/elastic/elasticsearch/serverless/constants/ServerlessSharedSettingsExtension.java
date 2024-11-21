@@ -27,11 +27,9 @@ public class ServerlessSharedSettingsExtension implements SettingsExtension {
     public List<Setting<?>> getSettings() {
         return List.of(
             ServerlessSharedSettings.BOOST_WINDOW_SETTING,
-            ServerlessSharedSettings.SEARCH_POWER_SETTING,
             ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING,
             ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING,
             ServerlessSharedSettings.ENABLE_REPLICAS_FOR_INSTANT_FAILOVER,
-            ServerlessSharedSettings.BWC_PROJECT_ID,
             ServerlessSharedSettings.PROJECT_ID,
             ServerlessSharedSettings.PROJECT_TYPE
         );

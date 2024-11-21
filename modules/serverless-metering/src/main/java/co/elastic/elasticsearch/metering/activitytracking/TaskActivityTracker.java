@@ -1,0 +1,274 @@
+/*
+ * ELASTICSEARCH CONFIDENTIAL
+ * __________________
+ *
+ * Copyright Elasticsearch B.V. All rights reserved.
+ *
+ * NOTICE:  All information contained herein is, and remains
+ * the property of Elasticsearch B.V. and its suppliers, if any.
+ * The intellectual and technical concepts contained herein
+ * are proprietary to Elasticsearch B.V. and its suppliers and
+ * may be covered by U.S. and Foreign Patents, patents in
+ * process, and are protected by trade secret or copyright
+ * law.  Dissemination of this information or reproduction of
+ * this material is strictly forbidden unless prior written
+ * permission is obtained from Elasticsearch B.V.
+ */
+
+package co.elastic.elasticsearch.metering.activitytracking;
+
+import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
+import org.elasticsearch.tasks.Task;
+import org.elasticsearch.tasks.TaskManager;
+import org.elasticsearch.xpack.core.security.SecurityContext;
+import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
+import org.elasticsearch.xpack.core.security.user.InternalUser;
+import org.elasticsearch.xpack.core.security.user.InternalUsers;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
+
+public class TaskActivityTracker {
+    private static final Logger log = LogManager.getLogger(TaskActivityTracker.class);
+    public static final Setting<TimeValue> COOL_DOWN_PERIOD = Setting.timeSetting(
+        "metering.activity_tracker.cool_down_period",
+        TimeValue.timeValueMinutes(15),
+        TimeValue.timeValueMinutes(1),
+        TimeValue.timeValueMinutes(120),
+        Setting.Property.NodeScope
+    );
+
+    /**
+     * A subset of the InternalUsers which will not be tracked. Other instances of
+     * InternalUser will be tracked (if isOperator==false and actionTier!=NEITHER).
+     *
+     * All tracked InternalUser instances are listed below:
+     *  InternalUsers.ASYNC_SEARCH_USER,
+     *  InternalUsers.STORAGE_USER,
+     *  InternalUsers.DATA_STREAM_LIFECYCLE_USER,
+     *  InternalUsers.SYNONYMS_USER,
+     *  InternalUsers.LAZY_ROLLOVER_USER
+     */
+    static final Set<InternalUser> INTERNAL_USERS_TO_IGNORE = Set.of(
+        InternalUsers.SYSTEM_USER,
+        InternalUsers.XPACK_USER,
+        InternalUsers.XPACK_SECURITY_USER,
+        InternalUsers.SECURITY_PROFILE_USER
+    );
+
+    private final boolean hasSearchRole;
+    private final ThreadContext threadContext;
+    private final Clock clock;
+    private final Duration coolDownPeriod;
+    private final ActionTier.Mapper actionTierMapper;
+    private final SecurityContext securityContext;
+
+    private volatile Activity search = Activity.EMPTY;
+    private volatile Activity index = Activity.EMPTY;
+    private final Set<Long> searchTaskIds = ConcurrentHashMap.newKeySet();
+    private final Set<Long> indexTaskIds = ConcurrentHashMap.newKeySet();
+    private final Set<Long> bothTaskIds = ConcurrentHashMap.newKeySet();
+
+    private TaskActivityTracker(
+        Clock clock,
+        Duration coolDownPeriod,
+        boolean hasSearchRole,
+        ThreadContext threadContext,
+        ActionTier.Mapper actionTierMapper,
+        SecurityContext securityContext
+    ) {
+        // To simplify testing, clock.instant() should be called at most once in every public method
+        this.clock = clock;
+        this.coolDownPeriod = coolDownPeriod;
+        this.hasSearchRole = hasSearchRole;
+        this.threadContext = threadContext;
+        this.actionTierMapper = actionTierMapper;
+        this.securityContext = securityContext;
+    }
+
+    public static TaskActivityTracker build(
+        Clock clock,
+        Duration coolDownPeriod,
+        boolean hasSearchRole,
+        ThreadContext threadContext,
+        ActionTier.Mapper actionTierMapper,
+        TaskManager taskManager
+    ) {
+        return build(
+            clock,
+            coolDownPeriod,
+            hasSearchRole,
+            threadContext,
+            actionTierMapper,
+            taskManager,
+            new SecurityContext(Settings.EMPTY, threadContext)
+        );
+    }
+
+    static TaskActivityTracker build(
+        Clock clock,
+        Duration coolDownPeriod,
+        boolean hasSearchRole,
+        ThreadContext threadContext,
+        ActionTier.Mapper actionTierMapper,
+        TaskManager taskManager,
+        SecurityContext securityContext
+    ) {
+        var tracker = new TaskActivityTracker(clock, coolDownPeriod, hasSearchRole, threadContext, actionTierMapper, securityContext);
+        taskManager.registerRemovedTaskListener(tracker::onTaskFinish);
+        return tracker;
+    }
+
+    public Activity getIndexSampleActivity() {
+        return noIndexTaskIsRunning() ? index : index.extendCurrentPeriod(clock.instant());
+    }
+
+    public Activity getSearchSampleActivity() {
+        return noSearchTaskIsRunning() ? search : search.extendCurrentPeriod(clock.instant());
+    }
+
+    /**
+     * Combine activities from persistent task node with search and index activities.
+     * @param otherSearch search activity from persistent task node
+     * @param otherIndex search activity from persistent task node
+     */
+    public void mergeActivity(Activity otherSearch, Activity otherIndex) {
+        /*
+         * The incoming activities contain the most recent activity which the persistent task
+         * node is aware of. This differs from the search and index activity objects within
+         * the tracker. These objects will be out of date if there are open async requests.
+         * Before the other activities can be merged, the tracker's activities need
+         * to be extended if there are open requests.
+         */
+        var now = clock.instant();
+        var searchTasksPresent = searchTaskIds.isEmpty() == false;
+        var indexTasksPresent = indexTaskIds.isEmpty() == false;
+        var bothTasksPresent = bothTaskIds.isEmpty() == false;
+        var thisSearch = searchTasksPresent || bothTasksPresent ? search.extendCurrentPeriod(now) : search;
+        var thisIndex = indexTasksPresent || bothTasksPresent ? index.extendCurrentPeriod(now) : index;
+
+        search = Activity.merge(Stream.of(thisSearch, otherSearch), coolDownPeriod);
+        index = Activity.merge(Stream.of(thisIndex, otherIndex), coolDownPeriod);
+    }
+
+    void onTaskStart(String action, Task task) {
+        if (log.isTraceEnabled()) {
+            log.trace(
+                "Tracking: {},{},{},{},{}",
+                isOperator() ? "operator" : "not_operator",
+                isUntrackedInternalUser() ? "untracked_internal" : "not_untracked_internal",
+                getUserName(),
+                actionTierMapper.toTier(action),
+                action
+            );
+        }
+
+        if (isOperator() || isUntrackedInternalUser()) {
+            return;
+        }
+
+        var actionTier = actionTierMapper.toTier(action);
+        var now = clock.instant();
+
+        Activity searchCurrent = search;
+        Activity indexCurrent = index;
+        switch (actionTier) {
+            case SEARCH -> {
+                if (hasSearchRole == false) {
+                    log.trace("found action with SEARCH tier but node not search role: " + action);
+                }
+
+                if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(searchCurrent, now)) {
+                    search = searchCurrent.makeNewPeriod(now);
+                    log.info("New activity period started: tier[{}], action[{}], user[{}]", actionTier, action, getUserName());
+                }
+                searchTaskIds.add(task.getId());
+            }
+            case INDEX -> {
+                if (hasSearchRole) {
+                    log.trace("found action with INDEX tier but node not index role: " + action);
+                }
+
+                if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(indexCurrent, now)) {
+                    index = indexCurrent.makeNewPeriod(now);
+                    log.info("New activity period started: tier[{}], action[{}], user[{}]", actionTier, action, getUserName());
+                }
+                indexTaskIds.add(task.getId());
+            }
+            case BOTH -> {
+                if (noSearchTaskIsRunning() && coolDownPeriodHasElapsed(searchCurrent, now)) {
+                    search = searchCurrent.makeNewPeriod(now);
+                    log.info("New activity period started: tier[{}], action[{}], user[{}]", actionTier, action, getUserName());
+                }
+                if (noIndexTaskIsRunning() && coolDownPeriodHasElapsed(indexCurrent, now)) {
+                    index = indexCurrent.makeNewPeriod(now);
+                    log.info("New activity period started: tier[{}], action[{}], user[{}]", actionTier, action, getUserName());
+                }
+                bothTaskIds.add(task.getId());
+            }
+        }
+    }
+
+    void onTaskFinish(Task task) {
+        var actionTier = actionTierMapper.toTier(task.getAction());
+        var now = clock.instant();
+
+        if (actionTier == ActionTier.SEARCH) {
+            if (searchTaskIds.remove(task.getId())) {
+                search = search.extendCurrentPeriod(now);
+            }
+        }
+        if (actionTier == ActionTier.INDEX) {
+            if (indexTaskIds.remove(task.getId())) {
+                index = index.extendCurrentPeriod(now);
+            }
+        }
+        if (actionTier == ActionTier.BOTH) {
+            if (bothTaskIds.remove(task.getId())) {
+                search = search.extendCurrentPeriod(now);
+                index = index.extendCurrentPeriod(now);
+            }
+        }
+    }
+
+    private boolean coolDownPeriodHasElapsed(Activity activity, Instant now) {
+        return activity.lastActivityRecentPeriod().isBefore(now.minus(coolDownPeriod));
+    }
+
+    private boolean noSearchTaskIsRunning() {
+        return searchTaskIds.isEmpty() && bothTaskIds.isEmpty();
+    }
+
+    private boolean noIndexTaskIsRunning() {
+        return indexTaskIds.isEmpty() && bothTaskIds.isEmpty();
+    }
+
+    private boolean isUntrackedInternalUser() {
+        if (securityContext.getUser() instanceof InternalUser iu) {
+            return INTERNAL_USERS_TO_IGNORE.contains(iu);
+        }
+        return false;
+    }
+
+    private String getUserName() {
+        var user = securityContext.getUser();
+        return user == null ? null : user.principal();
+    }
+
+    private String getUserPrivilege() {
+        return threadContext.getHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY);
+    }
+
+    private boolean isOperator() {
+        return AuthenticationField.PRIVILEGE_CATEGORY_VALUE_OPERATOR.equals(getUserPrivilege());
+    }
+}

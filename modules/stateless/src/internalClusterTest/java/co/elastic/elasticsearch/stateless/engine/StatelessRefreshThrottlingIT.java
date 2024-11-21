@@ -19,14 +19,21 @@ package co.elastic.elasticsearch.stateless.engine;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 
+import org.apache.lucene.store.AlreadyClosedException;
+import org.elasticsearch.action.support.PlainActionFuture;
+import org.elasticsearch.common.util.concurrent.AbstractRunnable;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexSettings;
+import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.threadpool.ThreadPool;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
 
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 
@@ -123,7 +130,6 @@ public class StatelessRefreshThrottlingIT extends AbstractStatelessIntegTestCase
         RefreshBurstableThrottler systemIndexThrottler = getRefreshBurstableThrottler(indexNode, SYSTEM_INDEX_NAME, 0);
 
         RefreshNodeCreditManager nodeRegularIndicesCreditManager = getRegularIndicesCreditManager(indexNode);
-        RefreshNodeCreditManager nodeSystemIndicesCreditManager = getSystemIndicesCreditManager(indexNode);
         // Trigger throttler's credit to number of indices - 1
         nodeRegularIndicesCreditManager.setCredit(indices - 1);
 
@@ -175,7 +181,6 @@ public class StatelessRefreshThrottlingIT extends AbstractStatelessIntegTestCase
         refresh(regularIndexName);
         RefreshBurstableThrottler regularIndexThrottler = getRefreshBurstableThrottler(indexNode, regularIndexName, 0);
 
-        RefreshNodeCreditManager nodeRegularIndicesCreditManager = getRegularIndicesCreditManager(indexNode);
         RefreshNodeCreditManager nodeSystemIndicesCreditManager = getSystemIndicesCreditManager(indexNode);
         // Trigger throttler's credit to number of indices - 1
         nodeSystemIndicesCreditManager.setCredit(indices - 1);
@@ -205,11 +210,55 @@ public class StatelessRefreshThrottlingIT extends AbstractStatelessIntegTestCase
         }
     }
 
-    public void testSystemIndexWithFastRefreshIsNotThrottled() throws Exception {
+    public void testSystemIndexWithFastRefreshIsNotThrottled() {
         String indexNode = startMasterAndIndexNode();
         createSystemIndex(indexSettings(1, 0).put(IndexSettings.INDEX_FAST_REFRESH_SETTING.getKey(), true).build());
         indexDoc(SYSTEM_INDEX_NAME, "1", "field", "value");
         RefreshThrottler shardThrottler = getRefreshThrottler(indexNode, SYSTEM_INDEX_NAME, 0);
         assertThat(shardThrottler, instanceOf(RefreshThrottler.Noop.class));
+    }
+
+    public void testRunPendingRefreshAfterShardIsClosed() throws Exception {
+        String indexNode = startMasterAndIndexNode();
+        boolean useSystemIndex = randomBoolean();
+        final String indexName = useSystemIndex ? SYSTEM_INDEX_NAME : randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        if (useSystemIndex) {
+            createSystemIndex(indexSettings(1, 0).build());
+        } else {
+            createIndex(indexName, indexSettings(1, 0).build());
+        }
+
+        var latch = new CountDownLatch(1);
+        var threadPool = internalCluster().getInstance(ThreadPool.class, indexNode);
+        for (int i = 0; i < threadPool.info(ThreadPool.Names.REFRESH).getMax(); i++) {
+            threadPool.executor(ThreadPool.Names.REFRESH).execute(new AbstractRunnable() {
+                @Override
+                protected void doRun() throws Exception {
+                    latch.await();
+                }
+
+                @Override
+                public void onFailure(Exception e) {
+                    throw new AssertionError(e);
+                }
+            });
+        }
+
+        var refreshThrottler = getRefreshBurstableThrottler(indexNode, indexName, 0);
+        refreshThrottler.setCredit(0);
+
+        indexDocs(indexName, randomIntBetween(1, 5));
+
+        var refreshFuture = new PlainActionFuture<Engine.RefreshResult>();
+        var indexShard = findIndexShard(indexName);
+        indexShard.externalRefresh("api", refreshFuture); // use indexShard.externalRefresh because REFRESH thread pool is blocked
+
+        assertBusy(() -> assertThat(getThrottledRefreshes(refreshThrottler), equalTo(1L)));
+        assertAcked(client().admin().indices().prepareDelete(indexName));
+        assertBusy(() -> assertFalse(indexShard.store().hasReferences()));
+
+        latch.countDown();
+
+        expectThrows(AlreadyClosedException.class, refreshFuture::actionGet);
     }
 }

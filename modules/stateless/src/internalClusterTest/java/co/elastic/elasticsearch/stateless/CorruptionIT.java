@@ -24,8 +24,10 @@ import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 import org.apache.lucene.index.CorruptIndexException;
+import org.elasticsearch.action.NoShardAvailableActionException;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.search.SearchPhaseExecutionException;
 import org.elasticsearch.action.support.WriteRequest;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.blobcache.BlobCacheMetrics;
@@ -185,8 +187,7 @@ public class CorruptionIT extends AbstractStatelessIntegTestCase {
                         .forEach(
                             i -> bulkRequest.add(new IndexRequest(indexName).source("field", randomUnicodeOfLengthBetween(100, 1024)))
                         );
-                    // TODO: enable update once generational file issue is resolved ES-7496
-                    if (false && randomBoolean()) {
+                    if (randomBoolean()) {
                         var updateCount = Math.min(existingDocIds.size(), randomIntBetween(1, MAX_DOCS_PER_BULK / 2));
                         var idsToUpdate = randomSubsetOf(updateCount, existingDocIds);
                         idsToUpdate.forEach(
@@ -196,8 +197,7 @@ public class CorruptionIT extends AbstractStatelessIntegTestCase {
                         );
                     }
                     Set<String> idsToDelete = new HashSet<>();
-                    // TODO: enable deletion once generational file issue is resolved ES-7496
-                    if (false && randomBoolean()) {
+                    if (randomBoolean()) {
                         var deleteCount = Math.min(existingDocIds.size(), randomIntBetween(1, MAX_DOCS_PER_BULK / 2));
                         idsToDelete = new HashSet<>(randomSubsetOf(deleteCount, existingDocIds));
                         idsToDelete.forEach(id -> bulkRequest.add(new DeleteRequest(indexName, id)));
@@ -250,7 +250,19 @@ public class CorruptionIT extends AbstractStatelessIntegTestCase {
         Runnable searcher = () -> {
             try {
                 while (indexersRunning.getCount() > 0 && stop.get() == false) {
-                    assertNoFailures(prepareSearch(indexName).setTimeout(timeValueSeconds(60)));
+                    // Search may encounter shard failure due to search shard relocation. It is transient and we retry for it.
+                    assertBusy(() -> {
+                        try {
+                            assertNoFailures(prepareSearch(indexName).setTimeout(timeValueSeconds(60)));
+                        } catch (SearchPhaseExecutionException e) {
+                            if (Arrays.stream(e.shardFailures())
+                                .map(Exception::getCause)
+                                .allMatch(e1 -> e1 instanceof NoShardAvailableActionException)) {
+                                throw new AssertionError(e);
+                            }
+                            throw e;
+                        }
+                    });
                     safeSleep(randomLongBetween(100, 1_000));
                 }
             } catch (Throwable e) {
@@ -387,18 +399,12 @@ public class CorruptionIT extends AbstractStatelessIntegTestCase {
 
         @Override
         protected StatelessSharedBlobCacheService createSharedBlobCacheService(
-            PluginServices services,
             NodeEnvironment nodeEnvironment,
             Settings settings,
-            ThreadPool threadPool
+            ThreadPool threadPool,
+            BlobCacheMetrics blobCacheMetrics
         ) {
-            return new TestSharedBlobCacheService(
-                nodeEnvironment,
-                settings,
-                threadPool,
-                SHARD_READ_THREAD_POOL,
-                new BlobCacheMetrics(services.telemetryProvider().getMeterRegistry())
-            );
+            return new TestSharedBlobCacheService(nodeEnvironment, settings, threadPool, blobCacheMetrics);
         }
     }
 
@@ -410,10 +416,9 @@ public class CorruptionIT extends AbstractStatelessIntegTestCase {
             NodeEnvironment environment,
             Settings settings,
             ThreadPool threadPool,
-            String ioExecutor,
             BlobCacheMetrics blobCacheMetrics
         ) {
-            super(environment, settings, threadPool, ioExecutor, blobCacheMetrics);
+            super(environment, settings, threadPool, blobCacheMetrics);
         }
 
         @Override

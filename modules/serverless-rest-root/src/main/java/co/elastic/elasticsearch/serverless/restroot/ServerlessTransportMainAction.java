@@ -25,8 +25,9 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.env.Environment;
+import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.rest.root.MainRequest;
 import org.elasticsearch.rest.root.MainResponse;
 import org.elasticsearch.rest.root.MainRestPlugin;
@@ -62,7 +63,7 @@ public class ServerlessTransportMainAction extends TransportAction<MainRequest, 
         ClusterService clusterService,
         Environment env
     ) {
-        super(MainRestPlugin.MAIN_ACTION.name(), actionFilters, transportService.getTaskManager());
+        super(MainRestPlugin.MAIN_ACTION.name(), actionFilters, transportService.getTaskManager(), EsExecutors.DIRECT_EXECUTOR_SERVICE);
         this.clusterService = clusterService;
         this.projectId = new ClusterName(ServerlessSharedSettings.PROJECT_ID.get(env.settings()));
     }

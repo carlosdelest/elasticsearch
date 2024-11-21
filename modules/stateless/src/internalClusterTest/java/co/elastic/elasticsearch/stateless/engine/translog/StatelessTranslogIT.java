@@ -18,11 +18,10 @@
 package co.elastic.elasticsearch.stateless.engine.translog;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
-import co.elastic.elasticsearch.stateless.IndexingDiskController;
 import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessClusterConsistencyService;
-import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
+import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkShardRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.search.SearchResponse;
@@ -39,6 +38,7 @@ import org.elasticsearch.common.blobstore.support.BlobMetadata;
 import org.elasticsearch.common.io.stream.InputStreamStreamInput;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
@@ -46,7 +46,11 @@ import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.node.NodeRoleSettings;
+import org.elasticsearch.telemetry.InstrumentType;
+import org.elasticsearch.telemetry.Measurement;
+import org.elasticsearch.telemetry.RecordingMeterRegistry;
 import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.test.transport.MockTransportService;
 
@@ -63,9 +67,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS;
+import static co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator.FLUSH_INTERVAL_SETTING;
 import static org.elasticsearch.cluster.coordination.Coordinator.PUBLISH_TIMEOUT_SETTING;
 import static org.elasticsearch.cluster.coordination.FollowersChecker.FOLLOWER_CHECK_INTERVAL_SETTING;
 import static org.elasticsearch.cluster.coordination.FollowersChecker.FOLLOWER_CHECK_RETRY_COUNT_SETTING;
@@ -83,9 +90,7 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
     public void testTranslogFileHoldDirectoryOfReferencedFiles() throws Exception {
         startMasterOnlyNode();
 
-        String indexNode = startIndexNode(
-            Settings.builder().put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1)).build()
-        );
+        String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         ensureStableCluster(2);
 
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
@@ -98,13 +103,13 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
             indexDocs(indexName, randomIntBetween(1, 20));
         }
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNode);
+        var translogReplicator = getTranslogReplicator(indexNode);
 
         Set<TranslogReplicator.BlobTranslogFile> firstActiveTranslogFiles = translogReplicator.getActiveTranslogFiles();
         int firstFileCount = firstActiveTranslogFiles.size();
         assertThat(firstFileCount, greaterThan(0));
 
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        var indexObjectStoreService = getObjectStoreService(indexNode);
         BlobContainer translogBlobContainer = indexObjectStoreService.getTranslogBlobContainer();
         assertTranslogBlobsExist(firstActiveTranslogFiles, translogBlobContainer);
 
@@ -130,9 +135,7 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
     public void testTranslogFileHoldDirectoryForIdleShards() throws Exception {
         startMasterOnlyNode();
 
-        String indexNode = startIndexNode(
-            Settings.builder().put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1)).build()
-        );
+        String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         ensureStableCluster(2);
 
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
@@ -156,14 +159,14 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
             indexDocs(idleIndex, randomIntBetween(1, 20));
         }
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNode);
+        var translogReplicator = getTranslogReplicator(indexNode);
 
         Set<TranslogReplicator.BlobTranslogFile> firstActiveTranslogFiles = translogReplicator.getActiveTranslogFiles();
         int firstFileCount = firstActiveTranslogFiles.size();
         long maxUploadedFileAfterFirstIndex = translogReplicator.getMaxUploadedFile();
         assertThat(firstFileCount, greaterThan(0));
 
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        var indexObjectStoreService = getObjectStoreService(indexNode);
         BlobContainer translogBlobContainer = indexObjectStoreService.getTranslogBlobContainer();
         assertTranslogBlobsExist(firstActiveTranslogFiles, translogBlobContainer);
 
@@ -207,7 +210,7 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
                     StatelessClusterConsistencyService.DELAYED_CLUSTER_CONSISTENCY_INTERVAL_SETTING.getKey(),
                     TimeValue.timeValueMillis(200)
                 )
-                .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1))
+                .put(disableIndexingDiskAndMemoryControllersNodeSettings())
                 .build()
         );
         ensureStableCluster(2);
@@ -222,13 +225,13 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
             indexDocs(indexName, randomIntBetween(1, 20));
         }
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNode);
+        var translogReplicator = getTranslogReplicator(indexNode);
 
         Set<TranslogReplicator.BlobTranslogFile> firstActiveTranslogFiles = translogReplicator.getActiveTranslogFiles();
         int firstFileCount = firstActiveTranslogFiles.size();
         assertThat(firstFileCount, greaterThan(0));
 
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        var indexObjectStoreService = getObjectStoreService(indexNode);
         BlobContainer translogBlobContainer = indexObjectStoreService.getTranslogBlobContainer();
         assertTranslogBlobsExist(firstActiveTranslogFiles, translogBlobContainer);
 
@@ -271,12 +274,10 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
         }
     }
 
-    public void testTranslogWillRecoveryAllFilesIfShardMissingDirectory() throws Exception {
+    public void testTranslogWillRecoveryAllFilesIfShardMissingDirectory() {
         startMasterOnlyNode();
         startSearchNode();
-        String indexNode = startIndexNode(
-            Settings.builder().put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1)).build()
-        );
+        String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         ensureStableCluster(3);
 
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
@@ -305,14 +306,175 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
         refresh(indexName);
         assertResponse(prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()), searchResponse -> {
             assertNoFailures(searchResponse);
-            assertThat(searchResponse.getHits().getTotalHits().value, equalTo((long) docs));
+            assertThat(searchResponse.getHits().getTotalHits().value(), equalTo((long) docs));
         });
     }
 
+    public void testTranslogReplicatorReaderEmitsMetrics() throws Exception {
+        startMasterOnlyNode();
+        var indexNode = startIndexNode(
+            Settings.builder()
+                .put(STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), Integer.MAX_VALUE)
+                .put(disableIndexingDiskAndMemoryControllersNodeSettings())
+                .build()
+        );
+        ensureStableCluster(2);
+
+        var indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
+        createIndex(
+            indexName,
+            indexSettings(1, 0).put(IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING.getKey(), ByteSizeValue.ofGb(1L))
+                .put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), TimeValue.MINUS_ONE)
+                .build()
+        );
+
+        var docsBatchOne = randomIntBetween(1, 10);
+        var docsBatchTwo = randomIntBetween(1, 10);
+        var docsBatchThree = randomIntBetween(1, 10);
+
+        indexDocs(indexName, docsBatchOne);
+        indexDocs(indexName, docsBatchTwo);
+
+        // delete a random document to have `index` and `delete` operations be present in translog
+        var response = indexDocs(indexName, docsBatchThree);
+        var docIdToDelete = randomFrom(Arrays.stream(response.getItems()).map(BulkItemResponse::getId).toList());
+        client().prepareDelete(indexName, docIdToDelete).get();
+
+        ensureGreen(indexName);
+
+        // resolve shard id
+        var shardId = findIndexShard(indexName).shardId();
+
+        var indexObjectStoreService = getObjectStoreService(indexNode);
+
+        var recordingMeterRegistry = new RecordingMeterRegistry();
+        try (
+            var reader = new TranslogReplicatorReader(
+                indexObjectStoreService.getTranslogBlobContainer(),
+                shardId,
+                0,
+                Long.MAX_VALUE,
+                0,
+                () -> false,
+                new TranslogRecoveryMetrics(recordingMeterRegistry)
+            )
+        ) {
+            // read all translog operations
+            Translog.Operation next = reader.next();
+            while (next != null) {
+                next = reader.next();
+            }
+        }
+
+        BiFunction<InstrumentType, String, List<Measurement>> collectedMetrics = recordingMeterRegistry.getRecorder()::getMeasurements;
+
+        assertAndGetSingleRecordedMetric(
+            collectedMetrics,
+            InstrumentType.LONG_HISTOGRAM,
+            TranslogRecoveryMetrics.TRANSLOG_REPLAY_TIME_METRIC
+        );
+
+        var translogFilesTotalCounters = assertAndGetRecordedMetrics(
+            collectedMetrics,
+            InstrumentType.LONG_COUNTER,
+            TranslogRecoveryMetrics.TRANSLOG_FILES_TOTAL_METRIC,
+            "translog_blob_type",
+            "referenced"
+        );
+        assertThat(translogFilesTotalCounters.size(), equalTo(1));
+        var translogFilesTotalCounter = translogFilesTotalCounters.get(0);
+        // translog file is created based on time interval or size interval being exhausted, so it could be 1,2,3 or more
+        // main concern of this test is fact of emitting metrics
+        assertThat(translogFilesTotalCounter.getLong(), greaterThanOrEqualTo(1L));
+
+        var translogFilesSizeCounters = assertAndGetRecordedMetrics(
+            collectedMetrics,
+            InstrumentType.LONG_COUNTER,
+            TranslogRecoveryMetrics.TRANSLOG_FILES_SIZE_METRIC,
+            "translog_blob_type",
+            "referenced"
+        );
+        assertThat(translogFilesSizeCounters.size(), equalTo(1));
+        var translogFilesSizeCounter = translogFilesTotalCounters.get(0);
+        assertThat(translogFilesSizeCounter.getLong(), greaterThan(0L));
+
+        assertAndGetSingleRecordedMetric(
+            collectedMetrics,
+            InstrumentType.LONG_HISTOGRAM,
+            TranslogRecoveryMetrics.TRANSLOG_FILES_NETWORK_TIME_METRIC
+        );
+
+        var translogIndexOperationsCounters = assertAndGetRecordedMetrics(
+            collectedMetrics,
+            InstrumentType.LONG_COUNTER,
+            TranslogRecoveryMetrics.TRANSLOG_OPERATIONS_TOTAL_METRIC,
+            "translog_op_type",
+            "index"
+        );
+        assertThat(translogIndexOperationsCounters.size(), equalTo(1));
+        var translogIndexOperationsCounter = translogIndexOperationsCounters.get(0);
+        assertThat(translogIndexOperationsCounter.getLong(), equalTo((long) docsBatchOne + docsBatchTwo + docsBatchThree));
+
+        var translogDeleteOperationsCounters = assertAndGetRecordedMetrics(
+            collectedMetrics,
+            InstrumentType.LONG_COUNTER,
+            TranslogRecoveryMetrics.TRANSLOG_OPERATIONS_TOTAL_METRIC,
+            "translog_op_type",
+            "delete"
+        );
+        assertThat(translogDeleteOperationsCounters.size(), equalTo(1));
+        var translogDeleteOperationsCounter = translogDeleteOperationsCounters.get(0);
+        assertThat(translogDeleteOperationsCounter.getLong(), equalTo(1L));
+
+        var translogNoopOperationsCounters = assertAndGetRecordedMetrics(
+            collectedMetrics,
+            InstrumentType.LONG_COUNTER,
+            TranslogRecoveryMetrics.TRANSLOG_OPERATIONS_TOTAL_METRIC,
+            "translog_op_type",
+            "noop"
+        );
+        assertThat(translogNoopOperationsCounters.size(), equalTo(1));
+        var translogNoopOperationsCounter = translogNoopOperationsCounters.get(0);
+        assertThat(translogNoopOperationsCounter.getLong(), equalTo(0L));
+
+        var translogOperationsSizeInBytes = assertAndGetSingleRecordedMetric(
+            collectedMetrics,
+            InstrumentType.LONG_COUNTER,
+            TranslogRecoveryMetrics.TRANSLOG_OPERATIONS_SIZE_METRIC
+        );
+        assertThat(translogOperationsSizeInBytes.getLong(), greaterThan(0L));
+    }
+
+    private static Measurement assertAndGetSingleRecordedMetric(
+        BiFunction<InstrumentType, String, List<Measurement>> metricGetter,
+        InstrumentType type,
+        String name
+    ) {
+        final List<Measurement> measurements = metricGetter.apply(type, name);
+        assertFalse("Metric " + name + "is not recorded", measurements.isEmpty());
+        assertThat(measurements.size(), equalTo(1));
+        return measurements.get(0);
+    }
+
+    private static List<Measurement> assertAndGetRecordedMetrics(
+        BiFunction<InstrumentType, String, List<Measurement>> metricGetter,
+        InstrumentType type,
+        String name,
+        String attributeName,
+        String attributeValue
+    ) {
+        final List<Measurement> measurements = metricGetter.apply(type, name);
+        assertFalse("Metric " + name + "is not recorded", measurements.isEmpty());
+        return measurements.stream().filter(m -> m.attributes().get(attributeName).equals(attributeValue)).collect(Collectors.toList());
+    }
+
     @TestLogging(
-        value = "co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator:debug,"
-            + "co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicatorReader:debug",
-        reason = "to ensure we translog events on DEBUG level"
+        value = "co.elastic.elasticsearch.stateless.engine:debug,"
+            + "co.elastic.elasticsearch.stateless.recovery:trace,"
+            + "co.elastic.elasticsearch.stateless.commits:debug,"
+            + "co.elastic.elasticsearch.stateless.objectstore:trace,"
+            + "co.elastic.elasticsearch.stateless.StatelessIndexEventListener:trace",
+        reason = "to debug elasticsearch-serverless issue 2908"
     )
     public void testTranslogStressRecoveryTest() throws Exception {
         Settings isolatedNodeSettings = addIsolatedNodeSettings(Settings.builder()).build();
@@ -393,10 +555,7 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
     private void runStressTest(int failureCount, Settings additionalSettings, Failures... failureTypes) throws Exception {
         TimeValue flushInterval = TimeValue.timeValueMillis(rarely() ? 200 : randomLongBetween(25, 100));
         logger.info("running test with translog flush interval {}", flushInterval);
-        Settings settings = Settings.builder()
-            .put(additionalSettings)
-            .put(TranslogReplicator.FLUSH_INTERVAL_SETTING.getKey(), flushInterval)
-            .build();
+        Settings settings = Settings.builder().put(additionalSettings).put(FLUSH_INTERVAL_SETTING.getKey(), flushInterval).build();
 
         startIndexingAndMasterNode(settings);
         startIndexingAndMasterNode(settings);
@@ -478,7 +637,7 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
 
             SearchResponse response = prepareSearch(indexName).setQuery(QueryBuilders.idsQuery().addIds(failures.toArray(new String[0])))
                 .get();
-            long failureHits = response.getHits().getTotalHits().value;
+            long failureHits = response.getHits().getTotalHits().value();
             response.decRef();
             logger.info(
                 "Found ["
@@ -489,14 +648,14 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
 
             assertResponse(prepareSearch(indexName).setQuery(QueryBuilders.matchAllQuery()), searchResponse -> {
                 assertNoFailures(searchResponse);
-                assertThat(searchResponse.getHits().getTotalHits().value, greaterThanOrEqualTo(minExpectedDocs.get()));
+                assertThat(searchResponse.getHits().getTotalHits().value(), greaterThanOrEqualTo(minExpectedDocs.get()));
             });
 
             assertResponse(
                 prepareSearch(indexName).setQuery(QueryBuilders.idsQuery().addIds(successes.toArray(new String[0]))),
                 searchResponse -> {
                     assertNoFailures(searchResponse);
-                    assertThat(searchResponse.getHits().getTotalHits().value, equalTo((long) successes.size()));
+                    assertThat(searchResponse.getHits().getTotalHits().value(), equalTo((long) successes.size()));
                 }
             );
         } finally {
@@ -578,7 +737,9 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
                     });
                     masterTransportService.addUnresponsiveRule(nodeATransportService);
                     removedNode.actionGet();
-                    ClusterHealthRequest healthRequest = new ClusterHealthRequest(indexName).timeout(TimeValue.timeValueSeconds(30))
+                    ClusterHealthRequest healthRequest = new ClusterHealthRequest(TEST_REQUEST_TIMEOUT, indexName).timeout(
+                        TEST_REQUEST_TIMEOUT
+                    )
                         .waitForStatus(ClusterHealthStatus.YELLOW)
                         .waitForEvents(Priority.LANGUID)
                         .waitForNoRelocatingShards(true)
@@ -604,10 +765,7 @@ public class StatelessTranslogIT extends AbstractStatelessIntegTestCase {
 
     private void startIndexingAndMasterNode(Settings additionalSettings) {
         startMasterAndIndexNode(
-            Settings.builder()
-                .put(additionalSettings)
-                .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1))
-                .build()
+            Settings.builder().put(disableIndexingDiskAndMemoryControllersNodeSettings()).put(additionalSettings).build()
         );
     }
 

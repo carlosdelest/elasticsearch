@@ -20,6 +20,7 @@
 package co.elastic.elasticsearch.stateless.commits;
 
 import co.elastic.elasticsearch.stateless.Stateless;
+import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit.InternalFile;
 import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
 import co.elastic.elasticsearch.stateless.lucene.StatelessCommitRef;
 
@@ -31,39 +32,50 @@ import org.apache.lucene.store.IndexInput;
 import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.blobcache.BlobCacheUtils;
 import org.elasticsearch.blobcache.shared.SharedBytes;
+import org.elasticsearch.common.io.stream.ByteArrayStreamInput;
 import org.elasticsearch.common.io.stream.PositionTrackingOutputStreamStreamOutput;
 import org.elasticsearch.common.lucene.store.InputStreamIndexInput;
-import org.elasticsearch.common.util.Maps;
+import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.core.AbstractRefCounted;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.Streams;
+import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.index.snapshots.blobstore.SlicedInputStream;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.LongPredicate;
 import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
+import static co.elastic.elasticsearch.stateless.commits.ReplicatedContent.ALWAYS_REPLICATE;
+import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.isGenerationalFile;
 import static co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit.CURRENT_VERSION;
 import static java.util.stream.Collectors.groupingBy;
+import static org.elasticsearch.common.io.Streams.limitStream;
 
 /**
  * Represents a collection of non-uploaded compound commits, where multiple commits can be added and read,
@@ -77,14 +89,14 @@ import static java.util.stream.Collectors.groupingBy;
  *
  * <p>
  *     It is expected that after the batched compound commit is written to the store using the
- *     {@link #writeToStore(OutputStream)} method, the caller should promptly invoke {@link #close()} on the instance.
- *     This action releases the acquired Lucene commit reference and facilitates the proper release of associated resources.
+ *     {@link #getFrozenInputStreamForUpload()} method, the caller should promptly invoke {@link #close()} on the input stream and the VBCC
+ *     instance. This action releases the acquired Lucene commit reference and facilitates the proper release of associated resources.
  * </p>
  *
  * <p>
- *     This class facilitates the appending of multiple compound commits via {@link #appendCommit(StatelessCommitRef)}.
- *     When the caller intends to write these commits to the blob store it should use {@link #writeToStore(OutputStream)}.
- *  </p>
+ *     This class facilitates the appending of multiple compound commits via {@link #appendCommit(StatelessCommitRef, boolean)}.
+ *     When the caller intends to write these commits to the blob store it should use {@link #getFrozenInputStreamForUpload()}.
+ * </p>
  *
  * */
 public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements Closeable, AbstractBatchedCompoundCommit {
@@ -99,12 +111,24 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
     // Maps internal data (pending compound commits' headers, files, padding) to their offset in the virtual batched compound commit
     private final NavigableMap<Long, InternalDataReader> internalDataReadersByOffset = new ConcurrentSkipListMap<>();
     private final AtomicLong currentOffset = new AtomicLong();
-    private final String blobName;
     private final AtomicReference<Thread> appendingCommitThread = new AtomicReference<>();
+    private final BlobFile blobFile;
     private final PrimaryTermAndGeneration primaryTermAndGeneration;
     private final long creationTimeInMillis;
     // VBCC can no longer be appended to once it is frozen
     private volatile boolean frozen = false;
+
+    // Tracks search nodes notified that the non-uploaded VBCC's commits are available from the index node.
+    // Search shards may move to new search nodes before the commits are uploaded and tracking in the BlobReference begins.
+    // So tracking begins here before a BlobReference is created.
+    private final Set<String> notifiedSearchNodeIds;
+
+    // Size of a region in cache
+    private final int cacheRegionSizeInBytes;
+
+    // An estimate of the maximum size of a header in a cache region.
+    // This is used to avoid adding replicated content for files that are already included in the first region.
+    private final int estimatedMaxHeaderSizeInBytes;
 
     public VirtualBatchedCompoundCommit(
         ShardId shardId,
@@ -112,15 +136,34 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
         long primaryTerm,
         long generation,
         Function<String, BlobLocation> uploadedBlobLocationsSupplier,
-        LongSupplier timeInMillisSupplier
+        LongSupplier timeInMillisSupplier,
+        int cacheRegionSize,
+        double estimatedMaxHeaderSizeRatio
+
     ) {
         this.shardId = shardId;
         this.nodeEphemeralId = nodeEphemeralId;
         this.uploadedBlobLocationsSupplier = uploadedBlobLocationsSupplier;
         this.pendingCompoundCommits = new ConcurrentSkipListSet<>();
         this.primaryTermAndGeneration = new PrimaryTermAndGeneration(primaryTerm, generation);
-        this.blobName = StatelessCompoundCommit.blobNameFromGeneration(generation);
+        this.blobFile = new BlobFile(StatelessCompoundCommit.blobNameFromGeneration(generation), primaryTermAndGeneration);
         this.creationTimeInMillis = timeInMillisSupplier.getAsLong();
+        this.notifiedSearchNodeIds = ConcurrentCollections.newConcurrentSet();
+        this.cacheRegionSizeInBytes = cacheRegionSize;
+        if (estimatedMaxHeaderSizeRatio < 0.0 || 1.0 < estimatedMaxHeaderSizeRatio) {
+            throw new IllegalArgumentException("Must be 0.0 to 1.0 inclusive but got " + estimatedMaxHeaderSizeRatio);
+        }
+        this.estimatedMaxHeaderSizeInBytes = (int) (estimatedMaxHeaderSizeRatio * cacheRegionSize);
+    }
+
+    public void addNotifiedSearchNodeIds(Collection<String> nodeIds) {
+        assert frozen == false : "Unable to add notified search nodes ids after the VBCC is finalized";
+        notifiedSearchNodeIds.addAll(nodeIds);
+    }
+
+    public Set<String> getNotifiedSearchNodeIds() {
+        assert frozen : "Accessing the notified search node id list before the VBCC is finalized";
+        return Collections.unmodifiableSet(notifiedSearchNodeIds);
     }
 
     /**
@@ -149,10 +192,10 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
      * No synchronization is needed for this method because its sole caller is itself synchronized
      * @return {@code true} if the append is successful or {@code false} if the VBCC is frozen and cannot be appended to
      */
-    public boolean appendCommit(StatelessCommitRef reference) {
+    public boolean appendCommit(StatelessCommitRef reference, boolean useInternalFilesReplicatedContent) {
         assert assertCompareAndSetFreezeOrAppendingCommitThread(null, Thread.currentThread());
         try {
-            return doAppendCommit(reference);
+            return doAppendCommit(reference, useInternalFilesReplicatedContent);
         } catch (IOException e) {
             throw new UncheckedIOException(
                 "Unable to append commit [" + reference.getPrimaryTerm() + ", " + reference.getGeneration() + "]",
@@ -167,7 +210,7 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
         return frozen;
     }
 
-    private boolean doAppendCommit(StatelessCommitRef reference) throws IOException {
+    private boolean doAppendCommit(StatelessCommitRef reference, boolean useInternalFilesReplicatedContent) throws IOException {
         assert primaryTermAndGeneration.primaryTerm() == reference.getPrimaryTerm();
         assert (pendingCompoundCommits.isEmpty() && primaryTermAndGeneration.generation() == reference.getGeneration())
             || (pendingCompoundCommits.isEmpty() == false && primaryTermAndGeneration.generation() < reference.getGeneration());
@@ -178,9 +221,61 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
             return false;
         }
 
-        var internalFiles = computeInternalFiles(reference);
-        long compoundCommitFilesSize = internalFiles.stream().mapToLong(StatelessCompoundCommit.InternalFile::length).sum();
-        var header = materializeCompoundCommitHeader(reference, internalFiles);
+        final var ccTermAndGen = new PrimaryTermAndGeneration(reference.getPrimaryTerm(), reference.getGeneration());
+        final boolean isFirstCommit = ccTermAndGen.equals(primaryTermAndGeneration);
+
+        // Ordered set of compound commit (CC) internal files
+        var internalFiles = new TreeSet<InternalFile>();
+
+        // Map of compound commit (CC) referenced files
+        var referencedFiles = new HashMap<String, BlobLocation>();
+
+        var internalFilesSize = 0L;
+        for (String commitFile : reference.getCommitFiles()) {
+            boolean isAdditionalFile = reference.getAdditionalFiles().contains(commitFile);
+            if (isAdditionalFile || (isFirstCommit && isGenerationalFile(commitFile))) {
+                assert internalLocations.containsKey(commitFile) == false : commitFile;
+                var fileLength = reference.getDirectory().fileLength(commitFile);
+                internalFiles.add(new InternalFile(commitFile, fileLength));
+                internalFilesSize += fileLength;
+            } else {
+                var blobLocation = internalLocations.get(commitFile);
+                assert blobLocation != null || isGenerationalFile(commitFile) == false : commitFile;
+                if (blobLocation == null) {
+                    blobLocation = uploadedBlobLocationsSupplier.apply(commitFile);
+                    assert blobLocation != null : commitFile;
+                    assert blobLocation.getBatchedCompoundCommitTermAndGeneration().before(primaryTermAndGeneration);
+                }
+                referencedFiles.put(commitFile, blobLocation);
+            }
+        }
+
+        var replicatedContent = useInternalFilesReplicatedContent
+            ? getReplicatedContent(ccTermAndGen, currentOffset.get(), internalFiles, internalFilesSize, reference.getDirectory())
+            : ReplicatedContent.EMPTY;
+        var replicatedContentHeader = replicatedContent.header();
+
+        var header = materializeCompoundCommitHeader(
+            reference,
+            internalFiles,
+            replicatedContentHeader,
+            referencedFiles,
+            useInternalFilesReplicatedContent
+        );
+
+        if (logger.isDebugEnabled()) {
+            var referencedBlobs = referencedFiles.values().stream().map(location -> location.blobFile().blobName()).distinct().count();
+            logger.debug(
+                "{}{} appending commit ({} bytes). References external {} files in {} other CCs and adds {} internal files {}.",
+                shardId,
+                primaryTermAndGeneration,
+                header.length + replicatedContentHeader.dataSizeInBytes() + internalFilesSize,
+                referencedFiles.size(),
+                referencedBlobs,
+                internalFiles.size(),
+                internalFiles
+            );
+        }
 
         // Add padding to the previous CC if it exists
         if (pendingCompoundCommits.isEmpty() == false) {
@@ -202,29 +297,53 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
         var previousHeaderOffset = internalDataReadersByOffset.put(headerOffset, new InternalHeaderReader(header));
         assert previousHeaderOffset == null;
 
-        long internalFileOffset = headerOffset + header.length;
+        long replicatedContentOffset = headerOffset + header.length;
+        for (var replicatedRangeReader : replicatedContent.readers()) {
+            var previousReplicatedContent = internalDataReadersByOffset.put(replicatedContentOffset, replicatedRangeReader);
+            assert previousReplicatedContent == null;
+            replicatedContentOffset += replicatedRangeReader.rangeLength();
+        }
+        assert replicatedContentOffset == headerOffset + header.length + replicatedContentHeader.dataSizeInBytes();
+
+        long internalFileOffset = headerOffset + header.length + replicatedContentHeader.dataSizeInBytes();
+
+        // Map of all compound commit (CC) files with their internal or referenced blob location
+        final var commitFiles = new HashMap<>(referencedFiles);
 
         for (var internalFile : internalFiles) {
             var fileLength = internalFile.length();
-            var previousLocation = internalLocations.put(
-                internalFile.name(),
-                new BlobLocation(primaryTermAndGeneration.primaryTerm(), blobName, internalFileOffset, fileLength)
-            );
-            assert previousLocation == null;
+            var blobLocation = new BlobLocation(blobFile, internalFileOffset, fileLength);
+
+            var previousFile = commitFiles.put(internalFile.name(), blobLocation);
+            assert previousFile == null : internalFile.name();
+
+            var previousLocation = internalLocations.put(internalFile.name(), blobLocation);
+            assert previousLocation == null : internalFile.name();
+
             var previousOffset = internalDataReadersByOffset.put(
                 internalFileOffset,
                 new InternalFileReader(internalFile.name(), reference.getDirectory())
             );
-            assert previousOffset == null;
+            assert previousOffset == null : internalFile.name();
             internalFileOffset += fileLength;
         }
         currentOffset.set(internalFileOffset);
 
         var pendingCompoundCommit = new PendingCompoundCommit(
-            header,
+            header.length,
             reference,
-            internalFiles,
-            createStatelessCompoundCommit(reference, header.length + compoundCommitFilesSize, internalFiles)
+            new StatelessCompoundCommit(
+                shardId,
+                ccTermAndGen,
+                reference.getTranslogRecoveryStartFile(),
+                nodeEphemeralId,
+                Collections.unmodifiableMap(commitFiles),
+                header.length + replicatedContentHeader.dataSizeInBytes() + internalFilesSize,
+                internalFiles.stream().map(InternalFile::name).collect(Collectors.toUnmodifiableSet()),
+                header.length,
+                replicatedContent.header()
+            ),
+            Long.parseLong(reference.getIndexCommit().getUserData().get(SequenceNumbers.MAX_SEQ_NO))
         );
         pendingCompoundCommits.add(pendingCompoundCommit);
         assert currentOffset.get() == headerOffset + pendingCompoundCommit.getSizeInBytes()
@@ -238,42 +357,19 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
         return true;
     }
 
-    private StatelessCompoundCommit createStatelessCompoundCommit(
-        StatelessCommitRef reference,
-        long sizeInBytes,
-        List<StatelessCompoundCommit.InternalFile> internalFiles
-    ) {
-        Map<String, BlobLocation> commitLocations = Maps.newMapWithExpectedSize(reference.getCommitFiles().size());
-        for (String commitFile : reference.getCommitFiles()) {
-            var blobLocation = getBlobLocation(commitFile);
-            assert blobLocation != null;
-            commitLocations.put(commitFile, blobLocation);
-        }
-        return new StatelessCompoundCommit(
-            reference.getShardId(),
-            new PrimaryTermAndGeneration(reference.getPrimaryTerm(), reference.getGeneration()),
-            reference.getTranslogRecoveryStartFile(),
-            nodeEphemeralId,
-            Collections.unmodifiableMap(commitLocations),
-            sizeInBytes,
-            internalFiles.stream().map(StatelessCompoundCommit.InternalFile::name).collect(Collectors.toSet())
-        );
-    }
-
     private boolean assertInternalConsistency() {
         final Set<String> allInternalFiles = pendingCompoundCommits.stream()
-            .flatMap(pc -> pc.internalFiles.stream())
-            .map(StatelessCompoundCommit.InternalFile::name)
+            .flatMap(pc -> pc.getStatelessCompoundCommit().internalFiles().stream())
             .collect(Collectors.toUnmodifiableSet());
         assert allInternalFiles.equals(internalLocations.keySet()) : "all internal files must have internal blobLocations";
 
         final var sizeInBytes = pendingCompoundCommits.stream().mapToLong(PendingCompoundCommit::getSizeInBytes).sum();
         assert sizeInBytes == currentOffset.get() : "current offset must be at the end of the VBCC";
 
-        // Assert that compound commits have padding to be page-aligned, except for the last compound commit
         var it = pendingCompoundCommits.iterator();
         while (it.hasNext()) {
             var pendingCompoundCommit = it.next();
+            // Assert that compound commits have padding to be page-aligned, except for the last compound commit
             assert it.hasNext() == false
                 || pendingCompoundCommit.getSizeInBytes() == BlobCacheUtils.toPageAlignedSize(
                     pendingCompoundCommit.getStatelessCompoundCommit().sizeInBytes()
@@ -285,6 +381,18 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
                     + " should be equal to page-aligned size in bytes "
                     + BlobCacheUtils.toPageAlignedSize(pendingCompoundCommit.getStatelessCompoundCommit().sizeInBytes());
             assert it.hasNext() || pendingCompoundCommit.padding == 0 : "last pending compound commit should not have padding";
+
+            // Assert that all generational files are contained in the same VBCC (no reference to a previous VBCC or BCC)
+            for (var commitFile : pendingCompoundCommit.getStatelessCompoundCommit().commitFiles().entrySet()) {
+                assert isGenerationalFile(commitFile.getKey()) == false
+                    || commitFile.getValue().getBatchedCompoundCommitTermAndGeneration().equals(primaryTermAndGeneration)
+                    : "generational file "
+                        + commitFile.getValue()
+                        + " should be located in BCC "
+                        + primaryTermAndGeneration
+                        + " but got "
+                        + commitFile.getValue().getBatchedCompoundCommitTermAndGeneration();
+            }
         }
 
         // Group the internal data readers by class
@@ -312,23 +420,46 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
         return true;
     }
 
-    private List<StatelessCompoundCommit.InternalFile> computeInternalFiles(StatelessCommitRef commitRef) throws IOException {
-        var additionalFiles = commitRef.getAdditionalFiles();
-        List<StatelessCompoundCommit.InternalFile> internalFiles = new ArrayList<>();
-        for (String commitFile : commitRef.getCommitFiles()) {
-            if (additionalFiles.contains(commitFile)
-                || (StatelessCommitService.isGenerationalFile(commitFile) && internalLocations.containsKey(commitFile) == false)) {
-                internalFiles.add(new StatelessCompoundCommit.InternalFile(commitFile, commitRef.getDirectory().fileLength(commitFile)));
-            }
-        }
-        Collections.sort(internalFiles);
-        return Collections.unmodifiableList(internalFiles);
-    }
+    private ReplicatedContent getReplicatedContent(
+        PrimaryTermAndGeneration commitTermAndGen,
+        long currentOffset,
+        TreeSet<InternalFile> internalFiles,
+        long internalFilesSize,
+        Directory directory
+    ) {
+        // Current position of the start of the commit (relative to the start of the region)
+        int currentPositionInRegion = (int) (currentOffset % cacheRegionSizeInBytes);
 
-    public BatchedCompoundCommit writeToStore(OutputStream output) throws IOException {
-        BatchedCompoundCommit frozenBatchedCompoundCommit = getFrozenBatchedCompoundCommit();
-        doWriteToStore(output);
-        return frozenBatchedCompoundCommit;
+        // Approximate position of the end of the header + replicated content (using the estimated max. header size as a hint)
+        int estimatedHeaderEnd = Math.addExact(currentPositionInRegion, estimatedMaxHeaderSizeInBytes);
+
+        // Approximate position of the end of the commit
+        var estimatedCommitEnd = Math.addExact(estimatedHeaderEnd, internalFilesSize);
+
+        // Check if the header and internal files completely fit into the same region, in which case there is no need for replicated content
+        if (estimatedCommitEnd < cacheRegionSizeInBytes) {
+            logger.trace(
+                "{} skipping content replication: commit {} at offset [{}][{}] with [{}] bytes of internal files "
+                    + "would fit within the cache region of [{}] bytes assuming an approximate header size of [{}] bytes",
+                shardId,
+                commitTermAndGen,
+                currentOffset,
+                currentPositionInRegion,
+                internalFilesSize,
+                cacheRegionSizeInBytes,
+                estimatedMaxHeaderSizeInBytes
+            );
+            return ReplicatedContent.EMPTY;
+        }
+
+        LongPredicate shouldReplicate;
+        if (estimatedMaxHeaderSizeInBytes != 0) {
+            // Replicate content for internal files that are not in the same region as the header
+            shouldReplicate = (offset) -> cacheRegionSizeInBytes <= (estimatedHeaderEnd + offset);
+        } else {
+            shouldReplicate = ALWAYS_REPLICATE; // Keep previous behavior
+        }
+        return ReplicatedContent.create(true, internalFiles, directory, shouldReplicate);
     }
 
     public BatchedCompoundCommit getFrozenBatchedCompoundCommit() {
@@ -342,12 +473,38 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
         return new BatchedCompoundCommit(primaryTermAndGeneration, Collections.unmodifiableList(compoundCommits));
     }
 
-    void doWriteToStore(OutputStream output) throws IOException {
-        getBytesByRange(0, getTotalSizeInBytes(), output);
+    public InputStream getFrozenInputStreamForUpload() {
+        assert isFrozen() : "Cannot stream before freeze";
+        assert assertInternalConsistency();
+        return getInputStreamForUpload();
+    }
+
+    InputStream getInputStreamForUpload() {
+        mustIncRef();
+        List<Long> offsets = internalDataReadersByOffset.navigableKeySet().stream().collect(Collectors.toUnmodifiableList());
+        return new SlicedInputStream(offsets.size()) {
+            @Override
+            protected InputStream openSlice(int slice) throws IOException {
+                final var offset = offsets.get(slice);
+                final var reader = internalDataReadersByOffset.get(offset);
+                return reader.getInputStream(0L, Long.MAX_VALUE);
+            }
+
+            @Override
+            public void close() throws IOException {
+                if (isClosed() == false) {
+                    try {
+                        super.close();
+                    } finally {
+                        decRef();
+                    }
+                }
+            }
+        };
     }
 
     public String getBlobName() {
-        return blobName;
+        return blobFile.blobName();
     }
 
     public ShardId getShardId() {
@@ -399,7 +556,7 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
         IOUtils.closeWhileHandlingException(pendingCompoundCommits);
     }
 
-    List<PendingCompoundCommit> getPendingCompoundCommits() {
+    public List<PendingCompoundCommit> getPendingCompoundCommits() {
         return List.copyOf(pendingCompoundCommits);
     }
 
@@ -414,19 +571,14 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
             .collect(Collectors.toSet());
     }
 
-    private byte[] materializeCompoundCommitHeader(StatelessCommitRef reference, List<StatelessCompoundCommit.InternalFile> internalFiles)
-        throws IOException {
+    private byte[] materializeCompoundCommitHeader(
+        StatelessCommitRef reference,
+        Iterable<InternalFile> internalFiles,
+        InternalFilesReplicatedRanges replicatedRanges,
+        Map<String, BlobLocation> referencedFiles,
+        boolean useInternalFilesReplicatedContent
+    ) throws IOException {
         assert getBlobName() != null;
-
-        var internalFileNames = internalFiles.stream().map(StatelessCompoundCommit.InternalFile::name).collect(Collectors.toSet());
-        Map<String, BlobLocation> commitFiles = Maps.newMapWithExpectedSize(reference.getCommitFiles().size());
-        for (String fileName : reference.getCommitFiles()) {
-            if (internalFileNames.contains(fileName) == false) {
-                var location = getBlobLocation(fileName);
-                commitFiles.put(fileName, location);
-            }
-        }
-
         try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
             var positionTrackingOutputStreamStreamOutput = new PositionTrackingOutputStreamStreamOutput(os);
             StatelessCompoundCommit.writeXContentHeader(
@@ -435,10 +587,12 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
                 reference.getPrimaryTerm(),
                 nodeEphemeralId,
                 reference.getTranslogRecoveryStartFile(),
-                commitFiles,
+                referencedFiles,
                 internalFiles,
+                replicatedRanges,
                 CURRENT_VERSION,
-                positionTrackingOutputStreamStreamOutput
+                positionTrackingOutputStreamStreamOutput,
+                useInternalFilesReplicatedContent
             );
             return os.toByteArray();
         }
@@ -484,8 +638,10 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
                     }
                     InternalDataReader internalDataReader = entry.getValue();
                     long skipBytes = Math.max(0, offset - entry.getKey()); // can be non-zero only for the first entry
-                    long bytesRead = internalDataReader.read(skipBytes, remainingBytesToRead, output);
-                    remainingBytesToRead -= bytesRead;
+                    try (var inputStream = internalDataReader.getInputStream(skipBytes, remainingBytesToRead)) {
+                        long bytesRead = Streams.copy(inputStream, output, false);
+                        remainingBytesToRead -= bytesRead;
+                    }
                 }
                 assert remainingBytesToRead == 0 : "remaining bytes to read " + remainingBytesToRead;
             } finally {
@@ -537,43 +693,31 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
     }
 
     static class PendingCompoundCommit implements Closeable, Comparable<PendingCompoundCommit> {
-        private final byte[] header;
-        private final List<StatelessCompoundCommit.InternalFile> internalFiles;
+        private final int headerSize;
         private final StatelessCommitRef reference;
         private final StatelessCompoundCommit statelessCompoundCommit;
+        private final long maxSeqNo;
         // No need to be volatile because writing is synchronized at higher level in StatelessCommitService
         // and reading is dispatched to another thread after a second synchronization
         private int padding = 0;
 
-        private static final byte[] PADDING_BYTES;
-        static {
-            byte[] padding = new byte[SharedBytes.PAGE_SIZE];
-            Arrays.fill(padding, (byte) 0);
-            PADDING_BYTES = padding;
-        }
-
-        static void writePadding(OutputStream output, int length) throws IOException {
-            assert 0 <= length && length < SharedBytes.PAGE_SIZE : length;
-            output.write(PADDING_BYTES, 0, length);
-        }
-
         /**
          * Creates a new pending to upload compound commit. Note that the last pending compound commit should not have padding. The
          * padding is added to the previous pending compound commit when appending a new pending compound commit.
-         * @param header the materialized compound commit header
+         * @param headerSize the size of materialized compound commit header
          * @param reference the lucene commit reference
          * @param statelessCompoundCommit the associated compound commit that will be uploaded
          */
         PendingCompoundCommit(
-            byte[] header,
+            int headerSize,
             StatelessCommitRef reference,
-            List<StatelessCompoundCommit.InternalFile> internalFiles,
-            StatelessCompoundCommit statelessCompoundCommit
+            StatelessCompoundCommit statelessCompoundCommit,
+            long maxSeqNo
         ) {
+            this.headerSize = headerSize;
             this.reference = reference;
-            this.header = header;
-            this.internalFiles = internalFiles;
             this.statelessCompoundCommit = statelessCompoundCommit;
+            this.maxSeqNo = maxSeqNo;
         }
 
         void setPadding(int padding) {
@@ -581,8 +725,12 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
             assert padding >= 0 : "padding " + padding + " is negative";
         }
 
-        long getGeneration() {
+        public long getGeneration() {
             return reference.getGeneration();
+        }
+
+        long getMaxSeqNo() {
+            return maxSeqNo;
         }
 
         StatelessCommitRef getCommitReference() {
@@ -604,7 +752,7 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
 
         // package-private for testing
         long getHeaderSize() {
-            return header.length;
+            return headerSize;
         }
 
         @Override
@@ -628,15 +776,13 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
      * Interface for reading internal data from a batched compound commit
      */
     @FunctionalInterface
-    private interface InternalDataReader {
+    interface InternalDataReader {
         /**
-         * Read the internal data and copy it into the output.
-         * @param offset The starting position to read the data from. The value is relative to each individual data component.
-         * @param length The maximum length of data to read.
-         * @param output The destination where the data should be copied into.
-         * @return The number of bytes actually read and copied. It can be smaller than requested length if there is not enough data.
+         * Get the {@link InputStream} for reading the internal data.
+         * @param offset the number of bytes to skip in the internal data before starting to read the internal data.
+         * @param length the max number of bytes to read. ineffective if larger than the remaining available size of the internal data.
          */
-        long read(long offset, long length, OutputStream output) throws IOException;
+        InputStream getInputStream(long offset, long length) throws IOException;
     }
 
     /**
@@ -644,11 +790,10 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
      */
     private record InternalHeaderReader(byte[] header) implements InternalDataReader {
         @Override
-        public long read(long offset, long length, OutputStream output) throws IOException {
-            assert offset < header.length : "offset [" + offset + "] more than header length [" + header.length + "]";
-            long headerBytesToRead = Math.min(length, header.length - offset);
-            output.write(header, Math.toIntExact(offset), Math.toIntExact(headerBytesToRead));
-            return headerBytesToRead;
+        public InputStream getInputStream(long offset, long length) throws IOException {
+            final var stream = new ByteArrayStreamInput(header);
+            stream.skipNBytes(offset);
+            return limitStream(stream, length);
         }
     }
 
@@ -657,15 +802,23 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
      */
     private record InternalFileReader(String filename, Directory directory) implements InternalDataReader {
         @Override
-        public long read(long offset, long length, OutputStream output) throws IOException {
+        public InputStream getInputStream(long offset, long length) throws IOException {
             long fileLength = directory.fileLength(filename);
             assert offset < fileLength : "offset [" + offset + "] more than file length [" + fileLength + "]";
             long fileBytesToRead = Math.min(length, fileLength - offset);
-            try (IndexInput input = directory.openInput(filename, IOContext.READONCE)) {
+            IndexInput input = directory.openInput(filename, IOContext.READONCE);
+            try {
                 input.seek(offset);
-                Streams.copy(new InputStreamIndexInput(input, fileBytesToRead), output, false);
+                return new InputStreamIndexInput(input, fileBytesToRead) {
+                    @Override
+                    public void close() throws IOException {
+                        IOUtils.close(super::close, input);
+                    }
+                };
+            } catch (IOException e) {
+                IOUtils.closeWhileHandlingException(input);
+                throw e;
             }
-            return fileBytesToRead;
         }
     }
 
@@ -673,12 +826,24 @@ public class VirtualBatchedCompoundCommit extends AbstractRefCounted implements 
      * Internal data reader for padding bytes
      */
     private record InternalPaddingReader(int padding) implements InternalDataReader {
+
+        public InternalPaddingReader {
+            assert padding <= SharedBytes.PAGE_SIZE : "padding " + padding + " is more than page size " + SharedBytes.PAGE_SIZE;
+        }
+
+        private static final byte[] PADDING_BYTES;
+
+        static {
+            byte[] padding = new byte[SharedBytes.PAGE_SIZE];
+            Arrays.fill(padding, (byte) 0);
+            PADDING_BYTES = padding;
+        }
+
         @Override
-        public long read(long offset, long length, OutputStream output) throws IOException {
+        public InputStream getInputStream(long offset, long length) throws IOException {
             assert offset < padding : "offset [" + offset + "] more than padding length [" + padding + "]";
             int paddingBytesToRead = BlobCacheUtils.toIntBytes(Math.min(length, padding - offset));
-            PendingCompoundCommit.writePadding(output, paddingBytesToRead);
-            return paddingBytesToRead;
+            return limitStream(new ByteArrayStreamInput(PADDING_BYTES), paddingBytesToRead);
         }
     }
 }

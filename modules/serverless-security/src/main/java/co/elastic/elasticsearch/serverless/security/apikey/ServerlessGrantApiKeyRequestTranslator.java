@@ -17,7 +17,6 @@
 
 package co.elastic.elasticsearch.serverless.security.apikey;
 
-import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleParser;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
@@ -30,7 +29,6 @@ import org.elasticsearch.xpack.core.security.action.apikey.GrantApiKeyRequest;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGrantApiKeyAction;
 
 import java.io.IOException;
-import java.util.function.Supplier;
 
 public class ServerlessGrantApiKeyRequestTranslator extends RestGrantApiKeyAction.RequestTranslator.Default {
     private static final Logger logger = LogManager.getLogger(ServerlessGrantApiKeyRequestTranslator.class);
@@ -40,20 +38,8 @@ public class ServerlessGrantApiKeyRequestTranslator extends RestGrantApiKeyActio
     );
 
     private final ServerlessRoleValidator serverlessRoleValidator;
-    private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
 
-    // Needed for java module
     public ServerlessGrantApiKeyRequestTranslator() {
-        this(() -> false);
-    }
-
-    // For SPI
-    public ServerlessGrantApiKeyRequestTranslator(ServerlessSecurityPlugin plugin) {
-        this(plugin::isOperatorStrictRoleValidationEnabled);
-    }
-
-    private ServerlessGrantApiKeyRequestTranslator(Supplier<Boolean> operatorStrictRoleValidationEnabled) {
-        this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
         this.serverlessRoleValidator = new ServerlessRoleValidator();
     }
 
@@ -63,10 +49,7 @@ public class ServerlessGrantApiKeyRequestTranslator extends RestGrantApiKeyActio
             return parseWithValidation(request);
         } catch (Exception ex) {
             logger.info("Invalid role descriptors in [Grant API key request].", ex);
-            if (shouldApplyStrictOperatorRoleValidation(request)) {
-                throw ex;
-            }
-            return super.translate(request);
+            throw ex;
         }
     }
 
@@ -76,10 +59,5 @@ public class ServerlessGrantApiKeyRequestTranslator extends RestGrantApiKeyActio
             serverlessRoleValidator.validateCustomRoleAndThrow(grantApiKeyRequest.getApiKeyRequest().getRoleDescriptors(), false);
             return grantApiKeyRequest;
         }
-    }
-
-    private boolean shouldApplyStrictOperatorRoleValidation(RestRequest request) {
-        final boolean restrictRequest = request.hasParam(RestRequest.PATH_RESTRICTED);
-        return false == restrictRequest && operatorStrictRoleValidationEnabled.get();
     }
 }

@@ -15,34 +15,26 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Elastic License
- * 2.0 and the Server Side Public License, v 1; you may not use this file except
- * in compliance with, at your election, the Elastic License 2.0 or the Server
- * Side Public License, v 1.
- */
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.ingested_size.MeteringDocumentSizeObserver;
+import co.elastic.elasticsearch.metering.xcontent.MeteringDocumentParsingProvider;
 
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.ingest.PutPipelineRequest;
 import org.elasticsearch.action.support.WriteRequest;
-import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.ingest.common.IngestCommonPlugin;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 import org.elasticsearch.test.InternalSettingsPlugin;
 import org.elasticsearch.test.XContentTestUtils;
-import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.xcontent.XContentType;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -54,11 +46,8 @@ import java.util.Map;
 
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 
-@TestLogging(
-    value = "co.elastic.elasticsearch.metering:TRACE",
-    reason = "This test benefits from the trace messages in the metering module."
-)
 public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase {
 
     private static final int ITEMS_IN_BULK = 100;
@@ -74,7 +63,6 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     protected Collection<Class<? extends Plugin>> nodePlugins() {
         var list = new ArrayList<Class<? extends Plugin>>();
         list.addAll(super.nodePlugins());
@@ -128,7 +116,7 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         startMasterIndexAndIngestNode();
         startSearchNode();
         ensureStableCluster(2);
-        createPipeline("pipeline");
+        IngestMeteringIT.createNewFieldPipeline();
 
         String index = "test2";
         assertAcked(prepareCreate(index));
@@ -147,7 +135,10 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
                     .filter(m -> m.id().startsWith("ingested-doc"))
                     .mapToLong(r -> r.usage().quantity())
                     .sum();
-                assertThat(reportedQuantity, equalTo(successCount * documentNormalizedSize));
+                assertThat(
+                    reportedQuantity,
+                    equalTo(successCount * (documentNormalizedSize + IngestMeteringIT.PIPELINE_ADDED_FIELDS_SIZE))
+                );
             });
 
         }
@@ -197,36 +188,16 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
         return Collections.singletonMap("key", "value");
     }
 
-    private void createPipeline(String pipeline) {
-        final BytesReference pipelineBody = new BytesArray("""
-            {
-              "processors": [
-                {
-                   "set": {
-                     "field": "my-text-field",
-                     "value": "xxxx"
-                   }
-                 },
-                 {
-                   "set": {
-                     "field": "my-boolean-field",
-                     "value": true
-                   }
-                 }
-              ]
-            }
-            """);
-        clusterAdmin().putPipeline(new PutPipelineRequest(pipeline, pipelineBody, XContentType.JSON)).actionGet();
-    }
-
     private long meterDocument() {
         try {
             BytesReference bytesReference = XContentTestUtils.convertToXContent(documentSource(), XContentType.JSON);
-            MeteringDocumentSizeObserver meteringDocumentSizeObserver = new MeteringDocumentSizeObserver();
+            MeteringDocumentParsingProvider provider = new MeteringDocumentParsingProvider(false, Mockito::mock, Mockito::mock);
+            XContentMeteringParserDecorator meteringParserDecorator = provider.newMeteringParserDecorator(new IndexRequest());
 
-            XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, meteringDocumentSizeObserver).v2();
+            XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, meteringParserDecorator).v2();
 
-            return meteringDocumentSizeObserver.normalisedBytesParsed();
+            assertThat(meteringParserDecorator.meteredDocumentSize(), greaterThan(0L));
+            return meteringParserDecorator.meteredDocumentSize();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

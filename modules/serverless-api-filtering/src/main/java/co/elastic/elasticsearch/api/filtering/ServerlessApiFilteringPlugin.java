@@ -17,7 +17,11 @@
 
 package co.elastic.elasticsearch.api.filtering;
 
+import co.elastic.elasticsearch.api.validation.AutoCreateDotValidator;
+import co.elastic.elasticsearch.api.validation.CreateIndexDotValidator;
 import co.elastic.elasticsearch.api.validation.CreateIndexSettingsValidator;
+import co.elastic.elasticsearch.api.validation.DotPrefixValidator;
+import co.elastic.elasticsearch.api.validation.IndexTemplateDotValidator;
 import co.elastic.elasticsearch.api.validation.IndicesAliasRequestValidator;
 import co.elastic.elasticsearch.api.validation.PutComponentTemplateDataStreamLifecycleValidator;
 import co.elastic.elasticsearch.api.validation.PutComponentTemplateSettingsValidator;
@@ -31,7 +35,9 @@ import co.elastic.elasticsearch.api.validation.SimulateTemplateDataStreamLifecyc
 import co.elastic.elasticsearch.api.validation.UpdateSettingsValidator;
 
 import org.elasticsearch.action.support.MappedActionFilter;
+import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.IndexScopedSettings;
+import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
@@ -53,6 +59,7 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
     public Collection<?> createComponents(PluginServices services) {
         ThreadContext context = services.threadPool().getThreadContext();
         IndexScopedSettings indexScopedSettings = services.indicesService().getIndexScopedSettings();
+        ClusterService clusterService = services.clusterService();
 
         actionFilters.set(
             List.of(
@@ -71,11 +78,20 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 new PutDataStreamLifecycleValidator(context),
                 new SimulateIndexTemplateDataStreamLifecycleValidator(context),
                 new SimulateTemplateDataStreamLifecycleValidator(context),
-                new IndicesAliasRequestValidator()
+                new IndicesAliasRequestValidator(),
+                // Validation for dot-prefixed index creation
+                new CreateIndexDotValidator(context, clusterService),
+                new AutoCreateDotValidator(context, clusterService),
+                new IndexTemplateDotValidator(context, clusterService)
             )
         );
 
         return List.of();
+    }
+
+    @Override
+    public List<Setting<?>> getSettings() {
+        return List.of(DotPrefixValidator.VALIDATE_DOT_PREFIXES, DotPrefixValidator.IGNORED_INDEX_PATTERNS_SETTING);
     }
 
     @Override

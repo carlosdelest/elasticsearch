@@ -18,20 +18,19 @@
 package co.elastic.elasticsearch.stateless.commits;
 
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
-import co.elastic.elasticsearch.stateless.IndexingDiskController;
 import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.action.NewCommitNotificationRequest;
 import co.elastic.elasticsearch.stateless.action.NewCommitNotificationResponse;
 import co.elastic.elasticsearch.stateless.action.TransportGetVirtualBatchedCompoundCommitChunkAction;
 import co.elastic.elasticsearch.stateless.action.TransportNewCommitNotificationAction;
 import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
-import co.elastic.elasticsearch.stateless.cache.reader.CacheBlobReaderService;
-import co.elastic.elasticsearch.stateless.cache.reader.MutableObjectStoreUploadTracker;
 import co.elastic.elasticsearch.stateless.cluster.coordination.StatelessClusterConsistencyService;
+import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
-import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
-import co.elastic.elasticsearch.stateless.lucene.SearchIndexInput;
+import co.elastic.elasticsearch.stateless.lucene.BlobCacheIndexInput;
+import co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectory;
+import co.elastic.elasticsearch.stateless.lucene.IndexBlobStoreCacheDirectory;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreTestUtils;
 import co.elastic.elasticsearch.stateless.recovery.TransportRegisterCommitForRecoveryAction;
@@ -44,10 +43,12 @@ import org.elasticsearch.action.admin.cluster.snapshots.create.CreateSnapshotRes
 import org.elasticsearch.action.admin.indices.close.CloseIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.open.OpenIndexRequest;
+import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.support.ChannelActionListener;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.coordination.ApplyCommitRequest;
 import org.elasticsearch.cluster.coordination.Coordinator;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
@@ -60,6 +61,7 @@ import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.core.Tuple;
+import org.elasticsearch.discovery.MasterNotDiscoveredException;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.seqno.SeqNoStats;
@@ -68,6 +70,7 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.recovery.RecoveryClusterStateDelayListeners;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.plugins.PluginsService;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchResponseUtils;
 import org.elasticsearch.snapshots.SnapshotInfo;
 import org.elasticsearch.snapshots.SnapshotState;
@@ -98,10 +101,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.SHARD_INACTIVITY_DURATION_TIME_SETTING;
 import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.SHARD_INACTIVITY_MONITOR_INTERVAL_TIME_SETTING;
-import static co.elastic.elasticsearch.stateless.lucene.SearchDirectoryTestUtils.getCacheService;
+import static co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectoryTestUtils.getCacheService;
 import static co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService.OBJECT_STORE_FILE_DELETION_DELAY;
 import static org.elasticsearch.cluster.coordination.FollowersChecker.FOLLOWER_CHECK_INTERVAL_SETTING;
 import static org.elasticsearch.cluster.coordination.FollowersChecker.FOLLOWER_CHECK_RETRY_COUNT_SETTING;
@@ -128,7 +132,7 @@ import static org.hamcrest.Matchers.notNullValue;
 public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
 
     /**
-     * A plugin that can block snapshot threads from opening {@link SearchIndexInput} instances
+     * A plugin that can block snapshot threads from opening {@link BlobCacheIndexInput} instances
      */
     public static class SnapshotBlockerStatelessPlugin extends Stateless {
 
@@ -139,27 +143,19 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
         }
 
         @Override
-        protected SearchDirectory createSearchDirectory(
+        protected IndexBlobStoreCacheDirectory createIndexBlobStoreCacheDirectory(
             StatelessSharedBlobCacheService cacheService,
-            CacheBlobReaderService cacheBlobReaderService,
-            MutableObjectStoreUploadTracker objectStoreUploadTracker,
             ShardId shardId
         ) {
-            return new TrackingSearchDirectory(cacheService, cacheBlobReaderService, objectStoreUploadTracker, shardId, snapshotBlocker);
+            return new TrackingIndexBlobStoreCacheDirectory(cacheService, shardId, snapshotBlocker);
         }
 
-        private static class TrackingSearchDirectory extends SearchDirectory {
+        private static class TrackingIndexBlobStoreCacheDirectory extends IndexBlobStoreCacheDirectory {
 
             public final Semaphore blocker;
 
-            TrackingSearchDirectory(
-                StatelessSharedBlobCacheService cacheService,
-                CacheBlobReaderService cacheBlobReaderService,
-                MutableObjectStoreUploadTracker objectStoreUploadTracker,
-                ShardId shardId,
-                Semaphore blocker
-            ) {
-                super(cacheService, cacheBlobReaderService, objectStoreUploadTracker, shardId);
+            TrackingIndexBlobStoreCacheDirectory(StatelessSharedBlobCacheService cacheService, ShardId shardId, Semaphore blocker) {
+                super(cacheService, shardId);
                 this.blocker = blocker;
             }
 
@@ -211,7 +207,8 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
             .put(LEADER_CHECK_RETRY_COUNT_SETTING.getKey(), "1")
             .put(Coordinator.PUBLISH_TIMEOUT_SETTING.getKey(), "1s")
             .put(TransportSettings.CONNECT_TIMEOUT.getKey(), "5s")
-            .put(StatelessClusterConsistencyService.DELAYED_CLUSTER_CONSISTENCY_INTERVAL_SETTING.getKey(), "100ms");
+            .put(StatelessClusterConsistencyService.DELAYED_CLUSTER_CONSISTENCY_INTERVAL_SETTING.getKey(), "100ms")
+            .put(disableIndexingDiskAndMemoryControllersNodeSettings());
     }
 
     public void testSnapshotRetainsCommits() throws Exception {
@@ -246,7 +243,7 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
                 String snapshotName = "test-snap-0";
                 CreateSnapshotResponse createSnapshotResponse = client().admin()
                     .cluster()
-                    .prepareCreateSnapshot("test-repo", snapshotName)
+                    .prepareCreateSnapshot(TEST_REQUEST_TIMEOUT, "test-repo", snapshotName)
                     .setIncludeGlobalState(true)
                     .setWaitForCompletion(true)
                     .get();
@@ -291,8 +288,10 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
 
             // Evict everything from the indexing node's cache
             logger.info("Evicting cache");
-            SearchDirectory indexShardSearchDirectory = SearchDirectory.unwrapDirectory(indexShard.store().directory());
-            getCacheService(indexShardSearchDirectory).forceEvict((key) -> true);
+            BlobStoreCacheDirectory indexShardBlobStoreCacheDirectory = BlobStoreCacheDirectory.unwrapDirectory(
+                indexShard.store().directory()
+            );
+            getCacheService(indexShardBlobStoreCacheDirectory).forceEvict((key) -> true);
 
             logger.info("Unblocking snapshot");
             plugin.unblockSnapshots();
@@ -326,12 +325,12 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
             indexDocs(indexName, randomIntBetween(1, 100));
         }
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNode);
+        var translogReplicator = getTranslogReplicator(indexNode);
 
         Set<TranslogReplicator.BlobTranslogFile> activeTranslogFiles = translogReplicator.getActiveTranslogFiles();
         assertThat(activeTranslogFiles.size(), greaterThan(0));
 
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        var indexObjectStoreService = getObjectStoreService(indexNode);
         assertTranslogBlobsExist(activeTranslogFiles, indexObjectStoreService);
 
         flush(indexName);
@@ -362,12 +361,12 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
             indexDocs(indexName, randomIntBetween(1, 100));
         }
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNode);
+        var translogReplicator = getTranslogReplicator(indexNode);
 
         Set<TranslogReplicator.BlobTranslogFile> activeTranslogFiles = translogReplicator.getActiveTranslogFiles();
         assertThat(activeTranslogFiles.size(), greaterThan(0));
 
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        var indexObjectStoreService = getObjectStoreService(indexNode);
         var blobContainer = indexObjectStoreService.getTranslogBlobContainer();
 
         internalCluster().stopNode(indexNode);
@@ -395,12 +394,12 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
             indexDocs(indexName, randomIntBetween(1, 100));
         }
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNode);
+        var translogReplicator = getTranslogReplicator(indexNode);
 
         Set<TranslogReplicator.BlobTranslogFile> activeTranslogFiles = translogReplicator.getActiveTranslogFiles();
         assertThat(activeTranslogFiles.size(), greaterThan(0));
 
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        var indexObjectStoreService = getObjectStoreService(indexNode);
         var blobContainer = indexObjectStoreService.getTranslogBlobContainer();
 
         Exception shardFailed = new Exception("Shard Failed");
@@ -451,12 +450,12 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
             indexDocs(indexName, randomIntBetween(1, 100));
         }
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNodeA);
+        var translogReplicator = getTranslogReplicator(indexNodeA);
 
         Set<TranslogReplicator.BlobTranslogFile> activeTranslogFiles = translogReplicator.getActiveTranslogFiles();
         assertThat(activeTranslogFiles.size(), greaterThan(0));
 
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNodeA);
+        var indexObjectStoreService = getObjectStoreService(indexNodeA);
         assertTranslogBlobsExist(activeTranslogFiles, indexObjectStoreService);
 
         long millisBeforeDeletions = System.currentTimeMillis();
@@ -498,8 +497,8 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
             indexDocs(indexNameB, randomIntBetween(1, 100));
         }
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNode);
-        var objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        var translogReplicator = getTranslogReplicator(indexNode);
+        var objectStoreService = getObjectStoreService(indexNode);
 
         Set<TranslogReplicator.BlobTranslogFile> activeTranslogFiles = translogReplicator.getActiveTranslogFiles();
         logger.info("--> activeTranslogFiles {}", activeTranslogFiles);
@@ -541,8 +540,6 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
                 .put(DISCOVERY_FIND_PEERS_INTERVAL_SETTING.getKey(), "100ms")
                 .put(LEADER_CHECK_INTERVAL_SETTING.getKey(), "100ms")
                 .put(LEADER_CHECK_RETRY_COUNT_SETTING.getKey(), "1")
-                // Ensure that the disk controller does not flush the indices accidentally
-                .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1))
                 .build()
         );
         ensureStableCluster(2);
@@ -561,22 +558,19 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
 
         SeqNoStats beforeSeqNoStats = client(indexNodeA).admin().indices().prepareStats(indexName).get().getShards()[0].getSeqNoStats();
 
-        String indexNodeB = startIndexNode(
-            // Ensure that the disk controller does not flush the indices accidentally
-            Settings.builder().put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1)).build()
-        );
+        String indexNodeB = startIndexNode();
 
         ensureStableCluster(3);
 
-        var translogReplicator = internalCluster().getInstance(TranslogReplicator.class, indexNodeA);
+        var translogReplicator = getTranslogReplicator(indexNodeA);
 
         Set<TranslogReplicator.BlobTranslogFile> activeTranslogFiles = translogReplicator.getActiveTranslogFiles();
         assertThat(activeTranslogFiles.size(), greaterThan(0));
 
         final MockTransportService indexNodeTransportService = MockTransportService.getInstance(indexNodeA);
         final MockTransportService masterTransportService = MockTransportService.getInstance(internalCluster().getMasterName());
-        ObjectStoreService indexNodeAObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNodeA);
-        ObjectStoreService indexNodeBObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNodeB);
+        ObjectStoreService indexNodeAObjectStoreService = getObjectStoreService(indexNodeA);
+        ObjectStoreService indexNodeBObjectStoreService = getObjectStoreService(indexNodeB);
         MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(indexNodeBObjectStoreService);
         repository.setBlockOnAnyFiles();
 
@@ -624,87 +618,6 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
 
         SeqNoStats afterSeqNoStats = client(indexNodeB).admin().indices().prepareStats(indexName).get().getShards()[0].getSeqNoStats();
         assertEquals(beforeSeqNoStats.getMaxSeqNo(), afterSeqNoStats.getMaxSeqNo());
-    }
-
-    public void testCommitsAreRetainedUntilFastRefreshScrollCloses() throws Exception {
-        var indexNode = startMasterAndIndexNode();
-        var indexName = SYSTEM_INDEX_NAME;
-        createSystemIndex(indexSettings(1, 0).put(IndexSettings.INDEX_FAST_REFRESH_SETTING.getKey(), true).build());
-        ensureGreen(indexName);
-
-        // awaits #793
-        // var shardCommitsContainer = getShardCommitsContainerForCurrentPrimaryTerm(indexName, indexNode, 0);
-        // var initialBlobs = listBlobsWithAbsolutePath(shardCommitsContainer);
-
-        int totalIndexedDocs = 0;
-
-        var numDocsBeforeOpenScroll = indexDocsAndFlush(indexName);
-        totalIndexedDocs += numDocsBeforeOpenScroll;
-
-        // We need to disregard the first empty commit
-        // awaits #793
-        // var blobsUsedForScroll = Sets.difference(listBlobsWithAbsolutePath(shardCommitsContainer), initialBlobs);
-
-        // must refresh since flush only advances internal searcher.
-        assertNoFailures(client().admin().indices().prepareRefresh(indexName).execute().get());
-
-        final AtomicReference<String> currentScrollId = new AtomicReference<>();
-        assertResponse(
-            prepareSearch(indexName).setQuery(matchAllQuery()).setSize(1).setScroll(TimeValue.timeValueMinutes(2)),
-            response -> currentScrollId.set(response.getScrollId())
-        );
-
-        var numberOfCommitsAfterOpeningScroll = randomIntBetween(3, 5);
-        for (int i = 0; i < numberOfCommitsAfterOpeningScroll; i++) {
-            totalIndexedDocs += indexDocsAndFlush(indexName);
-        }
-
-        // awaits #793
-        // var blobsBeforeForceMerge = listBlobsWithAbsolutePath(shardCommitsContainer);
-
-        forceMerge();
-
-        assertNoFailures(client().admin().indices().prepareRefresh(indexName).execute().get());
-
-        // todo: randomly clear cache to go directly to blob store.
-
-        // We request 1 document per search request
-        int numberOfScrollRequests = numDocsBeforeOpenScroll - 1;
-        for (int i = 0; i < numberOfScrollRequests; i++) {
-            assertResponse(client().prepareSearchScroll(currentScrollId.get()).setScroll(TimeValue.timeValueMinutes(2)), searchResponse -> {
-                var hit = searchResponse.getHits().getHits()[0];
-                assertThat(hit, is(notNullValue()));
-            });
-        }
-
-        final int finalTotalDocs = totalIndexedDocs;
-        assertThat(
-            SearchResponseUtils.getTotalHitsValue(prepareSearch(indexName).setQuery(matchAllQuery())),
-            equalTo((long) finalTotalDocs)
-        );
-
-        var indexNodeObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
-        // awaits #793
-        // assertBusy(
-        // () -> assertThat(
-        // indexNodeObjectStoreService.getCommitBlobsToDelete().stream().noneMatch(blobsUsedForScroll::contains),
-        // is(true)
-        // )
-        // );
-
-        client().prepareClearScroll().addScrollId(currentScrollId.get()).get().decRef();
-
-        // Trigger a new flush so the index shard cleans the unused files after the search node responds with the used commits
-        totalIndexedDocs += indexDocsAndFlush(indexName);
-
-        // awaits #793
-        // assertBusy(() -> assertThat(indexNodeObjectStoreService.getCommitBlobsToDelete().containsAll(blobsBeforeForceMerge), is(true)));
-
-        assertNoFailures(client().admin().indices().prepareRefresh(indexName).execute().get());
-        assertThat(
-            SearchResponseUtils.getTotalHitsValue(prepareSearch(indexName).setQuery(matchAllQuery())),
-            equalTo((long) totalIndexedDocs)
-        );
     }
 
     public void testStaleCommitsArePrunedAfterBeingReleased() throws Exception {
@@ -900,7 +813,7 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
             // Verify that there is no more new commit notifications sent
             int currentCount = countNewCommitNotifications.get();
             var indexShardCommitService = internalCluster().getInstance(StatelessCommitService.class, indexNode);
-            indexShardCommitService.runInactivityMonitor(() -> Long.MAX_VALUE);
+            indexShardCommitService.updateCommitUseTrackingForInactiveShards(() -> Long.MAX_VALUE);
             assertThat(countNewCommitNotifications.get(), equalTo(currentCount));
         }
 
@@ -927,39 +840,59 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
         reason = "verifying shutdown doesn't cause warnings",
         value = "co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService:WARN"
     )
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/1671")
     public void testDeleteIndexWhileNodeStopping() {
         var indexNode = startMasterAndIndexNode();
-        startSearchNode();
+        var searchNode = startSearchNode();
         var indexName = randomIdentifier();
         createIndex(indexName, 1, 1);
         ensureGreen(indexName);
         startMasterAndIndexNode(Settings.builder().put(HEARTBEAT_FREQUENCY.getKey(), "1s").put(MAX_MISSED_HEARTBEATS.getKey(), 1).build());
 
         indexDocsAndFlush(indexName);
+        indexDocsAndFlush(indexName);
 
         final var startBarrier = new CyclicBarrier(3);
 
-        final var deleteThread = new Thread(() -> {
-            safeAwait(startBarrier);
-            indexDocsAndFlush(indexName);
+        var client = client(searchNode);
+        final var indexDocsAndFlushThread = new Thread(() -> {
+            try {
+                safeAwait(startBarrier);
+                var bulkRequest = client.prepareBulk();
+                IntStream.rangeClosed(0, randomIntBetween(10, 20))
+                    .mapToObj(ignored -> new IndexRequest(indexName).source("field", randomUnicodeOfCodepointLengthBetween(1, 25)))
+                    .forEach(bulkRequest::add);
+                var bulkResponse = bulkRequest.get();
+                for (var item : bulkResponse.getItems()) {
+                    if (item.getFailure() != null) {
+                        // can happen while node is stopped
+                        assertThat(item.getFailure().getStatus(), equalTo(RestStatus.INTERNAL_SERVER_ERROR));
+                    }
+                }
+                flush(indexName); // asserts that shard failures are equal to RestStatus.SERVICE_UNAVAILABLE
+            } catch (Exception e) {
+                throw new AssertionError(e);
+            }
         });
 
-        final var doForceMerge = randomBoolean();
         final var forceMergeThread = new Thread(() -> {
-            safeAwait(startBarrier);
-            if (doForceMerge) {
-                indicesAdmin().prepareForceMerge(indexName).setMaxNumSegments(1).get();
+            try {
+                safeAwait(startBarrier);
+                client.admin().indices().prepareForceMerge(indexName).setMaxNumSegments(1).get();
+            } catch (ClusterBlockException | MasterNotDiscoveredException e) {
+                // can happen while node is stopped
+                assertThat(e.status(), equalTo(RestStatus.SERVICE_UNAVAILABLE));
+            } catch (Exception e) {
+                throw new AssertionError(e);
             }
         });
 
         MockLog.assertThatLogger(() -> {
             try {
-                deleteThread.start();
+                indexDocsAndFlushThread.start();
                 forceMergeThread.start();
                 safeAwait(startBarrier);
                 internalCluster().stopNode(indexNode);
-                deleteThread.join();
+                indexDocsAndFlushThread.join();
                 forceMergeThread.join();
             } catch (Exception e) {
                 fail(e);
@@ -1134,6 +1067,9 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
         var shardCommitsContainer = getShardCommitsContainerForCurrentPrimaryTerm(indexName, indexNode, 0);
         var initialBlobs = listBlobsWithAbsolutePath(shardCommitsContainer);
 
+        var indexShard = findIndexShard(indexName);
+        var initialGeneration = asInstanceOf(IndexEngine.class, indexShard.getEngineOrNull()).getCurrentGeneration();
+
         // Create some commits
         int commits = randomIntBetween(2, 5);
         for (int i = 0; i < commits; i++) {
@@ -1141,11 +1077,12 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
             refresh(indexName);
         }
 
+        final long recoveryGeneration = initialGeneration + commits;
+        logger.debug("--> search shard 2 will recover from generation {}", recoveryGeneration);
+
         AtomicBoolean enableChecks = new AtomicBoolean(true);
         CountDownLatch commitRegistrationStarted = new CountDownLatch(1);
-        MockRepository searchNode2Repository = ObjectStoreTestUtils.getObjectStoreMockRepository(
-            internalCluster().getInstance(ObjectStoreService.class, searchNode2)
-        );
+        MockRepository searchNode2Repository = ObjectStoreTestUtils.getObjectStoreMockRepository(getObjectStoreService(searchNode2));
         CountDownLatch getVbccChunkLatch = new CountDownLatch(1);
 
         Runnable blockGetVbccChunk = () -> MockTransportService.getInstance(indexNode)
@@ -1172,35 +1109,60 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
                 );
             });
 
+        final var blobsBeforeNewCommitNotificationResponse = new AtomicReference<Set<String>>();
+        final var searchShardRecovered = new CountDownLatch(1);
+
+        // Delay all new commit notifications on searchNode2 except the one to recover from
+        final var delayedNotifications = new LinkedBlockingQueue<CheckedRunnable<Exception>>();
+        final var newCommitNotificationReceived = new CountDownLatch(1);
+        final var delayNotifications = new AtomicBoolean(true);
+
+        logger.debug("--> start delaying new commit notifications on node [{}] for generations > {}", searchNode2, recoveryGeneration);
+        MockTransportService.getInstance(searchNode2)
+            .addRequestHandlingBehavior(TransportNewCommitNotificationAction.NAME + "[u]", (handler, request, channel, task) -> {
+                var notification = asInstanceOf(NewCommitNotificationRequest.class, request);
+                // we want to notification from recovery to be processed, as it is required to start the search shard
+                if (delayNotifications.get() && (recoveryGeneration < notification.getGeneration())) {
+                    logger.debug("--> delaying new commit notification for generation [{}]", notification.getGeneration());
+                    delayedNotifications.add(
+                        () -> handler.messageReceived(
+                            request,
+                            new TestTransportChannel(ActionListener.runBefore(new ChannelActionListener<>(channel), () -> {
+                                if (enableChecks.get()) {
+                                    // After the shard has recovered, but before sending any new commit notification response (that could
+                                    // trigger
+                                    // blob deletions), store the current blobs, so we later check that the blobs before the merge are
+                                    // intact.
+                                    // 30 seconds timeout to align with ensureGreen after we release the vbccChunkLatch
+                                    try {
+                                        assertTrue(searchShardRecovered.await(30, TimeUnit.SECONDS));
+                                    } catch (InterruptedException e) {
+                                        Thread.currentThread().interrupt();
+                                        fail(e, "safeAwait: interrupted waiting for CountDownLatch to reach zero");
+                                    }
+                                    blobsBeforeNewCommitNotificationResponse.set(listBlobsWithAbsolutePath(shardCommitsContainer));
+                                }
+                            })),
+                            task
+                        )
+                    );
+                    newCommitNotificationReceived.countDown();
+                    return;
+                }
+                logger.debug("--> handling new commit notification for generation [{}]", notification.getGeneration());
+                handler.messageReceived(request, channel, task);
+            });
+
         // Start the second search shard and waits for recovery to start
         updateIndexSettings(Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 2), indexName);
         safeAwait(commitRegistrationStarted);
         var blobsBeforeMerge = Sets.difference(listBlobsWithAbsolutePath(shardCommitsContainer), initialBlobs);
 
-        AtomicReference<Set<String>> blobsBeforeNewCommitNotificationResponse = new AtomicReference<>();
-        CountDownLatch searchShardRecovered = new CountDownLatch(1);
-        CountDownLatch newCommitNotificationReceived = new CountDownLatch(1);
-        MockTransportService.getInstance(searchNode2)
-            .addRequestHandlingBehavior(TransportNewCommitNotificationAction.NAME + "[u]", (handler, request, channel, task) -> {
-                handler.messageReceived(
-                    request,
-                    new TestTransportChannel(ActionListener.runBefore(new ChannelActionListener<>(channel), () -> {
-                        if (enableChecks.get()) {
-                            // After the shard has recovered, but before sending any new commit notification response (that could trigger
-                            // blob deletions), store the current blobs, so we later check that the blobs before the merge are intact.
-                            safeAwait(searchShardRecovered);
-                            blobsBeforeNewCommitNotificationResponse.set(listBlobsWithAbsolutePath(shardCommitsContainer));
-                        }
-                    })),
-                    task
-                );
-                newCommitNotificationReceived.countDown();
-            });
-
         // While search shard is recovering, create a new merged commit
+        logger.debug("--> force merging");
         forceMerge();
 
-        // Wait for the new commit notification to be processed on the search node
+        logger.debug("--> wait for the new commit notification to be processed on the search node");
         safeAwait(newCommitNotificationReceived);
 
         // Allow recovery to finish, and trigger check that files should not be deleted
@@ -1208,6 +1170,13 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
         getVbccChunkLatch.countDown();
         ensureGreen(indexName);
         searchShardRecovered.countDown();
+
+        logger.debug("--> stop delaying new commit notifications and process delayed notifications on node [{}]", searchNode2);
+        delayNotifications.set(false);
+        CheckedRunnable<Exception> delayedNotification;
+        while ((delayedNotification = delayedNotifications.poll()) != null) {
+            delayedNotification.run();
+        }
 
         assertBusy(() -> {
             assertThat(blobsBeforeNewCommitNotificationResponse.get(), notNullValue());
@@ -1279,8 +1248,11 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
     public void testLatestCommitDependenciesUsesTheRightGenerations() throws Exception {
         var maxNonUploadedCommits = randomIntBetween(4, 5);
         var nodeSettings = Settings.builder()
-            .put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true)
             .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), maxNonUploadedCommits)
+            // Set the inactivity monitor to a high value, and the inactivity threshold to a low value. This allows us to run it explicitly,
+            // but the inactivity monitor won't run on its own.
+            .put(StatelessCommitService.SHARD_INACTIVITY_MONITOR_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueMinutes(30))
+            .put(StatelessCommitService.SHARD_INACTIVITY_DURATION_TIME_SETTING.getKey(), TimeValue.timeValueMillis(1))
             .build();
         startMasterOnlyNode(nodeSettings);
         var indexNode = startIndexNode(nodeSettings);
@@ -1366,6 +1338,10 @@ public class StatelessFileDeletionIT extends AbstractStatelessIntegTestCase {
         );
 
         internalCluster().stopNode(searchNode);
+        StatelessCommitServiceTestUtils.updateCommitUseTrackingForInactiveShards(
+            internalCluster().getInstance(StatelessCommitService.class, indexNode),
+            () -> Long.MAX_VALUE
+        );
 
         // If all the search nodes leave the cluster we should keep the latest BCC around
         assertBusy(

@@ -146,9 +146,6 @@ tasks {
                 "indices.stats/30_segments/Segment Stats",
                 "indices.clone/10_basic/Clone index via API",
 
-                // AwaitsFix: https://github.com/elastic/elasticsearch-serverless/issues/541
-                "synonyms/90_synonyms_reloading_for_synset/Reload analyzers for specific synonym set",
-
                 // Adjusting the voting configuration is not possible in stateless
                 "cluster.voting_config_exclusions/*/*",
 
@@ -162,6 +159,7 @@ tasks {
                 "indices.simulate_template/*/*",
                 "simulate.ingest/10_basic/Test index templates with pipelines",
                 "simulate.ingest/10_basic/Test bad pipeline substitution",
+                "simulate.ingest/10_basic/Test mapping validation from templates",
                 // - Field Mappings
                 "indices.get_field_mapping/*/*",
                 // - Clone
@@ -195,6 +193,7 @@ tasks {
 
                 // Tests that depend on unavailable features (if possible, we should fix test)
                 "index/91_metrics_no_subobjects/*", // depends on a legacy template
+                "index/92_metrics_auto_subobjects/*",  // depends on a legacy template
                 "cat.templates/*/*", // depends on a legacy templates
 
                 // Tests relying on version filters - need to be ported to feature filters (ES-7317)
@@ -209,8 +208,15 @@ tasks {
                 "search.inner_hits/20_highlighting/Unified highlighter with stored fields",
                 "search.inner_hits/20_highlighting/Unified highlighter with stored fields and disabled source",
                 "search/330_fetch_fields/Test disable source",
-                "tsdb/20_mapping/disabled source",
+                "tsdb/20_mapping/disabled source is not supported",
                 "tsdb/20_mapping/source include/exclude",
+                "logsdb/20_source_mapping/disabled _source is not supported",
+                "logsdb/20_source_mapping/include/exclude is supported with stored _source",
+                "logsdb/20_source_mapping/include/exclude is not supported with synthetic _source",
+
+                //Tests rely on updating replicas which is not supported in Serverless
+                "indices.put_settings/10_basic/*",
+                "indices.put_settings/20_update_non_dynamic_settings/*"
 
             ).joinToString(",")
         )

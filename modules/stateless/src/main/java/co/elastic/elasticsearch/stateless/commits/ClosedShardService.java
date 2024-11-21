@@ -33,11 +33,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ClosedShardService {
     private static final Logger logger = LogManager.getLogger(ClosedShardService.class);
 
-    // Active shard reader information, per shard. Readers may continue running after a shard is technically closed.
+    /**
+     * Active shard reader information, per shard. Readers may continue running after a shard is technically closed.
+     *
+     * Essentially a globally available snapshot of any remaining SearchEngine readers at the time an IndexShard is closed.
+     * All commits for a particular index are cleared at once from the service when all readers are done and the SearchEngine closes.
+     */
     private final Map<ShardId, Set<PrimaryTermAndGeneration>> openReadersByShardId = new ConcurrentHashMap<>();
 
     /**
-     * Registers information about what serverless shard commits are in still in active use by search operations.
+     * Registers information about what serverless shard commits are still in active use by search operations.
      *
      * Expected to be called whenever an {@link org.elasticsearch.index.shard.IndexShard} closes with active readers.
      */
@@ -59,7 +64,8 @@ public class ClosedShardService {
     }
 
     /**
-     * Fetches what serverless commits were still in use when the shard was closed, if any.
+     * Fetches any serverless commits that are still in active use by readers even though the index shard was closed. Readers can continue
+     * past shard closure.
      *
      * @param shardId
      * @return A set of serverless commit identifiers. Can be empty.

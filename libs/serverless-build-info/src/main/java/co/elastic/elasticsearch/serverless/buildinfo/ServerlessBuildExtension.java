@@ -21,9 +21,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.Build;
 import org.elasticsearch.common.io.FileSystemUtils;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.env.BuildVersion;
 import org.elasticsearch.internal.BuildExtension;
+import org.elasticsearch.xcontent.XContentBuilder;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -73,8 +76,23 @@ public class ServerlessBuildExtension implements BuildExtension {
         }
 
         @Override
-        public int id() {
-            return -1;
+        public String toNodeMetadata() {
+            return "-1";
+        }
+
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            return builder.value(-1);
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeVInt(-1);
+        }
+
+        @Override
+        public String toString() {
+            return "<SERVERLESS>";
         }
     };
 
@@ -125,9 +143,20 @@ public class ServerlessBuildExtension implements BuildExtension {
     public BuildVersion fromVersionId(int versionId) {
         // TODO: reenable this once we deal with PersistedCLusterState (ES-7343)
         // assert versionId == -1 : "do not create serverless build version with real version ID";
-        if (versionId != -1) {
-            logger.warn("Attempted to create a BuildVersion with stateful build id: [{}]", versionId);
-        }
+        return SERVERLESS_BUILD_VERSION;
+    }
+
+    @Override
+    public BuildVersion fromString(String version) {
+        // TODO: reenable once all old reserved versions are overwritten
+        // assert version.equals("<SERVERLESS>")
+        return SERVERLESS_BUILD_VERSION;
+    }
+
+    @Override
+    public BuildVersion fromStream(StreamInput in) throws IOException {
+        int version = in.readVInt();
+        // assert version == -1 : "do not create serverless build version with real version ID";
         return SERVERLESS_BUILD_VERSION;
     }
 }

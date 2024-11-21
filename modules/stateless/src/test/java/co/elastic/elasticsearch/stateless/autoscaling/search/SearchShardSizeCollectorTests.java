@@ -18,8 +18,7 @@
 package co.elastic.elasticsearch.stateless.autoscaling.search;
 
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
-import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
-import co.elastic.elasticsearch.stateless.lucene.stats.ShardSize;
+import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader.ShardSize;
 import co.elastic.elasticsearch.stateless.lucene.stats.ShardSizeStatsClient;
 
 import org.elasticsearch.TransportVersion;
@@ -59,7 +58,9 @@ import static org.elasticsearch.common.unit.ByteSizeUnit.KB;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
@@ -78,10 +79,8 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
 
     private SearchShardSizeCollector service;
 
-    private final PrimaryTermAndGeneration primaryTermGeneration = new PrimaryTermAndGeneration(
-        randomNonNegativeLong(),
-        randomNonNegativeLong()
-    );
+    private final long primaryTerm = randomNonNegativeLong();
+    private final long generation = randomNonNegativeLong();
 
     @Before
     @Override
@@ -121,19 +120,23 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
 
     public void testPushMetrics() {
         var shardId = new ShardId("index-1", "_na_", 0);
-        var size = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var size = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTerm, generation);
 
         setUpShardSize(shardId, size);
         service.collectShardSize(shardId);
 
+        assertThat(service.getShardSize(shardId), nullValue());
+
         deterministicTaskQueue.runAllRunnableTasks();
         verify(publisher).publishSearchShardDiskUsage(eq("search_node_1"), eq(Map.of(shardId, size)), any());
+
+        assertThat(service.getShardSize(shardId), is(size)); // available once published
     }
 
     public void testGroupPublications() {
         var shardId1 = new ShardId("index-1", "_na_", 0);
         var shardId2 = new ShardId("index-2", "_na_", 0);
-        var size = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var size = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTerm, generation);
 
         setUpShardSize(shardId1, size);
         setUpShardSize(shardId2, size);
@@ -147,7 +150,7 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
 
     public void testPublishPeriodicallyEvenIfNoChanges() {
         var shardId = new ShardId("index-1", "_na_", 0);
-        var size = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var size = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTerm, generation);
 
         setUpShardSize(shardId, size);
         service.collectShardSize(shardId);
@@ -176,7 +179,7 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
     public void testPublicationIsRetried() {
         var shardId1 = new ShardId("index-1", "_na_", 0);
         var shardId2 = new ShardId("index-2", "_na_", 0);
-        var size = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var size = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTerm, generation);
 
         // all initial publications of single shard should fail
         doAnswer(invocation -> {
@@ -200,8 +203,8 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
     public void testPublishImmediatelyIfBigChangeIsDetected() {
         var shardId1 = new ShardId("index-1", "_na_", 0);
         var shardId2 = new ShardId("index-2", "_na_", 0);
-        var smallSize = new ShardSize(smallSizeBytes(), anySizeBytes(), primaryTermGeneration);
-        var bigSize = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var smallSize = new ShardSize(smallSizeBytes(), anySizeBytes(), primaryTerm, generation);
+        var bigSize = new ShardSize(largeSizeBytes(), anySizeBytes(), primaryTerm, generation);
 
         setUpShardSize(shardId1, smallSize);
         setUpShardSize(shardId2, bigSize);
@@ -221,7 +224,7 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
     public void testPublishAllDataIfMasterChanged() {
         var shardId1 = new ShardId("index-1", "_na_", 0);
         var shardId2 = new ShardId("index-2", "_na_", 0);
-        var size = new ShardSize(anySizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var size = new ShardSize(anySizeBytes(), anySizeBytes(), primaryTerm, generation);
 
         setUpAllShardSizes(Map.of(shardId1, size, shardId2, size));
 
@@ -239,7 +242,7 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
     public void testPublishAllDataIfInteractiveDataAgeSettingChanges() {
         var shardId1 = new ShardId("index-1", "_na_", 0);
         var shardId2 = new ShardId("index-2", "_na_", 0);
-        var size = new ShardSize(anySizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var size = new ShardSize(anySizeBytes(), anySizeBytes(), primaryTerm, generation);
 
         setUpAllShardSizes(Map.of(shardId1, size, shardId2, size));
 
@@ -268,7 +271,7 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
         ).build();
         var state2 = ClusterState.builder(state1).metadata(Metadata.builder().put(indexMetadata1, false).build()).build();
 
-        var size = new ShardSize(anySizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var size = new ShardSize(anySizeBytes(), anySizeBytes(), primaryTerm, generation);
         setUpAllShardSizes(
             Map.ofEntries(
                 Map.entry(new ShardId(indexMetadata1.getIndex(), 0), size),
@@ -332,7 +335,7 @@ public class SearchShardSizeCollectorTests extends ESTestCase {
             )
             .build();
 
-        var size = new ShardSize(anySizeBytes(), anySizeBytes(), primaryTermGeneration);
+        var size = new ShardSize(anySizeBytes(), anySizeBytes(), primaryTerm, generation);
         setUpAllShardSizes(Map.of(new ShardId(indexMetadata1.getIndex(), 0), size, new ShardId(indexMetadata2.getIndex(), 0), size));
 
         service.clusterChanged(new ClusterChangedEvent("test", state0, ClusterState.EMPTY_STATE));

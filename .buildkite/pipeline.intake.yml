@@ -6,94 +6,151 @@ env:
   IMAGE_TAG: "git-${BUILDKITE_COMMIT:0:12}"
   ES_SERVERLESS_IMAGE: "${ES_SERVERLESS_IMAGE-docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}}"
 
+# NOTE: This pipeline used to be shared with the pull request pipeline.
+# PRs now use the steps defined in pipeline.pr.yml
+
 steps:
+  # TODO: We can remove this step and all of the related if statements once this code has been out for a few days and we can switch the pipeline in catalog-info without breaking all PRs
+  - command: ".buildkite/pipeline.pr.yml.sh | buildkite-agent pipeline upload"
+    if: pipeline.slug == "elasticsearch-serverless-pull-request" || pipeline.slug == "elasticsearch-serverless-es-pr-check"
+
   - label: ":git: Validate elasticsearch submodule"
-    branches: 'main'
     command: ".buildkite/scripts/validate-submodule.sh"
-    agents:
-      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
-      memory: "4G"
+    if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check" && build.branch == "main"
+
+  - label: ":git: Build info"
+    command: ".buildkite/scripts/show-build-info.sh"
+    if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
 
   - label: ":java: Run serverless Elasticsearch functional tests"
-    if: build.env('GITOPS_ENV') == 'dev'
+    if: build.env('GITOPS_ENV') == 'dev' && pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
     command: ".buildkite/scripts/run-gradle.sh check -Dtests.upgrade.skip=true"
     agents:
       provider: "gcp"
-      machineType: "n1-standard-32"
+      machineType: "n1-standard-64"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
+      buildDirectory: /dev/shm/bk
+      zones: us-central1-a,us-central1-b,us-central1-c
+    env:
+      GRADLE_MAX_WORKERS: "10"
     notify:
       - github_commit_status:
           context: "elasticsearch-serverless/functional tests"
 
   - label: ":pipeline: :arrow_up: Upload upgrade test steps"
     command: ".buildkite/scripts/run-upgrade-tests.sh"
+    if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
 
   - label: ":s3: Run AWS S3 third party tests"
-    if: build.env('GITOPS_ENV') == 'dev'
+    if: build.env('GITOPS_ENV') == 'dev' && pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
     command: ".buildkite/scripts/run-s3-third-party-tests.sh"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
     notify:
       - github_commit_status:
           context: "elasticsearch-serverless/third party tests"
 
   - label: ":docker: Publish docker images"
     key: docker-publish
-    branches: 'main patch/*'
     cancel_on_build_failing: true
     command: ".buildkite/scripts/publish-docker-artifacts.sh"
+    if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250
 
-  - label: ":rocket: Run E2E tests to check the component update"
-    if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//)
-    trigger: service-or-stack-update-e2e-tests
+  - label: ":serverless: Run synthetics tests against Serverless dev env (elasticsearch:${BUILDKITE_COMMIT:0:12})"
+    if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//) && pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+    trigger: serverless-devenv-synthetics
     depends_on: docker-publish
     build:
       env:
-        SERVICE: elasticsearch
-        VERSION: "${BUILDKITE_COMMIT:0:12}"
+        SERVICE_OVERRIDES: "elasticsearch:${BUILDKITE_COMMIT:0:12}"
 
-  - label: ":rocket: Run Kibana E2E tests"
-    if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//)
+  - label: ":pipeline: Trigger Kibana E2E tests"
+    if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//) && pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
     command: ".buildkite/scripts/run-e2e-kibana-tests.sh"
     agents:
       image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
       memory: "4G"
 
-  - label: ":k8s: :java: Run Elasticsearch E2E tests"
-    trigger: elasticsearch-serverless-e2e-tests-qa
-    depends_on: docker-publish
-    branches: 'main patch/*'
-    build:
-      message: "${BUILDKITE_MESSAGE}"
-      commit: "${BUILDKITE_COMMIT}"
-      branch: "${BUILDKITE_BRANCH}"
-      env:
-        SKIP_DOCKER: "${SKIP_DOCKER}"
+  - group: ":k8s: Serverless end-to-end tests"
+    steps:
+      - label: ":aws: :java: Test newly created project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            DEPLOY_ID: "ess-e2e-ci-aws-${IMAGE_TAG}"
+            REGION_ID: "aws-eu-west-1"
+      - label: ":aws: :java: Test upgraded project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            UPGRADED_PROJECT: true
+            DEPLOY_ID: "ess-e2e-ci-aws-upgrade-${IMAGE_TAG}"
+            REGION_ID: "aws-eu-west-1"
+            IMAGE_OVERRIDE: ""
+      - label: ":azure: :java: Test newly created project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            DEPLOY_ID: "ess-e2e-ci-azure-${IMAGE_TAG}"
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            REGION_ID: "azure-eastus2"
+      - label: ":azure: :java: Test upgraded project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            UPGRADED_PROJECT: true
+            DEPLOY_ID: "ess-e2e-ci-azure-upgrade-${IMAGE_TAG}"
+            REGION_ID: "azure-eastus2"
+            IMAGE_OVERRIDE: ""
+    notify:
+      - github_commit_status:
+          context: "elasticsearch-serverless/e2e tests"
 
-  - wait
+  - wait: ~
 
   - label: ":argo: Promote build using gpctl"
     trigger: gpctl-promote
-    if: build.env('GITOPS_ENV') != 'dev' || build.branch == 'main'
+    if: (build.env('GITOPS_ENV') != 'dev' || build.branch == 'main') && pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
     build:
       env:
         REMOTE_SERVICE_CONFIG: $GPCTL_CONFIG
         SERVICE_COMMIT_HASH: $BUILDKITE_COMMIT
 
   - label: ":git: Push promoted build tags"
-    if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main'
+    if: build.env('GITOPS_ENV') == 'dev' && build.branch == 'main' && pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
     command: ".buildkite/scripts/tag-promoted-commit.sh"
     agents:
       provider: "gcp"
       machineType: "n1-standard-4"
       image: family/elasticsearch-ubuntu-2022
-      diskSizeGb: 250

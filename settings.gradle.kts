@@ -19,7 +19,7 @@ pluginManagement {
 }
 
 plugins {
-    id("com.gradle.develocity") version ("3.17.4")
+    id("com.gradle.develocity") version ("3.18.1")
     id("elasticsearch.java-toolchain")
 }
 
@@ -99,6 +99,7 @@ include(":modules:serverless-no-wait-for-active-shards")
 include(":libs:serverless-build-info")
 include(":libs:serverless-metrics")
 include(":libs:serverless-shared-constants")
+include(":libs:serverless-stateless-api")
 include(":libs:serverless-xpack-template-resources")
 
 /*
@@ -149,6 +150,7 @@ includeStatefulTests(":x-pack:plugin:esql:qa:server:multi-node", includeYamlTest
 includeStatefulTests(":x-pack:plugin:esql:qa:server:mixed-cluster", includeYamlTests = true, includeJavaTests = true)
 includeStatefulTests(":x-pack:plugin:sql:qa:server:single-node", includeYamlTests = false, includeJavaTests = true)
 includeStatefulTests(":x-pack:plugin:downsample:qa:rest", includeYamlTests = true, includeJavaTests = false)
+includeStatefulTests(":x-pack:plugin:fleet:qa:rest", includeYamlTests = true, includeJavaTests = false)
 
 fun includeStatefulTests(projectPath: String, includeYamlTests: Boolean, includeJavaTests: Boolean) {
     include(":qa:stateful${projectPath}")

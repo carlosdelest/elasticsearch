@@ -57,8 +57,7 @@ public class ServerlessOperatorOnlyRegistry implements OperatorOnlyRegistry {
                 );
             } else {
                 assert Scope.PUBLIC.equals(scope);
-                restRequest.markPathRestricted("serverless");
-                logger.trace("Marked request for uri [{}] as restricted for serverless", restRequest.uri());
+                logger.trace("Request for uri [{}] with method [{}] is public in serverless mode", restRequest.uri(), restRequest.method());
             }
         } catch (ElasticsearchException e) {
             throw e;

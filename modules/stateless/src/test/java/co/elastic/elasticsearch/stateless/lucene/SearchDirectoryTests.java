@@ -17,13 +17,12 @@
 
 package co.elastic.elasticsearch.stateless.lucene;
 
-import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.cache.reader.CacheBlobReader;
 import co.elastic.elasticsearch.stateless.cache.reader.CacheBlobReaderService;
 import co.elastic.elasticsearch.stateless.cache.reader.MutableObjectStoreUploadTracker;
-import co.elastic.elasticsearch.stateless.cache.reader.ObjectStoreUploadTracker;
 import co.elastic.elasticsearch.stateless.commits.BlobLocation;
+import co.elastic.elasticsearch.stateless.commits.InternalFilesReplicatedRanges;
 import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
 import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
 import co.elastic.elasticsearch.stateless.test.FakeStatelessNode;
@@ -31,6 +30,7 @@ import co.elastic.elasticsearch.stateless.test.FakeStatelessNode;
 import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.blobcache.BlobCacheMetrics;
 import org.elasticsearch.blobcache.BlobCacheUtils;
 import org.elasticsearch.blobcache.common.ByteRange;
@@ -58,10 +58,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.function.LongConsumer;
 import java.util.function.LongFunction;
 import java.util.stream.Collectors;
 
+import static co.elastic.elasticsearch.stateless.commits.BlobLocationTestUtils.createBlobLocation;
 import static org.elasticsearch.blobcache.BlobCacheUtils.toIntBytes;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
@@ -76,7 +78,7 @@ public class SearchDirectoryTests extends ESTestCase {
     }
 
     /**
-     * Test that SearchIndexInput can be read from the cache while the blob in object store keeps growing in size.
+     * Test that BlobCacheIndexInput can be read from the cache while the blob in object store keeps growing in size.
      *
      * In production, the batched compound commits are expanded in cache by appending compound commits. For simplicity, this test appends
      * Lucene files instead.
@@ -103,23 +105,28 @@ public class SearchDirectoryTests extends ESTestCase {
                 CacheBlobReaderService cacheBlobReaderService,
                 MutableObjectStoreUploadTracker objectStoreUploadTracker
             ) {
-                var customCacheBlobReaderService = new CacheBlobReaderService(nodeSettings, sharedCacheService, client) {
+                var customCacheBlobReaderService = new CacheBlobReaderService(nodeSettings, sharedCacheService, client, threadPool) {
                     @Override
                     public CacheBlobReader getCacheBlobReader(
                         ShardId shardId,
                         LongFunction<BlobContainer> blobContainer,
                         BlobLocation location,
-                        ObjectStoreUploadTracker objectStoreUploadTracker,
+                        MutableObjectStoreUploadTracker objectStoreUploadTracker,
                         LongConsumer bytesReadFromObjectStore,
-                        LongConsumer bytesReadFromIndexing
+                        LongConsumer bytesReadFromIndexing,
+                        BlobCacheMetrics.CachePopulationReason cachePopulationReason,
+                        Executor objectStoreFetchExecutor
                     ) {
                         var originalCacheBlobReader = cacheBlobReaderService.getCacheBlobReader(
                             shardId,
                             blobContainer,
                             location,
-                            objectStoreUploadTracker,
+                            // The test expects to go through the blob store always
+                            MutableObjectStoreUploadTracker.ALWAYS_UPLOADED,
                             bytesReadFromObjectStore,
-                            bytesReadFromIndexing
+                            bytesReadFromIndexing,
+                            cachePopulationReason,
+                            objectStoreFetchExecutor
                         );
                         return new CacheBlobReader() {
                             @Override
@@ -130,8 +137,8 @@ public class SearchDirectoryTests extends ESTestCase {
                             }
 
                             @Override
-                            public InputStream getRangeInputStream(long position, int length) throws IOException {
-                                return originalCacheBlobReader.getRangeInputStream(position, length);
+                            public void getRangeInputStream(long position, int length, ActionListener<InputStream> listener) {
+                                originalCacheBlobReader.getRangeInputStream(position, length, listener);
                             }
                         };
                     }
@@ -145,13 +152,7 @@ public class SearchDirectoryTests extends ESTestCase {
                 Settings settings,
                 ThreadPool threadPool
             ) {
-                return new StatelessSharedBlobCacheService(
-                    nodeEnvironment,
-                    settings,
-                    threadPool,
-                    Stateless.SHARD_READ_THREAD_POOL,
-                    BlobCacheMetrics.NOOP
-                ) {
+                return new StatelessSharedBlobCacheService(nodeEnvironment, settings, threadPool, BlobCacheMetrics.NOOP) {
                     @Override
                     protected boolean assertOffsetsWithinFileLength(long offset, long length, long fileLength) {
                         // this test tries to read beyond the file length
@@ -162,7 +163,7 @@ public class SearchDirectoryTests extends ESTestCase {
         }) {
             final var primaryTerm = randomLongBetween(1L, 10L);
             final var indexDirectory = IndexDirectory.unwrapDirectory(node.indexingStore.directory());
-            final var searchDirectory = indexDirectory.getSearchDirectory();
+            final var searchDirectory = SearchDirectory.unwrapDirectory(node.searchStore.directory());
             final var blobContainer = searchDirectory.getBlobContainer(primaryTerm);
             final int minFileSize = CodecUtil.footerLength();
 
@@ -222,26 +223,23 @@ public class SearchDirectoryTests extends ESTestCase {
 
                 logger.debug("--> update commit with file [{}]", fileName);
                 // bypass index directory so that files remain on disk and can be read again by ChecksumedFilesInputStream
-                searchDirectory.updateLatestUploadInfo(
-                    randomBoolean() ? null : new PrimaryTermAndGeneration(primaryTerm, generation),
-                    new PrimaryTermAndGeneration(primaryTerm, generation),
-                    node.clusterService.localNode().getId()
-                );
                 searchDirectory.updateCommit(
                     new StatelessCompoundCommit(
                         node.shardId,
-                        primaryTerm,
-                        generation,
+                        new PrimaryTermAndGeneration(primaryTerm, generation),
+                        1L,
                         node.node.getId(),
                         files.stream()
                             .collect(
                                 Collectors.toUnmodifiableMap(
                                     ChecksummedFile::fileName,
-                                    f -> new BlobLocation(primaryTerm, blobName, f.fileOffset, f.fileLength)
+                                    f -> createBlobLocation(primaryTerm, 1L, f.fileOffset, f.fileLength)
                                 )
                             ),
                         blobLength,
-                        files.stream().map(ChecksummedFile::fileName).collect(Collectors.toSet())
+                        files.stream().map(ChecksummedFile::fileName).collect(Collectors.toSet()),
+                        0L,
+                        InternalFilesReplicatedRanges.EMPTY
                     )
                 );
                 generation += 1L;
@@ -252,14 +250,14 @@ public class SearchDirectoryTests extends ESTestCase {
 
                 logger.debug("--> open file [{}] from cache", fileName);
                 var input = searchDirectory.openInput(file.fileName(), IOContext.DEFAULT);
-                assertThat(input, instanceOf(SearchIndexInput.class));
+                assertThat(input, instanceOf(BlobCacheIndexInput.class));
 
                 logger.debug("--> now fully read file [{}] from cache and verify its checksum", file.fileName());
                 CodecUtil.checksumEntireFile(input);
                 assertThat(CodecUtil.retrieveChecksum(input), equalTo(file.fileChecksum()));
 
                 logger.debug("--> verify cache file");
-                var cacheFile = SearchDirectoryTestUtils.getCacheFile((SearchIndexInput) input);
+                var cacheFile = BlobStoreCacheDirectoryTestUtils.getCacheFile((BlobCacheIndexInput) input);
                 assertBusyCacheFile(cacheFile, file, blobName, blobLength);
 
                 if (previousFile != null) {
@@ -292,7 +290,7 @@ public class SearchDirectoryTests extends ESTestCase {
                 previousInput = input;
                 previousFile = file;
             }
-            assertThat(indexDirectory.getSearchDirectory().getCacheService().getStats().evictCount(), equalTo(0L));
+            assertThat(indexDirectory.getBlobStoreCacheDirectory().getCacheService().getStats().evictCount(), equalTo(0L));
         }
     }
 

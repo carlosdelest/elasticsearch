@@ -17,10 +17,12 @@
 
 package co.elastic.elasticsearch.metering.action;
 
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
+
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.transport.TransportService;
 
 public class TransportGetMeteringStatsForSecondaryUserAction extends TransportGetMeteringStatsAction {
@@ -31,7 +33,7 @@ public class TransportGetMeteringStatsForSecondaryUserAction extends TransportGe
         ActionFilters actionFilters,
         ClusterService clusterService,
         IndexNameExpressionResolver indexNameExpressionResolver,
-        MeteringIndexInfoService meteringIndexInfoService
+        SampledClusterMetricsService clusterMetricsService
     ) {
         super(
             GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
@@ -39,7 +41,7 @@ public class TransportGetMeteringStatsForSecondaryUserAction extends TransportGe
             actionFilters,
             clusterService,
             indexNameExpressionResolver,
-            meteringIndexInfoService
+            clusterMetricsService
         );
     }
 }

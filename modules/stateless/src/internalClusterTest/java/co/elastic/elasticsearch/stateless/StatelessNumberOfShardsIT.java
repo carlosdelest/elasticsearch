@@ -78,7 +78,7 @@ public class StatelessNumberOfShardsIT extends AbstractStatelessIntegTestCase {
         request.indexTemplate(
             ComposableIndexTemplate.builder()
                 .indexPatterns(List.of(dataStreamName + "*"))
-                .template(new Template(indexSettings(1, 1).build(), CompressedXContent.fromJSON("""
+                .template(Template.builder().settings(indexSettings(1, 1)).mappings(CompressedXContent.fromJSON("""
                     {
                       "properties": {
                         "@timestamp": {
@@ -89,17 +89,20 @@ public class StatelessNumberOfShardsIT extends AbstractStatelessIntegTestCase {
                           "type": "text"
                         }
                       }
-                    }"""), null, null))
+                    }""")))
                 .dataStreamTemplate(new ComposableIndexTemplate.DataStreamTemplate())
                 .build()
         );
         assertAcked(client().execute(TransportPutComposableIndexTemplateAction.TYPE, request));
 
-        final var createDataStreamRequest = new CreateDataStreamAction.Request(dataStreamName);
+        final var createDataStreamRequest = new CreateDataStreamAction.Request(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, dataStreamName);
         assertAcked(client().execute(CreateDataStreamAction.INSTANCE, createDataStreamRequest));
 
         assertResponse(
-            client().execute(GetDataStreamAction.INSTANCE, new GetDataStreamAction.Request(new String[] { dataStreamName })),
+            client().execute(
+                GetDataStreamAction.INSTANCE,
+                new GetDataStreamAction.Request(TEST_REQUEST_TIMEOUT, new String[] { dataStreamName })
+            ),
             response -> {
                 final String backingIndexName = response.getDataStreams()
                     .iterator()

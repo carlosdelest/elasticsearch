@@ -20,13 +20,21 @@ package co.elastic.elasticsearch.stateless.objectstore;
 import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.commits.BatchedCompoundCommit;
 import co.elastic.elasticsearch.stateless.commits.BlobFile;
+import co.elastic.elasticsearch.stateless.commits.BlobFileRanges;
+import co.elastic.elasticsearch.stateless.commits.BlobLocation;
 import co.elastic.elasticsearch.stateless.commits.StaleCompoundCommit;
 import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
 import co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommit;
-import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
+import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
+import co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectory;
+import co.elastic.elasticsearch.stateless.lucene.IndexBlobStoreCacheDirectory;
 
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionRunnable;
+import org.elasticsearch.action.support.RefCountingListener;
+import org.elasticsearch.action.support.SubscribableListener;
 import org.elasticsearch.cluster.metadata.RepositoryMetadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -38,14 +46,16 @@ import org.elasticsearch.common.blobstore.support.BlobMetadata;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.component.Lifecycle;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.InputStreamStreamInput;
-import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.lucene.store.InputStreamIndexInput;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
+import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.common.util.concurrent.PrioritizedThrottledTaskRunner;
+import org.elasticsearch.common.util.set.Sets;
+import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.PathUtils;
 import org.elasticsearch.core.Releasables;
 import org.elasticsearch.core.SuppressForbidden;
@@ -61,24 +71,29 @@ import org.elasticsearch.repositories.RepositoryStats;
 import org.elasticsearch.repositories.blobstore.BlobStoreRepository;
 import org.elasticsearch.threadpool.ThreadPool;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit.blobNameFromGeneration;
+import static co.elastic.elasticsearch.stateless.commits.BlobFileRanges.computeBlobFileRanges;
 import static co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit.parseGenerationFromBlobName;
 import static co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit.startsWithBlobPrefix;
 import static org.elasticsearch.core.Strings.format;
@@ -148,6 +163,14 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
         }
     }
 
+    public record IndexingShardState(
+        BatchedCompoundCommit latestCommit,
+        Set<BlobFile> unreferencedBlobs,
+        Map<String, BlobFileRanges> blobFileRanges
+    ) {
+        public static IndexingShardState EMPTY = new IndexingShardState(null, Set.of(), Map.of());
+    }
+
     public static final Setting<ObjectStoreType> TYPE_SETTING = Setting.enumSetting(
         ObjectStoreType.class,
         "stateless.object_store.type",
@@ -211,7 +234,6 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
 
     private final ClusterService clusterService;
 
-    @Inject
     public ObjectStoreService(
         Settings settings,
         RepositoriesService repositoriesService,
@@ -324,13 +346,13 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
         return objectStore.stats();
     }
 
-    private static RepositoryMetadata getRepositoryMetadata(Settings settings) {
+    protected Settings getRepositorySettings(ObjectStoreType type) {
+        return type.createRepositorySettings(BUCKET_SETTING.get(settings), CLIENT_SETTING.get(settings), BASE_PATH_SETTING.get(settings));
+    }
+
+    private RepositoryMetadata getRepositoryMetadata(Settings settings) {
         ObjectStoreType type = TYPE_SETTING.get(settings);
-        return new RepositoryMetadata(
-            Stateless.NAME,
-            type.toString(),
-            type.createRepositorySettings(BUCKET_SETTING.get(settings), CLIENT_SETTING.get(settings), BASE_PATH_SETTING.get(settings))
-        );
+        return new RepositoryMetadata(Stateless.NAME, type.toString(), getRepositorySettings(type));
     }
 
     @Override
@@ -398,7 +420,7 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
             l -> new BatchedCommitFileUploadTask(
                 commitStartNanos,
                 pendingCommit,
-                SearchDirectory.unwrapDirectory(directory).getBlobContainer(primaryTerm),
+                BlobStoreCacheDirectory.unwrapDirectory(directory).getBlobContainer(primaryTerm),
                 l
             )
         );
@@ -457,6 +479,113 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
         }
     }
 
+    /**
+     * List all blobs located in a blob container and return a sorted map of blob's term/generation with their {@link BlobMetadata}.
+     *
+     * @param blobPrimaryTerm   the primary term to associate to blobs (used to build the term/generation key)
+     * @param blobContainer     the blob container to list blobs from
+     * @return                  a sorted map of blob's {@link PrimaryTermAndGeneration} and their  {@link BlobMetadata}
+     * @throws IOException      if an I/O exception occurs while listing blobs
+     */
+    // package private for testing
+    static NavigableMap<PrimaryTermAndGeneration, BlobMetadata> listBlobs(long blobPrimaryTerm, BlobContainer blobContainer)
+        throws IOException {
+        var blobs = blobContainer.listBlobs(OperationPurpose.INDICES);
+        logger.trace(() -> format("listing blobs in [%s]: %s", blobContainer.path().buildAsString(), blobs));
+        var map = new TreeMap<PrimaryTermAndGeneration, BlobMetadata>();
+        for (var blob : blobs.entrySet()) {
+            if (startsWithBlobPrefix(blob.getKey())) {
+                map.put(new PrimaryTermAndGeneration(blobPrimaryTerm, parseGenerationFromBlobName(blob.getKey())), blob.getValue());
+            } else {
+                logger.warn(
+                    () -> format(
+                        "found object store file which does not match compound commit file naming pattern [%s] in [%s]",
+                        blob.getKey(),
+                        blobContainer.path().buildAsString()
+                    )
+                );
+            }
+        }
+        return Collections.unmodifiableNavigableMap(map);
+    }
+
+    /**
+     * Read a batched compound commit blob identified by a term/generation from the object store, fetching bytes using a prewarming instance
+     * from the provided {@link IndexBlobStoreCacheDirectory} and therefore populating the cache for every region that contains a compound
+     * commit header.
+     *
+     * @param directory         the {@link IndexBlobStoreCacheDirectory} used to read the blob in the object store
+     * @param blobTermAndGen    the term/generation of the blob to read
+     * @param maxBlobLength     the blob's maximum length to read
+     * @param exactBlobLength   a flag indicating that the max. blob length is equal to the real blob length in the object store (flag is
+     *                          {@code true}) or not (flag is {@code false}) in which case we are OK to not read the blob fully. This flag
+     *                          is used in assertions only.
+     * @return                  a {@link BatchedCompoundCommit}
+     * @throws IOException      if an I/O error occurs
+     */
+    private static BatchedCompoundCommit readBatchedCompoundCommitUsingCache(
+        IndexBlobStoreCacheDirectory directory,
+        IOContext context,
+        PrimaryTermAndGeneration blobTermAndGen,
+        long maxBlobLength,
+        boolean exactBlobLength
+    ) throws IOException {
+        assert directory.getBlobContainer(blobTermAndGen.primaryTerm()) != null;
+        var blobName = StatelessCompoundCommit.blobNameFromGeneration(blobTermAndGen.generation());
+        logger.trace(
+            () -> format(
+                "%s reading blob [name=%s, length=%d]%s from object store using cache",
+                directory.getShardId(),
+                blobName,
+                maxBlobLength,
+                blobTermAndGen
+            )
+        );
+        var dir = directory.createNewInstance();
+        dir.updateMetadata(
+            Map.of(blobName, new BlobFileRanges(new BlobLocation(new BlobFile(blobName, blobTermAndGen), 0L, maxBlobLength))),
+            maxBlobLength
+        );
+        return BatchedCompoundCommit.readFromStore(blobName, maxBlobLength, (ignored, offset, length) -> {
+            assert offset + length <= maxBlobLength : offset + " + " + length + " > " + maxBlobLength;
+            var input = dir.openInput(blobName, context);
+            try {
+                return new InputStreamStreamInput(new InputStreamIndexInput(input.slice(blobName, offset, length), length) {
+                    @Override
+                    public void close() throws IOException {
+                        IOUtils.close(super::close, input);
+                    }
+                }, length);
+            } catch (IOException e) {
+                IOUtils.closeWhileHandlingException(input);
+                throw e;
+            }
+        }, exactBlobLength);
+    }
+
+    /**
+     * Find the latest batched compound commit in the provided map and read it using
+     * {@link #readBatchedCompoundCommitUsingCache(IndexBlobStoreCacheDirectory, IOContext, PrimaryTermAndGeneration, long, boolean)}
+     *
+     * @param directory the {@link IndexBlobStoreCacheDirectory} to use for reading the blob
+     * @param blobs     a sorted map of batched compound commit blobs
+     * @return          a {@link BatchedCompoundCommit}
+     * @throws IOException if an I/O exception occurs while reading the blob using the cache
+     */
+    // package private for testing
+    static BatchedCompoundCommit readLatestBcc(
+        IndexBlobStoreCacheDirectory directory,
+        IOContext context,
+        NavigableMap<PrimaryTermAndGeneration, BlobMetadata> blobs
+    ) throws IOException {
+        var lastEntry = blobs.lastEntry();
+        if (lastEntry != null) {
+            assert startsWithBlobPrefix(lastEntry.getValue().name()) : lastEntry.getValue();
+            return readBatchedCompoundCommitUsingCache(directory, context, lastEntry.getKey(), lastEntry.getValue().length(), true);
+        }
+        return null;
+    }
+
     // Package private for testing
     static BatchedCompoundCommit readNewestBcc(BlobContainer blobContainer, Map<String, BlobMetadata> allBlobs) throws IOException {
 
@@ -478,7 +607,8 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
             blobName,
             blobLength,
             // The following issues a new call to blobstore for each CC as suggested by the BlobReader interface.
-            (name, offset, length) -> new InputStreamStreamInput(blobContainer.readBlob(OperationPurpose.INDICES, name, offset, length))
+            (name, offset, length) -> new InputStreamStreamInput(blobContainer.readBlob(OperationPurpose.INDICES, name, offset, length)),
+            true
         );
     }
 
@@ -516,67 +646,161 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
         return latestBcc;
     }
 
-    public static BatchedCompoundCommit readBatchedCompoundCommit(BlobContainer blobContainer, long generation) throws IOException {
-        // TODO save a GET here
-        var blobName = StatelessCompoundCommit.blobNameFromGeneration(generation);
-        var blobs = blobContainer.listBlobsByPrefix(OperationPurpose.INDICES, blobName);
-        assert blobs != null && blobs.size() == 1 : blobName + " not found in " + blobs;
+    public static void readIndexingShardState(
+        IndexBlobStoreCacheDirectory directory,
+        IOContext context,
+        BlobContainer shardContainer,
+        long primaryTerm,
+        ThreadPool threadPool,
+        boolean useReplicatedRanges,
+        ActionListener<IndexingShardState> listener
+    ) {
+        assert ThreadPool.assertCurrentThreadPool(ThreadPool.Names.GENERIC);
+        SubscribableListener
+            // List the existing blob containers (with their primary terms) in the object store
+            .<List<Tuple<Long, BlobContainer>>>newForked(l -> ActionListener.completeWith(l, () -> {
+                var blobContainersWithTerms = getContainersToSearch(shardContainer, primaryTerm);
+                if (logger.isTraceEnabled() && blobContainersWithTerms.isEmpty()) {
+                    logger.trace(
+                        () -> format(
+                            "%s no blob containers found for recovery in [%s]",
+                            directory.getShardId(),
+                            shardContainer.path().buildAsString()
+                        )
+                    );
+                }
+                return blobContainersWithTerms;
+            }))
+            // Build a list of all blobs in the object store that are in a container with term <= primary term
+            .<NavigableMap<PrimaryTermAndGeneration, BlobMetadata>>andThen((l, blobContainersWithTerms) -> {
+                if (blobContainersWithTerms.isEmpty()) {
+                    ActionListener.completeWith(l, Collections::emptyNavigableMap);
+                    return;
+                }
+                var blobs = new ConcurrentSkipListMap<PrimaryTermAndGeneration, BlobMetadata>();
+                try (
+                    var listeners = new RefCountingListener(
+                        // Fork back to generic thread pool to continue the recovery (or fail the recovery if a listing throws)
+                        ActionListener.wrap(ignored -> threadPool.generic().execute(ActionRunnable.supply(l, () -> blobs)), l::onFailure)
+                    )
+                ) {
+                    for (var blobContainerWithTerm : blobContainersWithTerms) {
+                        // use the prewarm thread pool to avoid exceeding the connection pool size with blob listings
+                        threadPool.executor(Stateless.PREWARM_THREAD_POOL)
+                            .execute(
+                                ActionRunnable.run(
+                                    listeners.acquire(),
+                                    () -> blobs.putAll(listBlobs(blobContainerWithTerm.v1(), blobContainerWithTerm.v2()))
+                                )
+                            );
+                    }
+                }
+            })
+            .<IndexingShardState>andThen((l, blobs) -> {
+                assert ThreadPool.assertCurrentThreadPool(ThreadPool.Names.GENERIC);
 
-        var blobMetadata = blobs.get(blobName);
-        if (blobMetadata != null) {
-            var batchedCompoundCommit = readBatchedCompoundCommitFromStore(blobContainer, blobMetadata.name(), blobMetadata.length());
-            logLatestBcc(batchedCompoundCommit, blobContainer);
-            return batchedCompoundCommit;
-        }
-        assert false : blobName + " not found";
-        throw new FileNotFoundException("Blob [" + blobName + "] not found");
+                // Find the most recent batched compound commit and read its headers using cache
+                var latestBcc = ObjectStoreService.readLatestBcc(directory, context, blobs);
+                if (latestBcc == null) {
+                    logger.trace(() -> format("%s no blob found for recovery", directory.getShardId()));
+                    ActionListener.completeWith(l, () -> IndexingShardState.EMPTY);
+                    return;
+                }
+
+                // List of non latest blobs found in the object store
+                var otherBlobs = blobs.entrySet()
+                    .stream()
+                    .filter(entry -> Objects.equals(entry.getKey(), latestBcc.primaryTermAndGeneration()) == false)
+                    .map(entry -> new BlobFile(entry.getValue().name(), entry.getKey()))
+                    .collect(Collectors.toUnmodifiableSet());
+                logger.trace(
+                    () -> format(
+                        "%s found non-latest blobs in [%s]: %s",
+                        directory.getShardId(),
+                        shardContainer.path().buildAsString(),
+                        otherBlobs
+                    )
+                );
+
+                // Map of blobs used as location in commit files (including the latest bcc). The key is the blob's term/generation and the
+                // value is a tuple of the blob's max length that includes the set of commit files in that blob (used later to stop reading
+                // the blob's commit headers early) and the set of commit files that are contained in the blob.
+                var referencedBlobs = computedReferencedBlobs(latestBcc);
+
+                // Read/Warm header(s) of every referenced blob and compute BlobFileRanges
+                readBlobsAndComputeBlobFileRanges(
+                    directory,
+                    context,
+                    latestBcc,
+                    referencedBlobs,
+                    useReplicatedRanges,
+                    threadPool.generic(),
+                    l.map(blobFileRanges -> new IndexingShardState(latestBcc, otherBlobs, Map.copyOf(blobFileRanges)))
+                );
+            })
+            .addListener(listener);
     }
 
-    public static Tuple<BatchedCompoundCommit, Set<BlobFile>> readIndexingShardState(BlobContainer shardContainer, long primaryTerm)
-        throws IOException {
-        Set<BlobFile> unreferencedBlobs = new HashSet<>();
-        BatchedCompoundCommit latestBcc = null;
-        List<Tuple<Long, BlobContainer>> containersToSearch = getContainersToSearch(shardContainer, primaryTerm);
-        for (Tuple<Long, BlobContainer> container : containersToSearch) {
-            final long blobContainerPrimaryTerm = container.v1();
-            final var blobContainer = container.v2();
-
-            Map<String, BlobMetadata> allBlobs = blobContainer.listBlobs(OperationPurpose.INDICES);
-            logger.trace(() -> format("listing blobs in [%s]: %s", blobContainer.path().buildAsString(), allBlobs));
-
-            if (latestBcc == null) {
-                latestBcc = ObjectStoreService.readNewestBcc(blobContainer, allBlobs);
-                if (latestBcc != null) {
-                    logLatestBcc(latestBcc, blobContainer);
-                    final var latestBccTermAndGen = latestBcc.primaryTermAndGeneration();
-                    allBlobs.forEach((key, value) -> {
-                        var blobFile = new BlobFile(blobContainerPrimaryTerm, key);
-                        if (startsWithBlobPrefix(blobFile.blobName()) == false
-                            || blobFile.primaryTerm() != latestBccTermAndGen.primaryTerm()
-                            || parseGenerationFromBlobName(blobFile.blobName()) != latestBccTermAndGen.generation()) {
-                            unreferencedBlobs.add(blobFile);
-                        }
-                    });
+    private static Map<PrimaryTermAndGeneration, ReferencedBlobMaxBlobLengthAndFiles> computedReferencedBlobs(
+        BatchedCompoundCommit latestBcc
+    ) {
+        var referencedBlobs = new HashMap<PrimaryTermAndGeneration, ReferencedBlobMaxBlobLengthAndFiles>();
+        for (var commitFile : latestBcc.lastCompoundCommit().commitFiles().entrySet()) {
+            var blobLocation = commitFile.getValue();
+            referencedBlobs.compute(blobLocation.getBatchedCompoundCommitTermAndGeneration(), (ignored, existing) -> {
+                long maxBlobLength = blobLocation.offset();
+                if (existing == null) {
+                    return new ReferencedBlobMaxBlobLengthAndFiles(maxBlobLength, Set.of(commitFile.getKey()));
+                } else {
+                    return new ReferencedBlobMaxBlobLengthAndFiles(
+                        // max position in the blob to read (header is located before that)
+                        Math.max(existing.maxBlobLength(), maxBlobLength),
+                        // set of files contained in the blob
+                        Sets.union(existing.files(), Set.of(commitFile.getKey()))
+                    );
                 }
-            } else {
-                allBlobs.forEach((key, value) -> unreferencedBlobs.add(new BlobFile(blobContainerPrimaryTerm, key)));
+            });
+        }
+        return referencedBlobs;
+    }
+
+    private static void readBlobsAndComputeBlobFileRanges(
+        IndexBlobStoreCacheDirectory directory,
+        IOContext context,
+        BatchedCompoundCommit latestBcc,
+        Map<PrimaryTermAndGeneration, ReferencedBlobMaxBlobLengthAndFiles> referencedBlobs,
+        boolean useReplicatedRanges,
+        ExecutorService executor,
+        ActionListener<Map<String, BlobFileRanges>> listener
+    ) {
+        // Map of commit files names and their corresponding BlobFileRanges
+        final Map<String, BlobFileRanges> blobFileRanges = ConcurrentCollections.newConcurrentMap();
+
+        try (var listeners = new RefCountingListener(listener.map(unused -> blobFileRanges))) {
+            // Read/warm header(s) of every referenced blob
+            for (var referencedBlob : referencedBlobs.entrySet()) {
+                executor.execute(ActionRunnable.run(listeners.acquire(), () -> {
+                    var blobTermAndGen = referencedBlob.getKey();
+                    var blobLengthAndFiles = referencedBlob.getValue();
+
+                    BatchedCompoundCommit bcc = blobTermAndGen.equals(latestBcc.primaryTermAndGeneration()) == false
+                        ? readBatchedCompoundCommitUsingCache(directory, context, blobTermAndGen, blobLengthAndFiles.maxBlobLength(), false)
+                        : latestBcc;
+                    blobFileRanges.putAll(computeBlobFileRanges(bcc, blobLengthAndFiles.files(), useReplicatedRanges));
+                }));
             }
         }
-        final var finalUnreferencedBlobs = Set.copyOf(unreferencedBlobs);
-        logger.trace(() -> format("found unreferenced blobs in [%s]: %s", shardContainer.path().buildAsString(), finalUnreferencedBlobs));
-        return new Tuple<>(latestBcc, finalUnreferencedBlobs);
     }
+
+    private record ReferencedBlobMaxBlobLengthAndFiles(long maxBlobLength, Set<String> files) {}
 
     private static void logLatestBcc(BatchedCompoundCommit latestBcc, BlobContainer blobContainer) {
         if (logger.isTraceEnabled()) {
-            logger.trace("found latest CC in [{}]: {}", blobContainer.path().buildAsString(), latestBcc.last().toLongDescription());
-        }
-    }
-
-    public static StatelessCompoundCommit readStatelessCompoundCommit(BlobContainer blobContainer, long generation) throws IOException {
-        String commitFileName = blobNameFromGeneration(generation);
-        try (StreamInput streamInput = new InputStreamStreamInput(blobContainer.readBlob(OperationPurpose.INDICES, commitFileName))) {
-            return StatelessCompoundCommit.readFromStore(streamInput);
+            logger.trace(
+                "found latest CC in [{}]: {}",
+                blobContainer.path().buildAsString(),
+                latestBcc.lastCompoundCommit().toLongDescription()
+            );
         }
     }
 
@@ -692,16 +916,15 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
             boolean success = false;
             try {
                 var before = threadPool.relativeTimeInMillis();
-                // TODO: Ensure that out usage of this method for writing files is appropriate. The javadoc is a bit concerning. "This
-                // method is only used for streaming serialization of repository metadata that is known to be of limited size at any point
-                // in time and across all concurrent invocations of this method."
-                blobContainer.writeMetadataBlob(
-                    OperationPurpose.INDICES,
-                    virtualBatchedCompoundCommit.getBlobName(),
-                    false,
-                    true,
-                    virtualBatchedCompoundCommit::writeToStore
-                );
+                try (var vbccInputStream = virtualBatchedCompoundCommit.getFrozenInputStreamForUpload()) {
+                    blobContainer.writeBlobAtomic(
+                        OperationPurpose.INDICES,
+                        virtualBatchedCompoundCommit.getBlobName(),
+                        vbccInputStream,
+                        virtualBatchedCompoundCommit.getTotalSizeInBytes(),
+                        false
+                    );
+                }
                 var after = threadPool.relativeTimeInMillis();
                 logger.debug(
                     () -> format(
@@ -799,7 +1022,12 @@ public class ObjectStoreService extends AbstractLifecycleComponent {
             final var level = lifecycle.started() ? Level.WARN : Level.DEBUG;
             if (logger.isDebugEnabled()) {
                 // Might be 100 files, only log when debug enabled
-                logger.log(level, () -> format("exception while attempting to delete blob files [%s]", blobPathStream().toList()), e);
+                try {
+                    logger.log(level, () -> format("exception while attempting to delete blob files [%s]", blobPathStream().toList()), e);
+                } catch (Exception blobException) {
+                    e.addSuppressed(blobException);
+                    logger.log(level, () -> "exception while attempting to delete blob files (and could not list blob files)", e);
+                }
             } else {
                 logger.log(level, () -> "exception while attempting to delete blob files", e);
             }

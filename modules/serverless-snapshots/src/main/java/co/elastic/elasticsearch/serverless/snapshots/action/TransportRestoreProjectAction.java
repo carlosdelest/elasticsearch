@@ -34,10 +34,11 @@ import org.elasticsearch.action.support.SubscribableListener;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.snapshots.SnapshotInfo;
 import org.elasticsearch.snapshots.SnapshotState;
@@ -91,7 +92,7 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
     @Inject
     public TransportRestoreProjectAction(TransportService transportService, ActionFilters actionFilters, Client client) {
-        super(TYPE.name(), actionFilters, transportService.getTaskManager());
+        super(TYPE.name(), actionFilters, transportService.getTaskManager(), EsExecutors.DIRECT_EXECUTOR_SERVICE);
         this.client = client;
         final var threadPool = transportService.getThreadPool();
         this.restoreExecutor = threadPool.executor(ThreadPool.Names.MANAGEMENT);
@@ -112,7 +113,7 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
         client.admin()
             .cluster()
-            .prepareGetSnapshots()
+            .prepareGetSnapshots(request.masterNodeTimeout())
             .setRepositories(repository)
             .setSort(SnapshotSortKey.START_TIME)
             .setOrder(SortOrder.DESC)
@@ -150,7 +151,7 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
         client.admin()
             .cluster()
-            .prepareGetSnapshots()
+            .prepareGetSnapshots(request.masterNodeTimeout())
             .setRepositories(repository)
             .setSnapshots(Strings.splitStringByCommaToArray(snapshot)) // n.b. handle a list of snapshots, providing a more precise error
             .setVerbose(false)
@@ -216,9 +217,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
             : Settings.builder().put("ingest.geoip.downloader.enabled", false);
         client.admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TimeValue.MINUS_ONE, TimeValue.MINUS_ONE)
             .setPersistentSettings(enabledSettings)
-            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
             .execute(ignoreResult(listener));
     }
 
@@ -238,9 +238,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
             : Settings.builder().put("xpack.profiling.templates.enabled", false);
         client.admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TimeValue.MINUS_ONE, TimeValue.MINUS_ONE)
             .setPersistentSettings(enabledSettings)
-            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
             .execute(ignoreResult(listener));
     }
 
@@ -261,9 +260,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
             : Settings.builder().put("xpack.apm_data.registry.enabled", false);
         client.admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TimeValue.MINUS_ONE, TimeValue.MINUS_ONE)
             .setPersistentSettings(enabledSettings)
-            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
             .execute(ignoreResult(listener));
     }
 
@@ -299,9 +297,8 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
 
         client.admin()
             .cluster()
-            .prepareUpdateSettings()
+            .prepareUpdateSettings(TimeValue.MINUS_ONE, TimeValue.MINUS_ONE)
             .setPersistentSettings(enabledSettings)
-            .setMasterNodeTimeout(TimeValue.MAX_VALUE)
             .execute(ignoreResult(listener));
     }
 
@@ -366,7 +363,10 @@ public class TransportRestoreProjectAction extends TransportAction<RestoreSnapsh
                     // delete all data streams
                     .<Void>andThen(restoreExecutor, threadContext, (l, ignored) -> {
                         logger.info("deleting data streams!");
-                        DeleteDataStreamAction.Request deleteDataStreamRequest = new DeleteDataStreamAction.Request("*");
+                        DeleteDataStreamAction.Request deleteDataStreamRequest = new DeleteDataStreamAction.Request(
+                            request.masterNodeTimeout(),
+                            "*"
+                        );
                         deleteDataStreamRequest.indicesOptions(IndicesOptions.LENIENT_EXPAND_OPEN_CLOSED_HIDDEN);
                         deleteDataStreamRequest.masterNodeTimeout(TimeValue.MAX_VALUE);
                         client.execute(DeleteDataStreamAction.INSTANCE, deleteDataStreamRequest, ignoreResult(l));

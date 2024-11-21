@@ -20,18 +20,22 @@ package co.elastic.elasticsearch.stateless;
 import co.elastic.elasticsearch.stateless.action.NewCommitNotificationRequest;
 import co.elastic.elasticsearch.stateless.action.TransportNewCommitNotificationAction;
 import co.elastic.elasticsearch.stateless.commits.BatchedCompoundCommit;
+import co.elastic.elasticsearch.stateless.commits.BlobLocation;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
-import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicatorReader;
-import co.elastic.elasticsearch.stateless.lucene.SearchDirectory;
+import co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectory;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreTestUtils;
 
+import org.apache.lucene.index.SegmentInfos;
 import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
+import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.tests.util.LuceneTestCase;
+import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.UnavailableShardsException;
 import org.elasticsearch.action.admin.cluster.reroute.ClusterRerouteRequest;
@@ -45,6 +49,7 @@ import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.support.ActiveShardCount;
 import org.elasticsearch.action.support.PlainActionFuture;
+import org.elasticsearch.action.support.SubscribableListener;
 import org.elasticsearch.action.support.broadcast.BroadcastResponse;
 import org.elasticsearch.cluster.coordination.stateless.StoreHeartbeatService;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
@@ -54,8 +59,12 @@ import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.allocation.command.MoveAllocationCommand;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.blobstore.BlobContainer;
+import org.elasticsearch.common.blobstore.support.BlobMetadata;
 import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.io.stream.InputStreamStreamInput;
 import org.elasticsearch.common.lucene.Lucene;
+import org.elasticsearch.common.lucene.store.InputStreamIndexInput;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.AbstractRunnable;
@@ -75,6 +84,7 @@ import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.GlobalCheckpointListeners;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.index.store.Store;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.plugins.Plugin;
@@ -92,10 +102,13 @@ import org.elasticsearch.xpack.shutdown.GetShutdownStatusAction;
 import org.elasticsearch.xpack.shutdown.PutShutdownNodeAction;
 import org.elasticsearch.xpack.shutdown.ShutdownPlugin;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -116,9 +129,9 @@ import static co.elastic.elasticsearch.stateless.recovery.TransportStatelessPrim
 import static org.elasticsearch.index.IndexSettings.INDEX_REFRESH_INTERVAL_SETTING;
 import static org.elasticsearch.index.IndexSettings.STATELESS_DEFAULT_REFRESH_INTERVAL;
 import static org.elasticsearch.indices.IndexingMemoryController.SHARD_INACTIVE_TIME_SETTING;
-import static org.elasticsearch.indices.IndexingMemoryController.SHARD_MEMORY_INTERVAL_TIME_SETTING;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailures;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -149,11 +162,11 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
     public void testCompoundCommitHasNodeEphemeralId() throws Exception {
         startMasterOnlyNode();
 
-        String indexNodeName = startIndexNodes(1).get(0);
+        String indexNodeName = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         ensureStableCluster(2);
 
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
-        createIndex(indexName, indexSettings(1, 0).build());
+        createIndex(indexName, indexSettings(1, 0).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
         ensureGreen(indexName);
 
         indexDocumentsWithFlush(indexName);
@@ -162,18 +175,20 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
         Index index = resolveIndex(indexName);
         IndexShard indexShard = findShard(index, 0, DiscoveryNodeRole.INDEX_ROLE, ShardRouting.Role.INDEX_ONLY);
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNodeName);
+        ObjectStoreService objectStoreService = getObjectStoreService(indexNodeName);
         ClusterService clusterService = internalCluster().getInstance(ClusterService.class, indexNodeName);
         var blobContainerForCommit = objectStoreService.getBlobContainer(indexShard.shardId(), indexShard.getOperationPrimaryTerm());
         final long directoryGeneration = Lucene.readSegmentInfos(indexShard.store().directory()).getGeneration();
-        final BatchedCompoundCommit latestUploadedBcc = readLatestUploadedBccUptoGen(blobContainerForCommit, directoryGeneration);
-        StatelessCompoundCommit commit = latestUploadedBcc.lastCompoundCommit();
-        assertThat(commit.generation(), equalTo(directoryGeneration));
-        assertThat(
-            "Expected that the compound commit has the ephemeral Id of the indexing node",
-            commit.nodeEphemeralId(),
-            equalTo(clusterService.localNode().getEphemeralId())
-        );
+        assertBusy(() -> {
+            final BatchedCompoundCommit latestUploadedBcc = readLatestUploadedBccUptoGen(blobContainerForCommit, directoryGeneration);
+            StatelessCompoundCommit commit = latestUploadedBcc.lastCompoundCommit();
+            assertThat(commit.generation(), equalTo(directoryGeneration));
+            assertThat(
+                "Expected that the compound commit has the ephemeral Id of the indexing node",
+                commit.nodeEphemeralId(),
+                equalTo(clusterService.localNode().getEphemeralId())
+            );
+        });
     }
 
     public void testClusterCanFormWithStatelessEnabled() {
@@ -216,7 +231,9 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
         assertTrue(setRefreshIntervalSetting(indexName, TimeValue.timeValueSeconds(120)));
         assertEquals(TimeValue.timeValueSeconds(120), getRefreshIntervalSetting(indexName, false));
         assertRefreshIntervalConcreteValue(index, TimeValue.timeValueSeconds(120));
-        // TODO (ES-6244): try setting to less than 5sec and assert there is a validation exception.
+        var exc = expectThrows(Exception.class, () -> setRefreshIntervalSetting(indexName, TimeValue.timeValueSeconds(2)));
+        Throwable cause = ExceptionsHelper.unwrapCause(exc.getCause());
+        assertThat(cause.getMessage(), containsString("equal to or greater than 5s"));
         assertTrue(setRefreshIntervalSetting(indexName, TimeValue.MINUS_ONE));
         assertEquals(TimeValue.MINUS_ONE, getRefreshIntervalSetting(indexName, false));
         assertRefreshIntervalConcreteValue(index, TimeValue.MINUS_ONE);
@@ -249,7 +266,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
     public void testScheduledRefreshBypassesSearchIdleness() throws Exception {
         startMasterOnlyNode();
-        startIndexNodes(1);
+        startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
 
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         Settings.Builder indexSettings = indexSettings(1, 0).put(
@@ -268,7 +285,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
         assertBusy(
             () -> assertThat(
-                "expected a scheduled refresh to cause the non fast refresh shard to flush and produce a new commit generation",
+                "expected a scheduled refresh to cause the shard to flush and produce a new commit generation",
                 indexShard.commitStats().getGeneration(),
                 greaterThan(genBefore)
             ),
@@ -292,7 +309,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
     public void testTranslogIsSyncedToObjectStoreDuringIndexing() throws Exception {
         startMasterOnlyNode();
-        startIndexNode();
+        startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         createIndex(indexName, indexSettings(1, 0).build());
         ensureGreen(indexName);
@@ -313,7 +330,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
         indexDocs(indexName, 1);
 
         // Check that the translog on the object store contains the correct sequence numbers and number of operations
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode.getName());
+        var indexObjectStoreService = getObjectStoreService(indexNode.getName());
         var reader = new TranslogReplicatorReader(indexObjectStoreService.getTranslogBlobContainer(), shardId);
         long maxSeqNo = SequenceNumbers.NO_OPS_PERFORMED;
         long totalOps = 0;
@@ -330,7 +347,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
     public void testGlobalCheckpointOnlyAdvancesAfterObjectStoreSync() throws Exception {
         startMasterOnlyNode();
         final int numberOfShards = 1;
-        String indexNode = startIndexNodes(numberOfShards).get(0);
+        String indexNode = startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         createIndex(indexName, indexSettings(numberOfShards, 0).build());
         ensureGreen(indexName);
@@ -345,7 +362,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
         assertTrue(index.isPresent());
 
         // Ensure that an automatic flush cannot clean translog
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
+        ObjectStoreService objectStoreService = getObjectStoreService(indexNode);
         MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
         repository.setRandomControlIOExceptionRate(1.0);
         repository.setRandomDataFileIOExceptionRate(1.0);
@@ -360,7 +377,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
         assertBusy(() -> {
             assertThat(indexShard.getEngineOrNull().getProcessedLocalCheckpoint(), greaterThanOrEqualTo(0L));
-            assertThat(indexShard.getEngineOrNull().getTranslogLastWriteLocation().translogLocation, greaterThanOrEqualTo(0L));
+            assertThat(indexShard.getEngineOrNull().getTranslogLastWriteLocation().translogLocation(), greaterThanOrEqualTo(0L));
         });
         // Sleep to allow local file system translog sync to complete which historically would have advanced local checkpoint. But now it
         // should no longer advance local checkpoint
@@ -418,7 +435,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
         // Ensure that an automatic flush cannot clean translog
         for (String indexingNode : indexingNodes) {
-            ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexingNode);
+            ObjectStoreService objectStoreService = getObjectStoreService(indexingNode);
             MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
             repository.setRandomControlIOExceptionRate(1.0);
             repository.setRandomDataFileIOExceptionRate(1.0);
@@ -435,7 +452,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
         // Allow flushes again
         for (String indexingNode : indexingNodes) {
-            ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexingNode);
+            ObjectStoreService objectStoreService = getObjectStoreService(indexingNode);
             MockRepository repository = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreService);
             repository.setRandomControlIOExceptionRate(0.0);
             repository.setRandomDataFileIOExceptionRate(0.0);
@@ -445,7 +462,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
     public void testDownloadNewCommitsFromObjectStore() throws Exception {
         startMasterOnlyNode();
         final int numberOfShards = randomIntBetween(1, 2);
-        startIndexNodes(numberOfShards);
+        startIndexNodes(numberOfShards, disableIndexingDiskAndMemoryControllersNodeSettings());
         startSearchNodes(numberOfShards);
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         // Disable scheduled refreshes so it doesn't add non-uploaded commits to the BCC
@@ -508,7 +525,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         final int numberOfShards = randomIntBetween(1, 5);
         startIndexNodes(numberOfShards);
-        createIndex(indexName, indexSettings(numberOfShards, 0).build());
+        createIndex(indexName, indexSettings(numberOfShards, 0).put(IndexSettings.INDEX_REFRESH_INTERVAL_SETTING.getKey(), -1).build());
         ensureGreen(indexName);
         indexDocumentsWithFlush(indexName);
         assertObjectStoreConsistentWithIndexShards();
@@ -522,13 +539,13 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
     }
 
     public void testSetsRecyclableBigArraysInTranslogReplicator() throws Exception {
-        startMasterAndIndexNode();
+        final String masterAndIndexNode = startMasterAndIndexNode();
         String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         createIndex(indexName, indexSettings(1, 0).build());
         ensureGreen(indexName);
 
         assertBusy(() -> {
-            var bigArrays = internalCluster().getInstance(TranslogReplicator.class).bigArrays();
+            var bigArrays = getTranslogReplicator(masterAndIndexNode).bigArrays();
             assertNotNull(bigArrays);
             assertNotNull(bigArrays.breakerService());
         });
@@ -676,7 +693,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
     public void testIndexSearchDirectoryPruned() throws Exception {
         startMasterOnlyNode();
-        startIndexNode();
+        startIndexNode(disableIndexingDiskAndMemoryControllersNodeSettings());
         final String indexName = randomAlphaOfLength(10).toLowerCase(Locale.ROOT);
         createIndex(
             indexName,
@@ -685,9 +702,9 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
         ensureGreen(indexName);
         IndexShard shard = findIndexShard(indexName);
         Directory directory = shard.store().directory();
-        SearchDirectory searchDirectory = SearchDirectory.unwrapDirectory(directory);
+        BlobStoreCacheDirectory blobStoreCacheDirectory = BlobStoreCacheDirectory.unwrapDirectory(directory);
         // nothing deleted yet so we expect same contents.
-        String[] originalFiles = searchDirectory.listAll();
+        String[] originalFiles = blobStoreCacheDirectory.listAll();
         assertThat(originalFiles, equalTo(directory.listAll()));
         if (randomBoolean()) {
             indexDocs(indexName, randomIntBetween(1, 100));
@@ -696,12 +713,12 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
         assertObjectStoreConsistentWithIndexShards();
 
         Set<String> secondFileSet = Sets.union(toSet(directory.listAll()), toSet(originalFiles));
-        assertBusy(() -> assertThat(toSet(searchDirectory.listAll()), equalTo(secondFileSet)));
+        assertBusy(() -> assertThat(toSet(blobStoreCacheDirectory.listAll()), equalTo(secondFileSet)));
         indexDocs(indexName, randomIntBetween(1, 100));
         flush(indexName);
 
         // retained by external reader manager.
-        assertThat(toSet(searchDirectory.listAll()), hasItems(secondFileSet.toArray(String[]::new)));
+        assertThat(toSet(blobStoreCacheDirectory.listAll()), hasItems(secondFileSet.toArray(String[]::new)));
 
         refresh(indexName);
 
@@ -710,7 +727,7 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
         flush(indexName);
 
         // expect at least one deleted file, the segments_N file.
-        assertBusy(() -> assertThat(toSet(searchDirectory.listAll()), not(hasItems(secondFileSet.toArray(String[]::new)))));
+        assertBusy(() -> assertThat(toSet(blobStoreCacheDirectory.listAll()), not(hasItems(secondFileSet.toArray(String[]::new)))));
 
         forceMerge();
         refresh(indexName);
@@ -718,11 +735,11 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
         flush(indexName);
 
         // all from secondFileSet are gone.
-        assertBusy(() -> assertThat(Sets.intersection(toSet(searchDirectory.listAll()), secondFileSet), empty()));
+        assertBusy(() -> assertThat(Sets.intersection(toSet(blobStoreCacheDirectory.listAll()), secondFileSet), empty()));
 
     }
 
-    private static Set<String> toSet(String[] strings) throws IOException {
+    private static Set<String> toSet(String[] strings) {
         return Set.of(strings);
     }
 
@@ -762,7 +779,14 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
         if (randomBoolean()) {
             var shutdownNode = randomFrom(Stream.concat(indexNodes.stream(), searchNodes.stream()).toList());
-            var shutdownNodeId = client().admin().cluster().prepareState().get().getState().nodes().resolveNode(shutdownNode).getId();
+            var shutdownNodeId = client().admin()
+                .cluster()
+                .prepareState(TEST_REQUEST_TIMEOUT)
+                .get()
+                .getState()
+                .nodes()
+                .resolveNode(shutdownNode)
+                .getId();
             client().execute(
                 PutShutdownNodeAction.INSTANCE,
                 new PutShutdownNodeAction.Request(
@@ -807,19 +831,18 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
 
     public void testBackgroundMergeCommitAfterRelocationHasStartedDoesNotSendANewCommitNotification() throws Exception {
         var nodeSettings = Settings.builder()
-            .put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true)
             .put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), 12)
             // Ensure that merges are flushed immediately
             .put(SHARD_INACTIVE_TIME_SETTING.getKey(), TimeValue.ZERO)
             // Disable background flushes
-            .put(SHARD_MEMORY_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(2))
+            .put(disableIndexingDiskAndMemoryControllersNodeSettings())
             .build();
         var indexNode1 = startMasterAndIndexNode(nodeSettings);
         var searchNode = startSearchNode(nodeSettings);
         ensureStableCluster(2);
         var indexNode1EphemeralId = client().admin()
             .cluster()
-            .prepareState()
+            .prepareState(TEST_REQUEST_TIMEOUT)
             .get()
             .getState()
             .getNodes()
@@ -1016,4 +1039,190 @@ public class StatelessIT extends AbstractStatelessIntegTestCase {
             }
         });
     }
+
+    protected static void indexDocumentsWithFlush(String indexName) {
+        indexDocumentsThenFlushOrRefreshOrForceMerge(indexName, StatelessIT::assertObjectStoreConsistentWithIndexShards, () -> {
+            client().admin().indices().prepareFlush(indexName).setForce(false).setWaitIfOngoing(false).get();
+            assertObjectStoreConsistentWithIndexShards();
+        }, StatelessIT::assertObjectStoreConsistentWithIndexShards);
+    }
+
+    private static void assertObjectStoreConsistentWithIndexShards() {
+        assertObjectStoreConsistentWithShards(DiscoveryNodeRole.INDEX_ROLE, ShardRouting.Role.INDEX_ONLY);
+    }
+
+    private static void assertObjectStoreConsistentWithSearchShards() {
+        assertObjectStoreConsistentWithShards(DiscoveryNodeRole.SEARCH_ROLE, ShardRouting.Role.SEARCH_ONLY);
+    }
+
+    private static void assertObjectStoreConsistentWithShards(DiscoveryNodeRole nodeRole, ShardRouting.Role shardRole) {
+        final Map<Index, Integer> indices = resolveIndices();
+        assertThat(indices.isEmpty(), is(false));
+
+        for (Map.Entry<Index, Integer> entry : indices.entrySet()) {
+            assertThat(entry.getValue(), greaterThan(0));
+            for (int shardId = 0; shardId < entry.getValue(); shardId++) {
+                assertThatObjectStoreIsConsistentWithLastCommit(findShard(entry.getKey(), shardId, nodeRole, shardRole));
+            }
+        }
+    }
+
+    private static void assertThatObjectStoreIsConsistentWithLastCommit(final IndexShard indexShard) {
+        final Store store = indexShard.store();
+        store.incRef();
+        try {
+            ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
+            var blobContainerForCommit = objectStoreService.getBlobContainer(indexShard.shardId(), indexShard.getOperationPrimaryTerm());
+
+            final SegmentInfos segmentInfos = Lucene.readSegmentInfos(store.directory());
+
+            // can take some time for files to be uploaded to the object store
+            assertBusy(() -> {
+                // New commit can be uploaded after we read segmentInfos, so we bound the read by the known generation
+                final var latestUploadedBcc = readLatestUploadedBccUptoGen(blobContainerForCommit, segmentInfos.getGeneration());
+                StatelessCompoundCommit commit = latestUploadedBcc.lastCompoundCommit();
+
+                assertThat(commit.primaryTermAndGeneration().generation(), equalTo(segmentInfos.getGeneration()));
+                var localFiles = segmentInfos.files(false);
+                var expectedBlobFile = localFiles.stream().map(s -> commit.commitFiles().get(s).blobName()).collect(Collectors.toSet());
+                var remoteFiles = blobContainerForCommit.listBlobs(operationPurpose).keySet();
+                assertThat(
+                    "Expected that all local files " + localFiles + " exist in remote " + remoteFiles,
+                    remoteFiles,
+                    hasItems(expectedBlobFile.toArray(String[]::new))
+                );
+                for (String localFile : segmentInfos.files(false)) {
+                    BlobLocation blobLocation = commit.commitFiles().get(localFile);
+                    final BlobContainer blobContainerForFile = objectStoreService.getBlobContainer(
+                        indexShard.shardId(),
+                        blobLocation.primaryTerm()
+                    );
+                    assertThat(localFile, blobContainerForFile.blobExists(operationPurpose, blobLocation.blobName()), is(true));
+                    try (
+                        IndexInput input = store.directory().openInput(localFile, IOContext.READONCE);
+                        InputStream local = new InputStreamIndexInput(input, input.length());
+                        InputStream remote = blobContainerForFile.readBlob(
+                            operationPurpose,
+                            blobLocation.blobName(),
+                            blobLocation.offset(),
+                            blobLocation.fileLength()
+                        );
+                    ) {
+                        assertEquals("File [" + blobLocation + "] in object store has a different content than local file ", local, remote);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        } finally {
+            store.decRef();
+        }
+    }
+
+    /**
+     * Read the latest BCC from the object store bounded by the given generation (inclusive), i.e. the BCC generation
+     * must not be higher than the specified generation.
+     */
+    private static BatchedCompoundCommit readLatestUploadedBccUptoGen(BlobContainer blobContainerForCommit, long maxGeneration)
+        throws IOException {
+        final BlobMetadata latestUploadBccMetadata = blobContainerForCommit.listBlobsByPrefix(
+            operationPurpose,
+            StatelessCompoundCommit.PREFIX
+        )
+            .values()
+            .stream()
+            .filter(m -> StatelessCompoundCommit.parseGenerationFromBlobName(m.name()) <= maxGeneration)
+            .max(Comparator.comparingLong(m -> StatelessCompoundCommit.parseGenerationFromBlobName(m.name())))
+            .orElseThrow(() -> new AssertionError("retry with assertBusy"));
+        final var latestUploadedBcc = BatchedCompoundCommit.readFromStore(
+            latestUploadBccMetadata.name(),
+            latestUploadBccMetadata.length(),
+            (blobName, offset, length) -> new InputStreamStreamInput(
+                blobContainerForCommit.readBlob(operationPurpose, blobName, offset, length)
+            ),
+            true
+        );
+        return latestUploadedBcc;
+    }
+
+    private static void assertThatSearchShardIsConsistentWithLastCommit(final IndexShard indexShard, final IndexShard searchShard) {
+        final Store indexStore = indexShard.store();
+        final Store searchStore = searchShard.store();
+        indexStore.incRef();
+        searchStore.incRef();
+        try {
+            ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
+            var blobContainerForCommit = objectStoreService.getBlobContainer(indexShard.shardId(), indexShard.getOperationPrimaryTerm());
+
+            // Wait for the latest commit on the index shard is processed on the search engine
+            var listener = new SubscribableListener<Long>();
+            searchShard.getEngineOrNull()
+                .addPrimaryTermAndGenerationListener(
+                    indexShard.getOperationPrimaryTerm(),
+                    indexShard.getEngineOrNull().getLastCommittedSegmentInfos().getGeneration(),
+                    listener
+                );
+            safeAwait(listener);
+            final SegmentInfos segmentInfos = Lucene.readSegmentInfos(indexStore.directory());
+
+            // New commit can be uploaded after we read segmentInfos, so we bound the read by the known generation
+            final var latestUploadedBcc = readLatestUploadedBccUptoGen(blobContainerForCommit, segmentInfos.getGeneration());
+            StatelessCompoundCommit commit = latestUploadedBcc.lastCompoundCommit();
+            assertThat(commit.primaryTermAndGeneration().generation(), equalTo(segmentInfos.getGeneration()));
+
+            for (String localFile : segmentInfos.files(false)) {
+                var blobPath = commit.commitFiles().get(localFile);
+                BlobContainer blobContainer = objectStoreService.getBlobContainer(indexShard.shardId(), blobPath.primaryTerm());
+                var blobFile = blobPath.blobName();
+                // can take some time for files to be uploaded to the object store
+                assertBusy(() -> {
+                    assertThat(blobFile, blobContainer.blobExists(operationPurpose, blobFile), is(true));
+
+                    try (
+                        IndexInput input = indexStore.directory().openInput(localFile, IOContext.READONCE);
+                        InputStream local = new InputStreamIndexInput(input, input.length());
+                        IndexInput searchInput = searchStore.directory().openInput(localFile, IOContext.READONCE);
+                        InputStream searchInputStream = new InputStreamIndexInput(searchInput, searchInput.length());
+                    ) {
+                        assertEquals(
+                            "File [" + blobFile + "] on search shard has a different content than local file ",
+                            local,
+                            searchInputStream
+                        );
+                    }
+                });
+            }
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        } finally {
+            indexStore.decRef();
+            searchStore.decRef();
+        }
+    }
+
+    private static void assertEquals(String message, InputStream expected, InputStream actual) throws IOException {
+        // adapted from Files.mismatch()
+        final int bufferSize = 8192;
+        byte[] buffer1 = new byte[bufferSize];
+        byte[] buffer2 = new byte[bufferSize];
+        try (
+            InputStream expectedStream = new BufferedInputStream(expected, bufferSize);
+            InputStream actualStream = new BufferedInputStream(actual, bufferSize)
+        ) {
+            long totalRead = 0;
+            while (true) {
+                int nRead1 = expectedStream.readNBytes(buffer1, 0, bufferSize);
+                int nRead2 = actualStream.readNBytes(buffer2, 0, bufferSize);
+
+                int i = Arrays.mismatch(buffer1, 0, nRead1, buffer2, 0, nRead2);
+                assertThat(message + "(position: " + (totalRead + i) + ')', i, equalTo(-1));
+                if (nRead1 < bufferSize) {
+                    // we've reached the end of the files, but found no mismatch
+                    break;
+                }
+                totalRead += nRead1;
+            }
+        }
+    }
+
 }

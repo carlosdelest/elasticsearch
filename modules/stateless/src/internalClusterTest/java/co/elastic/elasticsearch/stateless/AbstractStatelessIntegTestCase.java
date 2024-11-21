@@ -19,21 +19,19 @@ package co.elastic.elasticsearch.stateless;
 
 import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
 import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
-import co.elastic.elasticsearch.stateless.commits.BatchedCompoundCommit;
-import co.elastic.elasticsearch.stateless.commits.BlobLocation;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
 import co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommit;
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.PrimaryTermAndGeneration;
+import co.elastic.elasticsearch.stateless.engine.ThreadPoolMergeScheduler;
+import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicatorReader;
+import co.elastic.elasticsearch.stateless.lucene.BlobStoreCacheDirectory;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreTestUtils;
 
 import org.apache.logging.log4j.Logger;
-import org.apache.lucene.index.SegmentInfos;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.store.IndexInput;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.cluster.node.stats.NodeStats;
 import org.elasticsearch.action.admin.cluster.node.stats.NodesStatsResponse;
@@ -43,13 +41,13 @@ import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.support.IndicesOptions;
-import org.elasticsearch.action.support.SubscribableListener;
 import org.elasticsearch.blobcache.BlobCachePlugin;
 import org.elasticsearch.blobcache.shared.SharedBytes;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.coordination.stateless.StoreHeartbeatService;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.NodesShutdownMetadata;
 import org.elasticsearch.cluster.metadata.SingleNodeShutdownMetadata;
@@ -60,10 +58,6 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.OperationPurpose;
-import org.elasticsearch.common.blobstore.support.BlobMetadata;
-import org.elasticsearch.common.io.stream.InputStreamStreamInput;
-import org.elasticsearch.common.lucene.Lucene;
-import org.elasticsearch.common.lucene.store.InputStreamIndexInput;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.RatioValue;
@@ -75,13 +69,14 @@ import org.elasticsearch.index.recovery.RecoveryStats;
 import org.elasticsearch.index.seqno.SequenceNumbers;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.index.store.Store;
 import org.elasticsearch.index.translog.Translog;
+import org.elasticsearch.indices.IndexingMemoryController;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.SystemIndexDescriptor;
 import org.elasticsearch.indices.recovery.RecoverySettings;
 import org.elasticsearch.node.NodeRoleSettings;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.plugins.SystemIndexPlugin;
 import org.elasticsearch.snapshots.SnapshotInfo;
 import org.elasticsearch.snapshots.SnapshotState;
@@ -89,16 +84,14 @@ import org.elasticsearch.telemetry.TelemetryProvider;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.transport.MockTransportService;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.xpack.logsdb.LogsDBPlugin;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +108,6 @@ import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcke
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailures;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
@@ -123,11 +115,6 @@ import static org.hamcrest.Matchers.notNullValue;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
-
-    public static final boolean STATELESS_UPLOAD_DELAYED = Boolean.parseBoolean(
-        System.getProperty("es.test.stateless.upload.delayed", "true")
-    );
-
     private int uploadMaxCommits;
 
     @Before
@@ -183,7 +170,13 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
 
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(SystemIndexTestPlugin.class, BlobCachePlugin.class, Stateless.class, MockTransportService.TestPlugin.class);
+        return List.of(
+            SystemIndexTestPlugin.class,
+            BlobCachePlugin.class,
+            Stateless.class,
+            MockTransportService.TestPlugin.class,
+            LogsDBPlugin.class
+        );
     }
 
     public static class NoopSharedBlobCacheWarmingService extends SharedBlobCacheWarmingService {
@@ -192,7 +185,13 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
         }
 
         @Override
-        protected void warmCache(IndexShard indexShard, StatelessCompoundCommit commit, ActionListener<Void> listener) {
+        protected void warmCacheRecovery(
+            Type type,
+            IndexShard indexShard,
+            StatelessCompoundCommit commit,
+            BlobStoreCacheDirectory blobStoreCacheDirectory,
+            ActionListener<Void> listener
+        ) {
             listener.onResponse(null);
         }
 
@@ -226,7 +225,12 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
 
     public static void createRepository(Logger logger, String repoName, String type, Settings.Builder settings, boolean verify) {
         logger.info("--> creating or updating repository [{}] [{}]", repoName, type);
-        assertAcked(clusterAdmin().preparePutRepository(repoName).setVerify(verify).setType(type).setSettings(settings));
+        assertAcked(
+            clusterAdmin().preparePutRepository(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, repoName)
+                .setVerify(verify)
+                .setType(type)
+                .setSettings(settings)
+        );
     }
 
     protected void createRepository(String repoName, String type) {
@@ -238,12 +242,12 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
     }
 
     protected void deleteRepository(String repoName) {
-        assertAcked(clusterAdmin().prepareDeleteRepository(repoName));
+        assertAcked(clusterAdmin().prepareDeleteRepository(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT, repoName));
     }
 
     protected SnapshotInfo createSnapshot(String repositoryName, String snapshot, List<String> indices, List<String> featureStates) {
         logger.info("--> creating snapshot [{}] of {} in [{}]", snapshot, indices, repositoryName);
-        final CreateSnapshotResponse response = clusterAdmin().prepareCreateSnapshot(repositoryName, snapshot)
+        final CreateSnapshotResponse response = clusterAdmin().prepareCreateSnapshot(TEST_REQUEST_TIMEOUT, repositoryName, snapshot)
             .setIndices(indices.toArray(Strings.EMPTY_ARRAY))
             .setWaitForCompletion(true)
             .setFeatureStates(featureStates.toArray(Strings.EMPTY_ARRAY))
@@ -266,19 +270,26 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
         return getTestName().replaceAll("[^0-9a-zA-Z-_]", "_") + "_bucket";
     }
 
+    /**
+     * Set a very high {@link StoreHeartbeatService#MAX_MISSED_HEARTBEATS} value by default so that the cluster does not recover from an
+     * <i>unexpected</i> master failover before the whole suite times out. Tests that expect to see a master failover should generally use
+     * {@link #shutdownMasterNodeGracefully} to trigger the usual graceful abdication process. If a test really needs to simulate an abrupt
+     * master failure then it should adjust the heartbeat configuration by setting both {@link StoreHeartbeatService#MAX_MISSED_HEARTBEATS}
+     * and {@link StoreHeartbeatService#HEARTBEAT_FREQUENCY} to ensure that the test cluster recovers without undue delay.
+     */
+    private static final int DEFAULT_TEST_MAX_MISSED_HEARTBEATS = 1000;
+
     protected Settings.Builder nodeSettings() {
         final Settings.Builder builder = Settings.builder()
             .put(Stateless.STATELESS_ENABLED.getKey(), true)
             .put(RecoverySettings.INDICES_RECOVERY_USE_SNAPSHOTS_SETTING.getKey(), false)
             .put(ObjectStoreService.TYPE_SETTING.getKey(), ObjectStoreService.ObjectStoreType.FS)
-            .put(ObjectStoreService.BUCKET_SETTING.getKey(), getFsRepoSanitizedBucketName());
+            .put(ObjectStoreService.BUCKET_SETTING.getKey(), getFsRepoSanitizedBucketName())
+            .put(StoreHeartbeatService.MAX_MISSED_HEARTBEATS.getKey(), DEFAULT_TEST_MAX_MISSED_HEARTBEATS)
+            .put(ThreadPoolMergeScheduler.MERGE_THREAD_POOL_SCHEDULER.getKey(), randomBoolean())
+            .put(StatelessCommitService.STATELESS_COMMIT_USE_INTERNAL_FILES_REPLICATED_CONTENT.getKey(), randomBoolean());
         if (useBasePath) {
             builder.put(ObjectStoreService.BASE_PATH_SETTING.getKey(), "base_path");
-        }
-        if (STATELESS_UPLOAD_DELAYED) {
-            builder.put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), true);
-        } else {
-            builder.put(StatelessCommitService.STATELESS_UPLOAD_DELAYED.getKey(), false);
         }
         builder.put(StatelessCommitService.STATELESS_UPLOAD_MAX_AMOUNT_COMMITS.getKey(), getUploadMaxCommits());
         return builder;
@@ -301,10 +312,8 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
     }
 
     protected Settings.Builder settingsForRoles(DiscoveryNodeRole... roles) {
-        var builder = nodeSettings().putList(
-            NodeRoleSettings.NODE_ROLES_SETTING.getKey(),
-            Arrays.stream(roles).map(DiscoveryNodeRole::roleName).toList()
-        );
+        var builder = Settings.builder()
+            .putList(NodeRoleSettings.NODE_ROLES_SETTING.getKey(), Arrays.stream(roles).map(DiscoveryNodeRole::roleName).toList());
 
         // when changing those values, keep in mind that multiple nodes with their own caches can be created by integration tests which can
         // also be executed concurrently.
@@ -334,7 +343,9 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
             // no cache (a single region does not even fit in the cache)
             builder.put(SHARED_CACHE_SIZE_SETTING.getKey(), ByteSizeValue.ofBytes(1L));
         }
-        return builder;
+
+        // Add settings from nodeSettings last, allowing them to take precedence over the randomly generated values
+        return builder.put(nodeSettings().build());
     }
 
     protected String startMasterOnlyNode() {
@@ -356,9 +367,13 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
     }
 
     protected List<String> startIndexNodes(int numOfNodes) {
+        return startIndexNodes(numOfNodes, Settings.EMPTY);
+    }
+
+    protected List<String> startIndexNodes(int numOfNodes, Settings extraSettings) {
         final List<String> nodes = new ArrayList<>(numOfNodes);
         for (int i = 0; i < numOfNodes; i++) {
-            nodes.add(startIndexNode());
+            nodes.add(startIndexNode(extraSettings));
         }
         return List.copyOf(nodes);
     }
@@ -404,12 +419,12 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
     }
 
     protected void setNodeRepositoryStrategy(String nodeName, StatelessMockRepositoryStrategy strategy) {
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, nodeName);
+        ObjectStoreService objectStoreService = getObjectStoreService(nodeName);
         ObjectStoreTestUtils.getObjectStoreStatelessMockRepository(objectStoreService).setStrategy(strategy);
     }
 
     protected StatelessMockRepositoryStrategy getNodeRepositoryStrategy(String nodeName) {
-        ObjectStoreService objectStoreService = internalCluster().getInstance(ObjectStoreService.class, nodeName);
+        ObjectStoreService objectStoreService = getObjectStoreService(nodeName);
         return ObjectStoreTestUtils.getObjectStoreStatelessMockRepository(objectStoreService).getStrategy();
     }
 
@@ -449,7 +464,11 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
      */
     private static String masterNodeAbdicatesForGracefulShutdown() {
         // Ensure that there is at least one other master role node to which the current master can abdicate.
-        assertThat(internalCluster().numMasterNodes(), greaterThan(1));
+        assertThat(
+            "Master node cannot abdicate gracefully on shutdown when there is no other master-eligible node",
+            internalCluster().numMasterNodes(),
+            greaterThan(1)
+        );
 
         final String masterNodeName = internalCluster().getMasterName();
 
@@ -484,6 +503,7 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
                             .setReason("master failover for test")
                             .build()
                     );
+
                     return currentState.copyAndUpdateMetadata(
                         metadata -> metadata.putCustom(NodesShutdownMetadata.TYPE, new NodesShutdownMetadata(shutdownMetadata))
                     );
@@ -538,7 +558,11 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
     }
 
     protected void indexDocsAndRefresh(String indexName, int numDocs) throws Exception {
-        var bulkRequest = client().prepareBulk();
+        indexDocsAndRefresh(client(), indexName, numDocs);
+    }
+
+    protected void indexDocsAndRefresh(Client client, String indexName, int numDocs) throws Exception {
+        var bulkRequest = client.prepareBulk();
         for (int i = 0; i < numDocs; i++) {
             bulkRequest.add(new IndexRequest(indexName).source("field", randomUnicodeOfCodepointLengthBetween(1, 25)));
         }
@@ -548,7 +572,7 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
         }
         assertNoFailures(bulkRequest.get());
         if (bulkRefreshes == false) {
-            assertNoFailures(client().admin().indices().prepareRefresh(indexName).execute().get());
+            assertNoFailures(client.admin().indices().prepareRefresh(indexName).execute().get());
         }
     }
 
@@ -557,203 +581,44 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
         return false;
     }
 
-    protected static void indexDocumentsWithFlush(String indexName) {
-        indexDocuments(indexName, true);
+    protected static ObjectStoreService getCurrentMasterObjectStoreService() {
+        return internalCluster().getCurrentMasterNodeInstance(StatelessComponents.class).getObjectStoreService();
     }
 
-    protected static void indexDocuments(String indexName, boolean expectObjectStoreAndIndexShardConsistency) {
+    protected static ObjectStoreService getObjectStoreService(String nodeName) {
+        return internalCluster().getInstance(StatelessComponents.class, nodeName).getObjectStoreService();
+    }
+
+    protected static TranslogReplicator getTranslogReplicator(String nodeName) {
+        return internalCluster().getInstance(StatelessComponents.class, nodeName).getTranslogReplicator();
+    }
+
+    protected static void indexDocumentsThenFlushOrRefreshOrForceMerge(String indexName) {
+        indexDocumentsThenFlushOrRefreshOrForceMerge(indexName, () -> {}, () -> {}, () -> {});
+    }
+
+    protected static void indexDocumentsThenFlushOrRefreshOrForceMerge(
+        String indexName,
+        Runnable afterFlush,
+        Runnable afterRefresh,
+        Runnable afterForceMerge
+    ) {
         final int iters = randomIntBetween(1, 20);
         for (int i = 0; i < iters; i++) {
             indexDocs(indexName, randomIntBetween(1, 100));
             switch (randomInt(2)) {
-                case 0 -> client().admin().indices().prepareFlush(indexName).setForce(randomBoolean()).get();
+                case 0 -> {
+                    client().admin().indices().prepareFlush(indexName).setForce(randomBoolean()).get();
+                    afterFlush.run();
+                }
                 case 1 -> {
                     client().admin().indices().prepareRefresh(indexName).get();
-                    if (expectObjectStoreAndIndexShardConsistency) {
-                        client().admin().indices().prepareFlush(indexName).setForce(false).setWaitIfOngoing(false).get();
-                    }
+                    afterRefresh.run();
                 }
-                case 2 -> client().admin().indices().prepareForceMerge(indexName).get();
-            }
-            if (expectObjectStoreAndIndexShardConsistency) {
-                assertObjectStoreConsistentWithIndexShards();
-            }
-        }
-    }
-
-    protected static void assertObjectStoreConsistentWithIndexShards() {
-        assertObjectStoreConsistentWithShards(DiscoveryNodeRole.INDEX_ROLE, ShardRouting.Role.INDEX_ONLY);
-    }
-
-    protected static void assertObjectStoreConsistentWithSearchShards() {
-        assertObjectStoreConsistentWithShards(DiscoveryNodeRole.SEARCH_ROLE, ShardRouting.Role.SEARCH_ONLY);
-    }
-
-    private static void assertObjectStoreConsistentWithShards(DiscoveryNodeRole nodeRole, ShardRouting.Role shardRole) {
-        final Map<Index, Integer> indices = resolveIndices();
-        assertThat(indices.isEmpty(), is(false));
-
-        for (Map.Entry<Index, Integer> entry : indices.entrySet()) {
-            assertThat(entry.getValue(), greaterThan(0));
-            for (int shardId = 0; shardId < entry.getValue(); shardId++) {
-                assertThatObjectStoreIsConsistentWithLastCommit(findShard(entry.getKey(), shardId, nodeRole, shardRole));
-            }
-        }
-    }
-
-    protected static void assertThatObjectStoreIsConsistentWithLastCommit(final IndexShard indexShard) {
-        final Store store = indexShard.store();
-        store.incRef();
-        try {
-            ObjectStoreService objectStoreService = internalCluster().getDataNodeInstance(ObjectStoreService.class);
-            var blobContainerForCommit = objectStoreService.getBlobContainer(indexShard.shardId(), indexShard.getOperationPrimaryTerm());
-
-            final SegmentInfos segmentInfos = Lucene.readSegmentInfos(store.directory());
-
-            // can take some time for files to be uploaded to the object store
-            assertBusy(() -> {
-                // New commit can be uploaded after we read segmentInfos, so we bound the read by the known generation
-                final var latestUploadedBcc = readLatestUploadedBccUptoGen(blobContainerForCommit, segmentInfos.getGeneration());
-                StatelessCompoundCommit commit = latestUploadedBcc.lastCompoundCommit();
-
-                assertThat(commit.primaryTermAndGeneration().generation(), equalTo(segmentInfos.getGeneration()));
-                var localFiles = segmentInfos.files(false);
-                var expectedBlobFile = localFiles.stream().map(s -> commit.commitFiles().get(s).blobName()).collect(Collectors.toSet());
-                var remoteFiles = blobContainerForCommit.listBlobs(operationPurpose).keySet();
-                assertThat(
-                    "Expected that all local files " + localFiles + " exist in remote " + remoteFiles,
-                    remoteFiles,
-                    hasItems(expectedBlobFile.toArray(String[]::new))
-                );
-                for (String localFile : segmentInfos.files(false)) {
-                    BlobLocation blobLocation = commit.commitFiles().get(localFile);
-                    final BlobContainer blobContainerForFile = objectStoreService.getBlobContainer(
-                        indexShard.shardId(),
-                        blobLocation.primaryTerm()
-                    );
-                    assertThat(localFile, blobContainerForFile.blobExists(operationPurpose, blobLocation.blobName()), is(true));
-                    try (
-                        IndexInput input = store.directory().openInput(localFile, IOContext.READONCE);
-                        InputStream local = new InputStreamIndexInput(input, input.length());
-                        InputStream remote = blobContainerForFile.readBlob(
-                            operationPurpose,
-                            blobLocation.blobName(),
-                            blobLocation.offset(),
-                            blobLocation.fileLength()
-                        );
-                    ) {
-                        assertEquals("File [" + blobLocation + "] in object store has a different content than local file ", local, remote);
-                    }
+                case 2 -> {
+                    client().admin().indices().prepareForceMerge(indexName).get();
+                    afterForceMerge.run();
                 }
-            });
-        } catch (Exception e) {
-            throw new AssertionError(e);
-        } finally {
-            store.decRef();
-        }
-    }
-
-    /**
-     * Read the latest BCC from the object store bounded by the given generation (inclusive), i.e. the BCC generation
-     * must not be higher than the specified generation.
-     */
-    protected static BatchedCompoundCommit readLatestUploadedBccUptoGen(BlobContainer blobContainerForCommit, long maxGeneration)
-        throws IOException {
-        final BlobMetadata latestUploadBccMetadata = blobContainerForCommit.listBlobsByPrefix(
-            operationPurpose,
-            StatelessCompoundCommit.PREFIX
-        )
-            .values()
-            .stream()
-            .filter(m -> StatelessCompoundCommit.parseGenerationFromBlobName(m.name()) <= maxGeneration)
-            .max(Comparator.comparingLong(m -> StatelessCompoundCommit.parseGenerationFromBlobName(m.name())))
-            .orElseThrow(() -> new AssertionError("retry with assertBusy"));
-        final var latestUploadedBcc = BatchedCompoundCommit.readFromStore(
-            latestUploadBccMetadata.name(),
-            latestUploadBccMetadata.length(),
-            (blobName, offset, length) -> new InputStreamStreamInput(
-                blobContainerForCommit.readBlob(operationPurpose, blobName, offset, length)
-            )
-        );
-        return latestUploadedBcc;
-    }
-
-    protected static void assertThatSearchShardIsConsistentWithLastCommit(final IndexShard indexShard, final IndexShard searchShard) {
-        final Store indexStore = indexShard.store();
-        final Store searchStore = searchShard.store();
-        indexStore.incRef();
-        searchStore.incRef();
-        try {
-            ObjectStoreService objectStoreService = internalCluster().getDataNodeInstance(ObjectStoreService.class);
-            var blobContainerForCommit = objectStoreService.getBlobContainer(indexShard.shardId(), indexShard.getOperationPrimaryTerm());
-
-            // Wait for the latest commit on the index shard is processed on the search engine
-            var listener = new SubscribableListener<Long>();
-            searchShard.getEngineOrNull()
-                .addPrimaryTermAndGenerationListener(
-                    indexShard.getOperationPrimaryTerm(),
-                    indexShard.getEngineOrNull().getLastCommittedSegmentInfos().getGeneration(),
-                    listener
-                );
-            safeAwait(listener);
-            final SegmentInfos segmentInfos = Lucene.readSegmentInfos(indexStore.directory());
-
-            // New commit can be uploaded after we read segmentInfos, so we bound the read by the known generation
-            final var latestUploadedBcc = readLatestUploadedBccUptoGen(blobContainerForCommit, segmentInfos.getGeneration());
-            StatelessCompoundCommit commit = latestUploadedBcc.lastCompoundCommit();
-            assertThat(commit.primaryTermAndGeneration().generation(), equalTo(segmentInfos.getGeneration()));
-
-            for (String localFile : segmentInfos.files(false)) {
-                var blobPath = commit.commitFiles().get(localFile);
-                BlobContainer blobContainer = objectStoreService.getBlobContainer(indexShard.shardId(), blobPath.primaryTerm());
-                var blobFile = blobPath.blobName();
-                // can take some time for files to be uploaded to the object store
-                assertBusy(() -> {
-                    assertThat(blobFile, blobContainer.blobExists(operationPurpose, blobFile), is(true));
-
-                    try (
-                        IndexInput input = indexStore.directory().openInput(localFile, IOContext.READONCE);
-                        InputStream local = new InputStreamIndexInput(input, input.length());
-                        IndexInput searchInput = searchStore.directory().openInput(localFile, IOContext.READONCE);
-                        InputStream searchInputStream = new InputStreamIndexInput(searchInput, searchInput.length());
-                    ) {
-                        assertEquals(
-                            "File [" + blobFile + "] on search shard has a different content than local file ",
-                            local,
-                            searchInputStream
-                        );
-                    }
-                });
-            }
-        } catch (Exception e) {
-            throw new AssertionError(e);
-        } finally {
-            indexStore.decRef();
-            searchStore.decRef();
-        }
-    }
-
-    private static void assertEquals(String message, InputStream expected, InputStream actual) throws IOException {
-        // adapted from Files.mismatch()
-        final int BUFFER_SIZE = 8192;
-        byte[] buffer1 = new byte[BUFFER_SIZE];
-        byte[] buffer2 = new byte[BUFFER_SIZE];
-        try (
-            InputStream expectedStream = new BufferedInputStream(expected, BUFFER_SIZE);
-            InputStream actualStream = new BufferedInputStream(actual, BUFFER_SIZE)
-        ) {
-            long totalRead = 0;
-            while (true) {
-                int nRead1 = expectedStream.readNBytes(buffer1, 0, BUFFER_SIZE);
-                int nRead2 = actualStream.readNBytes(buffer2, 0, BUFFER_SIZE);
-
-                int i = Arrays.mismatch(buffer1, 0, nRead1, buffer2, 0, nRead2);
-                assertThat(message + "(position: " + (totalRead + i) + ')', i, equalTo(-1));
-                if (nRead1 < BUFFER_SIZE) {
-                    // we've reached the end of the files, but found no mismatch
-                    break;
-                }
-                totalRead += nRead1;
             }
         }
     }
@@ -867,7 +732,7 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
                 final ShardId objShardId = new ShardId(entry.getKey(), shardId);
 
                 // Check that the translog on the object store contains the correct sequence numbers and number of operations
-                var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode.getName());
+                var indexObjectStoreService = getObjectStoreService(indexNode.getName());
                 var reader = new TranslogReplicatorReader(indexObjectStoreService.getTranslogBlobContainer(), objShardId);
                 long maxSeqNo = SequenceNumbers.NO_OPS_PERFORMED;
                 long totalOps = 0;
@@ -893,8 +758,15 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
     }
 
     protected static BlobContainer getShardCommitsContainerForCurrentPrimaryTerm(String indexName, String indexNode, int shardId) {
-        var indexObjectStoreService = internalCluster().getInstance(ObjectStoreService.class, indexNode);
-        var primaryTerm = client().admin().cluster().prepareState().get().getState().metadata().index(indexName).primaryTerm(shardId);
+        var indexObjectStoreService = getObjectStoreService(indexNode);
+        var primaryTerm = client().admin()
+            .cluster()
+            .prepareState(TEST_REQUEST_TIMEOUT)
+            .get()
+            .getState()
+            .metadata()
+            .index(indexName)
+            .primaryTerm(shardId);
         return indexObjectStoreService.getBlobContainer(new ShardId(resolveIndex(indexName), shardId), primaryTerm);
     }
 
@@ -928,7 +800,7 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
 
     protected static Set<PrimaryTermAndGeneration> listBlobsTermAndGenerations(ShardId shardId) throws Exception {
         Set<PrimaryTermAndGeneration> set = new HashSet<>();
-        var objectStoreService = internalCluster().getInstance(ObjectStoreService.class, internalCluster().getRandomNodeName());
+        var objectStoreService = getObjectStoreService(internalCluster().getRandomNodeName());
         var indexBlobContainer = objectStoreService.getBlobContainer(shardId);
         for (var entry : indexBlobContainer.children(operationPurpose).entrySet()) {
             var primaryTerm = Long.parseLong(entry.getKey());
@@ -943,7 +815,7 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
     }
 
     protected static long[] getPrimaryTerms(Client client, String indexName) {
-        var response = client.admin().cluster().prepareState().get();
+        var response = client.admin().cluster().prepareState(TEST_REQUEST_TIMEOUT).get();
         var state = response.getState();
 
         var indexMetadata = state.metadata().index(indexName);
@@ -952,5 +824,19 @@ public abstract class AbstractStatelessIntegTestCase extends ESIntegTestCase {
             primaryTerms[i] = indexMetadata.primaryTerm(i);
         }
         return primaryTerms;
+    }
+
+    protected static <T> T findPlugin(String nodeName, Class<T> pluginType) {
+        return internalCluster().getInstance(PluginsService.class, nodeName)
+            .filterPlugins(pluginType)
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("Plugin not found: " + pluginType.getName()));
+    }
+
+    protected static Settings disableIndexingDiskAndMemoryControllersNodeSettings() {
+        return Settings.builder()
+            .put(IndexingMemoryController.SHARD_MEMORY_INTERVAL_TIME_SETTING.getKey(), TimeValue.timeValueHours(1L))
+            .put(IndexingDiskController.INDEXING_DISK_INTERVAL_TIME_SETTING.getKey(), TimeValue.MINUS_ONE)
+            .build();
     }
 }

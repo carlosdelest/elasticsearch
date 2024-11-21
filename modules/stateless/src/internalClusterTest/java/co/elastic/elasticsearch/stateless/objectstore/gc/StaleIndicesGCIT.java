@@ -31,12 +31,12 @@ import org.elasticsearch.cluster.coordination.stateless.StoreHeartbeatService;
 import org.elasticsearch.cluster.health.ClusterHealthStatus;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.CheckedSupplier;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.DeleteResult;
 import org.elasticsearch.common.blobstore.OperationPurpose;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
-import org.elasticsearch.core.CheckedConsumer;
 import org.elasticsearch.core.CheckedRunnable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
@@ -44,9 +44,10 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.disruption.BlockClusterStateProcessing;
 import org.elasticsearch.test.disruption.NetworkDisruption;
+import org.elasticsearch.test.junit.annotations.TestIssueLogging;
 
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
@@ -127,7 +128,6 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
         assertBusy(() -> assertIndexDoesNotExistsInObjectStore(indexUUID));
     }
 
-    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch-serverless/issues/1406")
     public void testStaleIndicesAreCleanedAfterThePersistentTaskNodeFails() throws Exception {
         internalCluster().setBootstrapMasterNodeIndex(0);
         startMasterNode();
@@ -139,19 +139,16 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
 
         var indexName = randomIdentifier();
         createAndPopulateIndex(indexName, indexNode);
+        var indexUUID = resolveIndexUUID(indexName);
 
         internalCluster().stopNode(indexNode);
-
-        var indexUUID = resolveIndexUUID(indexName);
         assertIndexExistsInObjectStore(indexUUID);
 
         client().admin().indices().prepareDelete(indexName).get();
-
         // no index node can take care of cleaning the stale files
         assertIndexExistsInObjectStore(indexUUID);
 
         startIndexNode();
-
         assertBusy(() -> assertIndexDoesNotExistsInObjectStore(indexUUID));
     }
 
@@ -234,7 +231,11 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
             .execute()
             .get();
 
-        var healthResponse = client(masterNode).admin().cluster().prepareHealth(newIndex).setWaitForGreenStatus().get();
+        var healthResponse = client(masterNode).admin()
+            .cluster()
+            .prepareHealth(TEST_REQUEST_TIMEOUT, newIndex)
+            .setWaitForGreenStatus()
+            .get();
         assertFalse(healthResponse.isTimedOut());
 
         var indexUUID = resolveIndexUUID(newIndex, masterNode);
@@ -307,6 +308,10 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
      * Verify that on failure to write using chunked writes, we do not accidentally delete files
      * (bug that we had, notice that assertions must be disabled to provoke it directly)
      */
+    @TestIssueLogging(
+        value = "org.elasticsearch.indices.IndicesService:TRACE",
+        issueUrl = "https://github.com/elastic/elasticsearch-serverless/issues/1954"
+    )
     public void testWriteFailure() throws Exception {
         internalCluster().setBootstrapMasterNodeIndex(0);
         var masterNode = startMasterOnlyNode(
@@ -343,19 +348,15 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
         CountDownLatch failed = new CountDownLatch(1);
         setNodeRepositoryStrategy(indexNode, new StatelessMockRepositoryStrategy() {
             @Override
-            public void blobContainerWriteMetadataBlob(
+            public void blobContainerWriteBlobAtomic(
                 CheckedRunnable<IOException> original,
                 OperationPurpose purpose,
                 String blobName,
-                boolean failIfAlreadyExists,
-                boolean atomic,
-                CheckedConsumer<OutputStream, IOException> writer
+                InputStream inputStream,
+                long blobSize,
+                boolean failIfAlreadyExists
             ) throws IOException {
                 if (StatelessCompoundCommit.startsWithBlobPrefix(blobName)) {
-                    writer.accept(new OutputStream() {
-                        @Override
-                        public void write(int b) {}
-                    });
                     logger.info("--> simulate failure on [{}]", blobName);
                     failed.countDown();
                     throw new IOException("simulate failure after write");
@@ -382,13 +383,19 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
         disruption.startDisrupting();
 
         assertBusy(() -> {
-            assertThat(client(masterNode).admin().cluster().prepareHealth(indexName).get().getStatus(), equalTo(ClusterHealthStatus.RED));
+            assertThat(
+                client(masterNode).admin().cluster().prepareHealth(TEST_REQUEST_TIMEOUT, indexName).get().getStatus(),
+                equalTo(ClusterHealthStatus.RED)
+            );
         });
 
         var indexNode2 = startIndexNode(extraSettings);
 
         assertBusy(() -> {
-            assertThat(client(masterNode).admin().cluster().prepareHealth(indexName).get().getStatus(), equalTo(ClusterHealthStatus.GREEN));
+            assertThat(
+                client(masterNode).admin().cluster().prepareHealth(TEST_REQUEST_TIMEOUT, indexName).get().getStatus(),
+                equalTo(ClusterHealthStatus.GREEN)
+            );
         });
 
         setNodeRepositoryStrategy(indexNode, new StatelessMockRepositoryStrategy());
@@ -415,7 +422,7 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
     }
 
     private static String getNodeWhereGCTaskIsAssigned() {
-        var state = client().admin().cluster().prepareState().get().getState();
+        var state = client().admin().cluster().prepareState(TEST_REQUEST_TIMEOUT).get().getState();
         PersistentTasksCustomMetadata persistentTasks = state.metadata().custom(PersistentTasksCustomMetadata.TYPE);
         var nodeId = persistentTasks.getTask(ObjectStoreGCTask.TASK_NAME).getAssignment().getExecutorNode();
         var executingTaskNode = state.nodes().resolveNode(nodeId).getName();
@@ -455,18 +462,21 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
     }
 
     private static Set<String> getIndicesInBlobStore(String viaNode) throws IOException {
-        var objectStoreService = viaNode == null
-            ? internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class)
-            : internalCluster().getInstance(ObjectStoreService.class, viaNode);
+        var objectStoreService = viaNode == null ? getCurrentMasterObjectStoreService() : getObjectStoreService(viaNode);
         return objectStoreService.getIndicesBlobContainer().children(OperationPurpose.INDICES).keySet();
     }
 
-    private static String resolveIndexUUID(String indexName) {
+    private String resolveIndexUUID(String indexName) {
         return resolveIndexUUID(indexName, null);
     }
 
-    private static String resolveIndexUUID(String indexName, String viaNode) {
-        return client(viaNode).admin().cluster().prepareState().get().getState().metadata().index(indexName).getIndexUUID();
+    private String resolveIndexUUID(String indexName, String viaNode) {
+        var state = client(viaNode).admin().cluster().prepareState(TEST_REQUEST_TIMEOUT).get().getState();
+        var indexMetadata = state.metadata().index(indexName);
+        if (indexMetadata == null) {
+            logger.warn("Index [{}] is not found in cluster state: {}", indexName, Strings.toString(state, true, true));
+        }
+        return indexMetadata.getIndexUUID();
     }
 
     private String startMasterNode() {
@@ -485,7 +495,7 @@ public class StaleIndicesGCIT extends AbstractStatelessIntegTestCase {
 
     private void ensureRed(String masterNode) throws Exception {
         assertBusy(() -> {
-            var healthResponse = client(masterNode).admin().cluster().prepareHealth().get();
+            var healthResponse = client(masterNode).admin().cluster().prepareHealth(TEST_REQUEST_TIMEOUT).get();
             assertFalse(healthResponse.isTimedOut());
             assertThat(healthResponse.getStatus(), is(ClusterHealthStatus.RED));
         });

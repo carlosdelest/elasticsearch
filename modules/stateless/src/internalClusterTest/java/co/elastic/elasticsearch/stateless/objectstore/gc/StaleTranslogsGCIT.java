@@ -26,7 +26,6 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthRequest;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.client.internal.Client;
-import org.elasticsearch.cluster.coordination.stateless.StoreHeartbeatService;
 import org.elasticsearch.cluster.health.ClusterHealthStatus;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -121,7 +120,7 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
 
     public void testTranslogGC() throws Exception {
         startMasterOnlyNode();
-        ObjectStoreService objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
+        ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
 
         String indexNodeA = startIndexNode();
         ensureStableCluster(2);
@@ -178,7 +177,7 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
 
     public void testTranslogGCWithDisruption() throws Exception {
         String masterNode = startMasterOnlyNode();
-        ObjectStoreService objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
+        ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
 
         String indexNodeA = startIndexNode();
         ensureStableCluster(2);
@@ -209,7 +208,7 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
         ensureStableCluster(2, masterNode);
 
         logger.info("--> waiting for index to recover");
-        ClusterHealthRequest healthRequest = new ClusterHealthRequest(indexName).timeout(TimeValue.timeValueSeconds(30L))
+        ClusterHealthRequest healthRequest = new ClusterHealthRequest(TEST_REQUEST_TIMEOUT, indexName).timeout(TEST_REQUEST_TIMEOUT)
             .waitForStatus(ClusterHealthStatus.GREEN)
             .waitForEvents(Priority.LANGUID)
             .waitForNoRelocatingShards(true)
@@ -246,8 +245,7 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
     public void testIsolatedNodeDoesNotDeleteTranslogs() throws Exception {
         Settings settings = Settings.builder().put(ObjectStoreGCTask.GC_INTERVAL_SETTING.getKey(), TimeValue.timeValueHours(1)).build();
         String masterNode = startMasterOnlyNode(settings);
-        ObjectStoreService objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
-        int numDocs = randomIntBetween(1, 10);
+        ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
         AtomicInteger nodes = new AtomicInteger(1);
 
         String indexNodeA = buildNodeWithIndex(nodes, settings); // has the persistent task and will be isolated
@@ -293,7 +291,7 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
     public void testNewFilesOfRejoinedNodeAreNotDeleted() throws Exception {
         Settings settings = Settings.builder().put(ObjectStoreGCTask.GC_INTERVAL_SETTING.getKey(), TimeValue.timeValueHours(1)).build();
         String masterNode = startMasterOnlyNode(settings);
-        ObjectStoreService objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
+        ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
 
         String indexNodeA = startIndexNode(settings); // has the persistent GC task
         ensureStableCluster(2);
@@ -326,7 +324,9 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
         networkDisruption.startDisrupting();
         ensureStableCluster(2, masterNode);
         logger.info("--> waiting for index to recover");
-        ClusterHealthRequest healthRequest = new ClusterHealthRequest(initialIndexNameOnNodeB).timeout(TimeValue.timeValueSeconds(30L))
+        ClusterHealthRequest healthRequest = new ClusterHealthRequest(TEST_REQUEST_TIMEOUT, initialIndexNameOnNodeB).timeout(
+            TEST_REQUEST_TIMEOUT
+        )
             .waitForStatus(ClusterHealthStatus.GREEN)
             .waitForEvents(Priority.LANGUID)
             .waitForNoRelocatingShards(true)
@@ -362,7 +362,7 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
     public void testStaleTranslogsAreNotCleanedWhenGCIsDisabled() throws Exception {
         Settings noGCSettings = Settings.builder().put(ObjectStoreGCTask.STALE_TRANSLOGS_GC_ENABLED_SETTING.getKey(), false).build();
         startMasterOnlyNode();
-        ObjectStoreService objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
+        ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
 
         String indexNodeA = startIndexNode(noGCSettings);
         ensureStableCluster(2);
@@ -394,7 +394,7 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
 
     public void testTranslogGCDoesNotDeleteLeftNodeWhenRecovering() throws Exception {
         startMasterOnlyNode();
-        ObjectStoreService objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
+        ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
         String indexNodeA = startIndexNode(); // has persistent task
         ensureStableCluster(2);
 
@@ -415,13 +415,13 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
         String indexNodeC = startIndexNode(); // will recover shard after node B leaves
         ensureStableCluster(4);
 
-        ObjectStoreService objectStoreServiceC = internalCluster().getInstance(ObjectStoreService.class, indexNodeB);
+        ObjectStoreService objectStoreServiceC = getObjectStoreService(indexNodeB);
         MockRepository repositoryC = ObjectStoreTestUtils.getObjectStoreMockRepository(objectStoreServiceC);
         repositoryC.setBlockOnAnyFiles(); // recoveries will not progress
 
         internalCluster().stopNode(indexNodeB);
         ensureStableCluster(3);
-        ClusterHealthStatus health = clusterAdmin().health(new ClusterHealthRequest()).get().getStatus();
+        ClusterHealthStatus health = clusterAdmin().health(new ClusterHealthRequest(TEST_REQUEST_TIMEOUT)).get().getStatus();
         assertThat("health should be RED", health, equalTo(ClusterHealthStatus.RED));
 
         cleanStaleTranslogs(indexNodeA);
@@ -444,7 +444,7 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
 
     public void testTranslogGCRespectsFileLimit() throws Exception {
         startMasterOnlyNode();
-        ObjectStoreService objectStoreService = internalCluster().getCurrentMasterNodeInstance(ObjectStoreService.class);
+        ObjectStoreService objectStoreService = getCurrentMasterObjectStoreService();
         Settings settings = Settings.builder()
             .put(ObjectStoreGCTask.GC_INTERVAL_SETTING.getKey(), TimeValue.timeValueHours(1))
             .put(ObjectStoreGCTask.STALE_TRANSLOGS_GC_FILES_LIMIT_SETTING.getKey(), 1)
@@ -492,15 +492,5 @@ public class StaleTranslogsGCIT extends AbstractStatelessIntegTestCase {
         indexDocs(indexNode, randomIntBetween(1, 5));
         updateIndexSettings(Settings.builder().put("index.routing.allocation.require._name", (String) null), indexNode);
         return indexNode;
-    }
-
-    private String startMasterNode(Settings settings) {
-        // Quick fail-over
-        return internalCluster().startMasterOnlyNode(
-            nodeSettings().put(StoreHeartbeatService.MAX_MISSED_HEARTBEATS.getKey(), 1)
-                .put(StoreHeartbeatService.HEARTBEAT_FREQUENCY.getKey(), TimeValue.timeValueSeconds(1))
-                .put(settings)
-                .build()
-        );
     }
 }

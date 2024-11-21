@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.stateless.commits;
 
 import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
+import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService;
 
 import org.elasticsearch.action.ActionListener;
@@ -25,6 +26,7 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.telemetry.TelemetryProvider;
 
 import java.util.function.Supplier;
 
@@ -38,9 +40,11 @@ public class TestStatelessCommitService extends StatelessCommitService {
         ClusterService clusterService,
         Client client,
         StatelessCommitCleaner commitCleaner,
-        SharedBlobCacheWarmingService cacheWarmingService
+        StatelessSharedBlobCacheService cacheService,
+        SharedBlobCacheWarmingService cacheWarmingService,
+        TelemetryProvider telemetryProvider
     ) {
-        super(settings, objectStoreService, clusterService, client, commitCleaner, cacheWarmingService);
+        super(settings, objectStoreService, clusterService, client, commitCleaner, cacheService, cacheWarmingService, telemetryProvider);
     }
 
     public Strategy getStrategy() {

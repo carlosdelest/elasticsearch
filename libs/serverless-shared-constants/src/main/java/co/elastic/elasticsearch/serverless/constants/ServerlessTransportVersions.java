@@ -32,11 +32,10 @@ public class ServerlessTransportVersions {
 
     static Set<Integer> IDS = new HashSet<>();
 
-    public static final TransportVersion REMOVE_DUMMY_PRIMARY_RELOCATION_CHANGE = def(8_647_01_0);
-    public static final TransportVersion NEW_COMMIT_NOTIFICATION_WITH_CLUSTER_STATE_VERSION_AND_NODE_ID = def(8_661_01_0);
-    public static final TransportVersion ADD_INGESTED_SIZE_STORAGE_FIELD = def(8_661_02_0);
-    public static final TransportVersion ADD_SAMPLED_METRICS_METADATA = def(8_665_01_0);
-    public static final TransportVersion PUBLISH_NODE_SEARCH_LOAD_QUALITY = def(8_688_01_0);
+    public static final TransportVersion COMPOUND_COMMITS_WITH_HEADER_SIZE_AND_REPLICATED_RANGES = def(8_757_01_0);
+    public static final TransportVersion SHARD_INFO_METADATA = def(8_768_01_0);
+    public static final TransportVersion COMMIT_NOTIFICATION_TRANSPORT_ACTION_SPLIT = def(8_777_01_0);
+    public static final TransportVersion METERING_BROADCAST_ACTIVITY = def(8_777_02_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
@@ -53,13 +52,13 @@ public class ServerlessTransportVersions {
      *
      * See TransportVersions.java for a description of the transport version id layout.
      *
-     * The new version constant should be based on a version constant from the elasticsearch repo. Take the id of the latest version
-     * constant defined in TransportVersions. There are two possible cases:
+     * The new version constant should be based on a version constant from the latest synced elasticsearch submodule.
+     * Take the id of the latest version constant defined in TransportVersions. There are two possible cases:
      * - If the server part of the id is equal to the server part from the latest constant defined here, then
-     *   bump the server part of the latest version here. eg if the latest id defined in server is 8_501_00_0, and the latest defined
+     *   bump the serverless part of the latest version here. eg if the latest id defined in server is 8_501_00_0, and the latest defined
      *   here is 8_501_01_0, then the next id should be 8_501_02_0.
      * - If the server part of the id is newer than the server part from the latest constant defined here, then the next id
-     *   should bump the server part of that id. eg if the latest id defined in server is 8_600_00_0, and the latest defined
+     *   should bump the serverless part of that id. eg if the latest id defined in server is 8_600_00_0, and the latest defined
      *   here is 8_500_01_0, then the next id should be 8_600_01_0.
      *
      * A patch id should only be created if a patch transport change is needed in serverless code. If so, the next id should be

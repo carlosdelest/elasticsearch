@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.stateless.lucene;
 
-import co.elastic.elasticsearch.stateless.commits.StatelessCompoundCommit;
+import co.elastic.elasticsearch.stateless.commits.BlobFileRanges;
 
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FilterDirectory;
@@ -25,13 +25,16 @@ import org.apache.lucene.store.FilterIndexInput;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
+import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.blobcache.common.BlobCacheBufferedIndexInput;
 import org.elasticsearch.common.lucene.store.FilterIndexOutput;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.AbstractRefCounted;
 import org.elasticsearch.core.CheckedFunction;
 import org.elasticsearch.core.IOUtils;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.RefCounted;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.store.ByteSizeDirectory;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -48,13 +51,16 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
 
+import static co.elastic.elasticsearch.stateless.commits.StatelessCommitService.isGenerationalFile;
 import static org.elasticsearch.blobcache.BlobCacheUtils.ensureSeek;
 import static org.elasticsearch.blobcache.BlobCacheUtils.ensureSlice;
 import static org.elasticsearch.core.Strings.format;
@@ -68,7 +74,13 @@ public class IndexDirectory extends ByteSizeDirectory {
      * Directory used to access files stored in the object store through the shared cache. Once a commit is uploaded to the object store,
      * its files should be accessed using this cache directory.
      */
-    private final SearchDirectory cacheDirectory;
+    private final IndexBlobStoreCacheDirectory cacheDirectory;
+    /**
+     * A callback to invoke when a generational file is deleted (by Lucene). It is used for
+     * ref-counting their associated BCC blobs.
+     */
+    @Nullable
+    private final BiConsumer<ShardId, String> onGenerationalFileDeletion;
 
     /**
      * Map of files created on disk by the indexing shard. A reference {@link LocalFileRef} to this file is kept in the map until the file
@@ -89,11 +101,19 @@ public class IndexDirectory extends ByteSizeDirectory {
      */
     private final AtomicLong estimatedSize = new AtomicLong();
 
+    private final SetOnce<String> recoveryCommitMetadataNodeEphemeralId = new SetOnce<>();
+    private final SetOnce<Long> recoveryCommitTranslogRecoveryStartFile = new SetOnce<>();
+
     private long lastGeneration = -1;
 
-    public IndexDirectory(Directory in, SearchDirectory cacheDirectory) {
+    public IndexDirectory(
+        Directory in,
+        IndexBlobStoreCacheDirectory cacheDirectory,
+        @Nullable BiConsumer<ShardId, String> onGenerationalFileDeletion
+    ) {
         super(in);
         this.cacheDirectory = Objects.requireNonNull(cacheDirectory);
+        this.onGenerationalFileDeletion = onGenerationalFileDeletion;
     }
 
     @Override
@@ -181,7 +201,11 @@ public class IndexDirectory extends ByteSizeDirectory {
             }
             if (localFile != null && localFile.tryIncRefNotUploaded()) {
                 try {
-                    return new ReopeningIndexInput(name, context, super.openInput(name, context), localFile);
+                    // Index inputs opened with READONCE IO context are expected to be read and closed within the same thread
+                    // (see https://github.com/apache/lucene/pull/13535). This is not the case for ReopeningIndexInput that can be closed
+                    // by the uploading thread.
+                    var ctx = context == IOContext.READONCE ? IOContext.DEFAULT : context;
+                    return new ReopeningIndexInput(name, context, super.openInput(name, ctx), localFile);
                 } finally {
                     localFile.decRef();
                 }
@@ -226,6 +250,9 @@ public class IndexDirectory extends ByteSizeDirectory {
             return;
         }
         localFile.markAsDeleted();
+        if (onGenerationalFileDeletion != null && isGenerationalFile(name)) {
+            onGenerationalFileDeletion.accept(cacheDirectory.getShardId(), name);
+        }
     }
 
     public void sync(Collection<String> names) {
@@ -252,42 +279,70 @@ public class IndexDirectory extends ByteSizeDirectory {
         }
     }
 
-    public SearchDirectory getSearchDirectory() {
+    public IndexBlobStoreCacheDirectory createNewInstance() {
+        return cacheDirectory.createNewInstance();
+    }
+
+    public IndexBlobStoreCacheDirectory getBlobStoreCacheDirectory() {
         return cacheDirectory;
     }
 
-    public void updateCommit(StatelessCompoundCommit commit, Set<String> filesToRetain) {
+    public void updateCommit(
+        long lastUploadedGeneration,
+        long dataSizeInBytes,
+        Set<String> uploadedFiles,
+        Map<String, BlobFileRanges> blobFileRanges
+    ) {
         try (var ignored = writeLock.acquire()) {
             // retaining files will not work if we receive files out of order.
             // StatelessCommitService however promises to only call this in commit generation order.
-            assert commit.generation() >= lastGeneration : "out of order generation " + commit.generation() + " < " + lastGeneration;
-            lastGeneration = commit.generation();
-            assert filesToRetain == null || filesToRetain.containsAll(commit.commitFiles().keySet());
+            assert lastUploadedGeneration >= lastGeneration : "out of order generation " + lastUploadedGeneration + " < " + lastGeneration;
+            lastGeneration = lastUploadedGeneration;
+            assert blobFileRanges.keySet().containsAll(uploadedFiles);
 
-            cacheDirectory.updateCommit(commit);
-            if (filesToRetain != null) { // during close we do not know the files to retain
-                cacheDirectory.retainFilesIndexing(filesToRetain);
-            }
-            if (localFiles.isEmpty()) {
-                // create references for first commit files if they are not known
-                commit.commitFiles().keySet().forEach(file -> localFiles.putIfAbsent(file, new LocalFileRef(file) {
-                    @Override
-                    protected void closeInternal() {
-                        // skipping deletion, the file was not created locally
-                    }
-                }));
-
-                // Mark all the files added as uploaded since they came from the object store
-                commit.commitFiles().keySet().forEach(file -> localFiles.get(file).markAsUploaded());
-            } else {
-                commit.commitFiles().keySet().forEach(file -> {
-                    var localFile = localFiles.get(file);
-                    if (localFile != null) {
-                        localFile.markAsUploaded();
-                    }
-                });
-            }
+            cacheDirectory.updateMetadata(blobFileRanges, dataSizeInBytes);
+            uploadedFiles.forEach(file -> {
+                var localFile = localFiles.get(file);
+                if (localFile != null) {
+                    localFile.markAsUploaded();
+                }
+            });
         }
+    }
+
+    /**
+     * Updates the metadata required for recovery operations. This method is invoked prior to the recovery process
+     * to ensure that all necessary information is available for replaying operations from the transaction log (translog) if needed.
+     */
+    public void updateRecoveryCommit(
+        long generation,
+        String nodeEphemeralId,
+        long translogRecoveryStartFile,
+        long dataSetSizeInBytes,
+        Map<String, BlobFileRanges> blobFileRanges
+    ) {
+        recoveryCommitMetadataNodeEphemeralId.set(nodeEphemeralId);
+        recoveryCommitTranslogRecoveryStartFile.set(translogRecoveryStartFile);
+        try (var ignored = writeLock.acquire()) {
+            assert localFiles.isEmpty();
+            blobFileRanges.keySet().forEach(file -> localFiles.putIfAbsent(file, new LocalFileRef(file) {
+                @Override
+                protected void closeInternal() {
+                    // skipping deletion, the file was not created locally
+                }
+            }));
+            updateCommit(generation, dataSetSizeInBytes, blobFileRanges.keySet(), blobFileRanges);
+        }
+    }
+
+    public Optional<String> getRecoveryCommitMetadataNodeEphemeralId() {
+        String nodeEphemeralId = recoveryCommitMetadataNodeEphemeralId.get();
+        return nodeEphemeralId != null ? Optional.of(nodeEphemeralId) : Optional.empty();
+    }
+
+    public long getTranslogRecoveryStartFile() {
+        Long translogRecoveryStartFile = recoveryCommitTranslogRecoveryStartFile.get();
+        return translogRecoveryStartFile != null ? translogRecoveryStartFile : 0;
     }
 
     public static IndexDirectory unwrapDirectory(final Directory directory) {
@@ -569,7 +624,8 @@ public class IndexDirectory extends ByteSizeDirectory {
          * <p>
          * For example, during merges Lucene might delete a local file using {@link #deleteFile(String)} and continue to read from it. By
          * holding a ref on the {@link LocalFileRef}, the file remains in the directory folder on disk until the {@link LocalDelegate} is
-         * fully released.
+         * fully released. This specific bug has been fixed in Lucene 9.11.0 (https://github.com/apache/lucene/pull/13017) so we might want
+         * to revisit this.
          * </p>
          * <p>
          * When the local file is uploaded to the object store, the {@link LocalFileRef} calls back the {@link ReopeningIndexInput}
@@ -590,7 +646,7 @@ public class IndexDirectory extends ByteSizeDirectory {
                 super("local(" + name + ')', false, input);
                 this.name = Objects.requireNonNull(name);
                 this.localFile = Objects.requireNonNull(localFile);
-                this.localFile.incRef();
+                this.localFile.incRef(); // Do we need to revisit this? It is fixed in Lucene (https://github.com/apache/lucene/pull/13017)
                 this.refCounted = AbstractRefCounted.of(() -> {
                     try {
                         try {
@@ -718,7 +774,7 @@ public class IndexDirectory extends ByteSizeDirectory {
 
             private CachedDelegate(String name, IndexInput input, boolean clone) {
                 super("cached(" + name + ')', true, input);
-                assert FilterIndexInput.unwrap(input) instanceof SearchIndexInput : input;
+                assert FilterIndexInput.unwrap(input) instanceof BlobCacheIndexInput : input;
                 this.clone = clone;
             }
 
@@ -820,7 +876,7 @@ public class IndexDirectory extends ByteSizeDirectory {
                     if (current.isCached()) {
                         // We clone the actual delegate input. No need to clone our Delegate wrapper with the "cached" flag.
                         IndexInput inputToClone = current.getDelegate();
-                        assert FilterIndexInput.unwrap(inputToClone) instanceof SearchIndexInput : toString();
+                        assert FilterIndexInput.unwrap(inputToClone) instanceof BlobCacheIndexInput : toString();
                         return seekOnClone(inputToClone.clone());
                     } else {
                         final var clone = (ReopeningIndexInput) super.clone();
@@ -857,7 +913,7 @@ public class IndexDirectory extends ByteSizeDirectory {
             assert sliceDescription != null;
             return executeLocallyOrReopen(current -> {
                 if (current.isCached()) {
-                    assert FilterIndexInput.unwrap(current.getDelegate()) instanceof SearchIndexInput : toString();
+                    assert FilterIndexInput.unwrap(current.getDelegate()) instanceof BlobCacheIndexInput : toString();
                     return current.slice(sliceDescription, sliceOffset, sliceLength);
                 } else {
                     ensureSlice(sliceDescription, sliceOffset, sliceLength, current);
@@ -895,7 +951,7 @@ public class IndexDirectory extends ByteSizeDirectory {
                 try {
                     if (closed == false) {
                         var next = cacheDirectory.openInput(name, context);
-                        assert FilterIndexInput.unwrap(next) instanceof SearchIndexInput : next;
+                        assert FilterIndexInput.unwrap(next) instanceof BlobCacheIndexInput : next;
                         if (this.sliceDescription != null) {
                             next = next.slice(this.sliceDescription, this.sliceOffset, this.sliceLength);
                         }

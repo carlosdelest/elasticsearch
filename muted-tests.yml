@@ -1,105 +1,121 @@
 tests:
-- # Examples:
-  #
-  #  Mute a single test case in a YAML test suite:
-  #  - class: org.elasticsearch.analysis.common.CommonAnalysisClientYamlTestSuiteIT
-  #    method: test {yaml=analysis-common/30_tokenizers/letter}
-  #    issue: https://github.com/elastic/elasticsearch/...
-  #
-  #  Mute several methods of a Java test:
-  #  - class: org.elasticsearch.common.CharArraysTests
-  #    methods:
-  #      - testCharsBeginsWith
-  #      - testCharsToBytes
-  #      - testConstantTimeEquals
-  #    issue: https://github.com/elastic/elasticsearch/...
-  #
-  #  Mute an entire test class:
-  #  - class: org.elasticsearch.common.unit.TimeValueTests
-  #    issue: https://github.com/elastic/elasticsearch/...
-  #
-  #  Mute a single method in a test class:
-  #  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
-  #    method: testCrankyEvaluateBlockWithoutNulls
-  #    issue: https://github.com/elastic/elasticsearch/...
-  class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {stats.SumOfDouble SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/1939
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {stats.SumOfDouble SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/1939
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {stats.SumOfDouble SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/1939
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {stats.SumOfDouble SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/1939
-- class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/1987"
-  method: "testOngoingTasksAreReflectedInSearchLoad"
-- class: "co.elastic.elasticsearch.settings.secure.FileSecureSettingsServiceIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2013"
-  method: "testSettingsApplied"
-- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2120"
-  method: "test {yaml=logsdb/10_settings/create logs index}"
-- class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2138"
-  method: "test {stats.DocsStatsSumNestedExpression#[skip:-8.12.99,reason:supported\
-    \ in 8.13+] ASYNC}"
+# Examples:
+#
+#  Mute a single test case in a YAML test suite:
+#  - class: org.elasticsearch.analysis.common.CommonAnalysisClientYamlTestSuiteIT
+#    method: test {yaml=analysis-common/30_tokenizers/letter}
+#    issue: https://github.com/elastic/elasticsearch/...
+#
+#  Mute several methods of a Java test:
+#  - class: org.elasticsearch.common.CharArraysTests
+#    methods:
+#      - testCharsBeginsWith
+#      - testCharsToBytes
+#      - testConstantTimeEquals
+#    issue: https://github.com/elastic/elasticsearch/...
+#
+#  Mute an entire test class:
+#  - class: org.elasticsearch.common.unit.TimeValueTests
+#    issue: https://github.com/elastic/elasticsearch/...
+#
+#  Mute a single method in a test class:
+#  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
+#    method: testCrankyEvaluateBlockWithoutNulls
+#    issue: https://github.com/elastic/elasticsearch/...
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2190"
   method: "test {yaml=health/10_basic/cluster health basic test}"
-- class: "org.elasticsearch.datastreams.DataStreamUpgradeRestIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2192"
-  method: "testConflictingMappingUpgrade"
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2223"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2409"
   method: "testShardReadLoadCausesMinimumAndZeroSearchLoad"
-- class: "co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2245"
-  method: "testActiveTranslogFilesArePrunedCaseWithMultipleShards"
-- class: "org.elasticsearch.datastreams.logsdb.LogsIndexModeEnabledRestTestIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2251"
-  method: "testCreateDataStream"
-- class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2255"
-  methods:
-  - "test {spatial.AirportCityLocationPointDistance ASYNC}"
-  - "test {spatial.AirportCityLocationPointDistance SYNC}"
-  - "test {k8s-metrics.TwoRatesWithBucket ASYNC}"
-  - "test {k8s-metrics.TwoRatesWithBucket SYNC}"
-- class: "co.elastic.elasticsearch.stateless.CorruptionIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2258"
-  method: "testConcurrentOperations"
-- class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2263"
-  method: "test {spatial.AirportCityLocationPointDistance ASYNC}"
-- class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2255"
-  methods:
-  - "test {spatial.AirportCityLocationPointDistance SYNC}"
-  - "test {spatial.AirportCityLocationPointDistance ASYNC}"
-  - "test {k8s-metrics.TwoRatesWithBucket SYNC}"
-- class: "org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2266"
-- class: "co.elastic.elasticsearch.stateless.recovery.RecoveryMetricsIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2268"
-  method: "testRecoveryMetricPublicationBytesReadToCache"
-- class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2271"
-  method: "test {k8s-metrics.TwoRatesWithBucket SYNC}"
-- class: "co.elastic.elasticsearch.stateless.StatelessRecoveryIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2275"
-  method: "testPreferredNodeIdsAreUsedDuringRelocation"
-- class: "org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2276"
-- class: "org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2280"
-  method: "test {k8s-metrics.TwoRatesWithBucket ASYNC}"
+- class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2432"
+  method: "test {p0=esql/180_match_operator/*}"
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2137"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2496"
   method: "testMultipleDatastreamsRanking"
-- class: "co.elastic.elasticsearch.metering.SampledMetricsMetadataServiceIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2282"
-  method: "testRecordsSentFromLatestCommitedTimestampWhenPersistentTaskNodeRestarts"
+- class: co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetentionTests
+  method: testInvalidSettingsTooSmall
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2562
+- class: co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetentionTests
+  method: testInvalidCombination
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2563
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {categorize.Categorize SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {categorize.Categorize ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+- class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
+- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
+  method: "test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2899"
+- class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
+  method: testTooManyEval
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2929
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=profiling/10_basic/Test flamegraph from test-events}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2957
+- class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
+  method: testSortByManyLongsTooMuchMemoryAsync
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2926
+- class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/3034"
+  method: "testBackgroundMergeCanRetainDeletedGenerationalFile"
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {categorize.Categorize ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {categorize.Categorize ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {categorize.Categorize SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: "test {categorize.Categorize *"
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=ml/inference_crud/Test delete given model referenced by pipeline}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3085
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=ml/inference_crud/Test delete given model with alias referenced by pipeline}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3088
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=ml/inference_crud/Test force delete given model referenced by pipeline}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3089
+- class: co.elastic.elasticsearch.stateless.CorruptionIT
+  method: testConcurrentOperations
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/2969
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=profiling/10_basic/Test get stacktraces}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3121
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {union_types.Multi Index millis to nanos stats SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3122
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {union_types.Multi Index millis to nanos stats ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3123
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: "test {lookup-join.*"
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: "test {lookup-join.*"
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=profiling/10_basic/Test topN functions from test-events}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3153
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=synonyms/20_synonyms_get/Get synonyms set}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3157
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3158
+- class: org.elasticsearch.xpack.fleet.FleetRestIT
+  method: test {p0=fleet/40_secrets_get/Get Fleet Secret}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3159
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=profiling/10_basic/Test topN functions from profiling-events}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3160

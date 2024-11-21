@@ -31,6 +31,7 @@ import org.elasticsearch.xpack.core.security.authz.privilege.ApplicationPrivileg
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.core.security.authz.restriction.WorkflowResolver;
+import org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore;
 import org.elasticsearch.xpack.core.security.support.MetadataUtils;
 import org.elasticsearch.xpack.core.security.support.NativeRealmValidationUtil;
 import org.elasticsearch.xpack.core.security.support.Validation;
@@ -41,6 +42,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
@@ -56,6 +58,11 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
     static final String RESERVED_ROLE_NAME_PREFIX = "_";
     static final String PUBLIC_METADATA_KEY = MetadataUtils.RESERVED_PREFIX + "public";
     static final Set<String> PREDEFINED_ROLE_METADATA_ALLOWLIST = Set.of(PUBLIC_METADATA_KEY);
+
+    static final int MIN_ROLE_NAME_LENGTH = 1;
+    static final int MAX_ROLE_NAME_LENGTH = NativeRealmValidationUtil.MAX_NAME_LENGTH;
+    private static final Pattern VALID_ROLE_NAME = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9_.-]*$");
+    private static final Pattern VALID_RESERVED_ROLE_NAME = Pattern.compile("^[a-zA-Z0-9_.-]*$");
 
     public ServerlessRoleValidator() {}
 
@@ -82,7 +89,10 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
         ActionRequestValidationException validationException
     ) {
         if (validateRoleName) {
-            validationException = validateRoleName(roleDescriptor.getName(), validationException);
+            final String validationError = validateRoleName(roleDescriptor.getName(), false);
+            if (validationError != null) {
+                validationException = addValidationError(validationError, validationException);
+            }
         }
         validationException = validateRoleDescriptor(roleDescriptor, false, validationException);
         // Serverless validation is stricter than regular role descriptor validation, therefore the invariant that a valid custom
@@ -129,17 +139,27 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
         }
     }
 
-    private ActionRequestValidationException validateRoleName(String roleName, ActionRequestValidationException validationException) {
-        final Validation.Error error = NativeRealmValidationUtil.validateRoleName(roleName, false);
-        if (error != null) {
-            validationException = addValidationError(error.toString(), validationException);
-        } else if (roleName.startsWith(RESERVED_ROLE_NAME_PREFIX)) {
-            validationException = addValidationError(
-                "role name may not start with [" + RESERVED_ROLE_NAME_PREFIX + "]",
-                validationException
-            );
+    static String validateRoleName(String roleName, boolean allowReserved) {
+        if (roleName == null) {
+            return "role name is missing";
         }
-        return validationException;
+        if (roleName.length() < MIN_ROLE_NAME_LENGTH || roleName.length() > MAX_ROLE_NAME_LENGTH) {
+            return "role name must be at least " + MIN_ROLE_NAME_LENGTH + " and no more than " + MAX_ROLE_NAME_LENGTH + " characters";
+        }
+        if (allowReserved) {
+            if (VALID_RESERVED_ROLE_NAME.matcher(roleName).matches() == false) {
+                return "role name can only contain letters, digits and the characters '_', '-', and '.'";
+            }
+        } else {
+            if (VALID_ROLE_NAME.matcher(roleName).matches() == false) {
+                return "role name must begin with a letter or digit "
+                    + "and can only contain letters, digits and the characters '_', '-', and '.'";
+            }
+            if (ReservedRolesStore.isReserved(roleName)) {
+                return "Role [" + roleName + "] is reserved and may not be used.";
+            }
+        }
+        return null;
     }
 
     private ActionRequestValidationException validateRoleDescriptor(

@@ -9,5 +9,10 @@ tasks {
     }
     javaRestTest {
         exclude("**/DataStreamDeleteLifecycleWithPermissionsRestIT.class")
+
+        filter {
+            // Uses snapshot API not available as user API on serverless
+            excludeTestsMatching("*.LogsDataStreamRestIT.testLogsDBSnapshotCreateRestoreMount")
+        }
     }
 }

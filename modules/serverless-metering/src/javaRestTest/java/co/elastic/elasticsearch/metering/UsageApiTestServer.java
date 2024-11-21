@@ -33,12 +33,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.stream.Collectors;
 
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
 public class UsageApiTestServer extends ExternalResource {
@@ -75,34 +73,11 @@ public class UsageApiTestServer extends ExternalResource {
         return XContentParserUtils.parseList(parser, XContentParser::map);
     }
 
-    public BlockingQueue<List<Map<?, ?>>> getReceivedRecords() {
+    BlockingQueue<List<Map<?, ?>>> getReceivedRecords() {
         return received;
     }
 
-    public List<Map<?, ?>> getUsageRecords(String prefix) {
-        List<List<Map<?, ?>>> recordLists = drainAllUsageRecords();
-        logger.info(recordLists);
-        return filterUsageRecords(recordLists, prefix);
-    }
-
-    public static List<Map<?, ?>> filterUsageRecords(List<List<Map<?, ?>>> recordLists, String prefix) {
-        return recordLists.stream()
-            .flatMap(List::stream)
-            .filter(m -> ((String) m.get("id")).startsWith(prefix))
-            .collect(Collectors.toList());
-    }
-
-    public List<List<Map<?, ?>>> drainAllUsageRecords() {
-        List<List<Map<?, ?>>> recordLists = new ArrayList<>();
-        getReceivedRecords().drainTo(recordLists);
-        return recordLists;
-    }
-
-    public List<List<Map<?, ?>>> getAllUsageRecords() {
-        return new ArrayList<>(getReceivedRecords());
-    }
-
-    public InetSocketAddress getAddress() {
+    InetSocketAddress getAddress() {
         return server.getAddress();
     }
 }

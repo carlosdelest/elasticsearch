@@ -17,6 +17,11 @@
 
 package co.elastic.elasticsearch.metering;
 
+import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
+
+import org.hamcrest.FeatureMatcher;
+import org.hamcrest.Matcher;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,5 +32,16 @@ public class TestUtils {
             list.add(x);
         }
         return list;
+    }
+
+    public static Matcher<SampledMetricsProvider.MetricValues> hasBackfillStrategy(
+        Matcher<SampledMetricsProvider.BackfillStrategy> matcher
+    ) {
+        return new FeatureMatcher<>(matcher, "has backfill strategy", "backfillStrategy") {
+            @Override
+            protected SampledMetricsProvider.BackfillStrategy featureValueOf(SampledMetricsProvider.MetricValues metricValues) {
+                return metricValues.backfillStrategy();
+            }
+        };
     }
 }

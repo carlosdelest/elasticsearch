@@ -19,11 +19,18 @@ package co.elastic.elasticsearch.api.validation;
 
 import org.elasticsearch.action.admin.indices.settings.put.TransportUpdateSettingsAction;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 
+import java.util.Collections;
+
 public class UpdateSettingsValidator extends PublicSettingsValidator<UpdateSettingsRequest> {
+
+    private static final String NUMBER_OF_REPLICAS_WITHOUT_PREFIX = IndexMetadata.SETTING_NUMBER_OF_REPLICAS.substring(
+        IndexMetadata.INDEX_SETTING_PREFIX.length()
+    );
 
     public UpdateSettingsValidator(ThreadContext threadContext, IndexScopedSettings indexScopedSettings) {
         super(threadContext, indexScopedSettings);
@@ -37,5 +44,13 @@ public class UpdateSettingsValidator extends PublicSettingsValidator<UpdateSetti
     @Override
     protected Settings getSettingsFromRequest(UpdateSettingsRequest request) {
         return request.settings();
+    }
+
+    @Override
+    void validateSettings(Settings settings) {
+        super.validateSettings(settings);
+        if (settings.hasValue(IndexMetadata.SETTING_NUMBER_OF_REPLICAS) || settings.hasValue(NUMBER_OF_REPLICAS_WITHOUT_PREFIX)) {
+            throwValidationError(Collections.singletonList(IndexMetadata.SETTING_NUMBER_OF_REPLICAS));
+        }
     }
 }

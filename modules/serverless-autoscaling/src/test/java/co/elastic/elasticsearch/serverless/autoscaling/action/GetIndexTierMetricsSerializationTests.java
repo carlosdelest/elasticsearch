@@ -59,7 +59,7 @@ public class GetIndexTierMetricsSerializationTests extends AbstractWireSerializi
     }
 
     private static NodeIngestLoadSnapshot randomNodeIngestLoad() {
-        return new NodeIngestLoadSnapshot(randomDoubleBetween(0, 128, true), randomQuality());
+        return new NodeIngestLoadSnapshot(randomIdentifier(), randomIdentifier(), randomDoubleBetween(0, 128, true), randomQuality());
     }
 
     public static MetricQuality randomQuality() {

@@ -49,6 +49,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -62,6 +63,7 @@ import java.util.concurrent.TimeoutException;
 import static org.elasticsearch.server.cli.ProcessUtil.nonInterruptibleVoid;
 import static org.elasticsearch.server.cli.ServerlessServerCli.DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
+import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
@@ -79,19 +81,47 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
     private Path defaultSettingsFile;
     private Path cgroupFs;
-    private Path cpuShares;
+    private String cgroupV2DirName;
+    private Collection<CpuControlFile> cpuControlFiles;
     private int availableProcessors;
     private final MockServerlessProcess mockServer = new MockServerlessProcess();
+
+    /**
+     * Allows us to test both {@code cpu.shares} and {@code cpu.weight}
+     * @param file (you can assume the parent directory already exists at the start of the test)
+     * @param denominator the amount that represents one full CPU
+     * @param controllersFile is how we tell whether it's v1 or v2; if this file exists, it's v2
+     */
+    record CpuControlFile(Path file, int denominator, Path controllersFile) {
+        void setup() throws IOException {
+            if (controllersFile != null) {
+                Files.writeString(controllersFile, "cpuset cpu io memory hugetlb pids rdma");
+            }
+        }
+
+        void cleanup() throws IOException {
+            Files.deleteIfExists(file);
+            if (controllersFile != null) {
+                Files.deleteIfExists(controllersFile);
+            }
+        }
+    }
 
     @Before
     public void setupMockConfig() throws IOException {
         Files.createFile(configDir.resolve("log4j2.properties"));
         defaultSettingsFile = configDir.resolve("serverless-default-settings.yml");
         Files.writeString(defaultSettingsFile, "");
+
         cgroupFs = createTempDir();
-        cpuShares = cgroupFs.resolve("cpu/cpu.shares");
-        Files.createDirectories(cpuShares.getParent());
-        Files.writeString(cpuShares, "1024\n"); // mimic the extra whitespace that may appear in the cgroup fs files
+        CpuControlFile cpuShares = new CpuControlFile(cgroupFs.resolve("cpu/cpu.shares"), 1024, null);
+        cgroupV2DirName = "test-cgroup-name";
+        var cgroupV2Dir = cgroupFs.resolve(cgroupV2DirName);
+        CpuControlFile cpuWeight = new CpuControlFile(cgroupV2Dir.resolve("cpu.weight"), 100, cgroupFs.resolve("cgroup.controllers"));
+        Files.createDirectories(cpuShares.file().getParent());
+        Files.createDirectories(cgroupV2Dir);
+
+        cpuControlFiles = List.of(cpuShares, cpuWeight);
         availableProcessors = 2;
         mockServer.waitForAction = null;
         mockServer.stopAction = null;
@@ -118,24 +148,70 @@ public class ServerlessServerCliTests extends CommandTestCase {
     }
 
     public void testOvercommitDefaults() throws Exception {
-        executeOvercommit(1.0);
-        // defaults to no overcommit
-        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("1.0"));
+        for (var cpu : cpuControlFiles) {
+            try {
+                cpu.setup();
 
-        availableProcessors = 1;
-        executeOvercommit(1.0);
-        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("1.0"));
+                Files.writeString(cpu.file(), cpu.denominator + "\n"); // mimic the extra whitespace that may appear in the cgroup fs files
+                executeOvercommit(1.0);
+                // defaults to no overcommit
+                assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("1.0"));
+
+                availableProcessors = 1;
+                executeOvercommit(1.0);
+                assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("1.0"));
+            } finally {
+                cpu.cleanup();
+            }
+        }
     }
 
     public void testOvercommit() throws Exception {
-        // 512 share * 1.5 = 768 / 1024 = 0.75
-        Files.writeString(cpuShares, "512\n");
-        executeOvercommit(1.5);
-        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("0.75"));
+        for (var cpu : cpuControlFiles) {
+            try {
+                cpu.setup();
 
-        // 512 share * 4 = 2048 / 1024 = 2.0
-        executeOvercommit(4.0);
-        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("2.0"));
+                // Half a CPU * 1.5 = 0.75
+                Files.writeString(cpu.file(), cpu.denominator / 2 + "\n"); // mimic the extra whitespace that may appear in the cgroup fs
+                                                                           // files
+                executeOvercommit(1.5);
+                assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("0.75"));
+
+                // Half a CPU * 4 = 2.0
+                executeOvercommit(4.0);
+                assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("2.0"));
+            } finally {
+                cpu.cleanup();
+            }
+        }
+    }
+
+    public void testOvercommitCappedByAvailable() throws Exception {
+        for (var cpu : cpuControlFiles) {
+            try {
+                cpu.setup();
+
+                Files.writeString(cpu.file(), (cpu.denominator * 2 + 1) + "\n"); // Just a little more than 2 CPUs
+                executeOvercommit(1.0);
+                assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("2.0"));
+                assertThat(terminal.getOutput(), containsString("Capping cpu overcommit to (2)."));
+            } finally {
+                cpu.cleanup();
+            }
+        }
+    }
+
+    public void testOvercommitErrorCpuFileMissing() throws Exception {
+        for (var cpu : cpuControlFiles) {
+            try {
+                cpu.setup();
+                Files.deleteIfExists(cpu.file());
+                var e = expectThrows(IllegalStateException.class, () -> executeOvercommit(1.0));
+                assertThat(e.getMessage(), both(containsString("cgroups")).and(containsString("must be set in serverless")));
+            } finally {
+                cpu.cleanup();
+            }
+        }
     }
 
     public void testProjectId() throws Exception {
@@ -176,19 +252,6 @@ public class ServerlessServerCliTests extends CommandTestCase {
         sysprops.put(ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP, Double.toString(1.0));
         var e = expectThrows(IllegalStateException.class, () -> execute("-E", "node.processors=2"));
         assertThat(e.getMessage(), containsString("node.processors must not be present"));
-    }
-
-    public void testOvercommitErrorCpuSharesMissing() throws Exception {
-        Files.delete(cpuShares);
-        var e = expectThrows(IllegalStateException.class, () -> executeOvercommit(1.0));
-        assertThat(e.getMessage(), containsString("cgroups v1 cpu.shares must be set in serverless"));
-    }
-
-    public void testOvercommitCappedByAvailable() throws Exception {
-        Files.writeString(cpuShares, "2049\n");
-        executeOvercommit(1.0);
-        assertThat(mockServer.args.nodeSettings().get(EsExecutors.NODE_PROCESSORS_SETTING.getKey()), equalTo("2.0"));
-        assertThat(terminal.getOutput(), containsString("Capping cpu overcommit to (2)."));
     }
 
     private void executeOvercommit(double overcommit) throws Exception {
@@ -847,6 +910,11 @@ public class ServerlessServerCliTests extends CommandTestCase {
             @Override
             protected Path getCgroupFs() {
                 return cgroupFs;
+            }
+
+            @Override
+            protected String getCgroupV2DirName() {
+                return cgroupV2DirName;
             }
 
             @Override

@@ -29,22 +29,8 @@ public class ServerlessSharedSettingsTests extends ESTestCase {
     public void testDefaultSettings() {
         int defaultSP = 100;
         assertEquals(TimeValue.timeValueDays(7), ServerlessSharedSettings.BOOST_WINDOW_SETTING.get(Settings.EMPTY));
-        assertEquals(defaultSP, ServerlessSharedSettings.SEARCH_POWER_SETTING.get(Settings.EMPTY).intValue());
         assertEquals(defaultSP, ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.get(Settings.EMPTY).intValue());
         assertEquals(defaultSP, ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.get(Settings.EMPTY).intValue());
-    }
-
-    public void testLegacySettings() {
-        // to be removed when we remove SEARCH_POWER_SETTING. The behaviour is to set min, max and selected equal to SEARCH_POWER_SETTING
-        int sp = 200;
-        Settings legacySettings = Settings.builder()
-            .put(ServerlessSharedSettings.BOOST_WINDOW_SETTING.getKey(), DEFAULT_BOOST_WINDOW)
-            .put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), sp)
-            .build();
-        assertEquals(DEFAULT_BOOST_WINDOW, ServerlessSharedSettings.BOOST_WINDOW_SETTING.get(legacySettings));
-        assertEquals(sp, ServerlessSharedSettings.SEARCH_POWER_SETTING.get(legacySettings).intValue());
-        assertEquals(sp, ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.get(legacySettings).intValue());
-        assertEquals(sp, ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.get(legacySettings).intValue());
     }
 
     public void testSettingsOnlySPMinProvided() {
@@ -141,35 +127,6 @@ public class ServerlessSharedSettingsTests extends ESTestCase {
         );
         Settings update = Settings.builder().put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), newSPMax).build();
         assertTrue(clusterSettings.updateSettings(update, Settings.builder().put(s), Settings.builder(), ""));
-    }
-
-    public void testUpdateSPHasNoEffectOnMinMaxAndSelected() {
-        int spMin = 50;
-        int spMax = 150;
-        int spSelected = randomIntBetween(spMin, spMax);
-        Settings s = Settings.builder()
-            .put(ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.getKey(), spMin)
-            .put(ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.getKey(), spMax)
-            .build();
-        assertEquals(spMin, ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.get(s).intValue());
-        assertEquals(spMax, ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.get(s).intValue());
-        int newSP = 500;
-        ClusterSettings clusterSettings = new ClusterSettings(
-            Settings.EMPTY,
-            Sets.addToCopy(
-                ClusterSettings.BUILT_IN_CLUSTER_SETTINGS,
-                ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING,
-                ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING,
-                ServerlessSharedSettings.SEARCH_POWER_SETTING
-            )
-        );
-        Settings.Builder sb = Settings.builder().put(s);
-        Settings update = Settings.builder().put(ServerlessSharedSettings.SEARCH_POWER_SETTING.getKey(), newSP).build();
-        clusterSettings.updateSettings(update, sb, Settings.builder(), "");
-        Settings updatedSettings = sb.build();
-        assertEquals(spMin, ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING.get(updatedSettings).intValue());
-        assertEquals(spMax, ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING.get(updatedSettings).intValue());
-        assertEquals(newSP, ServerlessSharedSettings.SEARCH_POWER_SETTING.get(updatedSettings).intValue());
     }
 
     public void testFailingUpdateSPMin() {

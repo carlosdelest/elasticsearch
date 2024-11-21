@@ -35,7 +35,6 @@ import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.core.TimeValue;
@@ -44,6 +43,7 @@ import org.elasticsearch.index.engine.EngineException;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndexClosedException;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.transport.TransportService;
@@ -170,10 +170,8 @@ public class TransportNewCommitNotificationAction extends TransportBroadcastUnpr
 
             // Step 4: update the things that need updating, and compute the final response containing the commits that are still in use
             .<NewCommitNotificationResponse>andThen((l, searchEngine) -> {
-                // TODO: ES-8275 reconsider when to update global check point
-                if (request.isUploaded()) {
-                    shard.updateGlobalCheckpointOnReplica(searchEngine.getLastSyncedGlobalCheckpoint(), "new commit notification");
-                }
+                shard.updateGlobalCheckpointOnReplica(searchEngine.getLastSyncedGlobalCheckpoint(), "new commit notification");
+                // Since new data has been written, update the shard size tracking.
                 shardSizeCollector.collectShardSize(shard.shardId());
                 l.onResponse(new NewCommitNotificationResponse(searchEngine.getAcquiredPrimaryTermAndGenerations()));
             })

@@ -57,10 +57,13 @@ public class RestRestoreProjectAction extends BaseRestHandler {
 
         // at the rest layer we receive a repository and a snapshot (*only!*), translate that into a RestoreSnapshotRequest for
         // the transport layer, setting the options we actually want. specifically, this is always a full cluster restore.
-        RestoreSnapshotRequest restoreSnapshotRequest = new RestoreSnapshotRequest(repository, snapshot);
+        RestoreSnapshotRequest restoreSnapshotRequest = new RestoreSnapshotRequest(
+            TimeValue.MINUS_ONE, // infinite timeout
+            repository,
+            snapshot
+        );
         // the default for RestoreSnapshotRequest is that all indices are restored, and we change nothing here to alter that
         restoreSnapshotRequest.includeGlobalState(true); // always include the global state
-        restoreSnapshotRequest.masterNodeTimeout(TimeValue.MAX_VALUE); // infinite timeout
         restoreSnapshotRequest.waitForCompletion(true); // you must wait for completion, there's no option no to
         restoreSnapshotRequest.partial(true); // it is permissible to restore partial snapshots
         return channel -> client.execute(TransportRestoreProjectAction.TYPE, restoreSnapshotRequest, new RestToXContentListener<>(channel));

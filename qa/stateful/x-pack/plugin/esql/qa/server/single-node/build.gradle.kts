@@ -19,12 +19,16 @@ tasks {
     javaRestTest {
         // Tests use a shared cluster
         maxParallelForks = 1
+        // Needed for ArrowFormatIT
+        jvmArgs("--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED")
     }
     yamlRestTest {
         systemProperty(
             "tests.rest.blacklist", listOf(
                 // Tests with lossy source params, not allowed in serverless
                 "esql/30_types/_source disabled",
+                // Uses number_of_replicas: 0
+                "esql/170_no_replicas/*",
             ).joinToString(",")
         )
     }

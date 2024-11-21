@@ -17,10 +17,11 @@
 
 package co.elastic.elasticsearch.serverless.security.apikey;
 
-import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessCustomRoleParser;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
@@ -33,77 +34,36 @@ import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyRequestBu
 import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyRequestBuilderFactory;
 
 import java.io.IOException;
-import java.util.function.Supplier;
 
 public class ServerlessCreateApiKeyRequestBuilderFactory implements CreateApiKeyRequestBuilderFactory {
-    private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
-
     // Needed for java module
-    public ServerlessCreateApiKeyRequestBuilderFactory() {
-        this(() -> false);
-    }
-
-    // For SPI
-    public ServerlessCreateApiKeyRequestBuilderFactory(ServerlessSecurityPlugin plugin) {
-        this(plugin::isOperatorStrictRoleValidationEnabled);
-    }
-
-    private ServerlessCreateApiKeyRequestBuilderFactory(Supplier<Boolean> operatorStrictRoleValidationEnabled) {
-        this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
-    }
+    public ServerlessCreateApiKeyRequestBuilderFactory() {}
 
     @Override
-    public CreateApiKeyRequestBuilder create(Client client, boolean restrictRequest) {
-        return new ServerlessCreateApiKeyRequestBuilder(client, restrictRequest, operatorStrictRoleValidationEnabled);
+    public CreateApiKeyRequestBuilder create(Client client) {
+        return new ServerlessCreateApiKeyRequestBuilder(client);
     }
 
     static class ServerlessCreateApiKeyRequestBuilder extends CreateApiKeyRequestBuilder {
+        private static final Logger logger = LogManager.getLogger(ServerlessCreateApiKeyRequestBuilder.class);
         private static final ConstructingObjectParser<CreateApiKeyRequest, Void> PARSER = createParser(
             ServerlessCustomRoleParser::parseApiKeyRoleDescriptor
         );
-        private final boolean restrictRequest;
         private final ServerlessRoleValidator serverlessRoleValidator;
-        private final Supplier<Boolean> operatorStrictRoleValidationEnabled;
 
-        ServerlessCreateApiKeyRequestBuilder(
-            Client client,
-            boolean restrictRequest,
-            Supplier<Boolean> operatorStrictRoleValidationEnabled
-        ) {
+        ServerlessCreateApiKeyRequestBuilder(Client client) {
             super(client);
-            this.restrictRequest = restrictRequest;
             this.serverlessRoleValidator = new ServerlessRoleValidator();
-            this.operatorStrictRoleValidationEnabled = operatorStrictRoleValidationEnabled;
         }
 
         @Override
         public CreateApiKeyRequest parse(BytesReference source, XContentType xContentType) throws IOException {
             final SourceWithXContentType sourceWithXContentType = new SourceWithXContentType(source, xContentType);
-            if (shouldApplyStrictValidation()) {
-                try {
-                    return parseWithValidation(sourceWithXContentType);
-                } catch (Exception ex) {
-                    ServerlessCustomRoleErrorLogger.logException("API key creation request", ex);
-                    throw ex;
-                }
-            }
-
-            final CreateApiKeyRequest createApiKeyRequest = super.parse(source, xContentType);
-            ServerlessCustomRoleErrorLogger.logCustomRoleErrors(
-                "API key creation request with ID [" + createApiKeyRequest.getId() + "]",
-                sourceWithXContentType,
-                this::parseWithValidation,
-                createApiKeyRequest.getRoleDescriptors()
-            );
-
-            return createApiKeyRequest;
-        }
-
-        private boolean shouldApplyStrictValidation() {
-            if (restrictRequest) {
-                return true;
-            } else {
-                return operatorStrictRoleValidationEnabled.get();
+            try {
+                return parseWithValidation(sourceWithXContentType);
+            } catch (Exception ex) {
+                logger.info("Invalid role descriptors in [API key creation request].", ex);
+                throw ex;
             }
         }
 

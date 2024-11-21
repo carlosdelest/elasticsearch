@@ -63,6 +63,7 @@ public class ServerlessSupportedPrivilegesRegistryTests extends ESTestCase {
             "monitor_data_stream_global_retention", // not supported yet
             "monitor_rollup", // "read" counterpart to manage_rollup
             "monitor_snapshot", // "read" counterpart to manage_slm
+            "monitor_stats", // added for CCS reasons
             "monitor_text_structure", // internal-only API
             "monitor_watcher", // no watcher
             "read_ccr", // "read" counterpart for manage_ccr

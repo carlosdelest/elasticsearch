@@ -29,13 +29,13 @@ SEARCH_RESULT=$(curl -H "Authorization: ApiKey $DEPLOYMENT_EVENTS_ES_API_KEY" \
         -H "Content-Type: application/json" -XPOST -s \
         https://serverless-deployment-events.es.us-central1.gcp.cloud.es.io:9243/deployment-events/_search \
         -d "{
-            \"size\": 1, 
+            \"size\": 1,
             \"query\": {
                 \"bool\": {
                     \"filter\": [
                         {
                             \"term\": {
-                                \"service.service_name.keyword\": \"elasticsearch\"  
+                                \"service.service_name.keyword\": \"elasticsearch\"
                             }
                         },
                         {
@@ -111,13 +111,18 @@ echo "--- Annotate"
 data="$(vault_with_retries read -field=data -format=json $VAULT_PREFIX/$O11_VAULT_PATH)"
 O11_ES_USERNAME="$(echo $data | jq -r .es_username)"
 O11_ES_PASSWORD="$(echo $data | jq -r .es_password)"
+if [ -z "${DEPLOYMENT_SLICES}" ]; then
+    PROMO_TARGET_ENV="${$ENVIRONMENT}"
+else
+    PROMO_TARGET_ENV="${DEPLOYMENT_SLICES}"
+fi
 curl -u $O11_ES_USERNAME:$O11_ES_PASSWORD \
     -H "Content-Type: application/json" -XPOST \
     $O11_ES_ENDPOINT/elasticsearch-annotations/_doc \
     -d "{
         \"@timestamp\": \"$PROMOTION_TIMESTAMP\",
         \"type\": \"annotation\",
-        \"annotation\": \"${SERVICE_VERSION:0:12} promotion in $ENVIRONMENT\",
+        \"annotation\": \"${SERVICE_VERSION:0:12} promotion in $PROMO_TARGET_ENV\",
         \"modified_by\": \"quality-gates\",
         \"modified_at\": \"$CURRENT_TIMESTAMP\"
     }"

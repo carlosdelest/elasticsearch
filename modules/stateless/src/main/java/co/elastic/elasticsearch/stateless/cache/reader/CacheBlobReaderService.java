@@ -22,6 +22,8 @@ package co.elastic.elasticsearch.stateless.cache.reader;
 import co.elastic.elasticsearch.stateless.cache.StatelessSharedBlobCacheService;
 import co.elastic.elasticsearch.stateless.commits.BlobLocation;
 
+import org.elasticsearch.blobcache.BlobCacheMetrics;
+import org.elasticsearch.blobcache.CachePopulationSource;
 import org.elasticsearch.blobcache.shared.SharedBytes;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.blobstore.BlobContainer;
@@ -30,7 +32,9 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.threadpool.ThreadPool;
 
+import java.util.concurrent.Executor;
 import java.util.function.LongConsumer;
 import java.util.function.LongFunction;
 
@@ -63,13 +67,15 @@ public class CacheBlobReaderService {
     private final StatelessSharedBlobCacheService cacheService;
     private final Client client;
     private final ByteSizeValue indexingShardCacheBlobReaderChunkSize;
+    private final ThreadPool threadPool;
 
     // TODO consider specializing the CacheBlobReaderService for the indexing node to always consider blobs as uploaded (ES-8248)
     // TODO refactor CacheBlobReaderService to keep track of shard's upload info itself (ES-8248)
-    public CacheBlobReaderService(Settings settings, StatelessSharedBlobCacheService cacheService, Client client) {
+    public CacheBlobReaderService(Settings settings, StatelessSharedBlobCacheService cacheService, Client client, ThreadPool threadPool) {
         this.cacheService = cacheService;
         this.client = client;
         this.indexingShardCacheBlobReaderChunkSize = TRANSPORT_BLOB_READER_CHUNK_SIZE_SETTING.get(settings);
+        this.threadPool = threadPool;
     }
 
     /**
@@ -81,21 +87,29 @@ public class CacheBlobReaderService {
      * @param tracker the tracker to determine if the blob has been uploaded to the object store
      * @param totalBytesReadFromObjectStore counts how many bytes were read from object store
      * @param totalBytesReadFromIndexing counts how many bytes were read from indexing nodes
+     * @param cachePopulationReason The reason that we're reading from the data source
      * @return a {@link CacheBlobReader} for the given shard and blob
      */
     public CacheBlobReader getCacheBlobReader(
         ShardId shardId,
         LongFunction<BlobContainer> blobContainer,
         BlobLocation location,
-        ObjectStoreUploadTracker tracker,
+        MutableObjectStoreUploadTracker tracker,
         LongConsumer totalBytesReadFromObjectStore,
-        LongConsumer totalBytesReadFromIndexing
+        LongConsumer totalBytesReadFromIndexing,
+        BlobCacheMetrics.CachePopulationReason cachePopulationReason,
+        Executor objectStoreFetchExecutor
     ) {
         final var locationPrimaryTermAndGeneration = location.getBatchedCompoundCommitTermAndGeneration();
         final long rangeSize = cacheService.getRangeSize();
         var objectStoreCacheBlobReader = new MeteringCacheBlobReader(
-            new ObjectStoreCacheBlobReader(blobContainer.apply(location.primaryTerm()), location.blobName(), rangeSize),
-            totalBytesReadFromObjectStore
+            new ObjectStoreCacheBlobReader(
+                blobContainer.apply(location.primaryTerm()),
+                location.blobName(),
+                rangeSize,
+                objectStoreFetchExecutor
+            ),
+            createReadCompleteCallback(totalBytesReadFromObjectStore, CachePopulationSource.BlobStore, cachePopulationReason)
         );
         var latestUploadInfo = tracker.getLatestUploadInfo(locationPrimaryTermAndGeneration);
         if (latestUploadInfo.isUploaded()) {
@@ -107,11 +121,29 @@ public class CacheBlobReaderService {
                     locationPrimaryTermAndGeneration,
                     latestUploadInfo.preferredNodeId(),
                     client,
-                    indexingShardCacheBlobReaderChunkSize
+                    indexingShardCacheBlobReaderChunkSize,
+                    threadPool
                 ),
-                totalBytesReadFromIndexing
+                createReadCompleteCallback(totalBytesReadFromIndexing, CachePopulationSource.Peer, cachePopulationReason)
             );
-            return new SwitchingCacheBlobReader(latestUploadInfo, objectStoreCacheBlobReader, indexingShardCacheBlobReader);
+            return new SwitchingCacheBlobReader(
+                tracker,
+                locationPrimaryTermAndGeneration,
+                objectStoreCacheBlobReader,
+                indexingShardCacheBlobReader
+            );
         }
+    }
+
+    private MeteringCacheBlobReader.ReadCompleteCallback createReadCompleteCallback(
+        LongConsumer bytesReadCounter,
+        CachePopulationSource cachePopulationSource,
+        BlobCacheMetrics.CachePopulationReason cachePopulationReason
+    ) {
+        return (bytesRead, readTimeNanos) -> {
+            bytesReadCounter.accept(bytesRead);
+            cacheService.getBlobCacheMetrics()
+                .recordCachePopulationMetrics(bytesRead, readTimeNanos, cachePopulationReason, cachePopulationSource);
+        };
     }
 }

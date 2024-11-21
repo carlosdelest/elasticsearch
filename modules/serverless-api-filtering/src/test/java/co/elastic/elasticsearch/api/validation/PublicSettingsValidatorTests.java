@@ -28,6 +28,7 @@ import org.elasticsearch.action.admin.indices.template.put.TransportPutComposabl
 import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.cluster.metadata.ComponentTemplate;
 import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
+import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.Template;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
@@ -152,7 +153,11 @@ public class PublicSettingsValidatorTests extends ESTestCase {
             Settings.builder().put(PUBLIC_SETTING.getKey(), 0).put(NON_PUBLIC_SETTING.getKey(), 0).build()
         );
 
-        assertValidatorFails(() -> new CreateIndexSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS), request);
+        assertValidatorFails(
+            () -> new CreateIndexSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS),
+            request,
+            "index.internal_setting"
+        );
     }
 
     public void testCreateComposedTemplateValidation() throws IOException {
@@ -167,7 +172,8 @@ public class PublicSettingsValidatorTests extends ESTestCase {
 
         assertValidatorFails(
             () -> new PutComponentTemplateSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS),
-            request
+            request,
+            "index.internal_setting"
         );
     }
 
@@ -192,7 +198,8 @@ public class PublicSettingsValidatorTests extends ESTestCase {
 
         assertValidatorFails(
             () -> new PutComposableTemplateSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS),
-            request
+            request,
+            "index.internal_setting"
         );
     }
 
@@ -203,17 +210,50 @@ public class PublicSettingsValidatorTests extends ESTestCase {
             .build();
 
         UpdateSettingsRequest request = new UpdateSettingsRequest(mixPublicAndNonPublicSettings);
-        assertValidatorFails(() -> new UpdateSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS), request);
+        assertValidatorFails(
+            () -> new UpdateSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS),
+            request,
+            "index.internal_setting"
+        );
+    }
+
+    public void testSettingsUpdateNumberOfReplicasValidation() {
+        // set operator privileges
+        threadContext.putHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY, AuthenticationField.PRIVILEGE_CATEGORY_VALUE_OPERATOR);
+        Settings numReplicasSetting = Settings.builder()
+            .put(IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.getKey(), randomIntBetween(0, Integer.MAX_VALUE))
+            .build();
+
+        UpdateSettingsRequest request = new UpdateSettingsRequest(numReplicasSetting);
+        assertValidatorFails(
+            () -> new UpdateSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS),
+            request,
+            IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.getKey()
+        );
+    }
+
+    public void testSettingsUpdateNumberOfReplicasValidationWithoutIndexPrefix() {
+        // set operator privileges
+        threadContext.putHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY, AuthenticationField.PRIVILEGE_CATEGORY_VALUE_OPERATOR);
+        Settings numReplicasSetting = Settings.builder().put("number_of_replicas", randomIntBetween(0, Integer.MAX_VALUE)).build();
+
+        UpdateSettingsRequest request = new UpdateSettingsRequest(numReplicasSetting);
+        assertValidatorFails(
+            () -> new UpdateSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS),
+            request,
+            IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.getKey()
+        );
     }
 
     <RequestType extends ActionRequest, Validator extends PublicSettingsValidator<RequestType>> void assertValidatorFails(
         Supplier<Validator> ctor,
-        RequestType request
+        RequestType request,
+        String setting
     ) {
         Validator v = ctor.get();
         // validation fails on public setting
         var e = expectThrows(IllegalArgumentException.class, () -> v.apply(task, v.actionName(), request, listener, chain));
-        assertThat(e.getMessage(), equalTo("Settings [index.internal_setting] are not available when running in serverless mode"));
+        assertThat(e.getMessage(), equalTo("Settings [" + setting + "] are not available when running in serverless mode"));
     }
 
     public void testNoValidationForNotDeclaredAction() {
