@@ -111,3 +111,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3189
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {docs.GrokWithConversionSuffix ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3191
