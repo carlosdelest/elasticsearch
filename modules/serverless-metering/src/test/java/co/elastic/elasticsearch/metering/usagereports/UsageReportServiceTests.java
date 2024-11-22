@@ -83,6 +83,25 @@ public class UsageReportServiceTests extends ESTestCase {
 
         service.stop();
 
+        assertThat(
+            "Final counter collection task is runnable without advancing time",
+            deterministicTaskQueue,
+            both(transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(true))).and(
+                transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(true))
+            )
+        );
+
+        deterministicTaskQueue.runRandomTask();
+
+        assertThat(
+            "No more runnable tasks once the final counter collection task has run",
+            deterministicTaskQueue,
+            both(transformedMatch(DeterministicTaskQueue::hasDeferredTasks, is(true))).and(
+                transformedMatch(DeterministicTaskQueue::hasRunnableTasks, is(false))
+            )
+        );
+
+        // the previously scheduled next run is still in the task queue, advance time and run random task to remove it (it won't run)
         deterministicTaskQueue.advanceTime();
         deterministicTaskQueue.runRandomTask();
 

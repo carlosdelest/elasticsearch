@@ -202,6 +202,37 @@ public class UsageReportCollectorTests extends ESTestCase {
         verifyNoInteractions(backfillStrategy);
     }
 
+    public void testStopReportCollection() {
+        var backfillStrategy = mock(BackfillStrategy.class);
+
+        var sampleProvider = mockedSampleProvider(backfillStrategy, SAMPLE1);
+        var counterProvider = mockedCounterProvider(COUNTER);
+        var timestampCursor = inMemoryTimeCursor();
+        UsageReportCollector collector = startCollector(List.of(counterProvider), List.of(sampleProvider), timestampCursor);
+
+        Instant sampleTime = clock.instant();
+        var firstRuntime = advanceTimeAndRunCollection(sampleTime);
+
+        // both counter and sample metrics are collected and reported
+        verify(publisher).sendRecords(List.of(usageRecord(COUNTER, firstRuntime), usageRecord(SAMPLE1, sampleTime)));
+        verifyNoMoreInteractions(publisher);
+
+        verify(sampleProvider).getMetrics();
+        verify(counterProvider.getMetrics(), times(1)).commit();
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(sampleTime));
+
+        collector.stop();
+        var lastRuntime = advanceTimeAndRunCollection(nextSampleTime(sampleTime));
+
+        verify(publisher).sendRecords(List.of(usageRecord(COUNTER, lastRuntime)));
+        verifyNoMoreInteractions(publisher);
+
+        verifyNoMoreInteractions(sampleProvider); // skipped on the final run
+        verify(counterProvider.getMetrics(), times(2)).commit();
+        assertThat(timestampCursor.getLatestCommittedTimestamp(), isPresentWith(sampleTime)); // not advanced
+
+    }
+
     public void testErroneousCounterProvider() {
         var sampleTime = clock.instant();
         var committedTime = previousSampleTime(sampleTime);

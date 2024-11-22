@@ -49,6 +49,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static co.elastic.elasticsearch.metering.usagereports.SampleTimestampUtils.calculateSampleTimestamp;
 
@@ -99,8 +101,7 @@ class UsageReportCollector {
     private final LongCounter reportsBackfillPeriodsCounter;
     private final LongCounter reportsBackfillDroppedPeriodsCounter;
 
-    private volatile boolean cancel;
-    private volatile Scheduler.Cancellable nextRun;
+    private final AtomicReference<Scheduler.Cancellable> nextRun = new AtomicReference<>();
     private volatile Map<String, MetricValue> lastSampledMetricValues;
 
     UsageReportCollector(
@@ -184,41 +185,60 @@ class UsageReportCollector {
         long nanosToNextPeriod = now.until(sampleTimestamp.plus(reportPeriodDuration), ChronoUnit.NANOS);
         // schedule the first run towards the end of the current period so that collectors are more likely to have metrics available
         TimeValue timeToNextRun = TimeValue.timeValueNanos(nanosToNextPeriod * 9 / 10);
-        nextRun = threadPool.schedule(() -> gatherAndSendReports(sampleTimestamp), timeToNextRun, executor);
+        nextRun.set(threadPool.schedule(() -> gatherAndSendReports(sampleTimestamp), timeToNextRun, executor));
         log.trace("Scheduled first task");
     }
 
-    void cancel() {
-        // don't need to synchronize anything, cancel is idempotent
-        cancel = true;
-        var run = nextRun;
+    /**
+     * Stops the collector and schedules a final collection of counter metrics only.
+     */
+    void stop() {
+        var run = nextRun.getAndSet(null);
         if (run != null) {
-            run.cancel();  // try to optimistically stop the scheduled next run
-            nextRun = null;
+            run.cancel();
+            // run a final report (counter metrics only if stopped)
+            try {
+                executor.execute(() -> {
+                    Instant startedAt = Instant.now(clock);
+                    log.info("Running final usage report before stopping.");
+                    gatherAndSendReports(calculateSampleTimestamp(startedAt, reportPeriodDuration));
+                });
+            } catch (RejectedExecutionException e) {
+                log.error("Failed to schedule final report of counter metrics", e);
+            }
         }
+    }
+
+    private boolean isStopped() {
+        return nextRun.get() == null;
+    }
+
+    private Map<String, Object> metricAttributes() {
+        if (isStopped() == false) {
+            return Collections.emptyMap();
+        }
+        return Map.of("reporting_stopped", true);
     }
 
     private void gatherAndSendReports(Instant sampleTimestamp) {
         log.trace("starting to gather reports");
-        if (cancel) {
-            return; // cancelled - nothing to do
-        }
-        reportsTotalCounter.increment();
+
+        reportsTotalCounter.incrementBy(1, metricAttributes());
 
         Instant startedAt = Instant.now(clock);
-
         var reportsSent = false;
         try {
             reportsSent = collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
         } catch (RuntimeException e) {
-            reportsFailedCounter.increment();
-            log.error("Unexpected exception whilst collecting metrics and sending reports", e);
+            reportsFailedCounter.incrementBy(1, metricAttributes());
+            log.error("Unexpected exception whilst collecting metrics and sending reports [stopped: {}]", isStopped(), e);
         }
 
         Instant completedAt = Instant.now(clock);
         checkRuntime(startedAt, completedAt);
 
-        if (cancel == false) {
+        Scheduler.Cancellable currentRun = nextRun.get();
+        if (currentRun != null) {
             try {
                 final Instant nextSampleTimestamp = sampleTimestamp.plus(reportPeriodDuration);
                 var timeToNextRun = timeToNextRun(reportsSent, completedAt, nextSampleTimestamp, reportPeriodDuration);
@@ -228,18 +248,20 @@ class UsageReportCollector {
                 final Instant nextSampleTimestampToGather;
                 if (isRetry) {
                     nextSampleTimestampToGather = sampleTimestamp;
-                    reportsRetryCounter.increment();
+                    reportsRetryCounter.incrementBy(1, metricAttributes());
                 } else {
                     nextSampleTimestampToGather = nextSampleTimestamp;
                 }
 
                 // schedule the next run
-                nextRun = threadPool.schedule(() -> gatherAndSendReports(nextSampleTimestampToGather), timeToNextRun, executor);
-                log.trace(
-                    () -> Strings.format("scheduled next run in %s.%s seconds", timeToNextRun.getSeconds(), timeToNextRun.getMillis())
-                );
+                var scheduledRun = threadPool.schedule(() -> gatherAndSendReports(nextSampleTimestampToGather), timeToNextRun, executor);
+                if (nextRun.compareAndSet(currentRun, scheduledRun)) {
+                    log.trace("scheduled next run in {}", timeToNextRun);
+                } else {
+                    scheduledRun.cancel(); // already stopped, cancel immediately
+                }
             } catch (EsRejectedExecutionException e) {
-                nextRun = null;
+                nextRun.set(null);
                 if (e.isExecutorShutdown()) {
                     // ok - thread pool shutting down
                     log.trace("Not rescheduling report gathering because this node is being shutdown", e);
@@ -249,13 +271,15 @@ class UsageReportCollector {
                     // exception can't go anywhere, just stop here
                 }
             }
+        } else if (reportsSent == false) {
+            log.warn("Could not send final usage report before shutting down, some usage data might be lost.");
         }
     }
 
     private void checkRuntime(Instant startedAt, Instant completedAt) {
         long runtime = startedAt.until(completedAt, ChronoUnit.MILLIS);
         if (runtime > reportPeriodDuration.toMillis()) {
-            reportsDelayedCounter.increment();
+            reportsDelayedCounter.incrementBy(1, metricAttributes());
             log.error(
                 "Gathering metrics took {} [reportPeriod: {}], delaying the report schedule!",
                 TimeValue.timeValueMillis(runtime),
@@ -288,13 +312,13 @@ class UsageReportCollector {
     private boolean sendReport(List<UsageRecord> report) {
         try {
             if (usageRecordPublisher.sendRecords(report)) {
-                reportsSentTotalCounter.increment();
+                reportsSentTotalCounter.incrementBy(1, metricAttributes());
                 return true;
             }
         } catch (RuntimeException e) {
             log.warn("Exception when publishing usage records", e);
         }
-        reportsFailedCounter.increment();
+        reportsFailedCounter.incrementBy(1, metricAttributes());
         return false;
     }
 
@@ -305,6 +329,7 @@ class UsageReportCollector {
         List<CounterMetricsProvider.MetricValues> counterMetricValuesList = Collections.emptyList();
         Map<String, MetricValue> sampledMetricValuesById = Collections.emptyMap();
 
+        // counter metrics have to be processed even if stopped to at least attempt publishing remaining in-memory counts a final time
         if (counterMetricsProviders.isEmpty() == false) {
             counterMetricValuesList = new ArrayList<>(counterMetricsProviders.size());
             for (var counterMetricsProvider : counterMetricsProviders) {
@@ -323,41 +348,44 @@ class UsageReportCollector {
             }
         }
 
-        // only process sampled metrics if the SampledMetricsTimeCursor is ready (none empty timestamps)
-        var timestamps = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod);
-        if (timestamps.size() > 0 && sampledMetricsProviders.isEmpty() == false) {
-            sampledMetricValuesList = new ArrayList<>(sampledMetricsProviders.size());
-            for (SampledMetricsProvider sampledMetricsProvider : sampledMetricsProviders) {
-                try {
-                    var sampledMetricValues = sampledMetricsProvider.getMetrics();
-                    if (sampledMetricValues.isEmpty()) {
-                        log.info("[{}] is not ready for collect yet", sampledMetricsProvider.getClass().getName());
+        // sampled metrics can be skipped if stopped, we'll resume from the timestamp cursor on the next persistent task node
+        if (isStopped() == false) {
+            // only process sampled metrics if the SampledMetricsTimeCursor is ready (none empty timestamps)
+            var timestamps = sampledMetricsTimeCursor.generateSampleTimestamps(sampleTimestamp, reportPeriod);
+            if (timestamps.size() > 0 && sampledMetricsProviders.isEmpty() == false) {
+                sampledMetricValuesList = new ArrayList<>(sampledMetricsProviders.size());
+                for (SampledMetricsProvider sampledMetricsProvider : sampledMetricsProviders) {
+                    try {
+                        var sampledMetricValues = sampledMetricsProvider.getMetrics();
+                        if (sampledMetricValues.isEmpty()) {
+                            log.info("[{}] is not ready for collect yet", sampledMetricsProvider.getClass().getName());
+                            // Only process sampled metric values if all providers are ready and successfully returned values
+                            // Otherwise we cannot advance the committed sample timestamp.
+                            sampledMetricValuesList.clear();
+                            break;
+                        }
+                        sampledMetricValuesList.add(sampledMetricValues.get());
+                    } catch (RuntimeException e) {
+                        log.error(Strings.format("Failed to get sample metrics from %s", sampledMetricsProvider.getClass().getName()), e);
                         // Only process sampled metric values if all providers are ready and successfully returned values
                         // Otherwise we cannot advance the committed sample timestamp.
                         sampledMetricValuesList.clear();
                         break;
                     }
-                    sampledMetricValuesList.add(sampledMetricValues.get());
-                } catch (RuntimeException e) {
-                    log.error(Strings.format("Failed to get sample metrics from %s", sampledMetricsProvider.getClass().getName()), e);
-                    // Only process sampled metric values if all providers are ready and successfully returned values
-                    // Otherwise we cannot advance the committed sample timestamp.
-                    sampledMetricValuesList.clear();
-                    break;
-                }
-            }
-
-            if (sampledMetricValuesList.isEmpty() == false) {
-                if (timestamps.size() == 1) {
-                    // the default case
-                    sampledMetricValuesById = appendSampleRecords(sampleTimestamp, sampledMetricValuesList, records);
-                } else {
-                    // backfill missing samples for multiple timestamps (when we're behind schedule)
-                    sampledMetricValuesById = appendSampleRecordsWithBackfill(timestamps, sampledMetricValuesList, records);
                 }
 
-                if (sampledMetricValuesById.isEmpty()) {
-                    log.info("No sampled usage records generated during this metrics collection [{}]", timestamps);
+                if (sampledMetricValuesList.isEmpty() == false) {
+                    if (timestamps.size() == 1) {
+                        // the default case
+                        sampledMetricValuesById = appendSampleRecords(sampleTimestamp, sampledMetricValuesList, records);
+                    } else {
+                        // backfill missing samples for multiple timestamps (when we're behind schedule)
+                        sampledMetricValuesById = appendSampleRecordsWithBackfill(timestamps, sampledMetricValuesList, records);
+                    }
+
+                    if (sampledMetricValuesById.isEmpty()) {
+                        log.info("No sampled usage records generated during this metrics collection [{}]", timestamps);
+                    }
                 }
             }
         }

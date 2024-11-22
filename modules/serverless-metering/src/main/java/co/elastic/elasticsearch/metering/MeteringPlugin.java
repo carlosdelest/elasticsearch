@@ -64,7 +64,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
-import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.NodeEnvironment;
@@ -92,7 +91,6 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xcontent.NamedXContentRegistry;
 import org.elasticsearch.xcontent.ParseField;
 
-import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -126,7 +124,6 @@ public class MeteringPlugin extends Plugin
     private final boolean hasSearchRole;
     private List<SampledMetricsProvider> sampledMetricsProviders;
     private List<CounterMetricsProvider> counterMetricsProviders;
-    private UsageReportService usageReportService;
     public final SetOnce<List<ActionFilter>> actionFilters = new SetOnce<>();
     private volatile IngestMetricsProvider ingestMetricsCollector;
     private volatile SystemIndices systemIndices;
@@ -167,7 +164,7 @@ public class MeteringPlugin extends Plugin
                 settings,
                 METERING_REPORTER_THREAD_POOL_NAME,
                 1,
-                1,
+                2,
                 "serverless.metering.reporter.thread_pool",
                 EsExecutors.TaskTrackingConfig.DO_NOT_TRACK
             )
@@ -226,7 +223,7 @@ public class MeteringPlugin extends Plugin
         }
 
         TimeValue reportPeriod = UsageReportService.REPORT_PERIOD.get(environment.settings());
-        usageReportService = new UsageReportService(
+        UsageReportService usageReportService = new UsageReportService(
             nodeEnvironment.nodeId(),
             projectId,
             builtInCounterMetrics,
@@ -288,11 +285,6 @@ public class MeteringPlugin extends Plugin
     @Override
     public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
         return Map.of(RaStorageMetadataFieldMapper.FIELD_NAME, RaStorageMetadataFieldMapper.PARSER);
-    }
-
-    @Override
-    public void close() throws IOException {
-        IOUtils.close(usageReportService);
     }
 
     IngestMetricsProvider getIngestMetricsCollector() {
