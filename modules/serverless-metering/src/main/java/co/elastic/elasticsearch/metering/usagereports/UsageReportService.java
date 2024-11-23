@@ -136,7 +136,7 @@ public class UsageReportService extends AbstractLifecycleComponent {
 
     @Override
     protected void doStop() {
-        usageReportCollector.cancel();
+        usageReportCollector.stop();
     }
 
     @Override

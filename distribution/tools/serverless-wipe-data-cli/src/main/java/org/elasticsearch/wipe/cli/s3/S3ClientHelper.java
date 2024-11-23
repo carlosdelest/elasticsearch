@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package org.elasticsearch.wipe.cli;
+package org.elasticsearch.wipe.cli.s3;
 
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
@@ -24,13 +24,13 @@ import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 
-final class S3ClientHelper {
+public final class S3ClientHelper {
 
     private S3ClientHelper() {
         // utility class
     }
 
-    static AmazonS3 buildClient(String endpoint, String accessKey, String secretKey) {
+    public static AmazonS3 buildClient(String endpoint, String accessKey, String secretKey) {
         final AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
         builder.withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey)));
         final ClientConfiguration clientConfiguration = new ClientConfiguration();

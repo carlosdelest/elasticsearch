@@ -81,6 +81,10 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
     @Override
     public MetricValues getMetrics() {
         return clusterStateSupplier.withCurrentClusterState(clusterState -> {
+            if (metrics.isEmpty()) {
+                return CounterMetricsProvider.NO_VALUES;
+            }
+
             final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
             final var indicesLookup = clusterState.metadata().getProject().getIndicesLookup();
 

@@ -6,7 +6,6 @@ import org.elasticsearch.gradle.internal.docker.DockerBuildTask
 import org.elasticsearch.gradle.internal.docker.DockerSupportPlugin
 import org.elasticsearch.gradle.internal.docker.DockerSupportService
 import org.elasticsearch.gradle.internal.info.BuildParameterExtension
-import org.elasticsearch.gradle.internal.info.BuildParams
 import org.elasticsearch.gradle.internal.util.ParamsUtils.loadBuildParams
 import org.elasticsearch.gradle.util.GradleUtils
 

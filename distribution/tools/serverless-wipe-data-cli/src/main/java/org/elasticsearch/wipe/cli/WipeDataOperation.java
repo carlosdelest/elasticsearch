@@ -17,121 +17,60 @@
 
 package org.elasticsearch.wipe.cli;
 
-import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.DeleteObjectsRequest;
-import com.amazonaws.services.s3.model.ListNextBatchOfObjectsRequest;
-import com.amazonaws.services.s3.model.ListObjectsRequest;
-import com.amazonaws.services.s3.model.MultiObjectDeleteException;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.internal.Constants;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobServiceClient;
 
-import org.elasticsearch.ExceptionsHelper;
-import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.collect.Iterators;
+import org.elasticsearch.wipe.cli.azure.AzureBlobClientHelper;
+import org.elasticsearch.wipe.cli.azure.AzureBlobWipeDataOperation;
+import org.elasticsearch.wipe.cli.s3.S3ClientHelper;
+import org.elasticsearch.wipe.cli.s3.S3WipeDataOperation;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.Objects;
+import java.util.Properties;
 
-import static org.elasticsearch.common.Strings.format;
+public interface WipeDataOperation {
+    void deleteBlobs() throws IOException;
 
-public class WipeDataOperation {
+    static WipeDataOperation create(Properties properties) {
+        final String type = properties.getProperty("type");
+        final String client = properties.getProperty("client");
 
-    public static final Runnable NOOP_ON_BATCH_DELETED = () -> {};
+        if ("default".equals(client) == false) {
+            System.err.println("warning: 'client' was [" + client + "], but 'default' is expected");
+        }
 
-    private static final int MAX_BULK_DELETES = 1000;
-
-    private final AmazonS3 s3Client;
-    private final String bucketName;
-    private final String keyPrefix;
-    private final Runnable onBatchDeleted;
-
-    public WipeDataOperation(AmazonS3 s3Client, String bucketName, String keyPrefix, Runnable onBatchDeleted) {
-        this.s3Client = s3Client;
-        this.bucketName = bucketName;
-        this.keyPrefix = keyPrefix;
-        this.onBatchDeleted = onBatchDeleted;
-    }
-
-    public void deleteBlobs() throws IOException {
-        ObjectListing prevListing = null;
-        while (true) {
-            final ObjectListing list;
-            if (prevListing != null) {
-                final var listNextBatchOfObjectsRequest = new ListNextBatchOfObjectsRequest(prevListing);
-                list = s3Client.listNextBatchOfObjects(listNextBatchOfObjectsRequest);
-            } else {
-                final ListObjectsRequest listObjectsRequest = new ListObjectsRequest();
-                listObjectsRequest.setBucketName(bucketName);
-                listObjectsRequest.setPrefix(keyPrefix);
-                list = s3Client.listObjects(listObjectsRequest);
-            }
-            final Iterator<String> blobNameIterator = list.getObjectSummaries().stream().map(S3ObjectSummary::getKey).iterator();
-            if (list.isTruncated()) {
-                deleteBlobsIgnoringIfNotExists(blobNameIterator);
-                prevListing = list;
-            } else {
-                deleteBlobsIgnoringIfNotExists(Iterators.concat(blobNameIterator, Iterators.single(keyPrefix)));
-                break;
-            }
+        if ("s3".equals(type)) {
+            return createS3Operation(properties);
+        } else if ("azure".equals(type)) {
+            return createAzureOperation(properties);
+        } else {
+            throw new IllegalArgumentException("'type' was [" + type + "], expected 's3' or 'azure'");
         }
     }
 
-    private void deleteBlobsIgnoringIfNotExists(Iterator<String> blobNames) throws IOException {
-        if (blobNames.hasNext() == false) {
-            return;
-        }
+    private static S3WipeDataOperation createS3Operation(Properties properties) {
+        final String endpoint = Objects.requireNonNullElse(properties.getProperty("endpoint"), Constants.S3_HOSTNAME);
+        final String accessKey = Objects.requireNonNull(properties.getProperty("access_key"));
+        final String secretKey = Objects.requireNonNull(properties.getProperty("secret_key"));
+        final String bucket = Objects.requireNonNull(properties.getProperty("bucket"));
+        final String basePath = Objects.requireNonNull(properties.getProperty("base_path"));
 
-        final List<String> partition = new ArrayList<>();
-        try {
-            // S3 API only allows 1k blobs per delete, so we split up the given blobs into requests of max. 1k deletes
-            final AtomicReference<Exception> aex = new AtomicReference<>();
-
-            blobNames.forEachRemaining(key -> {
-                partition.add(key);
-                if (partition.size() == MAX_BULK_DELETES) {
-                    deletePartition(partition, aex);
-                    partition.clear();
-                }
-            });
-            if (partition.isEmpty() == false) {
-                deletePartition(partition, aex);
-            }
-
-            if (aex.get() != null) {
-                throw aex.get();
-            }
-        } catch (Exception e) {
-            throw new IOException("Failed to delete blobs " + partition.stream().limit(10).toList(), e);
-        }
+        AmazonS3 s3Client = S3ClientHelper.buildClient(endpoint, accessKey, secretKey);
+        return new S3WipeDataOperation(s3Client, bucket, basePath, () -> System.out.print("."));
     }
 
-    private void deletePartition(List<String> partition, AtomicReference<Exception> aex) {
-        try {
-            s3Client.deleteObjects(bulkDelete(partition));
-            this.onBatchDeleted.run();
-        } catch (MultiObjectDeleteException e) {
-            // We are sending quiet mode requests, so we can't use the deleted keys entry on the exception and instead
-            // first remove all keys that were sent in the request and then add back those that ran into an exception.
-            System.err.println(
-                format(
-                    "Failed to delete some blobs %s",
-                    e.getErrors().stream().map(err -> "[" + err.getKey() + "][" + err.getCode() + "][" + err.getMessage() + "]").toList()
-                )
-            );
-            e.printStackTrace();
-            aex.set(ExceptionsHelper.useOrSuppress(aex.get(), e));
-        } catch (AmazonClientException e) {
-            // The AWS client threw any unexpected exception and did not execute the request at all, so we do not
-            // remove any keys from the outstanding deletes set.
-            aex.set(ExceptionsHelper.useOrSuppress(aex.get(), e));
-        }
-    }
+    private static AzureBlobWipeDataOperation createAzureOperation(Properties properties) {
+        final String account = Objects.requireNonNull(properties.getProperty("account"));
+        final String bucket = Objects.requireNonNull(properties.getProperty("bucket"));
+        final String sasToken = Objects.requireNonNull(properties.getProperty("sas_token"));
 
-    private DeleteObjectsRequest bulkDelete(List<String> blobs) {
-        return new DeleteObjectsRequest(bucketName).withKeys(blobs.toArray(Strings.EMPTY_ARRAY)).withQuiet(true);
+        String endpoint = AzureBlobClientHelper.getStandardEndpoint(account);
+        BlobServiceClient serviceClient = AzureBlobClientHelper.createServiceClient(endpoint, sasToken);
+        BlobContainerClient blobContainerClient = serviceClient.getBlobContainerClient(bucket);
+
+        return new AzureBlobWipeDataOperation(blobContainerClient, () -> System.out.print("."));
     }
 }

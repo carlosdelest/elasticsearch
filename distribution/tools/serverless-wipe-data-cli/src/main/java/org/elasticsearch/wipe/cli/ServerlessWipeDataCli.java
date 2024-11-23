@@ -20,9 +20,6 @@ package org.elasticsearch.wipe.cli;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.internal.Constants;
-
 import org.elasticsearch.cli.Command;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.cli.Terminal;
@@ -34,7 +31,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
 import java.util.Properties;
 
 public class ServerlessWipeDataCli extends Command {
@@ -64,29 +60,8 @@ public class ServerlessWipeDataCli extends Command {
     @Override
     public void execute(Terminal terminal, OptionSet options, ProcessInfo processInfo) throws Exception {
         final Properties properties = getProperties(options);
+        WipeDataOperation operation = WipeDataOperation.create(properties);
 
-        final String type = properties.getProperty("type");
-        final String client = properties.getProperty("client");
-
-        if ("s3".equals(type) == false) {
-            // this codebase only supports s3, support for other object storage types will need to be added as
-            // future enhancements
-            throw new IllegalArgumentException("'type' was [" + type + "], but only 's3' is supported");
-        }
-
-        if ("default".equals(client) == false) {
-            System.err.println("warning: 'client' was [" + client + "], but 'default' is expected");
-        }
-
-        final String endpoint = Objects.requireNonNullElse(properties.getProperty("endpoint"), Constants.S3_HOSTNAME);
-        final String accessKey = Objects.requireNonNull(properties.getProperty("access_key"));
-        final String secretKey = Objects.requireNonNull(properties.getProperty("secret_key"));
-
-        final String bucket = Objects.requireNonNull(properties.getProperty("bucket"));
-        final String basePath = Objects.requireNonNull(properties.getProperty("base_path"));
-
-        AmazonS3 s3Client = S3ClientHelper.buildClient(endpoint, accessKey, secretKey);
-        WipeDataOperation operation = new WipeDataOperation(s3Client, bucket, basePath, () -> System.out.print("."));
         operation.deleteBlobs();
         System.out.println(".");
     }

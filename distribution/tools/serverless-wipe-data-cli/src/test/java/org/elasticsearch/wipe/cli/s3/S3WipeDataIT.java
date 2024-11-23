@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package org.elasticsearch.wipe.cli;
+package org.elasticsearch.wipe.cli.s3;
 
 import fixture.s3.S3HttpFixture;
 
@@ -80,11 +80,11 @@ public class S3WipeDataIT extends ESTestCase {
         List<String> blobNames;
 
         // clean up outside the common prefix, before the test, so that the test is repeatable
-        WipeDataOperation cleanupOutside = new WipeDataOperation(
+        S3WipeDataOperation cleanupOutside = new S3WipeDataOperation(
             s3Client,
             bucket,
             path + "/outsideCommonPrefix",
-            WipeDataOperation.NOOP_ON_BATCH_DELETED
+            S3WipeDataOperation.NOOP_ON_BATCH_DELETED
         );
         cleanupOutside.deleteBlobs();
 
@@ -106,11 +106,11 @@ public class S3WipeDataIT extends ESTestCase {
         assertThat(blobNames, hasSize(10 + 1)); // 10 in the common prefix and one outside
 
         // delete everything in the common prefix
-        WipeDataOperation operation = new WipeDataOperation(
+        S3WipeDataOperation operation = new S3WipeDataOperation(
             s3Client,
             bucket,
             path + "/" + commonPrefix,
-            WipeDataOperation.NOOP_ON_BATCH_DELETED
+            S3WipeDataOperation.NOOP_ON_BATCH_DELETED
         );
         operation.deleteBlobs();
 

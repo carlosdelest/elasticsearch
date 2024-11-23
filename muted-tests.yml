@@ -22,9 +22,6 @@ tests:
 #  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
 #    method: testCrankyEvaluateBlockWithoutNulls
 #    issue: https://github.com/elastic/elasticsearch/...
-- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2190"
-  method: "test {yaml=health/10_basic/cluster health basic test}"
 - class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2409"
   method: "testShardReadLoadCausesMinimumAndZeroSearchLoad"
@@ -93,29 +90,27 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test get stacktraces}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3121
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {union_types.Multi Index millis to nanos stats SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3122
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {union_types.Multi Index millis to nanos stats ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3123
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: "test {lookup-join.*"
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: "test {lookup-join.*"
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
-- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=profiling/10_basic/Test topN functions from test-events}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3153
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: "test {lookup-join.*"
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=synonyms/20_synonyms_get/Get synonyms set}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3157
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3158
-- class: org.elasticsearch.xpack.fleet.FleetRestIT
-  method: test {p0=fleet/40_secrets_get/Get Fleet Secret}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3159
-- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=profiling/10_basic/Test topN functions from profiling-events}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3160
+- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/3174"
+  method: "test {yaml=synonyms/20_synonyms_get/Pagination - size}"
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {multivalue_geometries.WhereContainsGeometryCollectionFields ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3183
+- class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
+  method: testRandomActivities
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3189
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {docs.GrokWithConversionSuffix ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3191
