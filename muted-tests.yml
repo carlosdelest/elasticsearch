@@ -114,3 +114,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {docs.GrokWithConversionSuffix ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3191
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=synonyms/50_synonym_rule_put/Update a synonyms rule}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3197
