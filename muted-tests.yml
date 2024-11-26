@@ -99,18 +99,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: "test {lookup-join.*"
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  method: test {yaml=synonyms/20_synonyms_get/Get synonyms set}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3157
-- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/3174"
-  method: "test {yaml=synonyms/20_synonyms_get/Pagination - size}"
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {multivalue_geometries.WhereContainsGeometryCollectionFields ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3183
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3189
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {docs.GrokWithConversionSuffix ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3191

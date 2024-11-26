@@ -189,8 +189,8 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             "_elastic_pod_autoscaler",
             "12846123796498123",
             "_my-reserved-role.123",
+            "alph4num3r1c0n1y",
             randomFrom("_", ".", "-") + randomAsciiAlphanumOfLengthBetween(5, 10),
-            randomAsciiAlphanumOfLengthBetween(1, 20),
             String.valueOf(System.currentTimeMillis()),
             randomAlphaOfLength(1),
             randomFrom("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
