@@ -136,6 +136,11 @@ include(":qa:sso-authentication")
  */
 include(":serverless-test-framework")
 
+/*
+ * Benchmarks
+ */
+include(":serverless-benchmarks")
+
 
 /*
  * Stateful ES QA Projects

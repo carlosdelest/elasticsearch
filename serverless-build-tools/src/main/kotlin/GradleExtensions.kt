@@ -1,4 +1,5 @@
 import groovy.lang.Closure
+import org.elasticsearch.gradle.internal.info.BuildParameterExtension
 import org.elasticsearch.gradle.internal.util.ParamsUtils.loadBuildParams
 import org.elasticsearch.gradle.serverless.ServerlessDistributionDownloadPlugin
 import org.elasticsearch.gradle.test.SystemPropertyCommandLineArgumentProvider
@@ -44,6 +45,9 @@ fun DependencyHandler.testArtifact(dependency: ModuleDependency, sourceSet: Stri
 fun Project.isCi(): Boolean {
     return loadBuildParams(this).map { it.isCi }.get()
 }
+
+val Project.buildParams: BuildParameterExtension
+    get() = loadBuildParams(this).get()
 
 fun StandaloneRestIntegTestTask.usesDefaultDistribution() {
     if (!this.extra.has("usingDefaultDistro")) {

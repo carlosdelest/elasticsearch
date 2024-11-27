@@ -1,3 +1,4 @@
+import groovy.lang.Closure
 import org.gradle.plugins.ide.idea.model.IdeaModel
 import org.jetbrains.gradle.ext.CopyrightConfiguration
 import org.jetbrains.gradle.ext.IdeaExtPlugin
@@ -12,9 +13,9 @@ plugins.withType<IdeaExtPlugin> {
         notice = """
             ELASTICSEARCH CONFIDENTIAL
             __________________
-            
+
             Copyright Elasticsearch B.V. All rights reserved.
-            
+
             NOTICE:  All information contained herein is, and remains
             the property of Elasticsearch B.V. and its suppliers, if any.
             The intellectual and technical concepts contained herein
@@ -30,4 +31,13 @@ plugins.withType<IdeaExtPlugin> {
     // We only want to use the "default" Elastic+SSPL license header for open source code
     copyright.useDefault = "confidential"
     copyright.scopes = mapOf("x-pack" to "Elastic", "llrc" to "Apache2", "elasticsearch" to "Default")
+
+    tasks.named("enablePreviewFeatures") {
+        fun enablePreview(moduleFile: String, languageLevel: String) = (extra.get("enablePreview") as Closure<*>).call(moduleFile, languageLevel)
+
+        doLast {
+            enablePreview(".idea/modules/elasticsearch/libs/native/elasticsearch.libs.native.main.iml", "JDK_21_PREVIEW")
+            enablePreview(".idea/modules/elasticsearch/libs/native/elasticsearch.libs.native.test.iml", "JDK_21_PREVIEW")
+        }
+    }
 }
