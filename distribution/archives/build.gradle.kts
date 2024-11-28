@@ -39,6 +39,7 @@ dependencies {
     bundledPlugins("org.elasticsearch.plugin:analysis-stempel")
     xpackTemplateResources(project(":libs:serverless-xpack-template-resources"))
     additionalLibJars(project(":libs:serverless-build-info"))
+    additionalLibJars(project(":libs:serverless-codec"))
     additionalLibJars(project(":libs:serverless-shared-constants"))
 }
 
