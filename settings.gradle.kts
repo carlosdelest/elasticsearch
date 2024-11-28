@@ -130,6 +130,7 @@ include(":qa:x-pack-rest-test")
 include(":qa:e2e-test")
 include(":qa:master-failover")
 include(":qa:sso-authentication")
+include(":qa:multi-project-smoke-test")
 
 /*
  * Test Framework
