@@ -205,10 +205,11 @@ public class AzureWipeDataIT extends ESTestCase {
             BlobClient blobClient = containerClient.getBlobClient(name);
             blobClient.upload(BinaryData.fromString(content));
 
-            // put a lease (lock) on blob indefinitely
+            // put a lease (lock) on blob
             if (leased) {
                 BlobLeaseClient leaseClient = new BlobLeaseClientBuilder().blobClient(blobClient).buildClient();
-                leaseClient.acquireLease(-1);
+                // randomized lease period, -1 being indefinite
+                leaseClient.acquireLease(randomBoolean() ? -1 : randomIntBetween(15, 60));
             }
 
             blobNames.add(name);
