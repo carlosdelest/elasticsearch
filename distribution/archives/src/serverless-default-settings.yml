@@ -2,8 +2,10 @@ stateless.enabled: true
 search.query_phase_parallel_collection_enabled: true
 # TODO remove the following line once we are confident that there are no file deletions issues
 logger.co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService.shard_files_deletes: DEBUG
-# TODO remove the following line once we are confident that shard snapshots are not stalling during shutdown
+
+# TODO remove the following lines once we are confident that shard snapshots are not stalling during shutdown, see ES-8773
 logger.org.elasticsearch.repositories.blobstore.BlobStoreRepository.ShutdownLogger: DEBUG
+logger.org.elasticsearch.snapshots.SnapshotShardsService: DEBUG
 
 # allow more concurrent recoveries in serverless, since we wait for object store during recovery.
 cluster.routing.allocation.node_concurrent_recoveries: 6
