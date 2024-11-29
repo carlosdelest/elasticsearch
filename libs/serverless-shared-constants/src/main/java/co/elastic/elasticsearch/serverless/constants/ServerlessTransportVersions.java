@@ -36,7 +36,6 @@ public class ServerlessTransportVersions {
     public static final TransportVersion SHARD_INFO_METADATA = def(8_768_01_0);
     public static final TransportVersion COMMIT_NOTIFICATION_TRANSPORT_ACTION_SPLIT = def(8_777_01_0);
     public static final TransportVersion METERING_BROADCAST_ACTIVITY = def(8_777_02_0);
-    public static final TransportVersion PRIMARY_RELOCATION_SEARCH_NODES = def(8_801_01_0);
 
     /*
      * STOP! READ THIS FIRST! No, really,
