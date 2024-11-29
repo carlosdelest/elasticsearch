@@ -77,14 +77,13 @@ public class Elasticsearch900Lucene100CompletionPostingsFormat extends Completio
             Elasticsearch900Lucene100CompletionPostingsFormat.fstOnHeap.set(fstOnHeap);
         } catch (SetOnce.AlreadySetException e) {
             // If you see this in an IT test, ignore it. It's a side effect of the way IT tests are run,
-            // where all nodes share the same class loader.
+            // where all nodes share the same JVM and thus, the same class loader.
             logger.error(
                 Strings.format(
-                    "Error setting fstOnHeap to %s, already set to %s",
+                    "Error setting fstOnHeap to %s, already set to %s. (This is expected in IT tests, but nowhere else.)",
                     fstOnHeap,
                     Elasticsearch900Lucene100CompletionPostingsFormat.fstOnHeap.get()
-                ),
-                e
+                )
             );
         }
     }
