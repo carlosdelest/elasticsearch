@@ -18,6 +18,7 @@
 package org.elasticsearch.wipe.cli.azure;
 
 import fixture.azure.AzureHttpFixture;
+import fixture.azure.MockAzureBlobStore;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.resolver.DefaultAddressResolverGroup;
@@ -80,7 +81,8 @@ public class AzureWipeDataIT extends ESTestCase {
         AZURE_TEST_CONTAINER,
         System.getProperty("test.azure.tenant_id"),
         System.getProperty("test.azure.client_id"),
-        AzureHttpFixture.sharedKeyForAccountPredicate(AZURE_TEST_ACCOUNT)
+        AzureHttpFixture.sharedKeyForAccountPredicate(AZURE_TEST_ACCOUNT),
+        MockAzureBlobStore.LeaseExpiryPredicate.NEVER_EXPIRE
     );
 
     @BeforeClass
