@@ -9,6 +9,8 @@ source ./.buildkite/java-versions.properties
 # Resolve JAVA_HOME
 export JAVA_HOME="/${HOME}/.java/${ES_BUILD_JAVA}"
 
+export GH_TOKEN="$VAULT_GITHUB_TOKEN"
+
 if [[ "${USE_GITHUB_CREDENTIALS:-}" == "true" ]]; then
   GITHUB_TOKEN=$(vault read -field=token secret/ci/elastic-elasticsearch-serverless/github_api_credentials)
   export GITHUB_TOKEN
@@ -38,4 +40,8 @@ EOF
 
 <summary>Agent information from gobld</summary>
 EOF
+fi
+
+if [[ "${BUILDKITE_PULL_REQUEST:-}" && "${BUILDKITE_AGENT_META_DATA_PROVIDER:-}" != "k8s" ]]; then
+  source .buildkite/scripts/get-latest-test-mutes.sh
 fi

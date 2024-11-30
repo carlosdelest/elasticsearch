@@ -29,6 +29,7 @@ import com.azure.storage.blob.models.BlobItem;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.DeleteSnapshotsOptionType;
 import com.azure.storage.blob.models.ListBlobsOptions;
+import com.azure.storage.blob.specialized.BlobLeaseClient;
 import com.azure.storage.blob.specialized.BlobLeaseClientBuilder;
 
 import org.elasticsearch.wipe.cli.WipeDataOperation;
@@ -53,6 +54,7 @@ public class AzureBlobWipeDataOperation implements WipeDataOperation {
 
     private static final Duration TIMEOUT_LIST_BLOBS = Duration.of(10, ChronoUnit.SECONDS);
     private static final Duration TIMEOUT_BATCH_DELETE = Duration.of(15, ChronoUnit.SECONDS);
+    private static final Duration TIMEOUT_BREAK_LEASE = Duration.of(5, ChronoUnit.SECONDS);
 
     private final BlobContainerClient containerClient;
     private final Runnable onBatchDeleted;
@@ -162,7 +164,10 @@ public class AzureBlobWipeDataOperation implements WipeDataOperation {
             }
             if (isLeaseMissingError(e)) {
                 // deletion fails if a blob is locked, we will break the lease, and mark it for retry
-                new BlobLeaseClientBuilder().blobClient(containerClient.getBlobClient(blobName)).buildClient().breakLease();
+                BlobLeaseClient leaseClient = new BlobLeaseClientBuilder().blobClient(containerClient.getBlobClient(blobName))
+                    .buildClient();
+                // set the break period to 0 second, so the lease is broken immediately ignoring the original lease period
+                leaseClient.breakLeaseWithResponse(0, null, TIMEOUT_BREAK_LEASE, Context.NONE);
                 return true;
             }
             // other unhandled failure

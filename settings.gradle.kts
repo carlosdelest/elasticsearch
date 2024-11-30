@@ -97,6 +97,7 @@ include(":modules:serverless-no-wait-for-active-shards")
  * Extraneous libs
  */
 include(":libs:serverless-build-info")
+include(":libs:serverless-codec")
 include(":libs:serverless-metrics")
 include(":libs:serverless-shared-constants")
 include(":libs:serverless-stateless-api")
