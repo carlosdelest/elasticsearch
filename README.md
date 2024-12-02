@@ -229,6 +229,14 @@ export ESS_API_KEY_ENCODED=$(echo $ESS_API_KEY_ENCRYPTED | openssl base64 -d | o
 Using the `run` Gradle task is the most convenient way to locally run serverless Elasticsearch. If you want
 you can also run via Docker if need be.
 
+#### Elastic Docker Registry Auth
+
+Before building the Docker image, you will need to be authenticated with the Elastic docker registry.
+
+To authenticate, simply visit: https://docker-auth.elastic.co/github_auth and follow the instructions.
+
+#### Building the Docker images
+
 The Serverless Elasticsearch x86 image can be built using the command:
 
 ```shell
