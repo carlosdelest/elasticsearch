@@ -31,6 +31,7 @@ if [ -z "${PREVIOUS_PROMOTED_COMMIT}" ]; then
   PREVIOUS_PROMOTED_COMMIT=$(echo "${SERVICE_VERSION_YAML}" | yq e '.services.elasticsearch.versions.production-noncanary-ds-1' -)
 fi
 echo "Promoting from commit '$PREVIOUS_PROMOTED_COMMIT' to commit '${PROMOTED_COMMIT}'"
+buildkite-agent meta-data set "promoted-commit" "${PROMOTED_COMMIT}"
 
 echo "--- Trigger release build"
 cat <<EOF | buildkite-agent pipeline upload
