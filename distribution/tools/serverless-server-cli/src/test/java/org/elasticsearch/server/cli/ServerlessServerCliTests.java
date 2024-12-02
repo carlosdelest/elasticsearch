@@ -254,6 +254,12 @@ public class ServerlessServerCliTests extends CommandTestCase {
         assertThat(e.getMessage(), containsString("node.processors must not be present"));
     }
 
+    public void testOvercommitErrorVCPURequestExists() {
+        sysprops.put(ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP, Double.toString(1.0));
+        var e = expectThrows(IllegalStateException.class, () -> execute("-E", "node.vcpu_request=2"));
+        assertThat(e.getMessage(), containsString("node.vcpu_request must not be present"));
+    }
+
     private void executeOvercommit(double overcommit) throws Exception {
         sysprops.put(ServerlessServerCli.PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP, Double.toString(overcommit));
         execute();
