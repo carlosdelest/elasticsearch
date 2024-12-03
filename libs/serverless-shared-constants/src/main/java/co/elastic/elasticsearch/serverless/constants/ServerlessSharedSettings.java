@@ -130,8 +130,9 @@ public class ServerlessSharedSettings {
     public static final Setting<Double> VCPU_REQUEST = Setting.doubleSetting(
         "node.vcpu_request",
         Runtime.getRuntime().availableProcessors(),
-        0.0,
-        Runtime.getRuntime().availableProcessors(),
+        // smallest *positive* double
+        Double.MIN_VALUE,
+        Double.POSITIVE_INFINITY,
         Setting.Property.NodeScope
     );
 
