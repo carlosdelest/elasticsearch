@@ -31,6 +31,7 @@ module org.elasticsearch.metering {
     requires org.elasticsearch.serverless.constants;
     requires org.elasticsearch.stateless.api;
     requires org.elasticsearch.xcore;
+    requires org.elasticsearch.sslconfig;
 
     provides org.elasticsearch.features.FeatureSpecification with MeteringFeatures;
     provides co.elastic.elasticsearch.stateless.api.DocValuesFormatFactory with RAStorageDocValuesFormatFactory;

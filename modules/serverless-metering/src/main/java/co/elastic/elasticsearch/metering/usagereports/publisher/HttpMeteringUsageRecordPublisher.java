@@ -22,9 +22,11 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
+import org.elasticsearch.common.ssl.KeyStoreUtil;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.env.Environment;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.telemetry.metric.LongCounter;
@@ -35,35 +37,39 @@ import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
 
 import java.io.IOException;
-import java.net.Socket;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.AccessController;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
+import java.security.GeneralSecurityException;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509ExtendedTrustManager;
 
 public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPublisher {
     private static final Logger log = LogManager.getLogger(HttpMeteringUsageRecordPublisher.class);
 
     private static final String USER_AGENT = "elasticsearch/metering/" + Build.current().version();
     private static final TimeValue DEFAULT_REQUEST_TIMEOUT = TimeValue.timeValueSeconds(30);
+
+    private static final String CERTIFICATE_PATH = "http-certs/ca.crt";
 
     static final String USAGE_API_REQUESTS_TOTAL = "es.metering.usage_api.request.total";
     static final String USAGE_API_ERRORS_TOTAL = "es.metering.usage_api.error.total"; // (include http status in the attributes)
@@ -87,31 +93,6 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
         Setting.Property.NodeScope
     );
 
-    private static final TrustManager TRUST_EVERYTHING = new X509ExtendedTrustManager() {
-        @Override
-        public X509Certificate[] getAcceptedIssuers() {
-            return new X509Certificate[0];
-        }
-
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) {}
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) {}
-
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) {}
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) {}
-
-        @Override
-        public void checkClientTrusted(X509Certificate[] chain, String authType) {}
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType) {}
-    };
-
     private final URI meteringUri;
     private final Duration requestTimeout;
     private final int batchSize;
@@ -121,24 +102,12 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
     private final LongHistogram requestsSize;
     private final LongHistogram requestsTime;
 
-    public HttpMeteringUsageRecordPublisher(Settings settings, MeterRegistry meterRegistry) {
+    public HttpMeteringUsageRecordPublisher(Environment environment, Settings settings, MeterRegistry meterRegistry) {
         this.meteringUri = METERING_URL.get(settings);
         this.batchSize = BATCH_SIZE.get(settings);
         this.requestTimeout = Duration.ofMillis(REQUEST_TIMEOUT.get(settings).millis());
 
-        SSLContext context;
-        try {
-            // don't check the SSL cert for now
-            // TODO ES-6505
-            context = SSLContext.getInstance("TLS");
-            context.init(null, new TrustManager[] { TRUST_EVERYTHING }, new SecureRandom());
-        } catch (NoSuchAlgorithmException | KeyManagementException e) {
-            // SSL error that shouldn't happen
-            assert false : e;
-            throw new RuntimeException(e);
-        }
-
-        client = HttpClient.newBuilder().sslContext(context).followRedirects(HttpClient.Redirect.NORMAL).build();
+        this.client = createHttpClient(environment);
 
         this.requestsTotalCounter = meterRegistry.registerLongCounter(
             USAGE_API_REQUESTS_TOTAL,
@@ -156,6 +125,47 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
             "Round-trip time of REST request to usage-api",
             "ms"
         );
+    }
+
+    private HttpClient createHttpClient(Environment environment) {
+        HttpClient.Builder httpClientBuilder = HttpClient.newBuilder();
+        if (meteringUri.getScheme().equalsIgnoreCase("https")) {
+            SSLContext context = createSslContext(environment);
+            httpClientBuilder.sslContext(context);
+        } else {
+            log.error("usage-api certificate check is disabled, metering.url is {}", meteringUri);
+        }
+        return httpClientBuilder.followRedirects(HttpClient.Redirect.NORMAL).build();
+    }
+
+    private static SSLContext createSslContext(Environment environment) {
+        SSLContext context;
+        try {
+            TrustManager trustManager = createTrustManager(environment);
+            log.debug("Certificate {} successfully loaded", CERTIFICATE_PATH);
+
+            context = SSLContext.getInstance("TLS");
+            context.init(null, new TrustManager[] { trustManager }, new SecureRandom());
+        } catch (CertificateException e) {
+            log.error("There is problem with certificate {}", CERTIFICATE_PATH, e);
+            throw new RuntimeException(e);
+        } catch (GeneralSecurityException e) {
+            log.error("SSLContext initialization failed {}", e);
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            log.error("Could not access certificate {}", CERTIFICATE_PATH, e);
+            throw new RuntimeException(e);
+        }
+        return context;
+    }
+
+    private static TrustManager createTrustManager(Environment environment) throws GeneralSecurityException, IOException {
+        Path certificateFile = environment.configFile().resolve(HttpMeteringUsageRecordPublisher.CERTIFICATE_PATH);
+        try (InputStream fis = Files.newInputStream(certificateFile)) {
+            CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+            X509Certificate caCert = (X509Certificate) certificateFactory.generateCertificate(fis);
+            return KeyStoreUtil.createTrustManager(Collections.singleton(caCert));
+        }
     }
 
     /**
@@ -227,6 +237,7 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
 
     private boolean handleResponse(HttpResponse<?> response, List<UsageRecord> records) {
         int statusCode = response.statusCode();
+        log.trace("Response from usage-api received, status code is {}", statusCode);
         if (statusCode == 201) {
             // all ok
             return true;

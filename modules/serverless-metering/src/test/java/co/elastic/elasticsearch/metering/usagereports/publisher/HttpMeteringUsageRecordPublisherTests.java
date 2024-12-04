@@ -94,7 +94,7 @@ public class HttpMeteringUsageRecordPublisherTests extends ESTestCase {
             .put(HttpMeteringUsageRecordPublisher.BATCH_SIZE.getKey(), BATCH_SIZE)
             .build();
         meterRegistry = new RecordingMeterRegistry();
-        reporter = new HttpMeteringUsageRecordPublisher(settings, meterRegistry);
+        reporter = new HttpMeteringUsageRecordPublisher(null, settings, meterRegistry);
     }
 
     private void handle(HttpExchange exchange) throws IOException {
