@@ -114,7 +114,7 @@ public final class ServerlessSsoIT extends ESRestTestCase {
         .user(ADMIN_USER, ADMIN_PASSWORD.toString(), User.ROOT_USER_ROLE, true)
         .configFile("metadata.xml", Resource.fromClasspath("saml/metadata.xml"))
         .configFile("operator/settings.json", Resource.fromClasspath("operator/role-mappings.json"))
-        .configFile("roles.yml", Resource.fromClasspath("roles.yml"))
+        .rolesFile(Resource.fromClasspath("roles.yml"))
         // Logging enabled to debug https://github.com/elastic/elasticsearch-serverless/issues/898
         .setting("logger.org.elasticsearch.xpack.security.authc.support.mapper", "TRACE")
         .build();

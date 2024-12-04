@@ -99,9 +99,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: "test {lookup-join.*"
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
-- class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
-  method: testRandomActivities
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3189
 - class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
   method: testTranslogStressRecoveryTest
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2908

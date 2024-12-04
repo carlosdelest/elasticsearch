@@ -424,6 +424,9 @@ public class ServerlessServerCli extends ServerCli {
         if (EsExecutors.NODE_PROCESSORS_SETTING.exists(builder)) {
             throw new IllegalStateException("node.processors must not be present, it will be auto calculated");
         }
+        if (ServerlessSharedSettings.VCPU_REQUEST.exists(builder)) {
+            throw new IllegalStateException("node.vcpu_request must not be present, it will be auto calculated");
+        }
 
         double vcpus;
         if (Files.exists(getCgroupFs().resolve("cgroup.controllers"))) {
@@ -465,6 +468,7 @@ public class ServerlessServerCli extends ServerCli {
             allocated = available;
         }
 
+        builder.put(ServerlessSharedSettings.VCPU_REQUEST.getKey(), vcpus);
         builder.put(EsExecutors.NODE_PROCESSORS_SETTING.getKey(), allocated);
     }
 

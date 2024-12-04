@@ -123,5 +123,18 @@ public class ServerlessSharedSettings {
         Setting.Property.NodeScope
     );
 
+    /**
+     * Stores the number of vCPUs configured by the current step of the Autoscaling Step Function (set as the k8s cpu "request"). This is
+     * set automatically via the cgroup cpu.weight/shares value.
+     */
+    public static final Setting<Double> VCPU_REQUEST = Setting.doubleSetting(
+        "node.vcpu_request",
+        Runtime.getRuntime().availableProcessors(),
+        // smallest *positive* double
+        Double.MIN_VALUE,
+        Double.POSITIVE_INFINITY,
+        Setting.Property.NodeScope
+    );
+
     private ServerlessSharedSettings() {}
 }

@@ -31,7 +31,8 @@ public class ServerlessSharedSettingsExtension implements SettingsExtension {
             ServerlessSharedSettings.SEARCH_POWER_MAX_SETTING,
             ServerlessSharedSettings.ENABLE_REPLICAS_FOR_INSTANT_FAILOVER,
             ServerlessSharedSettings.PROJECT_ID,
-            ServerlessSharedSettings.PROJECT_TYPE
+            ServerlessSharedSettings.PROJECT_TYPE,
+            ServerlessSharedSettings.VCPU_REQUEST
         );
     }
 }
