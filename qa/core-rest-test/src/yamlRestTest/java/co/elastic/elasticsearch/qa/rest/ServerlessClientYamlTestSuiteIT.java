@@ -13,31 +13,22 @@ import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import com.carrotsearch.randomizedtesting.annotations.TimeoutSuite;
 
 import org.apache.lucene.tests.util.TimeUnits;
-import org.elasticsearch.common.settings.SecureString;
-import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
-import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
 import org.junit.ClassRule;
 
 @TimeoutSuite(millis = 40 * TimeUnits.MINUTE)
-public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
+public class ServerlessClientYamlTestSuiteIT extends AbstractServerlessMultiProjectClientYamlSuiteTestCase {
 
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
+        .setting("multi_project.enabled", String.valueOf(MULTI_PROJECT_ENABLED))
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
         .setting("indices.disk.interval", "-1") // Disable IndexingDiskController to avoid scewing stats
         .user("admin-user", "x-pack-test-password")
         .build();
-
-    @Override
-    protected Settings restClientSettings() {
-        String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
-        return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).build();
-    }
 
     public ServerlessClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
         super(testCandidate);

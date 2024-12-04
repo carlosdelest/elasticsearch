@@ -6,10 +6,10 @@
  * Side Public License, v 1.
  */
 
-package co.elastic.elasticsearch.qa.sigterm;
+package co.elastic.elasticsearch.qa.multiproject;
 
-import org.apache.http.HttpHost;
 import org.elasticsearch.client.Request;
+import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.RestClient;
@@ -18,7 +18,6 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
-import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
@@ -37,6 +36,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
@@ -58,7 +58,7 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("stateless.enabled", "true")
         .setting("xpack.ml.enabled", "false")
-        .user("admin-user", "x-pack-test-password")
+        .user(ADMIN_USERNAME, ADMIN_PASSWORD)
         .setting("xpack.watcher.enabled", "false")
         .setting("multi_project.enabled", "true")
         .build();
@@ -66,15 +66,18 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
     @BeforeClass
     public static void randomizeProjectIds() {
         activeProject = randomAlphaOfLength(8).toLowerCase(Locale.ROOT) + "00active";
-        extraProjects = randomSet(1, 3, ESTestCase::randomIdentifier);
+        extraProjects = randomSet(1, 5, ESTestCase::randomIdentifier);
     }
+
+    private Map<String, ProjectClient> projectClients;
 
     @Before
     public void configureProjects() throws Exception {
         initClient();
-        createProject(activeProject);
+        projectClients = new HashMap<>();
+        projectClients.put(activeProject, createProject(activeProject));
         for (var project : extraProjects) {
-            createProject(project);
+            projectClients.put(project, createProject(project));
         }
 
         // The admin client does not set a project id, and can see all projects
@@ -94,13 +97,14 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         deleteProject(activeProject);
     }
 
-    private void createProject(String project) throws IOException {
+    private ProjectClient createProject(String project) throws IOException {
         RestClient client = adminClient();
         final Request request = new Request("PUT", "/_project/" + project);
         try {
             logger.info("--> Creating project {}", project);
             final Response response = client.performRequest(request);
             logger.info("--> Created project {} : {}", project, response.getStatusLine());
+            return new ProjectClient(client(), project);
         } catch (ResponseException e) {
             logger.error("--> Failed to create project: {}", project);
             throw e;
@@ -113,9 +117,9 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         try {
             logger.info("--> Deleting project {}", project);
             final Response response = client.performRequest(request);
-            logger.info("-->Deleted project {} : {}", project, response.getStatusLine());
+            logger.info("--> Deleted project {} : {}", project, response.getStatusLine());
         } catch (ResponseException e) {
-            logger.error("-->Failed to delete project: {}", project, e);
+            logger.error("--> Failed to delete project: {}", project, e);
             throw e;
         }
     }
@@ -173,10 +177,11 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
     }
 
     public void testBasicIndexOperationsWithOneProject() throws Exception {
+        final ProjectClient projectClient = projectClients.get(activeProject);
         final var indexName = randomIdentifier();
 
         if (randomBoolean()) {
-            assertOK(client().performRequest(new Request("PUT", "/" + indexName)));
+            assertOK(projectClient.performRequest(new Request("PUT", "/" + indexName)));
         }
 
         // Index a document
@@ -185,61 +190,47 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
             { "field": "value" }
             """);
         indexRequest.addParameter("refresh", "true");
-        final ObjectPath indexResponse = assertOKAndCreateObjectPath(client().performRequest(indexRequest));
+        final ObjectPath indexResponse = assertOKAndCreateObjectPath(projectClient.performRequest(indexRequest));
 
         // Get the document
         final String docId = indexResponse.evaluate("_id");
         final ObjectPath getResponse = assertOKAndCreateObjectPath(
-            client().performRequest(new Request("GET", "/" + indexName + "/_doc/" + docId))
+            projectClient.performRequest(new Request("GET", "/" + indexName + "/_doc/" + docId))
         );
         assertThat(getResponse.evaluate("_source"), equalTo(Map.of("field", "value")));
 
         // Search the document
-        final ObjectPath searchResponse = assertOKAndCreateObjectPath(client().performRequest(new Request("GET", "/_search")));
+        final ObjectPath searchResponse = assertOKAndCreateObjectPath(projectClient.performRequest(new Request("GET", "/_search")));
         assertThat(searchResponse.evaluate("hits.total.value"), equalTo(1));
         assertThat(searchResponse.evaluate("hits.hits.0._id"), equalTo(docId));
     }
 
     public void testConcurrentOperationsFromMultipleProjects() throws Exception {
-        final Map<String, RestClient> clients = new HashMap<>();
-        clients.put(activeProject, client());
-        try {
-            for (String projectId : extraProjects) {
-                clients.put(projectId, buildClient(clientSettings(true, projectId), getClusterHosts().toArray(HttpHost[]::new)));
+        final List<Thread> threads = Stream.concat(Stream.of(activeProject), extraProjects.stream()).map(projectId -> new Thread(() -> {
+            try {
+                doTestForOneProjectClient(projectClients.get(projectId));
+            } catch (IOException e) {
+                fail(e, "failed for project: %s", projectId);
             }
-            final List<Thread> threads = clients.entrySet().stream().map(entry -> new Thread(() -> {
-                try {
-                    doTestForOneProjectClient(entry.getKey(), entry.getValue());
-                } catch (IOException e) {
-                    fail(e, "failed for project: %s", entry.getKey());
-                }
-            })).toList();
+        })).toList();
 
-            threads.forEach(Thread::start);
-            for (Thread thread : threads) {
-                thread.join(30000);
-            }
-            assertThat(threads.stream().noneMatch(Thread::isAlive), equalTo(true));
-
-        } finally {
-            for (var entry : clients.entrySet()) {
-                if (entry.getKey().equals(activeProject)) {
-                    continue;
-                }
-                IOUtils.closeWhileHandlingException(entry.getValue());
-            }
+        threads.forEach(Thread::start);
+        for (Thread thread : threads) {
+            thread.join(30000);
         }
+        assertTrue(threads.stream().noneMatch(Thread::isAlive));
     }
 
-    private void doTestForOneProjectClient(String projectId, RestClient client) throws IOException {
+    private void doTestForOneProjectClient(ProjectClient projectClient) throws IOException {
+        final String projectId = projectClient.getProjectId();
         final String index = "index";
         final String anotherIndex = projectId + "-index";
         final int numDocs = between(50, 200);
 
         logger.info("--> running test for project [{}] and indices [{},{}] with [{}] docs", projectId, index, anotherIndex, numDocs);
         try {
-            assertOK(client.performRequest(new Request("PUT", "/" + index)));
-            assertOK(client.performRequest(new Request("PUT", "/" + anotherIndex)));
+            assertOK(projectClient.performRequest(new Request("PUT", "/" + index)));
+            assertOK(projectClient.performRequest(new Request("PUT", "/" + anotherIndex)));
 
             final Map<String, Integer> docCounts = new HashMap<>();
             final Request bulkRequest = new Request("POST", "/_bulk");
@@ -254,10 +245,10 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
                 docCounts.compute(activeIndex, (key, val) -> val == null ? 1 : val + 1);
             }
             bulkRequest.setJsonEntity(bulkBody.toString());
-            assertOK(client.performRequest(bulkRequest));
+            assertOK(projectClient.performRequest(bulkRequest));
 
             final ObjectPath searchResponse = assertOKAndCreateObjectPath(
-                client.performRequest(new Request("GET", "/_search?size=" + numDocs))
+                projectClient.performRequest(new Request("GET", "/_search?size=" + numDocs))
             );
 
             assertThat("project " + projectId, searchResponse.evaluate("hits.total.value"), equalTo(numDocs));
@@ -272,7 +263,34 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
             }
             assertThat("docCounts: " + docCounts, docCounts.values(), everyItem(equalTo(0)));
         } finally {
-            assertOK(client.performRequest(new Request("DELETE", "/" + index + "*," + anotherIndex + "*")));
+            assertOK(projectClient.performRequest(new Request("DELETE", "/" + index + "*," + anotherIndex + "*")));
+        }
+    }
+
+    static class ProjectClient {
+
+        private final RestClient delegate;
+        private final String projectId;
+
+        ProjectClient(RestClient delegate, String projectId) {
+            this.delegate = delegate;
+            this.projectId = projectId;
+        }
+
+        public String getProjectId() {
+            return projectId;
+        }
+
+        Response performRequest(Request request) throws IOException {
+            setRequestProjectId(request);
+            return delegate.performRequest(request);
+        }
+
+        void setRequestProjectId(Request request) {
+            RequestOptions.Builder options = request.getOptions().toBuilder();
+            options.removeHeader(Task.X_ELASTIC_PROJECT_ID_HTTP_HEADER);
+            options.addHeader(Task.X_ELASTIC_PROJECT_ID_HTTP_HEADER, projectId);
+            request.setOptions(options);
         }
     }
 }
