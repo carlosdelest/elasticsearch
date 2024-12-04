@@ -806,6 +806,18 @@ public class ServerlessServerCliTests extends CommandTestCase {
         return serverlessCli;
     }
 
+    public void testFileLoggingConfig() throws Exception {
+        sysprops.put(ServerlessServerCli.FILE_LOGGING_SYSPROP, "true");
+        Path loggingConfigFile = configDir.resolve("log4j2.properties");
+        Files.writeString(loggingConfigFile, "console-log-config");
+        Path serverlessLoggingConfigFile = configDir.resolve("log4j2.serverless.properties");
+        Files.writeString(serverlessLoggingConfigFile, "file-log-config");
+
+        execute();
+        String loggingConfig = Files.readString(loggingConfigFile);
+        assertThat(loggingConfig, equalTo("file-log-config"));
+    }
+
     private static Settings emptySettings() {
         return Settings.builder().build();
     }
