@@ -20,6 +20,8 @@ package co.elastic.elasticsearch.metering;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+
 import org.elasticsearch.action.DocWriteRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -56,6 +58,18 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
     static final int PIPELINE_ADDED_FIELDS_SIZE = 5 * ASCII_SIZE;
 
+    @ParametersFactory
+    public static List<Object[]> params() {
+        return List.of(
+            new Object[] { Settings.EMPTY },
+            new Object[] { Settings.builder().put("index.mapping.source.mode", "synthetic").build() }
+        );
+    }
+
+    public IngestMeteringIT(Settings indexSettings) {
+        super(indexSettings);
+    }
+
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
         var list = new ArrayList<>(super.nodePlugins());
@@ -75,7 +89,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         String indexName = "idx1";
         startMasterAndIndexNode();
         startSearchNode();
-        createIndex(indexName);
+        setupIndex(indexName);
         // size 3*char+int (long size)
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
 
@@ -120,7 +134,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         String indexName2 = "idx2";
         startMasterIndexAndIngestNode();
         startSearchNode();
-        createIndex(indexName2);
+        setupIndex(indexName2);
 
         client().index(
             // size char+int (long size)
@@ -146,7 +160,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         String indexName3 = "idx3";
         startMasterIndexAndIngestNode();
         startSearchNode();
-        createIndex(indexName3);
+        setupIndex(indexName3);
         createFailPipeline();
 
         client().bulk(
@@ -166,7 +180,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName4 = "update_partial_doc";
-        createIndex(indexName4);
+        setupIndex(indexName4);
         indexDoc(indexName4, ASCII_SIZE + NUMBER_SIZE, "a", 1, "b", "c");
 
         client().prepareUpdate().setIndex(indexName4).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
@@ -175,11 +189,11 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
         assertUsageRecord(indexName4, usageRecord, 2 * NUMBER_SIZE + ASCII_SIZE);// updated size
     }
 
-    public void testUpdatesViaScriptAreNotMetered() {
+    public void testUpdatesViaScriptAreMetered() {
         startMasterIndexAndIngestNode();
         startSearchNode();
         String indexName = "index1";
-        createIndex(indexName);
+        setupIndex(indexName);
 
         String scriptId = "script1";
         putJsonStoredScript(scriptId, Strings.format("""

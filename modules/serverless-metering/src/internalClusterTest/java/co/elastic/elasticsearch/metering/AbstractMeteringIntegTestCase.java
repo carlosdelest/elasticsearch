@@ -64,12 +64,22 @@ import java.util.concurrent.LinkedBlockingQueue;
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
 @ThreadLeakFilters(filters = { HttpClientThreadFilter.class })
 public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessIntegTestCase {
+    protected final Settings indexSettings;
+
     protected static final TimeValue REPORT_PERIOD = TimeValue.timeValueSeconds(3);
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
 
     private final BlockingQueue<List<UsageRecord>> received = new LinkedBlockingQueue<>();
     private final String projectId = randomAlphaOfLength(8);
     private HttpServer server;
+
+    protected AbstractMeteringIntegTestCase() {
+        this(Settings.EMPTY);
+    }
+
+    protected AbstractMeteringIntegTestCase(Settings indexSettings) {
+        this.indexSettings = indexSettings;
+    }
 
     @Before
     public void setupServer() throws IOException {
@@ -106,6 +116,10 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         list.add(MeteringPlugin.class);
         list.add(MockTransportService.TestPlugin.class);
         return list;
+    }
+
+    protected void setupIndex(String indexName) {
+        createIndex(indexName, indexSettings);
     }
 
     protected BlockingQueue<List<UsageRecord>> receivedMetrics() {
@@ -152,13 +166,13 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         recordLists.stream().flatMap(List::stream).forEach(usageRecords::add);
     }
 
-    protected static void createDataStreamAndTemplate(String dataStreamName, String mapping) throws IOException {
+    protected static void createDataStreamAndTemplate(String dataStreamName, Settings settings, String mapping) throws IOException {
         client().execute(
             TransportPutComposableIndexTemplateAction.TYPE,
             new TransportPutComposableIndexTemplateAction.Request(dataStreamName + "_template").indexTemplate(
                 ComposableIndexTemplate.builder()
                     .indexPatterns(Collections.singletonList(dataStreamName))
-                    .template(new Template(null, new CompressedXContent(mapping), null))
+                    .template(new Template(settings, new CompressedXContent(mapping), null))
                     .dataStreamTemplate(new ComposableIndexTemplate.DataStreamTemplate())
                     .build()
             )
@@ -171,7 +185,7 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
 
     protected void createDataStream(String indexName) throws IOException {
         String mapping = mappingWithTimestamp();
-        createDataStreamAndTemplate(indexName, mapping);
+        createDataStreamAndTemplate(indexName, indexSettings, mapping);
     }
 
     protected static String emptyMapping() {
