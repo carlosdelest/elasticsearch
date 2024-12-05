@@ -102,3 +102,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
   method: testTranslogStressRecoveryTest
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2908
+- class: co.elastic.elasticsearch.downsample.serverless.ServerlessDownsampleIT
+  method: testDownsampleWithDSL
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3248
