@@ -108,3 +108,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.masterfailover.MasterFailoverIT
   method: testFailover
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3249
+- class: co.elastic.elasticsearch.qa.sigterm.SigtermShutdownIT
+  method: testShutdown
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3250
