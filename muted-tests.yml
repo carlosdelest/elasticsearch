@@ -105,3 +105,6 @@ tests:
 - class: co.elastic.elasticsearch.downsample.serverless.ServerlessDownsampleIT
   method: testDownsampleWithDSL
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3248
+- class: co.elastic.elasticsearch.qa.masterfailover.MasterFailoverIT
+  method: testFailover
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3249
