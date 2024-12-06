@@ -40,6 +40,7 @@ steps:
     key: "checkblocker"
     command: |
           .buildkite/scripts/run-gradle.sh checkPromotionBlocker
+          buildkite-agent artifact upload "build/reports/blockers/serverless-promotion-blocker.json"
     env:
         USE_GITHUB_CREDENTIALS: "true"
         BLOCK_ON_ISSUES_UNTRIAGED: ${BLOCK_ON_ISSUES_UNTRIAGED}
