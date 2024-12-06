@@ -23,14 +23,10 @@ steps:
     command: "make -C /agent run-environment-tests"
     agents:
       image: "docker.elastic.co/ci-agent-images/quality-gate-seedling:0.0.4"
-
-  - label: ":question: Maybe add manual gate"
-    if: build.env("ENVIRONMENT") != "production-noncanary"
-    depends_on: quality-gates
-    command: ".buildkite/scripts/upload-manual-gate.sh"
-
   - label: ":git: Push promoted build tags"
+    key: tag
     branches: "main patch/*"
+    soft_fail: true
     env:
       USE_GITHUB_CREDENTIALS: "true"
       GITOPS_ENV: "${ENVIRONMENT}"
@@ -39,9 +35,17 @@ steps:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
-
   - label: ":elasticsearch: Annotate promotion in O11y dashboards"
+    key: annotate
+    soft_fail: true
+    branches: "main patch/*"
     command: ".buildkite/scripts/annotate-promotion.sh"
+  - label: ":question: Maybe add manual gate"
+    depends_on: 
+      - quality-gates
+      - annotate
+      - tag
+    command: ".buildkite/scripts/upload-manual-gate.sh"
 
 notify:
   - slack:

@@ -17,4 +17,4 @@ steps:
 
 notify:
   - slack: "#es-serverless-gitops"
-    if: build.state == "failed"
+    if: (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"
