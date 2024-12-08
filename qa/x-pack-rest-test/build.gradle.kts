@@ -111,7 +111,7 @@ tasks {
             // Global privileges not supported in Serverless
             "roles/40_global_privileges/*",
             // The migrate functionality will not be used in serverless yet
-            "migrate/*"
+            "migrate/*/*"
         ).joinToString(","))
     }
 }
