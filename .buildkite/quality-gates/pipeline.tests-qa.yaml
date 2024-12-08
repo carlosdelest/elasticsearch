@@ -18,6 +18,7 @@ steps:
 
       - label: ":java: Verify upgrade from current staging"
         command: ".buildkite/scripts/run-gradle.sh bwcTest -Dtests.bwc.tag=current_staging"
+        branches: "main patch/*"
         soft_fail: true
         agents:
           provider: "gcp"
@@ -27,6 +28,7 @@ steps:
       - label: ":kibana: Kibana serverless tests"
         trigger: appex-qa-serverless-kibana-ftr-tests # https://buildkite.com/elastic/appex-qa-serverless-kibana-ftr-tests
         soft_fail: true
+        branches: "main patch/*"
         build:
           env:
             ENVIRONMENT: qa
@@ -38,6 +40,7 @@ steps:
       - label: ":hourglass: Wait 30 minutes for environment health metrics"
         soft_fail: true
         key: bake_period
+        branches: "main patch/*"
         command:
           - echo "Waiting for 30m for indicative health metrics"
           - sleep ${QA_GATE_WAIT_PERIOD:-1800}

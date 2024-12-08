@@ -133,6 +133,7 @@ distribution_archives {
                     into("config") {
                         from((project.extensions["jvmOptionsDir"] as File).parent)
                         from("src/serverless-default-settings.yml")
+                        from("src/config/log4j2.serverless.properties")
                     }
                     into("lib/tools/serverless-server-cli") {
                         from(serverCli)

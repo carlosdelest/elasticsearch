@@ -251,7 +251,14 @@ public abstract class GenerateServerlessPromotionNotesTask extends DefaultTask {
             jsonObject.addProperty("title", pullRequest.getTitle());
             jsonObject.addProperty("mergedAt", pullRequest.getMergedAt());
             jsonObject.addProperty("repository", pullRequest.getRepository());
-            JsonElement labels = new Gson().toJsonTree(pullRequest.getLabels().stream().map(Label::getName).toList());
+            jsonObject.addProperty("url", pullRequest.getUrl());
+            JsonElement labels = new Gson().toJsonTree(
+                pullRequest.getLabels()
+                    .stream()
+                    .filter(label -> labelsToFilter.stream().anyMatch(filterLabel -> label.getName().matches(filterLabel)) == false)
+                    .map(Label::getName)
+                    .toList()
+            );
             jsonObject.add("labels", labels);
             return jsonObject;
         }

@@ -42,6 +42,7 @@ public class ServerlessRestRootIT extends ESClientYamlSuiteTestCase {
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting(ServerlessSharedSettings.PROJECT_ID.getKey(), "dummy-project-id")
+        .setting("metering.url", "http://usage-api.usage-api/api/v1/usage")
         .user(OPERATOR_USER, OPERATOR_PASSWORD.toString(), User.ROOT_USER_ROLE, true)
         .user(NOT_OPERATOR_USER, NOT_OPERATOR_PASSWORD, User.ROOT_USER_ROLE, false)
         .build();

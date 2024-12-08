@@ -217,6 +217,7 @@ public class MeteringPlugin extends Plugin
             usageRecordPublisher = MeteringUsageRecordPublisher.NOOP_REPORTER;
         } else {
             usageRecordPublisher = new HttpMeteringUsageRecordPublisher(
+                environment,
                 environment.settings(),
                 services.telemetryProvider().getMeterRegistry()
             );

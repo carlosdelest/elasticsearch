@@ -113,22 +113,25 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
                     )
                 );
             });
+
             List<CheckedIssues> blocker = byBlocking.get(true);
             boolean isFailure = blocker != null && blocker.isEmpty() == false;
-            try {
-                Process process = new ProcessBuilder(
-                    "buildkite-agent",
-                    "annotate",
-                    blockerAnnotation.toString(),
-                    "--context",
-                    "promotion-" + LABEL_BLOCKER,
-                    "--style",
-                    (getIgnoreFailures() || isFailure ? "warning" : "error")
-                ).start();
-                process.waitFor(10, TimeUnit.SECONDS);
-            } catch (Exception e) {
-                getLogger().error("Failed to add build annotation", e);
-                throw new RuntimeException(e);
+            if(issues.isEmpty() == false) {
+                try {
+                    Process process = new ProcessBuilder(
+                        "buildkite-agent",
+                        "annotate",
+                        blockerAnnotation.toString(),
+                        "--context",
+                        "promotion-" + LABEL_BLOCKER,
+                        "--style",
+                        (getIgnoreFailures() || isFailure ? "warning" : "error")
+                    ).start();
+                    process.waitFor(10, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    getLogger().error("Failed to add build annotation", e);
+                    throw new RuntimeException(e);
+                }
             }
         }
     }

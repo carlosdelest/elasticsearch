@@ -109,7 +109,9 @@ tasks {
             // Bulk roles is not available in serverless
             "roles/60_bulk_roles/*",
             // Global privileges not supported in Serverless
-            "roles/40_global_privileges/*"
+            "roles/40_global_privileges/*",
+            // The migrate functionality will not be used in serverless yet
+            "migrate/*/*"
         ).joinToString(","))
     }
 }

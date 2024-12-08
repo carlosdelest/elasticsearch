@@ -30,6 +30,7 @@ import org.elasticsearch.common.hash.MessageDigests;
 import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.core.Booleans;
 import org.elasticsearch.core.CheckedConsumer;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.Strings;
@@ -42,6 +43,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
@@ -66,6 +68,7 @@ public class ServerlessServerCli extends ServerCli {
 
     static final String PROCESSORS_OVERCOMMIT_FACTOR_SYSPROP = "es.serverless.processors_overcommit_factor";
     static final String FAST_SHUTDOWN_MARKER_FILE_SYSPROP = "es.serverless.fast_shutdown_marker_file";
+    static final String FILE_LOGGING_SYSPROP = "es.serverless.file_logging";
     static final String APM_PROJECT_ID_SETTING = "telemetry.agent.global_labels.project_id";
     static final String APM_NODE_ROLE_SETTING = "telemetry.agent.global_labels.node_tier";
     static final String APM_PROJECT_TYPE_SETTING = "telemetry.agent.global_labels.project_type";
@@ -92,6 +95,14 @@ public class ServerlessServerCli extends ServerCli {
         if (processInfo.sysprops().containsKey(FAST_SHUTDOWN_MARKER_FILE_SYSPROP)) {
             var file = processInfo.sysprops().get(FAST_SHUTDOWN_MARKER_FILE_SYSPROP);
             fastShutdownWatcher = new FastShutdownFileWatcher(terminal, Paths.get(file), this::getServer);
+        }
+
+        String fileLogging = processInfo.sysprops().get(FILE_LOGGING_SYSPROP);
+        if (fileLogging != null && Booleans.parseBoolean(fileLogging)) {
+            Path loggingConfig = env.configFile().resolve("log4j2.properties");
+            Path serverlessLoggingConfig = env.configFile().resolve("log4j2.serverless.properties");
+            // overwrite with new file based logging config
+            Files.copy(serverlessLoggingConfig, loggingConfig, StandardCopyOption.REPLACE_EXISTING);
         }
 
         try {

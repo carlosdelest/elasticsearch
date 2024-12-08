@@ -30,6 +30,8 @@ import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.RefreshThrottler;
 import co.elastic.elasticsearch.stateless.engine.translog.TranslogReplicator;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+
 import org.apache.lucene.index.CodecReader;
 import org.apache.lucene.index.FilterMergePolicy;
 import org.apache.lucene.index.IndexWriter;
@@ -102,10 +104,22 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
 public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
-
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
     private static final long EXPECTED_SIZE = 3 * ASCII_SIZE + NUMBER_SIZE;
+    public static final String RAS_FIELD = RaStorageMetadataFieldMapper.FIELD_NAME;
+
+    @ParametersFactory
+    public static List<Object[]> params() {
+        return List.of(
+            new Object[] { Settings.EMPTY },
+            new Object[] { Settings.builder().put("index.mapping.source.mode", "synthetic").build() }
+        );
+    }
+
+    public StorageMeteringIT(Settings indexSettings) {
+        super(indexSettings);
+    }
 
     /**
      * This extension of the Serverless plugin allow us to intercept and inject a different MergePolicy.
@@ -277,22 +291,30 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     }
 
     public void testRaStorageFieldInaccessible() {
+        // https://github.com/elastic/elasticsearch-serverless/issues/3244
+        assumeTrue("Fails randomly if run multiple times", indexSettings.equals(Settings.EMPTY));
+
         String indexName = "idx1";
-        createIndex(indexName);
+        setupIndex(indexName);
         String id = client().index(new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar"))
             .actionGet()
             .getId();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
         List<SearchSourceBuilder> searchBuilders = List.of(
-            new SearchSourceBuilder().fetchField(RaStorageMetadataFieldMapper.FIELD_NAME).query(new MatchAllQueryBuilder()),
-            new SearchSourceBuilder().query(new ExistsQueryBuilder(RaStorageMetadataFieldMapper.FIELD_NAME)),
-            new SearchSourceBuilder().query(new TermQueryBuilder(RaStorageMetadataFieldMapper.FIELD_NAME, 0))
+            new SearchSourceBuilder().fetchField(RAS_FIELD).query(new MatchAllQueryBuilder()),
+            new SearchSourceBuilder().query(new ExistsQueryBuilder(RAS_FIELD)),
+            new SearchSourceBuilder().query(new TermQueryBuilder(RAS_FIELD, 0))
         );
 
         // can't query for it
         for (var source : searchBuilders) {
-            Exception e = expectThrows(Exception.class, () -> client().search(new SearchRequest(indexName).source(source)).actionGet());
+            Exception e = expectThrows(Exception.class, () -> {
+                var req = new SearchRequest(indexName).source(source);
+                var resp = client().search(req).actionGet();
+                logger.error("Expected exception for {}, but got: {}", req.source(), resp);
+            });
+
             assertThat(
                 ElasticsearchException.guessRootCauses(e)[0].getMessage(),
                 anyOf(
@@ -304,30 +326,21 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         }
 
         // can't set it
-        Exception e = expectThrows(
-            Exception.class,
-            () -> client().index(
-                new IndexRequest(indexName).source(
-                    XContentType.JSON,
-                    "value1",
-                    "foo",
-                    "value2",
-                    "bar",
-                    RaStorageMetadataFieldMapper.FIELD_NAME,
-                    100L
-                )
-            ).actionGet()
-        );
+        Exception e = expectThrows(Exception.class, () -> {
+            var req = new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar", RAS_FIELD, 100L);
+            var resp = client().index(req).actionGet();
+            logger.error("Expected exception, but got: {}", resp);
+        });
         assertThat(
             ElasticsearchException.guessRootCauses(e)[0].getMessage(),
             containsString("Field [_rastorage] is a metadata field and cannot be added inside a document.")
         );
 
         // can't update it
-        e = expectThrows(
-            Exception.class,
-            () -> client().update(new UpdateRequest(indexName, id).doc(RaStorageMetadataFieldMapper.FIELD_NAME, 100L)).actionGet()
-        );
+        e = expectThrows(Exception.class, () -> {
+            var resp = client().update(new UpdateRequest(indexName, id).doc(RAS_FIELD, 100L)).actionGet();
+            logger.error("Expected exception, but got: {}", resp);
+        });
         assertThat(
             ElasticsearchException.guessRootCauses(e)[0].getMessage(),
             containsString("Field [_rastorage] is a metadata field and cannot be added inside a document.")
@@ -422,7 +435,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         String dsName = ".ds-" + indexName;
 
         String mapping = emptyMapping();
-        createDataStreamAndTemplate(indexName, mapping);
+        createDataStreamAndTemplate(indexName, indexSettings, mapping);
 
         client().index(
             new IndexRequest(indexName).source(XContentType.JSON, "@timestamp", 123, "key", "abc").opType(DocWriteRequest.OpType.CREATE)
@@ -466,7 +479,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         startSearchNode();
         String indexName = "index1";
 
-        createIndex(indexName);
+        setupIndex(indexName);
 
         // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
         client().prepareIndex().setIndex(indexName).setId("1").setSource("a", 1, "b", "c").setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
@@ -501,7 +514,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         startSearchNode();
         String indexName = "index1";
 
-        createIndex(indexName);
+        setupIndex(indexName);
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
@@ -547,7 +560,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     public void testRAStorageWithNonTimeSeries() throws Exception {
         String indexName = "idx1";
-        createIndex(indexName);
+        setupIndex(indexName);
 
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
@@ -561,7 +574,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     public void testRAStorageWithNonTimeSeriesMultipleUniformDocs() throws Exception {
         String indexName = "idx1";
-        createIndex(indexName);
+        setupIndex(indexName);
 
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
@@ -577,7 +590,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
 
     public void testRAStorageWithNonTimeSeriesMultipleDifferentDocs() throws Exception {
         String indexName = "idx1";
-        createIndex(indexName);
+        setupIndex(indexName);
 
         var doc1RASize = 3 * ASCII_SIZE + NUMBER_SIZE;
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
@@ -600,7 +613,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     public void testRAStorageWithNonTimeSeriesAndDeletesNoMerge() throws Exception {
         CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(NoMergePolicy.INSTANCE);
         String indexName = "idx1";
-        createIndex(indexName);
+        setupIndex(indexName);
 
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
@@ -622,7 +635,10 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(CustomMergePolicyStatelessPlugin.simpleMergePolicy);
 
         String indexName = "idx1";
-        createIndex(indexName, indexSettings(1, 1).put(INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING.getKey(), TimeValue.ZERO).build());
+        createIndex(
+            indexName,
+            indexSettings(1, 1).put(indexSettings).put(INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING.getKey(), TimeValue.ZERO).build()
+        );
         ensureGreen(indexName);
 
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
@@ -647,7 +663,8 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(NoMergePolicy.INSTANCE);
 
         String indexName = "idx1", indexName2 = "idx2";
-        createIndex(indexName, indexName2);
+        setupIndex(indexName);
+        setupIndex(indexName2);
         ensureGreen(indexName, indexName2);
 
         var result1 = client().prepareIndex(indexName).setSource("some_field", 123, "key", "abc").get();
@@ -681,7 +698,10 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(CustomMergePolicyStatelessPlugin.simpleMergePolicy);
 
         String indexName = "idx1";
-        createIndex(indexName, indexSettings(1, 1).put(INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING.getKey(), TimeValue.ZERO).build());
+        createIndex(
+            indexName,
+            indexSettings(1, 1).put(indexSettings).put(INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING.getKey(), TimeValue.ZERO).build()
+        );
         ensureGreen(indexName);
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
@@ -704,7 +724,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         admin().indices().delete(new DeleteIndexRequest(indexName));
 
         String newIndexName = "idx2";
-        createIndex(newIndexName, indexSettings(1, 1).build());
+        createIndex(newIndexName, indexSettings(1, 1).put(indexSettings).build());
         ensureGreen(newIndexName);
         client().index(new IndexRequest(newIndexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(newIndexName).force(true)).actionGet();
