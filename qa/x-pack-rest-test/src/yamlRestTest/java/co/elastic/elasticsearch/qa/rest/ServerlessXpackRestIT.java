@@ -12,6 +12,8 @@ import co.elastic.elasticsearch.stateless.objectstore.gc.ObjectStoreGCTask;
 
 import com.carrotsearch.randomizedtesting.annotations.Name;
 
+import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
@@ -19,17 +21,18 @@ import org.elasticsearch.test.rest.TestFeatureService;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestClient;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestExecutionContext;
-import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
 import org.junit.ClassRule;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
-public class ServerlessXpackRestIT extends AbstractXPackRestTest {
+public class ServerlessXpackRestIT extends AbstractServerlessXpackMultiProjectClientYamlSuiteTestCase {
 
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("yamlRestTest")
+        .setting("multi_project.enabled", String.valueOf(MULTI_PROJECT_ENABLED))
         .setting("xpack.ml.enabled", "true")
         .setting("xpack.profiling.enabled", "true")
         .setting("xpack.security.enabled", "true")
@@ -87,5 +90,14 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
             osList,
             (api, path) -> (api.getName().equals("ml.infer_trained_model") && path.deprecated()) == false
         );
+    }
+
+    @Override
+    protected Map<String, String> getApiCallHeaders() {
+        if (MULTI_PROJECT_ENABLED) {
+            return Map.of(Task.X_ELASTIC_PROJECT_ID_HTTP_HEADER, Metadata.DEFAULT_PROJECT_ID.id());
+        } else {
+            return super.getApiCallHeaders();
+        }
     }
 }

@@ -30,7 +30,7 @@ import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.rest.ObjectPath;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
-import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
+import org.elasticsearch.xpack.test.rest.AbstractXPackRestTest;
 import org.junit.After;
 import org.junit.Before;
 
@@ -46,13 +46,13 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.nullValue;
 
 @FixForMultiProject(description = "Remove copy/paste code, see also https://elasticco.atlassian.net/browse/ES-10292")
-public abstract class AbstractServerlessMultiProjectClientYamlSuiteTestCase extends ESClientYamlSuiteTestCase {
+public abstract class AbstractServerlessXpackMultiProjectClientYamlSuiteTestCase extends AbstractXPackRestTest {
     public static final boolean MULTI_PROJECT_ENABLED = Boolean.parseBoolean(System.getProperty("es.test.multi_project.enabled", "false"));
     // The active project-id is slightly longer, and has a fixed suffix so that it's easier to pick in error messages etc.
     private final String activeProject = randomAlphaOfLength(8).toLowerCase(Locale.ROOT) + "00active";
     private final Set<String> extraProjects = randomSet(1, 3, () -> randomAlphaOfLength(12).toLowerCase(Locale.ROOT));
 
-    public AbstractServerlessMultiProjectClientYamlSuiteTestCase(ClientYamlTestCandidate testCandidate) {
+    public AbstractServerlessXpackMultiProjectClientYamlSuiteTestCase(ClientYamlTestCandidate testCandidate) {
         super(testCandidate);
     }
 
@@ -208,7 +208,7 @@ public abstract class AbstractServerlessMultiProjectClientYamlSuiteTestCase exte
     }
 
     private Settings clientSettings(boolean projectScoped) {
-        String token = basicAuthHeaderValue("admin-user", new SecureString("x-pack-test-password".toCharArray()));
+        String token = basicAuthHeaderValue("x_pack_rest_user", new SecureString("x-pack-test-password".toCharArray()));
         final Settings.Builder builder = Settings.builder()
             .put(super.restClientSettings())
             .put(ThreadContext.PREFIX + ".Authorization", token);
