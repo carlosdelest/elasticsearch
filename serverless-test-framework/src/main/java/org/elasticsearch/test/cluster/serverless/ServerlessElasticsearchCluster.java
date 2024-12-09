@@ -24,7 +24,7 @@ public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
      *
      * @return a builder for a local cluster
      */
-    static LocalClusterSpecBuilder<ServerlessElasticsearchCluster> local() {
+    static ServerlessLocalClusterSpecBuilder local() {
         return new ServerlessLocalClusterSpecBuilder();
     }
 
@@ -44,10 +44,16 @@ public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
      * simulates a scenario in which the old node "dies" during upgrade, forcing a recovery rather than relocation on the newly upgraded
      * node.
      *
-     * @param index index of node ot upgrade
+     * @param index index of node to upgrade
      * @param version version to upgrade to
      * @param forciblyDestroyOldNode whether to forcibly destroy the old node
      */
     void upgradeNodeToVersion(int index, Version version, boolean forciblyDestroyOldNode);
 
+    /**
+     * Restarts the given node with the same node id.
+     * @param index index node to restart
+     * @param forciblyDestroyOldNode whether to forcibly destroy the old node
+     */
+    void restartNodeInPlace(int index, boolean forciblyDestroyOldNode);
 }

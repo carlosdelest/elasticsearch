@@ -20,7 +20,7 @@ package org.elasticsearch.test.cluster.serverless.local;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.elasticsearch.test.cluster.local.AbstractLocalClusterFactory;
+import org.elasticsearch.test.cluster.local.AbstractLocalClusterFactory.Node;
 import org.elasticsearch.test.cluster.local.DefaultLocalClusterHandle;
 import org.elasticsearch.test.cluster.local.distribution.DistributionResolver;
 import org.elasticsearch.test.cluster.util.Version;
@@ -36,17 +36,12 @@ public class ServerlessLocalClusterHandle extends DefaultLocalClusterHandle {
     private static final Logger LOGGER = LogManager.getLogger(ServerlessLocalClusterHandle.class);
 
     private final String name;
-    private final List<AbstractLocalClusterFactory.Node> nodes;
+    private final List<Node> nodes;
     private final Path baseWorkingDir;
     private final DistributionResolver distributionResolver;
     private final Lock nodeLock = new ReentrantLock();
 
-    public ServerlessLocalClusterHandle(
-        String name,
-        Path baseWorkingDir,
-        DistributionResolver distributionResolver,
-        List<AbstractLocalClusterFactory.Node> nodes
-    ) {
+    public ServerlessLocalClusterHandle(String name, Path baseWorkingDir, DistributionResolver distributionResolver, List<Node> nodes) {
         super(name, nodes);
         this.name = name;
         this.baseWorkingDir = baseWorkingDir;
@@ -60,14 +55,8 @@ public class ServerlessLocalClusterHandle extends DefaultLocalClusterHandle {
         // When stopping a node in serverless we want to actually replace it with a new node on subsequent startup since that is what is
         // most likely to happen in a kubernetes environment. Containers are unlikely to be restarted in-place, rather, if a pod is
         // terminated, a new one will be created to replace it.
-        AbstractLocalClusterFactory.Node oldNode = nodes.get(index);
-        AbstractLocalClusterFactory.Node newNode = new AbstractLocalClusterFactory.Node(
-            baseWorkingDir,
-            distributionResolver,
-            oldNode.getSpec(),
-            RandomStringUtils.randomAlphabetic(7),
-            true
-        );
+        Node oldNode = nodes.get(index);
+        Node newNode = new Node(baseWorkingDir, distributionResolver, oldNode.getSpec(), RandomStringUtils.randomAlphabetic(7), true);
 
         nodes.set(index, newNode);
         nodeLock.unlock();
@@ -84,14 +73,8 @@ public class ServerlessLocalClusterHandle extends DefaultLocalClusterHandle {
 
     public void upgradeNodeToVersion(int index, Version version, boolean forciblyDestroyOldNode) {
         nodeLock.lock();
-        AbstractLocalClusterFactory.Node oldNode = nodes.get(index);
-        AbstractLocalClusterFactory.Node newNode = new AbstractLocalClusterFactory.Node(
-            baseWorkingDir,
-            distributionResolver,
-            oldNode.getSpec(),
-            RandomStringUtils.randomAlphabetic(7),
-            true
-        );
+        Node oldNode = nodes.get(index);
+        Node newNode = new Node(baseWorkingDir, distributionResolver, oldNode.getSpec(), RandomStringUtils.randomAlphabetic(7), true);
 
         LOGGER.info("Replacing node '{}' with node '{}'", oldNode.getName(), newNode.getName());
         nodes.add(index, newNode);
@@ -107,13 +90,19 @@ public class ServerlessLocalClusterHandle extends DefaultLocalClusterHandle {
     public void upgradeToVersion(Version version) {
         LOGGER.info("Upgrading serverless Elasticsearch cluster '{}'", name);
 
-        List<AbstractLocalClusterFactory.Node> searchNodes = nodes.stream().filter(n -> n.getSpec().hasRole("search")).toList();
-        List<AbstractLocalClusterFactory.Node> otherNodes = nodes.stream().filter(not(n -> n.getSpec().hasRole("search"))).toList();
+        List<Node> searchNodes = nodes.stream().filter(n -> n.getSpec().hasRole("search")).toList();
+        List<Node> otherNodes = nodes.stream().filter(not(n -> n.getSpec().hasRole("search"))).toList();
         searchNodes.forEach(n -> upgradeNodeToVersion(n, version));
         otherNodes.forEach(n -> upgradeNodeToVersion(n, version));
     }
 
-    private void upgradeNodeToVersion(AbstractLocalClusterFactory.Node node, Version version) {
+    public void restartNodeInPlace(int index, boolean forcibly) {
+        Node node = nodes.get(index);
+        node.stop(forcibly);
+        node.start(null);
+    }
+
+    private void upgradeNodeToVersion(Node node, Version version) {
         upgradeNodeToVersion(nodes.indexOf(node), version);
     }
 }
