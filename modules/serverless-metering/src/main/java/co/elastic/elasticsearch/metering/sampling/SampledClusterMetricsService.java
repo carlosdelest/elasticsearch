@@ -25,6 +25,7 @@ import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.shard.ShardId;
@@ -248,8 +249,11 @@ public class SampledClusterMetricsService {
 
     private Map<ShardKey, ShardSample> removeStaleEntries(Map<ShardKey, ShardSample> shardInfoKeyShardInfoValueMap) {
         Set<ShardKey> activeShards = clusterService.state()
-            .routingTable()
-            .allShards()
+            .globalRoutingTable()
+            .routingTables()
+            .values()
+            .stream()
+            .flatMap(RoutingTable::allShards)
             .map(x -> ShardKey.fromShardId(x.shardId()))
             .collect(Collectors.toUnmodifiableSet());
 

@@ -32,6 +32,8 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.cluster.routing.GlobalRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.TestShardRouting;
@@ -559,7 +561,8 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         when(routingTable.allShards()).thenAnswer(
             a -> shardsInfo.get().stream().map(s -> TestShardRouting.newShardRouting(s, "node_0", true, ShardRoutingState.STARTED))
         );
-        when(clusterState.routingTable()).thenReturn(routingTable);
+        final var globalRoutingTable = GlobalRoutingTable.builder().put(Metadata.DEFAULT_PROJECT_ID, routingTable).build();
+        when(clusterState.globalRoutingTable()).thenReturn(globalRoutingTable);
         when(clusterService.state()).thenReturn(clusterState);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
         return clusterService;
