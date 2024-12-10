@@ -20,10 +20,10 @@ package co.elastic.elasticsearch.serverless.constants;
 import org.elasticsearch.TransportVersion;
 
 import java.util.HashSet;
-import java.util.NavigableMap;
+import java.util.List;
 import java.util.Set;
 
-import static org.elasticsearch.TransportVersions.getAllVersionIds;
+import static org.elasticsearch.TransportVersions.collectAllVersionIdsDefinedInClass;
 
 /**
  * A container for TransportVersion constants used by the serverless repo.
@@ -75,13 +75,12 @@ public class ServerlessTransportVersions {
         return new TransportVersion(id);
     }
 
-    static final NavigableMap<Integer, TransportVersion> VERSION_IDS = getAllVersionIds(ServerlessTransportVersions.class);
+    /**
+     * Sorted list of all versions defined in this class
+     */
+    static final List<TransportVersion> DEFINED_VERSIONS = collectAllVersionIdsDefinedInClass(ServerlessTransportVersions.class);
 
-    // the highest transport version constant defined in this file
-    static final TransportVersion LATEST_DEFINED;
     static {
-        LATEST_DEFINED = VERSION_IDS.lastEntry().getValue();
-
         // see comment on IDS field
         // now we're registered all the transport versions, we can clear the map
         IDS = null;
