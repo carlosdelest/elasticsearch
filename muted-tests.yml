@@ -111,3 +111,5 @@ tests:
 - class: co.elastic.elasticsearch.qa.sigterm.SigtermShutdownIT
   method: testShutdown
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3250
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3265
