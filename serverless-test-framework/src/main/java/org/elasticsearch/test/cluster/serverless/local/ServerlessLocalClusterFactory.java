@@ -42,6 +42,12 @@ public class ServerlessLocalClusterFactory extends AbstractLocalClusterFactory<L
             spec.getNodes()
                 .stream()
                 .map(s -> new Node(baseWorkingDir, distributionResolver, s, RandomStringUtils.randomAlphabetic(7), true))
+                .sorted((a, b) -> {
+                    // Sort search nodes first to ease the upgrade process (search nodes must be upgraded first)
+                    boolean isSearchA = a.getSpec().hasRole("search");
+                    boolean isSearchB = b.getSpec().hasRole("search");
+                    return Boolean.compare(isSearchB, isSearchA);
+                })
                 .collect(Collectors.toList())
         );
     }
