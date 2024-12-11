@@ -39,4 +39,9 @@ public class DefaultLocalServerlessElasticsearchCluster extends DefaultLocalElas
     public void upgradeNodeToVersion(int index, Version version, boolean forciblyDestroyOldNode) {
         getHandle().upgradeNodeToVersion(index, version, forciblyDestroyOldNode);
     }
+
+    @Override
+    public void restartNodeInPlace(int index, boolean forciblyDestroyOldNode) {
+        getHandle().restartNodeInPlace(index, forciblyDestroyOldNode);
+    }
 }

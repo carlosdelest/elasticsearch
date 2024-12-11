@@ -56,8 +56,11 @@ public abstract class ServerlessParameterizedRollingUpgradeTestCase extends ESRe
         // Upgrade nodes.
         if (upgradedNodes.size() < requestedUpgradedNodes) {
             closeClients();
-            // we might be running a specific upgrade test by itself - check previous nodes too
+            // We upgrade nodes sequentially to ensure that search nodes are upgraded first.
+            // This mirrors our production strategy to ensure that indices created
+            // with a newer version can immediately be allocated to search nodes.
             for (int n = 0; n < requestedUpgradedNodes; n++) {
+                // we might be running a specific upgrade test by itself - check previous nodes too
                 if (upgradedNodes.add(n)) {
                     try {
                         logger.info("Upgrading node {} to version {}", n, Version.CURRENT);

@@ -21,11 +21,12 @@ import org.elasticsearch.TransportVersion;
 import org.elasticsearch.index.IndexVersion;
 import org.elasticsearch.internal.VersionExtension;
 
-public class ServerlessVersionExtension implements VersionExtension {
+import java.util.List;
 
+public class ServerlessVersionExtension implements VersionExtension {
     @Override
-    public TransportVersion getCurrentTransportVersion(TransportVersion fallback) {
-        return TransportVersion.max(ServerlessTransportVersions.LATEST_DEFINED, fallback);
+    public List<TransportVersion> getTransportVersions() {
+        return ServerlessTransportVersions.DEFINED_VERSIONS;
     }
 
     @Override

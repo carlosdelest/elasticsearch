@@ -65,7 +65,7 @@ public class ServerlessCompletionPostingExtensionIT extends ESRestTestCase {
         refresh(index);
 
         // The index node should load the segment after the refresh:
-        try (InputStream log = cluster.getNodeLog(0, LogType.SERVER)) {
+        try (InputStream log = cluster.getNodeLog(1, LogType.SERVER)) {
             final List<String> logLines = Streams.readAllLines(log);
             assertTrue(
                 "The Index node should load FSTs off heap.",
@@ -76,7 +76,7 @@ public class ServerlessCompletionPostingExtensionIT extends ESRestTestCase {
         searchCompletions(index);
 
         // The search node should load the segment:
-        try (InputStream log = cluster.getNodeLog(1, LogType.SERVER)) {
+        try (InputStream log = cluster.getNodeLog(0, LogType.SERVER)) {
             final List<String> logLines = Streams.readAllLines(log);
             assertTrue(
                 "The Search node should load FSTs off heap as a result of the node config.",
@@ -89,7 +89,7 @@ public class ServerlessCompletionPostingExtensionIT extends ESRestTestCase {
         ensureGreen(index);
 
         // The index node should load the segment:
-        try (InputStream log = cluster.getNodeLog(0, LogType.SERVER)) {
+        try (InputStream log = cluster.getNodeLog(1, LogType.SERVER)) {
             final List<String> logLines = Streams.readAllLines(log);
             assertTrue(
                 "The Index node should always load FSTs off heap.",
@@ -100,7 +100,7 @@ public class ServerlessCompletionPostingExtensionIT extends ESRestTestCase {
         searchCompletions(index);
 
         // The search node should load the segment:
-        try (InputStream log = cluster.getNodeLog(1, LogType.SERVER)) {
+        try (InputStream log = cluster.getNodeLog(0, LogType.SERVER)) {
             final List<String> logLines = Streams.readAllLines(log);
             assertTrue(
                 "The Search node should load FSTs on heap as a result of the node config.",

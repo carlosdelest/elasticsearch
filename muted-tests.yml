@@ -90,15 +90,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test get stacktraces}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3121
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: "test {lookup-join.*"
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: "test {lookup-join.*"
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: "test {lookup-join.*"
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3148
 - class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
   method: testTranslogStressRecoveryTest
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2908
@@ -111,3 +102,5 @@ tests:
 - class: co.elastic.elasticsearch.qa.sigterm.SigtermShutdownIT
   method: testShutdown
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3250
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3265
