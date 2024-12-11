@@ -71,10 +71,13 @@ public class TaskActivityTrackerTests extends ESTestCase {
                 .collect(Collectors.toList())
         );
 
+        boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         var tracker = TaskActivityTracker.build(
             clock,
             coolDown,
-            randomBoolean(),
+            hasSearchRole,
+            hasIndexRole,
             nonOperatorThreadContext(),
             TEST_MAPPER,
             mock(TaskManager.class),
@@ -91,11 +94,13 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
     public void testUntrackedInternalUserHasNoEffect() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         ActionTier.Mapper mapper = action -> randomFrom(ActionTier.values());
         var activityTracker = TaskActivityTracker.build(
             Clock.systemUTC(),
             coolDown,
             hasSearchRole,
+            hasIndexRole,
             nonOperatorThreadContext(),
             mapper,
             mock(TaskManager.class),
@@ -115,12 +120,14 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
     public void testOperatorHasNoEffect() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         ActionTier.Mapper mapper = action -> randomFrom(ActionTier.values());
         var threadContext = operatorThreadContext();
         var activityTracker = TaskActivityTracker.build(
             Clock.systemUTC(),
             coolDown,
             hasSearchRole,
+            hasIndexRole,
             threadContext,
             mapper,
             mock(TaskManager.class)
@@ -139,12 +146,14 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
     public void testNeitherHasNoEffect() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         ActionTier.Mapper mapper = action -> ActionTier.NEITHER;
 
         var activityTracker = TaskActivityTracker.build(
             Clock.systemUTC(),
             coolDown,
             hasSearchRole,
+            hasIndexRole,
             nonOperatorThreadContext(),
             mapper,
             mock(TaskManager.class)
@@ -158,12 +167,21 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
     public void testSingleTierOneEventSync() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         var threadContext = nonOperatorThreadContext();
         String actionTested = randomFrom(SEARCH_ACTION, INDEX_ACTION);
         var start1 = Instant.now();
         var end1 = start1.plus(1, ChronoUnit.SECONDS);
         var clock = createClock(start1, end1);
-        var tracker = TaskActivityTracker.build(clock, coolDown, hasSearchRole, threadContext, TEST_MAPPER, mock(TaskManager.class));
+        var tracker = TaskActivityTracker.build(
+            clock,
+            coolDown,
+            hasSearchRole,
+            hasIndexRole,
+            threadContext,
+            TEST_MAPPER,
+            mock(TaskManager.class)
+        );
 
         var action = randomBoolean() ? actionTested : BOTH_ACTION;
         var task1 = createTask(1, action);
@@ -176,6 +194,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
     // Test that sync actions which are spaced less than cooldown period apart are put in a single period
     public void testSingleTierManySyncEventsSamePeriod() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         var threadContext = nonOperatorThreadContext();
         String actionTested = randomFrom(SEARCH_ACTION, INDEX_ACTION);
 
@@ -190,7 +209,15 @@ public class TaskActivityTrackerTests extends ESTestCase {
         }
 
         var clock = createClock(times);
-        var tracker = TaskActivityTracker.build(clock, coolDown, hasSearchRole, threadContext, TEST_MAPPER, mock(TaskManager.class));
+        var tracker = TaskActivityTracker.build(
+            clock,
+            coolDown,
+            hasSearchRole,
+            hasIndexRole,
+            threadContext,
+            TEST_MAPPER,
+            mock(TaskManager.class)
+        );
 
         for (int i = 0; i < numActions; ++i) {
             var action = randomBoolean() ? actionTested : BOTH_ACTION;
@@ -208,6 +235,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
     // Test that sync actions which are spaced more than cooldown period apart are put in different periods
     public void testSingleTierManySyncEventsDifferentPeriods() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         var threadContext = nonOperatorThreadContext();
         String actionTested = randomFrom(SEARCH_ACTION, INDEX_ACTION);
 
@@ -222,7 +250,15 @@ public class TaskActivityTrackerTests extends ESTestCase {
         }
 
         var clock = createClock(times);
-        var tracker = TaskActivityTracker.build(clock, coolDown, hasSearchRole, threadContext, TEST_MAPPER, mock(TaskManager.class));
+        var tracker = TaskActivityTracker.build(
+            clock,
+            coolDown,
+            hasSearchRole,
+            hasIndexRole,
+            threadContext,
+            TEST_MAPPER,
+            mock(TaskManager.class)
+        );
 
         for (int i = 0; i < numActions; ++i) {
             var action = randomBoolean() ? actionTested : BOTH_ACTION;
@@ -239,6 +275,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
     public void testSingleTierRepeatedSampleWithAsync() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         var threadContext = nonOperatorThreadContext();
         String actionTested = randomFrom(SEARCH_ACTION, INDEX_ACTION);
 
@@ -249,7 +286,15 @@ public class TaskActivityTrackerTests extends ESTestCase {
         var sample3 = sample2.plus(Duration.ofSeconds(coolDown.getSeconds() + 1));
 
         var clock = createClock(asyncStart, sample1, sample2, asyncFinish, sample3);
-        var tracker = TaskActivityTracker.build(clock, coolDown, hasSearchRole, threadContext, TEST_MAPPER, mock(TaskManager.class));
+        var tracker = TaskActivityTracker.build(
+            clock,
+            coolDown,
+            hasSearchRole,
+            hasIndexRole,
+            threadContext,
+            TEST_MAPPER,
+            mock(TaskManager.class)
+        );
 
         var action = randomBoolean() ? actionTested : BOTH_ACTION;
         var task = createTask(1L, action);
@@ -267,6 +312,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
     public void testMultipleTierInterleaving() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         var threadContext = nonOperatorThreadContext();
 
         var searchStart = Instant.now();
@@ -293,7 +339,15 @@ public class TaskActivityTrackerTests extends ESTestCase {
             bothIndexSample,
             bothEnd
         );
-        var tracker = TaskActivityTracker.build(clock, coolDown, hasSearchRole, threadContext, TEST_MAPPER, mock(TaskManager.class));
+        var tracker = TaskActivityTracker.build(
+            clock,
+            coolDown,
+            hasSearchRole,
+            hasIndexRole,
+            threadContext,
+            TEST_MAPPER,
+            mock(TaskManager.class)
+        );
 
         var searchTask = createTask(0, SEARCH_ACTION);
         var indexTask = createTask(1, INDEX_ACTION);
@@ -327,6 +381,7 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
     public void testDontStartNewPeriodIfAsyncRunning() {
         boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         var threadContext = nonOperatorThreadContext();
 
         var start1 = Instant.now();
@@ -334,7 +389,15 @@ public class TaskActivityTrackerTests extends ESTestCase {
         var sample = start2.plus(1, ChronoUnit.SECONDS);
 
         var clock = createClock(start1, start2, sample);
-        var tracker = TaskActivityTracker.build(clock, coolDown, hasSearchRole, threadContext, TEST_MAPPER, mock(TaskManager.class));
+        var tracker = TaskActivityTracker.build(
+            clock,
+            coolDown,
+            hasSearchRole,
+            hasIndexRole,
+            threadContext,
+            TEST_MAPPER,
+            mock(TaskManager.class)
+        );
 
         var testSearchActions = randomBoolean();
         var action1 = testSearchActions ? randomFrom(SEARCH_ACTION, BOTH_ACTION) : randomFrom(INDEX_ACTION, BOTH_ACTION);
@@ -354,11 +417,13 @@ public class TaskActivityTrackerTests extends ESTestCase {
     public void testMergeActivityFromPersistentNodeNoOpenTasks() {
         var threadContext = nonOperatorThreadContext();
         var hasSearchRole = randomBoolean();
+        var hasIndexRole = hasSearchRole == false;
 
         var tracker = TaskActivityTracker.build(
             Clock.systemUTC(),
             coolDown,
             hasSearchRole,
+            hasIndexRole,
             threadContext,
             TEST_MAPPER,
             mock(TaskManager.class)
@@ -400,10 +465,13 @@ public class TaskActivityTrackerTests extends ESTestCase {
             Instant.EPOCH // index sample, use epoch to get un-extended activity
         );
 
+        boolean hasSearchRole = randomBoolean();
+        boolean hasIndexRole = hasSearchRole == false;
         var tracker = TaskActivityTracker.build(
             clock,
             coolDown,
-            randomBoolean(),
+            hasSearchRole,
+            hasIndexRole,
             nonOperatorThreadContext(),
             TEST_MAPPER,
             mock(TaskManager.class)

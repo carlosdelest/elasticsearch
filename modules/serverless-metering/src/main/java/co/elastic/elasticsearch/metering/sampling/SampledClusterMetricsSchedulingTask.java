@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.sampling;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.logging.LogManager;
@@ -33,7 +34,8 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 public class SampledClusterMetricsSchedulingTask extends AllocatedPersistentTask {
-
+    // the role assignment of the persistent task, it won't run on any node that doesn't have this role
+    public static final DiscoveryNodeRole ASSIGNED_ROLE = DiscoveryNodeRole.SEARCH_ROLE;
     public static final String TASK_NAME = "metering-index-info";
 
     private static final Logger logger = LogManager.getLogger(SampledClusterMetricsSchedulingTask.class);

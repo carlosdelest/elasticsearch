@@ -28,7 +28,6 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
@@ -53,7 +52,6 @@ import java.util.concurrent.atomic.AtomicReference;
  * Persistent task executor that is managing the {@link SampledClusterMetricsSchedulingTask}.
  */
 public final class SampledClusterMetricsSchedulingTaskExecutor extends PersistentTasksExecutor<SampledClusterMetricsSchedulingTaskParams> {
-
     private static final Logger logger = LogManager.getLogger(SampledClusterMetricsSchedulingTaskExecutor.class);
 
     public static final Setting<Boolean> ENABLED_SETTING = Setting.boolSetting(
@@ -150,7 +148,7 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         DiscoveryNode discoveryNode = selectLeastLoadedNode(
             clusterState,
             candidateNodes,
-            node -> node.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName())
+            node -> node.hasRole(SampledClusterMetricsSchedulingTask.ASSIGNED_ROLE.roleName())
         );
         if (discoveryNode == null) {
             return NO_NODE_FOUND;
