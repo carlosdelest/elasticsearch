@@ -32,11 +32,10 @@ steps:
       - label: ":hourglass: Wait 1 hour for environment health metrics"
         soft_fail: true
         key: bake_period
-        command:
-          - echo "Waiting for 60m for indicative health metrics"
-          - sleep ${QA_GATE_WAIT_PERIOD:-3600}
-
-      # For now, deploying using the 'all' deployment type algo in staging 
+        command: ".buildkite/scripts/baking-period.sh"
+        env:
+          GATE_WAIT_PERIOD: ${STAGING_CANARY_GATE_WAIT_PERIOD:-3600}
+      # For now, deploying using the 'all' deployment type algo in staging
       - label: ":pipeline: Trigger Elasticsearch observability checks in Staging"
         depends_on: bake_period
         trigger: serverless-quality-gates

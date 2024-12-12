@@ -40,11 +40,9 @@ steps:
       - label: ":hourglass: Wait 30 minutes for environment health metrics"
         soft_fail: true
         key: bake_period
-        branches: "main patch/*"
-        command:
-          - echo "Waiting for 30m for indicative health metrics"
-          - sleep ${QA_GATE_WAIT_PERIOD:-1800}
-
+        command: ".buildkite/scripts/baking-period.sh"
+        env:
+          GATE_WAIT_PERIOD: ${QA_GATE_WAIT_PERIOD:-1800}
       - label: ":pipeline: Trigger Elasticsearch observability checks in QA"
         depends_on: bake_period
         trigger: serverless-quality-gates
