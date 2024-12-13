@@ -73,8 +73,10 @@ tests:
   method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {categorize.Categorize ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+  methods:
+  - test {categorize.Categorize ASYNC}
+  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {categorize.Categorize SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
