@@ -1,28 +1,28 @@
 tests:
-# Examples:
-#
-#  Mute a single test case in a YAML test suite:
-#  - class: org.elasticsearch.analysis.common.CommonAnalysisClientYamlTestSuiteIT
-#    method: test {yaml=analysis-common/30_tokenizers/letter}
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute several methods of a Java test:
-#  - class: org.elasticsearch.common.CharArraysTests
-#    methods:
-#      - testCharsBeginsWith
-#      - testCharsToBytes
-#      - testConstantTimeEquals
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute an entire test class:
-#  - class: org.elasticsearch.common.unit.TimeValueTests
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute a single method in a test class:
-#  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
-#    method: testCrankyEvaluateBlockWithoutNulls
-#    issue: https://github.com/elastic/elasticsearch/...
-- class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
+- # Examples:
+  #
+  #  Mute a single test case in a YAML test suite:
+  #  - class: org.elasticsearch.analysis.common.CommonAnalysisClientYamlTestSuiteIT
+  #    method: test {yaml=analysis-common/30_tokenizers/letter}
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute several methods of a Java test:
+  #  - class: org.elasticsearch.common.CharArraysTests
+  #    methods:
+  #      - testCharsBeginsWith
+  #      - testCharsToBytes
+  #      - testConstantTimeEquals
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute an entire test class:
+  #  - class: org.elasticsearch.common.unit.TimeValueTests
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute a single method in a test class:
+  #  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
+  #    method: testCrankyEvaluateBlockWithoutNulls
+  #    issue: https://github.com/elastic/elasticsearch/...
+  class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2409"
   method: "testShardReadLoadCausesMinimumAndZeroSearchLoad"
 - class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT"
@@ -41,8 +41,10 @@ tests:
   method: test {categorize.Categorize SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {categorize.Categorize ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+  methods:
+  - test {categorize.Categorize ASYNC}
+  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
@@ -61,8 +63,10 @@ tests:
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/3034"
   method: "testBackgroundMergeCanRetainDeletedGenerationalFile"
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {categorize.Categorize ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+  methods:
+  - test {categorize.Categorize ASYNC}
+  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
@@ -79,10 +83,12 @@ tests:
   method: test {yaml=ml/inference_crud/Test delete given model referenced by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3085
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=ml/inference_crud/Test delete given model with alias referenced by pipeline}
+  method: test {yaml=ml/inference_crud/Test delete given model with alias referenced
+    by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3088
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=ml/inference_crud/Test force delete given model referenced by pipeline}
+  method: test {yaml=ml/inference_crud/Test force delete given model referenced by
+    pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3089
 - class: co.elastic.elasticsearch.stateless.CorruptionIT
   method: testConcurrentOperations
