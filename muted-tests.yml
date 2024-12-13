@@ -45,6 +45,7 @@ tests:
   methods:
   - test {categorize.Categorize ASYNC}
   - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
+  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
@@ -67,6 +68,7 @@ tests:
   methods:
   - test {categorize.Categorize ASYNC}
   - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
+  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
