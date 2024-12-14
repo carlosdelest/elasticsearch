@@ -25,7 +25,17 @@ public interface ServerlessElasticsearchCluster extends ElasticsearchCluster {
      * @return a builder for a local cluster
      */
     static ServerlessLocalClusterSpecBuilder local() {
-        return new ServerlessLocalClusterSpecBuilder();
+        return new ServerlessLocalClusterSpecBuilder(true);
+    }
+
+    /**
+     * Creates a new {@link LocalClusterSpecBuilder}, similar to {@link ServerlessElasticsearchCluster#local},
+     * but without any pre-configured nodes.
+     *
+     * @return a builder for a local cluster
+     */
+    static ServerlessLocalClusterSpecBuilder localEmptyNode() {
+        return new ServerlessLocalClusterSpecBuilder(false);
     }
 
     /**
