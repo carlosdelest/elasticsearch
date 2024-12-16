@@ -26,6 +26,7 @@ import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorO
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessGetBuiltinPrivilegesResponseTranslator;
 import co.elastic.elasticsearch.serverless.security.privilege.ServerlessHasPrivilegesRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessPutRoleRequestBuilderFactory;
+import co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesProviderFactory;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessReservedRoleNameChecker;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
@@ -40,7 +41,7 @@ import org.elasticsearch.xpack.security.authz.AuthorizationDenialMessages;
 import org.elasticsearch.xpack.security.authz.FileRoleValidator;
 import org.elasticsearch.xpack.security.authz.ReservedRoleNameChecker;
 import org.elasticsearch.xpack.security.rest.action.apikey.RestGrantApiKeyAction;
-
+import org.elasticsearch.xpack.security.support.QueryableBuiltInRolesProviderFactory;
 module org.elasticsearch.internal.security {
 
     requires org.elasticsearch.base;
@@ -69,6 +70,7 @@ module org.elasticsearch.internal.security {
     provides ReservedRoleNameChecker.Factory with ServerlessReservedRoleNameChecker.Factory;
     provides FileRoleValidator with ServerlessRoleValidator;
     provides SecondaryAuthActions with ServerlessSecondaryAuthActions;
+    provides QueryableBuiltInRolesProviderFactory with ServerlessQueryableBuiltInRolesProviderFactory;
 
     provides org.elasticsearch.plugins.internal.LoggingDataProvider with ServerlessUserLoggingDataProvider;
 }
