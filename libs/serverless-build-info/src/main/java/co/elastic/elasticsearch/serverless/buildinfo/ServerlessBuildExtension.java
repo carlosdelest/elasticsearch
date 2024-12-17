@@ -66,6 +66,21 @@ public class ServerlessBuildExtension implements BuildExtension {
      */
     private static final BuildVersion SERVERLESS_BUILD_VERSION = new BuildVersion() {
         @Override
+        public boolean canRemoveAssumedFeatures() {
+            /*
+             * This is always true, because serverless can not go backwards. Once a feature is on a serverless cluster,
+             * it will always be there, and so the feature check itself can immediately be removed
+             * (stateful releases nonwithstanding).
+             *
+             * Managing this does require some careful choreography of PRs and commits - the commit to mark a feature
+             * as assumed needs to be completely deployed on serverless, before the commit to remove that feature
+             * can be applied. Managing this is outside the scope of this code - it requires PR tests
+             * and other infrastructure-level checks to make sure the commits are deployed correctly
+             */
+            return true;
+        }
+
+        @Override
         public boolean onOrAfterMinimumCompatible() {
             return true;
         }
