@@ -38,12 +38,18 @@ tests:
   method: testInvalidCombination
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2563
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {categorize.Categorize SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3282
   methods:
-  - test {categorize.Categorize ASYNC}
+  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
+  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3281
+  methods:
+  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
+  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3283
+  methods:
   - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
   - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
@@ -63,27 +69,9 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/3034"
   method: "testBackgroundMergeCanRetainDeletedGenerationalFile"
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
-  methods:
-  - test {categorize.Categorize ASYNC}
-  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
-  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
-  methods:
-  - test {categorize.Categorize ASYNC}
-  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
-  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {categorize.Categorize SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: "test {categorize.Categorize *"
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_crud/Test delete given model referenced by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3085
@@ -111,8 +99,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.sigterm.SigtermShutdownIT
   method: testShutdown
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3250
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3265
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testRolesFileUpdateTriggersRolesSynchronization
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3287
