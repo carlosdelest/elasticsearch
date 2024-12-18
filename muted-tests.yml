@@ -138,3 +138,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {scoring.TestMatchAndQueryStringFunctionsWithScore ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3304
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {scoring.TestMatchAndQueryStringFunctionsWithScore SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3305
