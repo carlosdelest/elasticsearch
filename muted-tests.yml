@@ -1,28 +1,28 @@
 tests:
-# Examples:
-#
-#  Mute a single test case in a YAML test suite:
-#  - class: org.elasticsearch.analysis.common.CommonAnalysisClientYamlTestSuiteIT
-#    method: test {yaml=analysis-common/30_tokenizers/letter}
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute several methods of a Java test:
-#  - class: org.elasticsearch.common.CharArraysTests
-#    methods:
-#      - testCharsBeginsWith
-#      - testCharsToBytes
-#      - testConstantTimeEquals
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute an entire test class:
-#  - class: org.elasticsearch.common.unit.TimeValueTests
-#    issue: https://github.com/elastic/elasticsearch/...
-#
-#  Mute a single method in a test class:
-#  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
-#    method: testCrankyEvaluateBlockWithoutNulls
-#    issue: https://github.com/elastic/elasticsearch/...
-- class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
+- # Examples:
+  #
+  #  Mute a single test case in a YAML test suite:
+  #  - class: org.elasticsearch.analysis.common.CommonAnalysisClientYamlTestSuiteIT
+  #    method: test {yaml=analysis-common/30_tokenizers/letter}
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute several methods of a Java test:
+  #  - class: org.elasticsearch.common.CharArraysTests
+  #    methods:
+  #      - testCharsBeginsWith
+  #      - testCharsToBytes
+  #      - testConstantTimeEquals
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute an entire test class:
+  #  - class: org.elasticsearch.common.unit.TimeValueTests
+  #    issue: https://github.com/elastic/elasticsearch/...
+  #
+  #  Mute a single method in a test class:
+  #  - class: org.elasticsearch.xpack.esql.expression.function.scalar.convert.ToIPTests
+  #    method: testCrankyEvaluateBlockWithoutNulls
+  #    issue: https://github.com/elastic/elasticsearch/...
+  class: "co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2409"
   method: "testShardReadLoadCausesMinimumAndZeroSearchLoad"
 - class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT"
@@ -38,11 +38,20 @@ tests:
   method: testInvalidCombination
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2563
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {categorize.Categorize SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {categorize.Categorize ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3282
+  methods:
+  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
+  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3281
+  methods:
+  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
+  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3283
+  methods:
+  - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
+  - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
 - class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
@@ -60,29 +69,19 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/3034"
   method: "testBackgroundMergeCanRetainDeletedGenerationalFile"
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {categorize.Categorize ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {categorize.Categorize ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2775
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {categorize.Categorize SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: "test {categorize.Categorize *"
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2774
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_crud/Test delete given model referenced by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3085
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=ml/inference_crud/Test delete given model with alias referenced by pipeline}
+  method: test {yaml=ml/inference_crud/Test delete given model with alias referenced
+    by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3088
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
-  method: test {yaml=ml/inference_crud/Test force delete given model referenced by pipeline}
+  method: test {yaml=ml/inference_crud/Test force delete given model referenced by
+    pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3089
 - class: co.elastic.elasticsearch.stateless.CorruptionIT
   method: testConcurrentOperations
@@ -90,9 +89,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test get stacktraces}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3121
-- class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
-  method: testTranslogStressRecoveryTest
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2908
 - class: co.elastic.elasticsearch.downsample.serverless.ServerlessDownsampleIT
   method: testDownsampleWithDSL
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3248
@@ -102,5 +98,12 @@ tests:
 - class: co.elastic.elasticsearch.qa.sigterm.SigtermShutdownIT
   method: testShutdown
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3250
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3265
+- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
+  method: testRolesFileUpdateTriggersRolesSynchronization
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3287
+- class: org.elasticsearch.xpack.sql.qa.single_node.JdbcDocCsvSpecIT
+  method: test {docs.testFilterToday}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3289
+- class: co.elastic.elasticsearch.ml.serverless.actionfilters.GetTrainedModelsStatsResponseFilterTests
+  method: testNoFormatChangesSinceLastUpdate
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3295

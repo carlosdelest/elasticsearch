@@ -21,13 +21,15 @@ import java.util.List;
 
 public class PullRequest {
     private final String repository;
+    private final String base;
     private final String title;
     private final String url;
     private final String mergedAt;
     private final List<Label> labels;
 
-    public PullRequest(String repository, String title, String url, String mergedAt, List<Label> labels) {
+    public PullRequest(String repository, String base, String title, String url, String mergedAt, List<Label> labels) {
         this.repository = repository;
+        this.base = base;
         this.title = title;
         this.url = url;
         this.mergedAt = mergedAt;
@@ -36,6 +38,10 @@ public class PullRequest {
 
     public String getRepository() {
         return repository;
+    }
+
+    public String getBase() {
+        return base;
     }
 
     public String getTitle() {

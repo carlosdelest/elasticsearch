@@ -16,7 +16,12 @@ env:
   TEAM_CHANNEL: "#es-serverless-gitops"
 
 steps:
+  - label: "Detect rerun"
+    command: .buildkite/scripts/detect-rerun.sh
+    key: "detect-rerun"
   - label: ":pipeline: Upload quality gate steps"
+    depends_on:
+      - detect-rerun
     env:
       QG_PIPELINE_LOCATION: ".buildkite/quality-gates/emergency"
     command: "make -C /agent run-environment-tests"
@@ -43,7 +48,7 @@ steps:
 
   - label: ":question: Maybe add manual gate"
     if: build.env("ENVIRONMENT") != "production-noncanary"
-    depends_on: 
+    depends_on:
       - quality-gates
       - annotate
       - tag

@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public abstract class GenerateServerlessPromotionNotesTask extends DefaultTask {
 
@@ -67,6 +68,12 @@ public abstract class GenerateServerlessPromotionNotesTask extends DefaultTask {
     );
 
     private static final List<String> internalLabels = List.of(">non-issue", ">refactoring", ">test", ">test-failure", ">test-mute");
+    private Predicate<PullRequest> labelFilterPredicate = pr -> pr.getLabels()
+        .stream()
+        .map(l -> l.getName())
+        .anyMatch(givenLabel -> internalLabels.stream().anyMatch(iLabel -> givenLabel.matches(iLabel)));
+    private Predicate<PullRequest> mainBaseFilter = pullRequest -> pullRequest.getBase().equals("elastic:main");
+
 
     @Input
     @Option(option = "currentGitHash", description = "The current promoting version")
@@ -114,16 +121,12 @@ public abstract class GenerateServerlessPromotionNotesTask extends DefaultTask {
         );
         getLogger().lifecycle("Found " + elasticsearchPullRequests.size() + " pull requests for elasticsearch");
         allPullRequests.addAll(elasticsearchPullRequests);
-        generateReports(allPullRequests);
+        generateReports(allPullRequests.stream().filter(mainBaseFilter).toList());
     }
 
     private void generateReports(List<PullRequest> allPullRequests) throws IOException {
         // Get the current date in a readable format
         String currentDateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMMM dd, yyyy HH:mm:ss"));
-        Predicate<PullRequest> labelFilterPredicate = pr -> pr.getLabels()
-            .stream()
-            .map(l -> l.getName())
-            .anyMatch(givenLabel -> internalLabels.stream().anyMatch(iLabel -> givenLabel.matches(iLabel)));
         List<PullRequest> serverlessPrs = allPullRequests.stream()
             .filter(pr -> pr.getRepository().equals("elasticsearch-serverless"))
             .filter(labelFilterPredicate.negate())

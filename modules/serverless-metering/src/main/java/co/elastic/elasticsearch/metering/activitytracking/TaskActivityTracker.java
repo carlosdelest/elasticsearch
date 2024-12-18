@@ -66,6 +66,7 @@ public class TaskActivityTracker {
     );
 
     private final boolean hasSearchRole;
+    private final boolean hasIndexRole;
     private final ThreadContext threadContext;
     private final Clock clock;
     private final Duration coolDownPeriod;
@@ -82,6 +83,7 @@ public class TaskActivityTracker {
         Clock clock,
         Duration coolDownPeriod,
         boolean hasSearchRole,
+        boolean hasIndexRole,
         ThreadContext threadContext,
         ActionTier.Mapper actionTierMapper,
         SecurityContext securityContext
@@ -90,6 +92,7 @@ public class TaskActivityTracker {
         this.clock = clock;
         this.coolDownPeriod = coolDownPeriod;
         this.hasSearchRole = hasSearchRole;
+        this.hasIndexRole = hasIndexRole;
         this.threadContext = threadContext;
         this.actionTierMapper = actionTierMapper;
         this.securityContext = securityContext;
@@ -99,6 +102,7 @@ public class TaskActivityTracker {
         Clock clock,
         Duration coolDownPeriod,
         boolean hasSearchRole,
+        boolean hasIndexRole,
         ThreadContext threadContext,
         ActionTier.Mapper actionTierMapper,
         TaskManager taskManager
@@ -107,6 +111,7 @@ public class TaskActivityTracker {
             clock,
             coolDownPeriod,
             hasSearchRole,
+            hasIndexRole,
             threadContext,
             actionTierMapper,
             taskManager,
@@ -118,12 +123,21 @@ public class TaskActivityTracker {
         Clock clock,
         Duration coolDownPeriod,
         boolean hasSearchRole,
+        boolean hasIndexRole,
         ThreadContext threadContext,
         ActionTier.Mapper actionTierMapper,
         TaskManager taskManager,
         SecurityContext securityContext
     ) {
-        var tracker = new TaskActivityTracker(clock, coolDownPeriod, hasSearchRole, threadContext, actionTierMapper, securityContext);
+        var tracker = new TaskActivityTracker(
+            clock,
+            coolDownPeriod,
+            hasSearchRole,
+            hasIndexRole,
+            threadContext,
+            actionTierMapper,
+            securityContext
+        );
         taskManager.registerRemovedTaskListener(tracker::onTaskFinish);
         return tracker;
     }
@@ -172,7 +186,7 @@ public class TaskActivityTracker {
             );
         }
 
-        if (isOperator() || isUntrackedInternalUser()) {
+        if ((hasIndexRole == false && hasSearchRole == false) || isOperator() || isUntrackedInternalUser()) {
             return;
         }
 

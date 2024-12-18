@@ -28,11 +28,11 @@ import org.elasticsearch.test.cluster.util.resource.Resource;
 public class ServerlessLocalClusterSpecBuilder extends AbstractLocalClusterSpecBuilder<ServerlessElasticsearchCluster> {
 
     @SuppressWarnings("this-escape")
-    public ServerlessLocalClusterSpecBuilder() {
+    public ServerlessLocalClusterSpecBuilder(boolean addDefaultNodes) {
         this.apply(c -> c.systemProperty("tests.testfeatures.enabled", "true"));
         this.settings(new DefaultServerlessSettingsProvider());
         this.environment(new DefaultEnvironmentProvider());
-        this.apply(new DefaultServerlessLocalConfigProvider());
+        this.apply(new DefaultServerlessLocalConfigProvider(addDefaultNodes));
         this.rolesFile(Resource.fromClasspath("default_test_roles.yml"));
     }
 

@@ -29,6 +29,11 @@ import java.util.function.Consumer;
  * Default configuration applied to all serverless clusters.
  */
 public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigProvider {
+    private final boolean addDefaultNodes;
+
+    public DefaultServerlessLocalConfigProvider(boolean addDefaultNodes) {
+        this.addDefaultNodes = addDefaultNodes;
+    }
 
     @Override
     public void apply(LocalClusterSpecBuilder<?> builder) {
@@ -40,9 +45,11 @@ public class DefaultServerlessLocalConfigProvider implements LocalClusterConfigP
             .setting("ingest.geoip.downloader.enabled", "false")
             .setting("serverless.sigterm.poll_interval", "1s")
             .setting("telemetry.agent.disable_send", "true")
-            .feature(FeatureFlag.TIME_SERIES_MODE)
-            .withNode(node("index", "[master,remote_cluster_client,ingest,index]"))
-            .withNode(node("search", "[remote_cluster_client,search]"));
+            .feature(FeatureFlag.TIME_SERIES_MODE);
+        if (addDefaultNodes) {
+            builder.withNode(node("index", "[master,remote_cluster_client,ingest,index]"))
+                .withNode(node("search", "[remote_cluster_client,search]"));
+        }
     }
 
     public static Consumer<? super LocalNodeSpecBuilder> node(String name, String nodeRoles) {

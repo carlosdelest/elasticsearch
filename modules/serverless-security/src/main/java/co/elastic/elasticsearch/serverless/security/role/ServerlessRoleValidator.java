@@ -221,7 +221,7 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
         return validationException;
     }
 
-    private boolean isMarkedPublic(RoleDescriptor roleDescriptor) {
+    public static boolean isMarkedPublic(RoleDescriptor roleDescriptor) {
         return Optional.ofNullable(roleDescriptor)
             .map(descriptor -> descriptor.getMetadata())
             .map(metadata -> metadata.get(PUBLIC_METADATA_KEY))

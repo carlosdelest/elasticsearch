@@ -269,11 +269,12 @@ public class GithubApi {
             Type labelsListType = new TypeToken<List<Label>>() {
             }.getType();
             List<Label> labels = new Gson().fromJson(json.getAsJsonObject().get("labels").getAsJsonArray(), labelsListType);
-
+            String baseBranch = json.getAsJsonObject().get("base").getAsJsonObject().get("label").getAsString();
             Matcher matcher = pattern.matcher(htmlUrl);
             matcher.find();
             return new PullRequest(
                 matcher.group(1),
+                baseBranch,
                 json.getAsJsonObject().get("title").getAsString(),
                 htmlUrl,
                 json.getAsJsonObject().get("merged_at").getAsString(),

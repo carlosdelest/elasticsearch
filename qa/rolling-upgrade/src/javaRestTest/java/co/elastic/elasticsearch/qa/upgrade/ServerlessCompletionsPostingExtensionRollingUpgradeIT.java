@@ -30,7 +30,7 @@ public class ServerlessCompletionsPostingExtensionRollingUpgradeIT extends Serve
     private static String newCodecEnabled = "false";
 
     @ClassRule
-    public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
+    public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.localEmptyNode()
         .version(ServerlessBwcVersion.instance())
         // We need to set stateless.enabled explicitly here until old version for rolling upgrade has the defaults file.
         .setting("stateless.enabled", "true")
@@ -38,15 +38,30 @@ public class ServerlessCompletionsPostingExtensionRollingUpgradeIT extends Serve
         .setting("xpack.watcher.enabled", "false")
         .systemProperty("serverless.codec.configurable_completions_postings_enabled", newCodecEnabled)
         .user("admin-user", "x-pack-test-password")
+        // We configure the search nodes first to ensure that they are upgraded before the index nodes.
+        // This mirrors our production strategy to ensure that indices created with a newer version can immediately
+        // be allocated to search nodes.
         .withNode(
-            indexNodeSpec -> indexNodeSpec.name("index-node-2") // The first index node is created by default.
-                .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
+            searchNodeSpec -> searchNodeSpec.name("search-node-1") // The first search node is created by default.
+                .setting("node.roles", "[remote_cluster_client,search]")
                 .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
                 .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
         )
         .withNode(
             searchNodeSpec -> searchNodeSpec.name("search-node-2") // The first search node is created by default.
                 .setting("node.roles", "[remote_cluster_client,search]")
+                .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
+                .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
+        )
+        .withNode(
+            indexNodeSpec -> indexNodeSpec.name("index-node-1") // The first index node is created by default.
+                .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
+                .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
+                .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
+        )
+        .withNode(
+            indexNodeSpec -> indexNodeSpec.name("index-node-2") // The first index node is created by default.
+                .setting("node.roles", "[master,remote_cluster_client,ingest,index]")
                 .setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
                 .setting("xpack.searchable.snapshot.shared_cache.region_size", "256KB")
         )
