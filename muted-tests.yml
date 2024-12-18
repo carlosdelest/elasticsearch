@@ -132,3 +132,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3302
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3303
