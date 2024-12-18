@@ -120,3 +120,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3298
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3299
