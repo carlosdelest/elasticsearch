@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.serverless.security;
 
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings;
+import org.elasticsearch.xpack.core.security.authc.saml.SingleSpSamlRealmSettings;
 
 import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDED_RESERVED_ROLES_SETTING;
 import static org.hamcrest.Matchers.contains;
@@ -46,6 +47,6 @@ public class ServerlessSecurityPluginTests extends ESTestCase {
     }
 
     public void testExcludeRolesSettingIsRegistered() {
-        assertThat(plugin.getSettings(), hasItem(SamlRealmSettings.EXCLUDE_ROLES));
+        assertThat(plugin.getSettings(), hasItem(SamlRealmSettings.EXCLUDE_ROLES.apply(SingleSpSamlRealmSettings.TYPE)));
     }
 }

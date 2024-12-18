@@ -34,6 +34,7 @@ import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.xpack.core.security.SecurityContext;
 import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
+import org.elasticsearch.xpack.core.security.authc.saml.SingleSpSamlRealmSettings;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -137,7 +138,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
             NATIVE_ROLES_SETTING,
             CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
             NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
-            EXCLUDE_ROLES
+            EXCLUDE_ROLES.apply(SingleSpSamlRealmSettings.TYPE)
         );
     }
 
