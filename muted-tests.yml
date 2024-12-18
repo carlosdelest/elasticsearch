@@ -147,3 +147,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT
   method: test {p0=esql/190_lookup_join/non-lookup index}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3308
+- class: co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT
+  method: testDeleteIndexAfterRecovery
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3312
