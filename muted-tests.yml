@@ -141,3 +141,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {scoring.TestMatchAndQueryStringFunctionsWithScore SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3305
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=indices.create/20_synthetic_source/create index with use_synthetic_source}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3307
