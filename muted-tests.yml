@@ -144,6 +144,3 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=indices.create/20_synthetic_source/create index with use_synthetic_source}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3307
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlAsyncSubmitAndFetchIT
-  method: test {p0=esql/190_lookup_join/non-lookup index}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3308
