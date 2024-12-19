@@ -144,3 +144,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=indices.create/20_synthetic_source/create index with use_synthetic_source}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3307
+- class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
+  method: testRemoveIngestionLoadWhenNodeRemoved
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3317
