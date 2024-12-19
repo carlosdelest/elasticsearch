@@ -147,3 +147,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testRemoveIngestionLoadWhenNodeRemoved
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3317
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=synonyms/40_synonyms_sets_get/More than 10 synonym sets}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3318
