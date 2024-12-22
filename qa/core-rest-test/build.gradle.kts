@@ -161,12 +161,16 @@ tasks {
         "simulate.ingest/10_basic/Test index templates with pipelines",
         "simulate.ingest/10_basic/Test bad pipeline substitution",
         "simulate.ingest/10_basic/Test mapping validation from templates",
+        // relies on index.recovery.use_synthetic_source setting:
+        "indices.create/20_synthetic_source/create index with use_synthetic_source",
         // - Field Mappings
         "indices.get_field_mapping/*/*",
         // - Clone
         "indices.clone/*/*",
         // - Direct Shard Access
         "indices.shard_stores/*/*",
+        // relies on index.recovery.use_synthetic_source and index.number_of_replicas setting:
+        "indices.recovery/20_synthetic_source/test recovery empty index with use_synthetic_source",
         "search_shards/*/*",
         "search_shards/10_basic/*/*", // One of the tests in this suite has a "/" in its name
         // - Allocation / Balance
