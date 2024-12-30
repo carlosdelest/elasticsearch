@@ -84,6 +84,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
                             new SingleNodeShutdownStatus(
                                 SingleNodeShutdownMetadata.builder()
                                     .setNodeId(nodeId)
+                                    .setNodeEphemeralId(nodeId)
                                     .setType(SingleNodeShutdownMetadata.Type.SIGTERM)
                                     .setReason(this.getTestName())
                                     .setStartedAtMillis(randomNonNegativeLong())
@@ -181,6 +182,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
                             new SingleNodeShutdownStatus(
                                 SingleNodeShutdownMetadata.builder()
                                     .setNodeId(nodeId)
+                                    .setNodeEphemeralId(nodeId)
                                     .setType(SingleNodeShutdownMetadata.Type.SIGTERM)
                                     .setReason(this.getTestName())
                                     .setStartedAtMillis(randomNonNegativeLong())

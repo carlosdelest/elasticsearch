@@ -100,6 +100,7 @@ public class ServerlessLocalClusterHandle extends DefaultLocalClusterHandle {
         Node node = nodes.get(index);
         node.stop(forcibly);
         node.start(null);
+        waitUntilReady();
     }
 
     private void upgradeNodeToVersion(Node node, Version version) {
