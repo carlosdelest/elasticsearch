@@ -28,6 +28,7 @@ import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.telemetry.metric.LongCounter;
@@ -267,8 +268,8 @@ public class SampledClusterMetricsService {
         return Optional.ofNullable(function.apply(currentInfo));
     }
 
-    public SampledMetricsProvider createSampledStorageMetricsProvider() {
-        return new SampledStorageMetricsProvider(this, clusterService);
+    public SampledMetricsProvider createSampledStorageMetricsProvider(SystemIndices systemIndices) {
+        return new SampledStorageMetricsProvider(this, clusterService, systemIndices);
     }
 
     public SampledVCUMetricsProvider createSampledVCUMetricsProvider(NodeEnvironment nodeEnvironment) {

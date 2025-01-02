@@ -24,8 +24,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.ClusterStateSupplier;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
+import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.indices.SystemIndices;
 
 import java.util.Iterator;
 import java.util.List;
@@ -60,9 +62,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class IngestMetricsProvider implements CounterMetricsProvider {
     public static final String METRIC_TYPE = "es_raw_data";
 
-    private static final String METADATA_INDEX_KEY = "index";
-    private static final String METADATA_DATASTREAM_KEY = "datastream";
-
     private final Logger logger = LogManager.getLogger(IngestMetricsProvider.class);
     private final Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
@@ -70,10 +69,12 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
     private final String nodeId;
     private final ClusterStateSupplier clusterStateSupplier;
+    private final SystemIndices systemIndices;
 
-    public IngestMetricsProvider(String nodeId, ClusterStateSupplier clusterStateSupplier) {
+    public IngestMetricsProvider(String nodeId, ClusterStateSupplier clusterStateSupplier, SystemIndices systemIndices) {
         this.nodeId = nodeId;
         this.clusterStateSupplier = clusterStateSupplier;
+        this.systemIndices = systemIndices;
     }
 
     private record SnapshotEntry(String key, long value) {}
@@ -88,7 +89,9 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
             final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
             final var indicesLookup = clusterState.metadata().getIndicesLookup();
 
-            final var toReturn = metricsSnapshot.stream().map(e -> metricValue(nodeId, e.key(), e.value(), indicesLookup)).toList();
+            final var toReturn = metricsSnapshot.stream()
+                .map(e -> metricValue(nodeId, e.key(), e.value(), indicesLookup, systemIndices))
+                .toList();
             logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
 
             return new MetricValues() {
@@ -134,12 +137,27 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
         }
     }
 
-    private static MetricValue metricValue(String nodeId, String index, long value, Map<String, IndexAbstraction> indicesLookup) {
-        var indexAbstraction = indicesLookup.get(index);
-        final boolean inDatastream = indexAbstraction != null && indexAbstraction.getParentDataStream() != null;
-        var metadata = inDatastream
-            ? Map.of(METADATA_INDEX_KEY, index, METADATA_DATASTREAM_KEY, indexAbstraction.getParentDataStream().getName())
-            : Map.of(METADATA_INDEX_KEY, index);
-        return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, metadata, value, null);
+    private static MetricValue metricValue(
+        String nodeId,
+        String index,
+        long value,
+        Map<String, IndexAbstraction> indicesLookup,
+        SystemIndices systemIndices
+    ) {
+        // note: this is intentionally not resolved via IndexAbstraction, see https://elasticco.atlassian.net/browse/ES-10384
+        final var isSystemIndex = systemIndices.isSystemIndex(index);
+        final var indexAbstraction = indicesLookup.get(index);
+
+        final var datastream = indexAbstraction != null ? indexAbstraction.getParentDataStream() : null;
+        Map<String, String> sourceMetadata = Maps.newHashMapWithExpectedSize(4);
+        sourceMetadata.put(SourceMetadata.INDEX, index);
+        sourceMetadata.put(SourceMetadata.SYSTEM_INDEX, Boolean.toString(isSystemIndex));
+        if (indexAbstraction != null) {
+            sourceMetadata.put(SourceMetadata.HIDDEN_INDEX, Boolean.toString(indexAbstraction.isHidden()));
+        }
+        if (datastream != null) {
+            sourceMetadata.put(SourceMetadata.DATASTREAM, datastream.getName());
+        }
+        return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, sourceMetadata, value, null);
     }
 }
