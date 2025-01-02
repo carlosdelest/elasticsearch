@@ -17,6 +17,7 @@
 
 import org.elasticsearch.gradle.internal.conventions.precommit.LicenseHeadersTask
 import org.elasticsearch.gradle.internal.precommit.CheckstylePrecommitPlugin
+import org.elasticsearch.gradle.internal.precommit.CopyCheckStyleConfTask
 import org.elasticsearch.gradle.internal.precommit.LoggerUsagePrecommitPlugin
 
 /*
@@ -30,11 +31,14 @@ allprojects {
 
     plugins.withType<CheckstylePrecommitPlugin> {
         // Configure additional Checkstyle suppressions
-        tasks.named("copyCheckstyleConf") {
+        var rootDirectory = rootDir
+        var buildDirectory = layout.buildDirectory.get().asFile
+
+        tasks.withType<CopyCheckStyleConfTask>().configureEach {
             doLast {
-                copy {
-                    from("${rootDir}/serverless-build-tools/src/main/resources/additional_checkstyle_suppressions.xml")
-                    into("${buildDir}/checkstyle")
+                getFs().copy {
+                    from("${rootDirectory}/serverless-build-tools/src/main/resources/additional_checkstyle_suppressions.xml")
+                    into("${buildDirectory}/checkstyle")
                 }
             }
         }

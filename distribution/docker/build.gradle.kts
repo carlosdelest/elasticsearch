@@ -87,8 +87,9 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
         from(if (architecture == Architecture.AARCH64) aarch64DockerSource else dockerSource)
     }
 
+    var destDir = transformTask.map { it.destinationDir }
     tasks.register<DockerBuildTask>("build${baseName}DockerImage") {
-        dockerContext.fileProvider(transformTask.map { it.destinationDir })
+        dockerContext.fileProvider(destDir)
         isNoCache = isCi()
         baseImages = arrayOf(DockerBase.DEFAULT.image)
         platforms = setOf(architecture.dockerPlatform)

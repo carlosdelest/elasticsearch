@@ -78,6 +78,10 @@ distribution_archives {
             }
         }
 
+        val jvmOptions = file("src/additional-jvm.options")
+        val logsDir = project.ext["logsDir"] as File
+        val pluginsDir = project.ext["pluginsDir"] as File
+        val jvmOptionsDir = project.ext["jvmOptionsDir"] as File
         content {
             copySpec {
                 from(upstreamDistro) {
@@ -92,7 +96,7 @@ distribution_archives {
                     }
                     filesMatching("*/config/jvm.options") {
                         // Add serverless jvm options to default distribution jvm.options file
-                        filter(mapOf("append" to file("src/additional-jvm.options")), ConcatFilter::class.java)
+                        filter(mapOf("append" to jvmOptions), ConcatFilter::class.java)
                     }
                     exclude("*/bin/elasticsearch")
                     exclude("*/bin/elasticsearch.bat")
@@ -116,8 +120,8 @@ distribution_archives {
                 }
                 into("elasticsearch") {
                     from(copyDistributionDefaults)
-                    from((project.ext["logsDir"] as File).parent)
-                    from((project.extensions["pluginsDir"] as File).parent)
+                    from(logsDir.parent)
+                    from(pluginsDir.parent)
                     into("bin") {
                         from(if (name.contains("windows")) "src/bin/elasticsearch.bat" else "src/bin/elasticsearch") {
                             filePermissions {
@@ -131,7 +135,7 @@ distribution_archives {
                         }
                     }
                     into("config") {
-                        from((project.extensions["jvmOptionsDir"] as File).parent)
+                        from(jvmOptionsDir.parent)
                         from("src/serverless-default-settings.yml")
                         from("src/config/log4j2.serverless.properties")
                     }
