@@ -122,7 +122,7 @@ The three following quantization strategies are supported:
 * `bbq` - experimental:[] Better binary quantization which reduces each dimension to a single bit precision. This reduces the memory footprint by 96% (or 32x) at a larger cost of accuracy. Generally, oversampling during query time and reranking can help mitigate the accuracy loss.
 
 
-When using a quantized format, you may want to oversample and rescore the results to improve accuracy. See <<dense-vector-knn-search-reranking, oversampling and rescoring>> for more information.
+When using a quantized format, you may want to oversample and rescore the results to improve accuracy. See <<dense-vector-knn-search-rescoring, oversampling and rescoring>> for more information.
 
 To use a quantized index, you can set your index type to `int8_hnsw`, `int4_hnsw`, or `bbq_hnsw`. When indexing `float` vectors, the current default
 index type is `int8_hnsw`.

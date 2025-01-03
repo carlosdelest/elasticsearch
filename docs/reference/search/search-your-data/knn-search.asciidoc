@@ -1152,7 +1152,7 @@ POST product-index/_search
 //TEST[continued]
 
 [discrete]
-[[dense-vector-knn-search-reranking]]
+[[dense-vector-knn-search-rescoring]]
 ==== Oversampling and rescoring for quantized vectors
 
 All forms of quantization will result in some accuracy loss and as the quantization level increases the accuracy loss will also increase.
@@ -1163,7 +1163,7 @@ Generally, we have found that:
 
 There are two main ways to oversample and rescore. The first is to utilize the <<rescore, rescore section>> in the `_search` request.
 
-Here is an example using the top level `knn` search with oversampling and using `rescore` to rerank the results:
+Here is an example using the top level `knn` search with oversampling and using `rescore` to rescore the results:
 
 [source,console]
 --------------------------------------------------
