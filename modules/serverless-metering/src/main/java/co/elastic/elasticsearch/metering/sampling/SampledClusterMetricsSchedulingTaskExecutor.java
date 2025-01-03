@@ -181,7 +181,7 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         PersistentTasksCustomMetadata.PersistentTask<SampledClusterMetricsSchedulingTaskParams> taskInProgress,
         Map<String, String> headers
     ) {
-        logger.debug("Creating MeteringIndexInfoTask [{}][{}]", type, action);
+        logger.debug("Creating sampling task for metering [{}][{}]", type, action);
         return new SampledClusterMetricsSchedulingTask(
             id,
             type,
@@ -234,10 +234,10 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
             SampledClusterMetricsSchedulingTask.TASK_NAME,
             SampledClusterMetricsSchedulingTaskParams.INSTANCE,
             null,
-            ActionListener.wrap(r -> logger.debug("Created MeteringIndexInfoTask task"), e -> {
+            ActionListener.wrap(r -> logger.debug("Created sampling task for metering"), e -> {
                 Throwable t = e instanceof RemoteTransportException ? e.getCause() : e;
                 if (t instanceof ResourceAlreadyExistsException == false) {
-                    logger.error("Failed to create MeteringIndexInfoTask task", e);
+                    logger.error("Failed to create sampling task for metering", e);
                 }
             })
         );
@@ -247,10 +247,10 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         persistentTasksService.sendRemoveRequest(
             SampledClusterMetricsSchedulingTask.TASK_NAME,
             null,
-            ActionListener.wrap(r -> logger.debug("Stopped MeteringIndexInfoTask task"), e -> {
+            ActionListener.wrap(r -> logger.debug("Stopped sampling task for metering"), e -> {
                 Throwable t = e instanceof RemoteTransportException ? e.getCause() : e;
                 if (t instanceof ResourceNotFoundException == false) {
-                    logger.error("failed to remove MeteringIndexInfoTask task", e);
+                    logger.error("Failed to remove sampling task for metering", e);
                 }
             })
         );

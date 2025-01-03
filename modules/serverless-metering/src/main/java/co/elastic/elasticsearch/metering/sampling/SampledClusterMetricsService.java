@@ -195,7 +195,7 @@ public class SampledClusterMetricsService {
      * Updates the internal storage of metering shard info, by performing a scatter-gather operation towards all (search) nodes
      */
     void updateSamples(Client client) {
-        logger.debug("Calling IndexSizeService#updateMeteringShardInfo");
+        logger.debug("Calling SampledClusterMetricsService#updateSamples");
         collectionsTotalCounter.increment();
         // If we get called and ask to update, that request comes from the PersistentTask, so we are definitely on
         // the PersistentTask node
@@ -237,7 +237,7 @@ public class SampledClusterMetricsService {
                 var status = EnumSet.copyOf(previous.status());
                 status.add(SamplingStatus.STALE);
                 collectedMetrics.set(previous.withStatus(status));
-                logger.error("failed to collect metering shard info", e);
+                logger.error("Failed to collect samples in cluster", e);
                 collectionsErrorsCounter.increment();
             }
         });
