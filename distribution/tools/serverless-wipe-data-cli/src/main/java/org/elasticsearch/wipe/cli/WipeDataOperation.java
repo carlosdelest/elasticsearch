@@ -21,9 +21,12 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.internal.Constants;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
+import com.google.cloud.storage.Storage;
 
 import org.elasticsearch.wipe.cli.azure.AzureBlobClientHelper;
 import org.elasticsearch.wipe.cli.azure.AzureBlobWipeDataOperation;
+import org.elasticsearch.wipe.cli.gcp.GoogleCloudStorageClientHelper;
+import org.elasticsearch.wipe.cli.gcp.GoogleCloudStorageWipeDataOperation;
 import org.elasticsearch.wipe.cli.s3.S3ClientHelper;
 import org.elasticsearch.wipe.cli.s3.S3WipeDataOperation;
 
@@ -32,9 +35,14 @@ import java.util.Objects;
 import java.util.Properties;
 
 public interface WipeDataOperation {
+
+    Runnable NOOP_ON_BATCH_DELETED = () -> {};
+
+    Runnable PRINT_DOT_ON_BATCH_DELETED = () -> System.out.print(".");
+
     void deleteBlobs() throws IOException;
 
-    static WipeDataOperation create(Properties properties) {
+    static WipeDataOperation create(Properties properties) throws IOException {
         final String type = properties.getProperty("type");
         final String client = properties.getProperty("client");
 
@@ -42,13 +50,12 @@ public interface WipeDataOperation {
             System.err.println("warning: 'client' was [" + client + "], but 'default' is expected");
         }
 
-        if ("s3".equals(type)) {
-            return createS3Operation(properties);
-        } else if ("azure".equals(type)) {
-            return createAzureOperation(properties);
-        } else {
-            throw new IllegalArgumentException("'type' was [" + type + "], expected 's3' or 'azure'");
-        }
+        return switch (type) {
+            case "s3" -> createS3Operation(properties);
+            case "azure" -> createAzureOperation(properties);
+            case "gcs" -> createGoogleCloudStorageOperation(properties);
+            case null, default -> throw new IllegalArgumentException("'type' was [" + type + "], expected 's3', 'azure', or 'gcs'");
+        };
     }
 
     private static S3WipeDataOperation createS3Operation(Properties properties) {
@@ -59,7 +66,7 @@ public interface WipeDataOperation {
         final String basePath = Objects.requireNonNull(properties.getProperty("base_path"));
 
         AmazonS3 s3Client = S3ClientHelper.buildClient(endpoint, accessKey, secretKey);
-        return new S3WipeDataOperation(s3Client, bucket, basePath, () -> System.out.print("."));
+        return new S3WipeDataOperation(s3Client, bucket, basePath, PRINT_DOT_ON_BATCH_DELETED);
     }
 
     private static AzureBlobWipeDataOperation createAzureOperation(Properties properties) {
@@ -71,6 +78,15 @@ public interface WipeDataOperation {
         BlobServiceClient serviceClient = AzureBlobClientHelper.createServiceClient(endpoint, sasToken);
         BlobContainerClient blobContainerClient = serviceClient.getBlobContainerClient(bucket);
 
-        return new AzureBlobWipeDataOperation(blobContainerClient, () -> System.out.print("."));
+        return new AzureBlobWipeDataOperation(blobContainerClient, PRINT_DOT_ON_BATCH_DELETED);
+    }
+
+    private static GoogleCloudStorageWipeDataOperation createGoogleCloudStorageOperation(Properties properties) throws IOException {
+        final String bucket = Objects.requireNonNull(properties.getProperty("bucket"));
+        final String credentialsFile = Objects.requireNonNull(properties.getProperty("credentials_file"));
+
+        Storage storage = GoogleCloudStorageClientHelper.createStorage(credentialsFile);
+
+        return new GoogleCloudStorageWipeDataOperation(bucket, storage, PRINT_DOT_ON_BATCH_DELETED);
     }
 }

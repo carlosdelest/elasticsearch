@@ -35,13 +35,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.elasticsearch.common.Strings.format;
 
 public class S3WipeDataOperation implements WipeDataOperation {
-
-    public static final Runnable NOOP_ON_BATCH_DELETED = () -> {};
 
     private static final int MAX_BULK_DELETES = 1000;
 
@@ -54,7 +53,7 @@ public class S3WipeDataOperation implements WipeDataOperation {
         this.s3Client = s3Client;
         this.bucketName = bucketName;
         this.keyPrefix = keyPrefix;
-        this.onBatchDeleted = onBatchDeleted;
+        this.onBatchDeleted = Objects.requireNonNull(onBatchDeleted);
     }
 
     public void deleteBlobs() throws IOException {

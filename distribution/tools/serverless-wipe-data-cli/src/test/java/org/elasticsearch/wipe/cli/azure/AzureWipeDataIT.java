@@ -49,6 +49,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.elasticsearch.wipe.cli.WipeDataOperation.NOOP_ON_BATCH_DELETED;
 import static org.elasticsearch.wipe.cli.azure.AzureBlobWipeDataOperation.MAX_BLOBS_PER_PAGE;
 import static org.hamcrest.Matchers.emptyString;
 import static org.hamcrest.Matchers.not;
@@ -91,7 +92,7 @@ public class AzureWipeDataIT extends ESTestCase {
         assertThat(AZURE_TEST_CONTAINER, not(emptyString()));
 
         // The only reason we use a custom netty client is keep references to the underlying resources blob client uses to properly close
-        // them after tests to prevent thread leaks, since the blob client does not close it them or expose a close hook
+        // them after tests to prevent thread leaks, since the blob client does not close them or expose a close hook
         // Known issue: https://github.com/Azure/azure-sdk-for-java/issues/34203
         eventLoopGroup = new NioEventLoopGroup(EVENT_LOOP_THREAD_COUNT);
         connectionProvider = ConnectionProvider.builder("azure-sdk-connection-pool")
@@ -144,7 +145,7 @@ public class AzureWipeDataIT extends ESTestCase {
         long count = containerClient.listBlobs().stream().count();
         assertEquals(numBlobs, count);
 
-        AzureBlobWipeDataOperation operation = new AzureBlobWipeDataOperation(containerClient, null);
+        AzureBlobWipeDataOperation operation = new AzureBlobWipeDataOperation(containerClient, NOOP_ON_BATCH_DELETED);
         operation.deleteBlobs();
 
         // verify blobs are deleted
@@ -164,7 +165,7 @@ public class AzureWipeDataIT extends ESTestCase {
         assertEquals(numBlobs, count);
 
         // delete and verify blobs are deleted
-        AzureBlobWipeDataOperation operation = new AzureBlobWipeDataOperation(containerClient, null);
+        AzureBlobWipeDataOperation operation = new AzureBlobWipeDataOperation(containerClient, NOOP_ON_BATCH_DELETED);
         operation.deleteBlobs();
         count = containerClient.listBlobs().stream().count();
         assertEquals(0L, count);
@@ -191,7 +192,7 @@ public class AzureWipeDataIT extends ESTestCase {
         long count = containerClient.listBlobs().stream().count();
         assertEquals(numBlobs * 2, count);
 
-        AzureBlobWipeDataOperation operation = new AzureBlobWipeDataOperation(containerClient, null);
+        AzureBlobWipeDataOperation operation = new AzureBlobWipeDataOperation(containerClient, NOOP_ON_BATCH_DELETED);
         operation.deleteBlobs();
 
         // verify blobs are deleted
