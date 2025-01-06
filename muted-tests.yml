@@ -99,9 +99,6 @@ tests:
 - class: org.elasticsearch.xpack.sql.qa.single_node.JdbcDocCsvSpecIT
   method: test {docs.testFilterToday}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3289
-- class: co.elastic.elasticsearch.ml.serverless.actionfilters.GetTrainedModelsStatsResponseFilterTests
-  method: testNoFormatChangesSinceLastUpdate
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3295
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3298
