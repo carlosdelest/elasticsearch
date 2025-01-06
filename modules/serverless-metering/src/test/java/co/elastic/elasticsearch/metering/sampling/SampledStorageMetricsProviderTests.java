@@ -24,6 +24,7 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.indices.SystemIndices;
@@ -82,7 +83,15 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
     public void setUp() throws Exception {
         super.setUp();
         clusterService = mock(ClusterService.class);
-        when(clusterService.state()).thenReturn(ClusterState.EMPTY_STATE.copyAndUpdate(b -> b.metadata(mock(Metadata.class))));
+        final ClusterState clusterState = ClusterState.EMPTY_STATE.copyAndUpdate(b -> {
+            final ProjectMetadata projectMetadata = mock(ProjectMetadata.class);
+            when(projectMetadata.id()).thenReturn(Metadata.DEFAULT_PROJECT_ID);
+            final Metadata metadata = mock(Metadata.class);
+            when(metadata.projects()).thenReturn(Map.of(Metadata.DEFAULT_PROJECT_ID, projectMetadata));
+            when(metadata.getProject()).thenReturn(projectMetadata);
+            b.metadata(metadata);
+        });
+        when(clusterService.state()).thenReturn(clusterState);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
         systemIndices = mock(SystemIndices.class);
     }
@@ -628,7 +637,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         TreeMap<String, IndexAbstraction> lookup = new TreeMap<>(
             Arrays.stream(indices).collect(Collectors.toMap(IndexAbstraction::getName, identity()))
         );
-        when(mock.getIndicesLookup()).thenReturn(lookup);
+        when(mock.getProject().getIndicesLookup()).thenReturn(lookup);
         return mock;
     }
 
