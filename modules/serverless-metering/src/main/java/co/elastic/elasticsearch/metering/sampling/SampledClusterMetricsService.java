@@ -29,6 +29,7 @@ import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.telemetry.metric.LongCounter;
@@ -195,7 +196,7 @@ public class SampledClusterMetricsService {
      * Updates the internal storage of metering shard info, by performing a scatter-gather operation towards all (search) nodes
      */
     void updateSamples(Client client) {
-        logger.debug("Calling IndexSizeService#updateMeteringShardInfo");
+        logger.debug("Calling SampledClusterMetricsService#updateSamples");
         collectionsTotalCounter.increment();
         // If we get called and ask to update, that request comes from the PersistentTask, so we are definitely on
         // the PersistentTask node
@@ -237,7 +238,7 @@ public class SampledClusterMetricsService {
                 var status = EnumSet.copyOf(previous.status());
                 status.add(SamplingStatus.STALE);
                 collectedMetrics.set(previous.withStatus(status));
-                logger.error("failed to collect metering shard info", e);
+                logger.error("Failed to collect samples in cluster", e);
                 collectionsErrorsCounter.increment();
             }
         });
@@ -271,8 +272,8 @@ public class SampledClusterMetricsService {
         return Optional.ofNullable(function.apply(currentInfo));
     }
 
-    public SampledMetricsProvider createSampledStorageMetricsProvider() {
-        return new SampledStorageMetricsProvider(this, clusterService);
+    public SampledMetricsProvider createSampledStorageMetricsProvider(SystemIndices systemIndices) {
+        return new SampledStorageMetricsProvider(this, clusterService, systemIndices);
     }
 
     public SampledVCUMetricsProvider createSampledVCUMetricsProvider(NodeEnvironment nodeEnvironment) {

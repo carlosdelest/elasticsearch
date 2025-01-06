@@ -57,6 +57,7 @@ rootProject.name = "elasticsearch-serverless"
 
 includeBuild("serverless-build-tools")
 includeBuild("elasticsearch")
+includeBuild("elasticsearch/build-tools-internal")
 
 /*
  * Check to ensure git submodules have been initialized

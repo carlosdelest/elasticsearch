@@ -90,7 +90,10 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
             assertThat(metric.id(), startsWith(idPRefix));
             assertThat(metric.usage().type(), equalTo("es_indexed_data"));
             assertThat(metric.usage().quantity(), greaterThan(0L));
-            assertThat(metric.source().metadata(), equalTo(Map.of("index", indexName, "shard", "0")));
+            assertThat(
+                metric.source().metadata(),
+                equalTo(Map.of("index", indexName, "shard", "0", "system_index", "false", "hidden_index", "false"))
+            );
 
         }, 20, TimeUnit.SECONDS);
     }

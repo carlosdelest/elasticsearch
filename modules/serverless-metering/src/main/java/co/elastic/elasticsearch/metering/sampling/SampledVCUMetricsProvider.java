@@ -217,7 +217,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
 
             if (provisionedMemory > currentInfo.searchTierMetrics().memorySize()) {
                 logger.warn(
-                    "spMinProvisionedMemory: [{}] exceeded provisioned search tier memory: [{}] "
+                    "spMinProvisionedMemory [{}] for inactivity billing exceeded actual provisioned search tier memory [{}] "
                         + "[spMin: {}, storage: {}, memory: {}, interactiveData: {}, totalData: {}]",
                     ByteSizeValue.ofBytes(provisionedMemory),
                     ByteSizeValue.ofBytes(currentInfo.searchTierMetrics().memorySize()),

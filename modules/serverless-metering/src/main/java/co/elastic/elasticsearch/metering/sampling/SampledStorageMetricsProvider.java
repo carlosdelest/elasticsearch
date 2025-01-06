@@ -17,12 +17,14 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.SourceMetadata;
 import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.indices.SystemIndices;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -41,16 +43,19 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
     private static final String RA_S_METRIC_TYPE = "es_raw_stored_data";
     static final String RA_S_METRIC_ID_PREFIX = "raw-stored-index-size";
     private static final String METADATA_PARTIAL_KEY = "partial";
-    private static final String METADATA_INDEX_KEY = "index";
-    private static final String METADATA_SHARD_KEY = "shard";
-    private static final String METADATA_DATASTREAM_KEY = "datastream";
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
     private final ClusterService clusterService;
+    private final SystemIndices systemIndices;
 
-    SampledStorageMetricsProvider(SampledClusterMetricsService sampledClusterMetricsService, ClusterService clusterService) {
+    SampledStorageMetricsProvider(
+        SampledClusterMetricsService sampledClusterMetricsService,
+        ClusterService clusterService,
+        SystemIndices systemIndices
+    ) {
         this.sampledClusterMetricsService = sampledClusterMetricsService;
         this.clusterService = clusterService;
+        this.systemIndices = systemIndices;
     }
 
     @Override
@@ -72,7 +77,7 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
                 var indexCreationDate = Instant.ofEpochMilli(shardMetrics.indexCreationDateEpochMilli());
 
                 Map<String, String> sourceMetadata = new HashMap<>();
-                sourceMetadata.put(METADATA_SHARD_KEY, Integer.toString(shardId));
+                sourceMetadata.put(SourceMetadata.SHARD, Integer.toString(shardId));
                 fillIndexMetadata(sourceMetadata, clusterStateMetadata, indexName, partial);
 
                 Map<String, String> usageMetadata = new HashMap<>();
@@ -125,15 +130,21 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
     }
 
     private void fillIndexMetadata(Map<String, String> sourceMetadata, Metadata clusterMetadata, String indexName, boolean partial) {
+        // note: this is intentionally not resolved via IndexAbstraction, see https://elasticco.atlassian.net/browse/ES-10384
+        final var isSystemIndex = systemIndices.isSystemIndex(indexName);
         final var indexAbstraction = clusterMetadata.getProject().getIndicesLookup().get(indexName);
-        final boolean inDatastream = indexAbstraction != null && indexAbstraction.getParentDataStream() != null;
+        final var datastream = indexAbstraction != null ? indexAbstraction.getParentDataStream() : null;
 
-        sourceMetadata.put(METADATA_INDEX_KEY, indexName);
+        sourceMetadata.put(SourceMetadata.INDEX, indexName);
+        sourceMetadata.put(SourceMetadata.SYSTEM_INDEX, Boolean.toString(isSystemIndex));
+        if (indexAbstraction != null) {
+            sourceMetadata.put(SourceMetadata.HIDDEN_INDEX, Boolean.toString(indexAbstraction.isHidden()));
+        }
         if (partial) {
             sourceMetadata.put(METADATA_PARTIAL_KEY, Boolean.TRUE.toString());
         }
-        if (inDatastream) {
-            sourceMetadata.put(METADATA_DATASTREAM_KEY, indexAbstraction.getParentDataStream().getName());
+        if (datastream != null) {
+            sourceMetadata.put(SourceMetadata.DATASTREAM, datastream.getName());
         }
     }
 

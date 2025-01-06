@@ -2,8 +2,8 @@ import org.elasticsearch.gradle.testclusters.ElasticsearchCluster
 import org.elasticsearch.gradle.testclusters.RunTask
 import org.elasticsearch.gradle.testclusters.TestDistribution
 
-val testClusters = project.extensions.getByName("testClusters") as NamedDomainObjectContainer<ElasticsearchCluster>
-val repoDir = file("${buildDir}/runTask/repo")
+val testClusters = project.extensions.getByName<NamedDomainObjectContainer<ElasticsearchCluster>>("testClusters")
+val repoDir = file("${layout.buildDirectory.get().asFile}/runTask/repo")
 
 val runCluster by testClusters.registering {
     setTestDistribution(TestDistribution.DEFAULT)

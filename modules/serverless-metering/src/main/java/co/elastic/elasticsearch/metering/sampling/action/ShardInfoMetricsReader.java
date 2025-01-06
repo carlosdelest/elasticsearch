@@ -124,7 +124,7 @@ interface ShardInfoMetricsReader {
             }
             long raStorage = Long.parseLong(raStorageString);
             if (raStorage < 0) {
-                logger.warn("skipping negative RA-S in UserData [{}] for shard [{}]", raStorageString, shardId);
+                logger.info("skipping negative RA-S in UserData [{}] for shard [{}]", raStorageString, shardId);
                 return null;
             }
 
@@ -148,7 +148,7 @@ interface ShardInfoMetricsReader {
                 // Due to bug related to ES-8577, we recorded the default raw size (-1, meaning not metered) for documents
                 // replayed from translog, potentially resulting into a negative RA-S avg per doc. We have to skip such
                 // segments here to minimize the impact.
-                logger.warn(
+                logger.info(
                     "skipping negative RA-S (avg: [{}], live docs: [{}]) for segment [{}/{}]",
                     avgRASize,
                     commitLiveDocs,

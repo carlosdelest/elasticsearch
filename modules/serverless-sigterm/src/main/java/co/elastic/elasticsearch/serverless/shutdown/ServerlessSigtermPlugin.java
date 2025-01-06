@@ -78,7 +78,7 @@ public class ServerlessSigtermPlugin extends ShutdownPlugin {
         );
 
         NodeSeenService nodeSeenService = new NodeSeenService(clusterService);
-        SigtermShutdownCleanupService shutdownCleanupService = new SigtermShutdownCleanupService(clusterService);
+        SigtermShutdownCleanupService shutdownCleanupService = new SigtermShutdownCleanupService(clusterService, services.rerouteService());
         return List.of(nodeSeenService, shutdownCleanupService);
     }
 

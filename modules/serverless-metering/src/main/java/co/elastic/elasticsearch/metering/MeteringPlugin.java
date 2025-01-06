@@ -195,11 +195,11 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
         if (hasPersistentTasksRole) {
             // required on search nodes only according to the persistent task node assignment, see
             // SampledClusterMetricsSchedulingTaskExecutor#getNodeAssignment
-            sampledMetrics.add(clusterMetricsService.createSampledStorageMetricsProvider());
+            sampledMetrics.add(clusterMetricsService.createSampledStorageMetricsProvider(systemIndices));
             sampledMetrics.add(clusterMetricsService.createSampledVCUMetricsProvider(nodeEnvironment));
         } else if (hasIndexRole) {
             // ingest metrics are only available on index nodes
-            ingestMetricsProvider = new IngestMetricsProvider(nodeEnvironment.nodeId(), clusterStateSupplier);
+            ingestMetricsProvider = new IngestMetricsProvider(nodeEnvironment.nodeId(), clusterStateSupplier, systemIndices);
             counterMetrics.add(ingestMetricsProvider);
         }
 
