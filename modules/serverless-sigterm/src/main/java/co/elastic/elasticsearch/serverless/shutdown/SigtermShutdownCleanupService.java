@@ -101,7 +101,9 @@ public class SigtermShutdownCleanupService implements ClusterStateListener {
                 // First check if the node being shutdown is still running. If it has a different
                 // ephemeral id than when it was marked for shutdown, then we can remove the shutdown record immediately.
                 DiscoveryNode discoveryNode = event.state().nodes().get(shutdown.getNodeId());
-                if (discoveryNode != null && discoveryNode.getEphemeralId().equals(shutdown.getNodeEphemeralId()) == false) {
+                if (discoveryNode != null
+                    && shutdown.getNodeEphemeralId() != null
+                    && discoveryNode.getEphemeralId().equals(shutdown.getNodeEphemeralId()) == false) {
                     logger.debug(
                         format(
                             "Node [%s] with ephemeral id [%s] has new ephemeral id [%s]. Removing shutdown record.",
@@ -240,7 +242,7 @@ public class SigtermShutdownCleanupService implements ClusterStateListener {
                         );
                         // this is not the shutdown we are looking for
                         shutdownMetadata.put(node.id, singleShutdown);
-                    } else if (singleShutdown.getNodeEphemeralId().equals(node.ephemeralId) == false) {
+                    } else if (Objects.equals(singleShutdown.getNodeEphemeralId(), node.ephemeralId) == false) {
                         logger.warn(
                             format(
                                 "not removing sigterm shutdown for node [%s], expected ephemeral id [%s]",
