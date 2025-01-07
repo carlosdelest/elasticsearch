@@ -141,3 +141,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessCompletionsPostingExtensionRollingUpgradeIT
   method: testClusterUpgrade {upgradedNodes=4}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3327
+- class: org.elasticsearch.xpack.esql.qa.single_node.RestEsqlIT
+  method: testProfile {ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3344
