@@ -93,9 +93,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.sigterm.SigtermShutdownIT
   method: testShutdown
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3250
-- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
-  method: testRolesFileUpdateTriggersRolesSynchronization
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3287
 - class: org.elasticsearch.xpack.sql.qa.single_node.JdbcDocCsvSpecIT
   method: test {docs.testFilterToday}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3289
