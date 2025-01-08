@@ -24,12 +24,16 @@ API_KEY=$(vault_with_retries read -field api-key "$VAULT_PATH_API_KEY")
 
 # Create es override if we have declared one. empty IMAGE_OVERRIDE env means using default with no override
 if [[ -z "${IMAGE_OVERRIDE}" ]]; then
-  echo "No IMAGE_OVERRIDE declared"
-# If we aren't overriding the image we need to explicitly specify the testing channel
-OVERRIDE_CONFIG=",
-    \"overrides\": {
-        \"channel\": \"testing\"
-    }"
+    echo "No IMAGE_OVERRIDE declared"
+    if [[ "$TEST_ENV" == "qa" ]]; then
+        # If we aren't overriding the image we need to explicitly specify the testing channel
+        OVERRIDE_CONFIG=",
+            \"overrides\": {
+                \"channel\": \"testing\"
+            }"
+    else
+        OVERRIDE_CONFIG=""
+    fi
 else
 OVERRIDE_CONFIG=",
     \"overrides\": {
