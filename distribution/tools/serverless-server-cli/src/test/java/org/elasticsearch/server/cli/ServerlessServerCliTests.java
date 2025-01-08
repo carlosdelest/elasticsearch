@@ -62,6 +62,8 @@ import java.util.concurrent.TimeoutException;
 
 import static org.elasticsearch.server.cli.ProcessUtil.nonInterruptibleVoid;
 import static org.elasticsearch.server.cli.ServerlessServerCli.DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP;
+import static org.elasticsearch.server.cli.ServerlessServerCli.ONE_VCPU_SHARES;
+import static org.elasticsearch.server.cli.ServerlessServerCli.ONE_VCPU_WEIGHT;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
@@ -114,10 +116,14 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Files.writeString(defaultSettingsFile, "");
 
         cgroupFs = createTempDir();
-        CpuControlFile cpuShares = new CpuControlFile(cgroupFs.resolve("cpu/cpu.shares"), 1024, null);
+        CpuControlFile cpuShares = new CpuControlFile(cgroupFs.resolve("cpu/cpu.shares"), ONE_VCPU_SHARES, null);
         cgroupV2DirName = "test-cgroup-name";
         var cgroupV2Dir = cgroupFs.resolve(cgroupV2DirName);
-        CpuControlFile cpuWeight = new CpuControlFile(cgroupV2Dir.resolve("cpu.weight"), 100, cgroupFs.resolve("cgroup.controllers"));
+        CpuControlFile cpuWeight = new CpuControlFile(
+            cgroupV2Dir.resolve("cpu.weight"),
+            ONE_VCPU_WEIGHT,
+            cgroupFs.resolve("cgroup.controllers")
+        );
         Files.createDirectories(cpuShares.file().getParent());
         Files.createDirectories(cgroupV2Dir);
 

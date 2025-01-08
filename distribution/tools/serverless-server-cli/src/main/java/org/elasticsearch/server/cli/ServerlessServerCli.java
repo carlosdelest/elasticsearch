@@ -88,6 +88,20 @@ public class ServerlessServerCli extends ServerCli {
 
     final AtomicReference<CountDownLatch> serverlessCliFinishedLatch = new AtomicReference<>();
 
+    static final int ONE_VCPU_SHARES = 1024;
+
+    /**
+     * The OCI spec configures CPU using cgroups v1-style shares, and those configurations are converted to v2
+     * by remapping the interval [2-262144] to [1-10000], as documented by systems like
+     * <a href="https://github.com/google/gvisor/blob/71194033590006223e4afe1fec95b01443fdb3c6/runsc/cgroup/cgroup_v2.go#L742-L747">gvisor</a>
+     * and
+     * <a href="https://github.com/containers/crun/blob/main/crun.1.md#cpu-controller">crun</a>.
+     * Doing this with {@link #ONE_VCPU_SHARES} yields approximately 39.9826, which is not an integer.
+     * This fact is a major hassle, given that the value in the cpu.weight file must be an integer.
+     * We'll just call it 40, which introduces an error less than 1/20 of 1%.
+     */
+    static final int ONE_VCPU_WEIGHT = 40;
+
     @Override
     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) throws Exception {
         terminal.println("Starting Serverless Elasticsearch...");
@@ -444,8 +458,8 @@ public class ServerlessServerCli extends ServerCli {
             // gcoups v2
             Path weightFile = getCgroupFs().resolve(getCgroupV2DirName()).resolve("cpu.weight");
             if (Files.exists(weightFile)) {
-                int weight = Integer.parseInt(Files.readString(weightFile).strip());
-                vcpus = weight / 100.0;
+                double weight = Integer.parseInt(Files.readString(weightFile).strip());
+                vcpus = weight / ONE_VCPU_WEIGHT;
             } else {
                 throw new IllegalStateException("In cgroups v2, cpu.weight must be set in serverless");
             }
@@ -453,8 +467,8 @@ public class ServerlessServerCli extends ServerCli {
             // gcoups v1
             Path sharesFile = getCgroupFs().resolve("cpu/cpu.shares");
             if (Files.exists(sharesFile)) {
-                int shares = Integer.parseInt(Files.readString(sharesFile).strip());
-                vcpus = shares / 1024.0;
+                double shares = Integer.parseInt(Files.readString(sharesFile).strip());
+                vcpus = shares / ONE_VCPU_SHARES;
             } else {
                 throw new IllegalStateException("In cgroups v1, cpu.shares must be set in serverless");
             }
