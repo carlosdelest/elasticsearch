@@ -26,8 +26,7 @@
   # Initialize failure store
   - do:
       indices.rollover:
-        alias: failure-data-stream
-        target_failure_store: true
+        alias: failure-data-stream::failures
   - do:
       indices.get_data_stream:
         name: failure-data-stream
