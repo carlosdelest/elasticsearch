@@ -19,6 +19,9 @@ steps:
   - label: "Detect rerun"
     command: .buildkite/scripts/detect-rerun.sh
     key: "detect-rerun"
+  - label: ":git: Update patch branch"
+    if: build.env("ENVIRONMENT") == "qa"
+    command: .buildkite/scripts/update-patch-branch.sh ${SERVICE_VERSION}
   - label: ":pipeline: Upload quality gate steps"
     depends_on:
       - detect-rerun
