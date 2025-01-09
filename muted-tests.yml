@@ -153,3 +153,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testUpdateBuiltInRole
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3355
+- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
+  method: testDeleteBuiltInRole
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3359
