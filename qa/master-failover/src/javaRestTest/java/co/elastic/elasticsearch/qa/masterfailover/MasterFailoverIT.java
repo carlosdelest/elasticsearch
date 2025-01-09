@@ -57,49 +57,46 @@ public class MasterFailoverIT extends ESRestTestCase {
     }
 
     public void testFailover() throws Exception {
-        try (var client = client()) {
+        var client = client();
 
-            final var indexName = randomIdentifier();
+        final var indexName = randomIdentifier();
 
-            final var indexRequest = new Request("POST", indexName + "/" + "_doc/");
-            indexRequest.setJsonEntity(Strings.toString(JsonXContent.contentBuilder().startObject().field("f", "v").endObject()));
-            assertOK(client.performRequest(indexRequest));
+        final var indexRequest = new Request("POST", indexName + "/" + "_doc/");
+        indexRequest.setJsonEntity(Strings.toString(JsonXContent.contentBuilder().startObject().field("f", "v").endObject()));
+        assertOK(client.performRequest(indexRequest));
 
-            final long primaryTerm = getFirstShardPrimaryTerm(client, indexName);
+        final long primaryTerm = getFirstShardPrimaryTerm(client, indexName);
 
-            final var getMasterNodeResponse = assertOKAndCreateObjectPath(
-                client.performRequest(new Request("GET", "_nodes/_master/_none"))
-            );
-            final var masterNodeId = (String) getMasterNodeResponse.evaluate("nodes._arbitrary_key_");
-            final var masterNodeName = (String) getMasterNodeResponse.evaluate("nodes." + masterNodeId + ".name");
-            final var masterNodeIndex = nodeIndexFromName(masterNodeName);
+        final var getMasterNodeResponse = assertOKAndCreateObjectPath(client.performRequest(new Request("GET", "_nodes/_master/_none")));
+        final var masterNodeId = (String) getMasterNodeResponse.evaluate("nodes._arbitrary_key_");
+        final var masterNodeName = (String) getMasterNodeResponse.evaluate("nodes." + masterNodeId + ".name");
+        final var masterNodeIndex = nodeIndexFromName(masterNodeName);
 
-            final var upgradeResult = new PlainActionFuture<Void>();
-            final var upgradeThread = new Thread(
-                ActionRunnable.run(upgradeResult, () -> cluster.upgradeNodeToVersion(masterNodeIndex, Version.CURRENT)),
-                "upgrade-thread"
-            );
-            upgradeThread.start();
+        final var upgradeResult = new PlainActionFuture<Void>();
+        final var upgradeThread = new Thread(
+            ActionRunnable.run(upgradeResult, () -> cluster.upgradeNodeToVersion(masterNodeIndex, Version.CURRENT)),
+            "upgrade-thread"
+        );
+        upgradeThread.start();
 
-            try {
-                while (upgradeResult.isDone() == false) {
-                    // Verifies that we barely notice the master failover, although using a somewhat generous 10s timeout just in case the
-                    // CI worker is very slow. Still, 10s is shorter than the default 30s timeout on things like master node requests.
-                    final var healthResponse = assertOKAndCreateObjectPath(
-                        client.performRequest(new Request("GET", "_cluster/health?master_timeout=10s"))
-                    );
-                    assertFalse(healthResponse.toString(), healthResponse.evaluate("timed_out"));
-                }
-            } finally {
-                upgradeThread.join();
+        try {
+            while (upgradeResult.isDone() == false) {
+                // Verifies that we barely notice the master failover, although using a somewhat generous 10s timeout just in case the
+                // CI worker is very slow. Still, 10s is shorter than the default 30s timeout on things like master node requests.
+                final var healthResponse = assertOKAndCreateObjectPath(
+                    client.performRequest(new Request("GET", "_cluster/health?master_timeout=10s"))
+                );
+                assertFalse(healthResponse.toString(), healthResponse.evaluate("timed_out"));
             }
-
-            assertNull(upgradeResult.get());
-
-            // The primary term would change if (a) the primary shard did not relocate gracefully, or (b) the master failover reopened the
-            // routing table from scratch, so this assertion verifies that neither of the above happened:
-            assertEquals(primaryTerm, getFirstShardPrimaryTerm(client, indexName));
+        } finally {
+            upgradeThread.join();
         }
+
+        assertNull(upgradeResult.get());
+
+        // The primary term would change if (a) the primary shard did not relocate gracefully, or (b) the master failover reopened the
+        // routing table from scratch, so this assertion verifies that neither of the above happened:
+        assertEquals(primaryTerm, getFirstShardPrimaryTerm(client, indexName));
     }
 
     private static int getFirstShardPrimaryTerm(RestClient client, String indexName) throws IOException {
