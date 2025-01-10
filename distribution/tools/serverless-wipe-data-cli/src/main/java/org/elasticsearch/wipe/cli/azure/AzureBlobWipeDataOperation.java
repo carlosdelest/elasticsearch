@@ -40,6 +40,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.azure.storage.blob.models.BlobErrorCode.BLOB_NOT_FOUND;
@@ -61,7 +62,7 @@ public class AzureBlobWipeDataOperation implements WipeDataOperation {
 
     public AzureBlobWipeDataOperation(BlobContainerClient containerClient, Runnable onBatchDeleted) {
         this.containerClient = containerClient;
-        this.onBatchDeleted = onBatchDeleted;
+        this.onBatchDeleted = Objects.requireNonNull(onBatchDeleted);
     }
 
     public void deleteBlobs() throws IOException {
@@ -86,9 +87,7 @@ public class AzureBlobWipeDataOperation implements WipeDataOperation {
                         deleteBlobBatch(blobBatchClient, batchBlobs);
                         totalDeleted += batchBlobs.size();
                         batchBlobs.clear();
-                        if (onBatchDeleted != null) {
-                            onBatchDeleted.run();
-                        }
+                        onBatchDeleted.run();
                     }
                 }
                 continuationToken = blobPage.getContinuationToken();

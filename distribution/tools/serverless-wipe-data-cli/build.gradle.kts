@@ -68,6 +68,35 @@ dependencies {
     api("org.reactivestreams:reactive-streams:1.0.4")
     api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.12.7")
 
+    // GCP sdk
+    api("com.google.cloud:google-cloud-storage:2.45.0")
+    api("com.google.cloud:google-cloud-storage-control:2.45.0")
+    api("com.google.cloud:google-cloud-core:2.48.0")
+    api("com.google.cloud:google-cloud-core-http:2.48.0")
+    api("com.google.auth:google-auth-library-credentials:1.30.0")
+    api("com.google.auth:google-auth-library-oauth2-http:1.30.0")
+    api("com.google.apis:google-api-services-storage:v1-rev20241113-2.0.0")
+    api("com.google.api.grpc:proto-google-cloud-storage-v2:2.45.0-beta")
+    api("com.google.api.grpc:proto-google-common-protos:2.49.0")
+    api("com.google.api.grpc:proto-google-iam-v1:1.44.0")
+    api("com.google.api:gax-httpjson:2.58.0")
+    api("com.google.api-client:google-api-client:2.7.0")
+    api("com.google.api:gax:2.58.0")
+    api("com.google.api:api-common:2.40.0")
+    api("com.google.http-client:google-http-client:1.45.1")
+    api("com.google.http-client:google-http-client-gson:1.45.1")
+    api("com.google.http-client:google-http-client-appengine:1.45.1")
+    api("com.google.http-client:google-http-client-jackson2:1.45.1")
+    api("com.google.code.gson:gson:2.11.0")
+    api("com.google.guava:guava:32.0.1-jre")
+    api("com.google.guava:failureaccess:1.0.2")
+    api("com.google.protobuf:protobuf-java-util:${versions["protobuf"]}")
+    api("com.google.protobuf:protobuf-java:${versions["protobuf"]}")
+    api("io.grpc:grpc-context:1.56.1")
+    api("io.opencensus:opencensus-api:0.31.1")
+    api("io.opencensus:opencensus-contrib-http-util:0.31.1")
+    api("org.threeten:threetenbp:1.7.0")
+
     // com.amazonaws.util.Base64 complains about performance if you don't have jaxb available
     api("javax.xml.bind:jaxb-api:2.2.2")
 
@@ -84,8 +113,12 @@ dependencies {
     testImplementation("org.elasticsearch:cli")
     testImplementation("org.elasticsearch.test:s3-fixture")
     testImplementation("org.elasticsearch.test:azure-fixture")
+    testImplementation("org.elasticsearch.test:gcs-fixture")
 }
 
+/**
+ * AWS configurations
+ **/
 var useS3Fixture = false
 
 var s3Endpoint: String? = System.getenv("amazon_s3_endpoint")
@@ -126,8 +159,10 @@ val s3ThirdPartyTest by tasks.registering(Test::class) {
 }
 
 
+/**
+ * Azure configurations
+ **/
 var useAzureFixture = false
-
 var azureEndpoint: String? = System.getenv("azure_blob_endpoint")
 var azureSasToken: String? = System.getenv("azure_blob_sas_token")
 var azureContainer: String? = System.getenv("azure_blob_container")
@@ -172,7 +207,38 @@ val azureThirdPartyTest by tasks.registering(Test::class) {
     setTestClassesDirs(testSourceSet.getOutput().getClassesDirs())
 }
 
+/**
+ * GCP configurations
+ **/
+var useGcsFixture = false
+var gcsServiceAccountCredentials: String? = System.getenv("gcs_service_account_credentials")
+var gcsBucket: String? = System.getenv("gcs_bucket")
+
+if (gcsServiceAccountCredentials == null && gcsBucket == null) {
+    // use fixture by default
+    useGcsFixture = true
+    gcsBucket = "test_bucket"
+} else if (gcsServiceAccountCredentials == null || gcsBucket == null) {
+    throw IllegalArgumentException("not all options specified to run against external Google Cloud Storage service are present")
+}
+
+val gcpThirdPartyTest by tasks.registering(Test::class) {
+    outputs.doNotCacheIf("Build cache is disabled for Docker tests") { true }
+    maxParallelForks = 1
+    include("**/gcp/*IT.class")
+    systemProperty("tests.security.manager", false)
+
+    systemProperty("test.gcs.use.fixture", useGcsFixture)
+    systemProperty("test.gcs.service_account_credentials", gcsServiceAccountCredentials ?: "")
+    systemProperty("test.gcs.bucket", gcsBucket ?: "")
+
+    val testSourceSet = sourceSets.getByName(SourceSet.TEST_SOURCE_SET_NAME)
+    setClasspath(testSourceSet.getRuntimeClasspath())
+    setTestClassesDirs(testSourceSet.getOutput().getClassesDirs())
+}
+
 tasks.named("check").configure {
     dependsOn(s3ThirdPartyTest)
     dependsOn(azureThirdPartyTest)
+    dependsOn(gcpThirdPartyTest)
 }

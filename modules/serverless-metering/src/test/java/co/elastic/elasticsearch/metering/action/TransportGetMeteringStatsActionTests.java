@@ -27,6 +27,7 @@ import co.elastic.elasticsearch.metering.sampling.action.TransportCollectCluster
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
+import org.elasticsearch.action.support.IndexComponentSelector;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.DataStream;
 import org.elasticsearch.cluster.metadata.DataStreamMetadata;
@@ -684,7 +685,9 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         when(clusterMetricsService.getMeteringShardInfo()).thenReturn(mockShardsInfo);
         when(indexNameExpressionResolver.concreteIndexNames(any(ClusterState.class), any())).thenReturn(new String[] { "foo1", "foo2" });
-        when(indexNameExpressionResolver.dataStreamNames(any(ProjectMetadata.class), any(), eq(query))).thenReturn(List.of("fooDs"));
+        when(indexNameExpressionResolver.dataStreams(any(ProjectMetadata.class), any(), eq(query))).thenReturn(
+            List.of(new IndexNameExpressionResolver.ResolvedExpression("fooDs", IndexComponentSelector.DATA))
+        );
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
 

@@ -87,57 +87,12 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test get stacktraces}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3121
-- class: co.elastic.elasticsearch.qa.masterfailover.MasterFailoverIT
-  method: testFailover
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3249
 - class: co.elastic.elasticsearch.qa.sigterm.SigtermShutdownIT
   method: testShutdown
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3250
-- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
-  method: testRolesFileUpdateTriggersRolesSynchronization
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3287
 - class: org.elasticsearch.xpack.sql.qa.single_node.JdbcDocCsvSpecIT
   method: test {docs.testFilterToday}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3289
-- class: co.elastic.elasticsearch.ml.serverless.actionfilters.GetTrainedModelsStatsResponseFilterTests
-  method: testNoFormatChangesSinceLastUpdate
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3295
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3298
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3299
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {scoring.TestMatchAndQueryStringFunctionsWithScore ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3300
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {scoring.TestMatchAndQueryStringFunctionsWithScore SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3301
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3298
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3299
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {scoring.TestMatchAndQueryStringFunctionsWithScore ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3300
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {scoring.TestMatchAndQueryStringFunctionsWithScore SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3301
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3302
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {scoring.TestMultiValuedFieldWithConjunctionWithScore ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3303
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {scoring.TestMatchAndQueryStringFunctionsWithScore ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3304
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {scoring.TestMatchAndQueryStringFunctionsWithScore SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3305
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=indices.create/20_synthetic_source/create index with use_synthetic_source}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3307
@@ -147,3 +102,15 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessCompletionsPostingExtensionRollingUpgradeIT
   method: testClusterUpgrade {upgradedNodes=4}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3327
+- class: org.elasticsearch.xpack.esql.qa.single_node.RestEsqlIT
+  method: testProfile {ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3344
+- class: org.elasticsearch.xpack.esql.qa.single_node.RestEsqlIT
+  method: testProfile {SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3346
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {stats.DocsStatsSumNestedExpression ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3347
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {stats.DocsStatsSumNestedExpression ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3353

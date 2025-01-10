@@ -48,26 +48,24 @@ public class SigtermShutdownIT extends ESRestTestCase {
     public void testShutdown() throws Exception {
         int searchIndex = 1;
         var name = cluster.getName(searchIndex);
-        try (var client = client()) {
-            var nodeId = assertOKAndCreateObjectPath(client.performRequest(new Request("GET", "_nodes/" + name))).evaluate(
-                "nodes._arbitrary_key_"
-            );
-            assertThat(nodeId, instanceOf(String.class));
-            var shutdownStatus = new Request("GET", "_nodes/" + nodeId + "/shutdown");
-            assertThat(assertOKAndCreateObjectPath(client.performRequest(shutdownStatus)).evaluate("nodes"), hasSize(0));
-            cluster.stopNode(searchIndex, false);
-            // Created
-            assertBusy(
-                () -> assertThat(assertOKAndCreateObjectPath(client.performRequest(shutdownStatus)).evaluate("nodes"), hasSize(1)),
-                SIGTERM_TIMEOUT.getSeconds(),
-                TimeUnit.SECONDS
-            );
-            // Cleaned up
-            assertBusy(
-                () -> assertThat(assertOKAndCreateObjectPath(client.performRequest(shutdownStatus)).evaluate("nodes"), hasSize(0)),
-                SIGTERM_TIMEOUT.getSeconds(),
-                TimeUnit.SECONDS
-            );
-        }
+        var nodeId = assertOKAndCreateObjectPath(client().performRequest(new Request("GET", "_nodes/" + name))).evaluate(
+            "nodes._arbitrary_key_"
+        );
+        assertThat(nodeId, instanceOf(String.class));
+        var shutdownStatus = new Request("GET", "_nodes/" + nodeId + "/shutdown");
+        assertThat(assertOKAndCreateObjectPath(client().performRequest(shutdownStatus)).evaluate("nodes"), hasSize(0));
+        cluster.stopNode(searchIndex, false);
+        // Created
+        assertBusy(
+            () -> assertThat(assertOKAndCreateObjectPath(client().performRequest(shutdownStatus)).evaluate("nodes"), hasSize(1)),
+            SIGTERM_TIMEOUT.getSeconds(),
+            TimeUnit.SECONDS
+        );
+        // Cleaned up
+        assertBusy(
+            () -> assertThat(assertOKAndCreateObjectPath(client().performRequest(shutdownStatus)).evaluate("nodes"), hasSize(0)),
+            SIGTERM_TIMEOUT.getSeconds(),
+            TimeUnit.SECONDS
+        );
     }
 }

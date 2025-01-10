@@ -181,7 +181,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
 
                     final var allConcreteIndicesNames = Stream.concat(
                         concreteIndicesNames != null ? Arrays.stream(concreteIndicesNames) : Stream.empty(),
-                        dataStreamConcreteIndicesNames
+                        dataStreamConcreteIndicesNames.stream()
                     ).toArray(String[]::new);
 
                     listener.onResponse(createResponse(shardsInfo, clusterState, allConcreteIndicesNames));

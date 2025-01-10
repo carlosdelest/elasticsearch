@@ -1,4 +1,5 @@
 import groovy.lang.Closure
+import org.elasticsearch.gradle.internal.idea.EnablePreviewFeaturesTask
 import org.gradle.plugins.ide.idea.model.IdeaModel
 import org.jetbrains.gradle.ext.CopyrightConfiguration
 import org.jetbrains.gradle.ext.IdeaExtPlugin
@@ -32,9 +33,7 @@ plugins.withType<IdeaExtPlugin> {
     copyright.useDefault = "confidential"
     copyright.scopes = mapOf("x-pack" to "Elastic", "llrc" to "Apache2", "elasticsearch" to "Default")
 
-    tasks.named("enablePreviewFeatures") {
-        fun enablePreview(moduleFile: String, languageLevel: String) = (extra.get("enablePreview") as Closure<*>).call(moduleFile, languageLevel)
-
+    tasks.named<EnablePreviewFeaturesTask>("enablePreviewFeatures") {
         doLast {
             enablePreview(".idea/modules/elasticsearch/libs/native/elasticsearch.libs.native.main.iml", "JDK_21_PREVIEW")
             enablePreview(".idea/modules/elasticsearch/libs/native/elasticsearch.libs.native.test.iml", "JDK_21_PREVIEW")

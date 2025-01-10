@@ -324,6 +324,87 @@ public class SigtermShutdownCleanupServiceTests extends ESTestCase {
         );
     }
 
+    public void testScheduleCleanForNullEphemeralId() {
+        var mocks = newMocks();
+        when(mocks.threadPool.absoluteTimeInMillis()).thenReturn(120_000L);
+        var taskQueue = newMockTaskQueue(mocks.clusterService);
+        var sigtermShutdownService = new SigtermShutdownCleanupService(mocks.clusterService, mocks.rerouteService);
+
+        var master = createDiscoveryNode("node1");
+        var other = createDiscoveryNode("node2");
+
+        var shutdowns = new NodesShutdownMetadata(
+            Map.of(
+                other.getId(),
+                // Create the shutdown record without specifying the ephemeralId. This can happen for nodes on old versions
+                // or on edge cases where the node leaves the cluster before the shutdown record can be created
+                SingleNodeShutdownMetadata.builder()
+                    .setNodeId(other.getId())
+                    .setType(SingleNodeShutdownMetadata.Type.SIGTERM)
+                    .setGracePeriod(new TimeValue(GRACE_PERIOD))
+                    .setReason("test")
+                    .setStartedAtMillis(20L)
+                    .build()
+            )
+        );
+        sigtermShutdownService.clusterChanged(
+            new ClusterChangedEvent(
+                this.getTestName(),
+                createClusterState(shutdowns, master, other),
+                createClusterState(null, master, other)
+            )
+        );
+
+        assertThat(sigtermShutdownService.cleanups.values(), hasSize(1));
+
+        var schedule = verifySchedule(mocks.threadPool, 1);
+        schedule.shutdown.get(0).run();
+
+        // Callable removes itself
+        assertThat(sigtermShutdownService.cleanups.values(), hasSize(0));
+
+        // Callable submits task
+        Mockito.verify(taskQueue, times(1))
+            .submitTask(eq("sigterm-grace-period-expired"), any(SigtermShutdownCleanupService.CleanupSigtermShutdownTask.class), isNull());
+    }
+
+    public void testCleanUpShutdownForNullEphemeralId() {
+        var mocks = newMocks();
+        newMockTaskQueue(mocks.clusterService);
+        long grace = GRACE_PERIOD;
+        long now = grace * 1_000;
+        when(mocks.threadPool.absoluteTimeInMillis()).thenReturn(now);
+
+        var master = createDiscoveryNode("node1");
+        var other = createDiscoveryNode("node2");
+        var otherNode = new Node(other.getId(), null);
+        var shutdowns = new NodesShutdownMetadata(
+            Map.of(
+                other.getId(),
+                // Create the shutdown record without specifying the ephemeralId. This can happen for nodes on old versions
+                // or on edge cases where the node leaves the cluster before the shutdown record can be created
+                SingleNodeShutdownMetadata.builder()
+                    .setNodeId(other.getId())
+                    .setType(SingleNodeShutdownMetadata.Type.SIGTERM)
+                    .setGracePeriod(new TimeValue(grace))
+                    .setReason("test")
+                    .setStartedAtMillis(now - 10 * grace)
+                    .build()
+            )
+        );
+        var removedShutdown = RemoveSigtermShutdownTaskExecutor.cleanupSigtermShutdowns(
+            Set.of(otherNode),
+            createClusterState(shutdowns, master)
+        );
+        assertThat(removedShutdown.metadata().nodeShutdowns().getAll().values(), hasSize(0));
+
+        var shutdownAlreadyRemoved = createClusterState(new NodesShutdownMetadata(Collections.emptyMap()), master);
+        assertThat(
+            RemoveSigtermShutdownTaskExecutor.cleanupSigtermShutdowns(Set.of(otherNode), shutdownAlreadyRemoved),
+            sameInstance(shutdownAlreadyRemoved)
+        );
+    }
+
     public void testNonSigtermShutdown() {
         var mocks = newMocks();
         newMockTaskQueue(mocks.clusterService);

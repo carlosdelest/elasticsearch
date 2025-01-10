@@ -31,6 +31,7 @@ import org.junit.ClassRule;
 import java.io.IOException;
 import java.util.List;
 
+import static org.elasticsearch.wipe.cli.WipeDataOperation.NOOP_ON_BATCH_DELETED;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.emptyString;
@@ -84,7 +85,7 @@ public class S3WipeDataIT extends ESTestCase {
             s3Client,
             bucket,
             path + "/outsideCommonPrefix",
-            S3WipeDataOperation.NOOP_ON_BATCH_DELETED
+            NOOP_ON_BATCH_DELETED
         );
         cleanupOutside.deleteBlobs();
 
@@ -106,12 +107,7 @@ public class S3WipeDataIT extends ESTestCase {
         assertThat(blobNames, hasSize(10 + 1)); // 10 in the common prefix and one outside
 
         // delete everything in the common prefix
-        S3WipeDataOperation operation = new S3WipeDataOperation(
-            s3Client,
-            bucket,
-            path + "/" + commonPrefix,
-            S3WipeDataOperation.NOOP_ON_BATCH_DELETED
-        );
+        S3WipeDataOperation operation = new S3WipeDataOperation(s3Client, bucket, path + "/" + commonPrefix, NOOP_ON_BATCH_DELETED);
         operation.deleteBlobs();
 
         // everything in the common prefix should be gone, but nothing outside the common prefix

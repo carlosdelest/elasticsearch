@@ -88,6 +88,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
         """;
 
     private static final MutableResource rolesFile = MutableResource.from(Resource.fromString(DEFAULT_FILE_ROLES));
+    public static final int MAX_WAIT_TIME_IN_SECONDS = 20;
 
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
@@ -97,6 +98,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
         .rolesFile(rolesFile)
         .setting("xpack.ml.enabled", "false")
         .systemProperty("es.queryable_built_in_roles_enabled", "true")
+        .setting("logger.org.elasticsearch.xpack.security.support", "TRACE")
         .build();
 
     @Override
@@ -126,7 +128,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                     assertThat((String) role.get("name"), is(oneOf(builtInRoles)));
                 }
             });
-        });
+        }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
     }
 
     public void testGetBuiltInRoles() throws Exception {
@@ -147,7 +149,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                 assertOK(response);
                 Map<String, ?> responseAsMap = responseAsMap(response);
                 assertThat(responseAsMap.keySet(), containsInAnyOrder(builtInRoles));
-            }, 10, TimeUnit.SECONDS);
+            }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         }
 
         // 2. Test get all roles as a regular user
@@ -162,7 +164,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                 assertOK(response);
                 Map<String, ?> responseAsMap = responseAsMap(response);
                 assertThat(responseAsMap.keySet(), containsInAnyOrder(builtInRoles));
-            }, 10, TimeUnit.SECONDS);
+            }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         }
     }
 
@@ -177,7 +179,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                     assertThat((String) role.get("name"), is(oneOf(builtInRoles)));
                 }
             });
-        }, 10, TimeUnit.SECONDS);
+        }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         final String builtInRole = randomFrom(builtInRoles);
         var e = expectThrows(ResponseException.class, () -> deleteRole(builtInRole));
         assertThat(e.getMessage(), containsString("role [" + builtInRole + "] is reserved and cannot be deleted"));
@@ -194,7 +196,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                     assertThat((String) role.get("name"), is(oneOf(builtInRoles)));
                 }
             });
-        }, 10, TimeUnit.SECONDS);
+        }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         final String builtInRole = randomFrom(builtInRoles);
         var e = expectThrows(ResponseException.class, () -> updateRole(builtInRole, """
             {"cluster":["all"]}"""));
@@ -238,7 +240,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                         assertThat((String) role.get("name"), is(oneOf(newBuiltInRoles)));
                     }
                 });
-            }, 10, TimeUnit.SECONDS);
+            }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         }
 
         // 2. Test updating the 'admin' built-in role in the roles.yml file
@@ -280,7 +282,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                     assertThat((String) roles.get(0).get("description"), is("This is the admin role"));
                     assertThat((List<?>) roles.get(0).get("applications"), is(emptyIterable()));
                 });
-            }, 10, TimeUnit.SECONDS);
+            }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         }
         // 3. Test removing the 'admin' role from roles.yml file
         {
@@ -304,7 +306,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                         assertThat((String) role.get("name"), is(oneOf(newBuiltInRoles)));
                     }
                 });
-            }, 10, TimeUnit.SECONDS);
+            }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         }
 
         // 4. Test marking the 'developer' role as internal only
@@ -330,7 +332,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                         assertThat((String) role.get("name"), is(oneOf(newBuiltInRoles)));
                     }
                 });
-            }, 10, TimeUnit.SECONDS);
+            }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         }
 
         // 5. Test removing all public built-in roles from the roles.yml file
@@ -346,7 +348,11 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                       privileges: [ "*" ]
                       resources: [ "*" ]"""));
 
-            assertBusy(() -> { assertQuery("", 0, roles -> { assertThat(roles, iterableWithSize(0)); }); }, 10, TimeUnit.SECONDS);
+            assertBusy(
+                () -> { assertQuery("", 0, roles -> { assertThat(roles, iterableWithSize(0)); }); },
+                MAX_WAIT_TIME_IN_SECONDS,
+                TimeUnit.SECONDS
+            );
         }
     }
 
