@@ -20,6 +20,7 @@ import co.elastic.elasticsearch.serverless.security.apikey.ServerlessBulkUpdateA
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessCreateApiKeyRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessGrantApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessUpdateApiKeyRequestTranslator;
+import co.elastic.elasticsearch.serverless.security.authc.saml.MultiProjectSamlAuthExtension;
 import co.elastic.elasticsearch.serverless.security.authz.ServerlessAuthorizationDenialMessages;
 import co.elastic.elasticsearch.serverless.security.logging.ServerlessUserLoggingDataProvider;
 import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorOnlyRegistry;
@@ -30,6 +31,7 @@ import co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuil
 import co.elastic.elasticsearch.serverless.security.role.ServerlessReservedRoleNameChecker;
 import co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator;
 
+import org.elasticsearch.xpack.core.security.SecurityExtension;
 import org.elasticsearch.xpack.core.security.action.apikey.BulkUpdateApiKeyRequestTranslator;
 import org.elasticsearch.xpack.core.security.action.apikey.CreateApiKeyRequestBuilderFactory;
 import org.elasticsearch.xpack.core.security.action.apikey.UpdateApiKeyRequestTranslator;
@@ -50,6 +52,7 @@ module org.elasticsearch.internal.security {
     requires org.elasticsearch.xcontent;
     requires org.apache.logging.log4j;
     requires org.elasticsearch.security;
+    requires org.opensaml.security;
 
     exports co.elastic.elasticsearch.serverless.security.apikey to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.operator to org.elasticsearch.server;
@@ -57,7 +60,9 @@ module org.elasticsearch.internal.security {
     exports co.elastic.elasticsearch.serverless.security.privilege to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.authz to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.logging to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.serverless.security.authc.saml to org.elasticsearch.server;
 
+    provides SecurityExtension with MultiProjectSamlAuthExtension;
     provides RestGrantApiKeyAction.RequestTranslator with ServerlessGrantApiKeyRequestTranslator;
     provides UpdateApiKeyRequestTranslator with ServerlessUpdateApiKeyRequestTranslator;
     provides BulkUpdateApiKeyRequestTranslator with ServerlessBulkUpdateApiKeyRequestTranslator;
