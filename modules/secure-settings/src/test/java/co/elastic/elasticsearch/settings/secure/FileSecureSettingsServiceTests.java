@@ -108,6 +108,17 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
         assertTrue(secureSettingsFile.endsWith("secrets.json"));
     }
 
+    public void testUnrelatedFile() throws Exception {
+        FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
+        Path otherFile = fileSecureSettingsService.watchedFile().resolveSibling("unrelated.json");
+
+        writeTestFile(otherFile, WITH_STRING_SECRET);
+
+        fileSecureSettingsService.processFileChanges(otherFile);    // should not do anything
+        verify(updateQueue, never()).submitTask(any(), any(), any());
+        verify(errorQueue, never()).submitTask(any(), any(), any());
+    }
+
     public void testValidSetting() throws Exception {
         // we need the secure setting defined to pass validation
         when(clusterService.getClusterSettings()).thenReturn(
@@ -118,7 +129,7 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
         writeTestFile(fileSecureSettingsService.watchedFile(), WITH_STRING_SECRET);
 
-        fileSecureSettingsService.processFileChanges();
+        fileSecureSettingsService.processFileChanges(fileSecureSettingsService.watchedFile());
 
         ArgumentCaptor<ClusterStateTaskListener> taskCapture = ArgumentCaptor.forClass(ClusterStateTaskListener.class);
         verify(updateQueue, times(1)).submitTask(any(), taskCapture.capture(), any());
@@ -136,7 +147,7 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
 
         writeTestFile(fileSecureSettingsService.watchedFile(), WITH_STRING_SECRET);
-        fileSecureSettingsService.processFileChanges();
+        fileSecureSettingsService.processFileChanges(fileSecureSettingsService.watchedFile());
 
         ArgumentCaptor<ClusterStateTaskListener> taskCapture = ArgumentCaptor.forClass(ClusterStateTaskListener.class);
         verify(errorQueue, times(1)).submitTask(any(), taskCapture.capture(), any());
@@ -158,7 +169,7 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
 
         writeTestFile(fileSecureSettingsService.watchedFile(), "{");
-        fileSecureSettingsService.processFileChanges();
+        fileSecureSettingsService.processFileChanges(fileSecureSettingsService.watchedFile());
 
         ArgumentCaptor<ClusterStateTaskListener> taskCapture = ArgumentCaptor.forClass(ClusterStateTaskListener.class);
         verify(errorQueue, times(1)).submitTask(any(), taskCapture.capture(), any());
@@ -178,7 +189,7 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
 
         writeTestFile(fileSecureSettingsService.watchedFile(), INVALID_KEY_METADATA);
-        fileSecureSettingsService.processFileChanges();
+        fileSecureSettingsService.processFileChanges(fileSecureSettingsService.watchedFile());
 
         ArgumentCaptor<ClusterStateTaskListener> taskCapture = ArgumentCaptor.forClass(ClusterStateTaskListener.class);
         verify(errorQueue, times(1)).submitTask(any(), taskCapture.capture(), any());
@@ -205,7 +216,7 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
         writeTestFile(fileSecureSettingsService.watchedFile(), WITH_STRING_SECRET);
 
         // process the task
-        fileSecureSettingsService.processFileChanges();
+        fileSecureSettingsService.processFileChanges(fileSecureSettingsService.watchedFile());
 
         ArgumentCaptor<ClusterStateTaskListener> updateTaskCapture = ArgumentCaptor.forClass(ClusterStateTaskListener.class);
         verify(updateQueue, times(1)).submitTask(any(), updateTaskCapture.capture(), any());
@@ -248,7 +259,7 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
                 .putCustom(ClusterStateSecretsMetadata.TYPE, metadata)
                 .build()
         );
-        fileSecureSettingsService.processFileChanges();
+        fileSecureSettingsService.processFileChanges(fileSecureSettingsService.watchedFile());
         verify(updateQueue, times(updateQueueEvents)).submitTask(any(), any(), any());
         verify(errorQueue, times(errorQueueEvents)).submitTask(any(), any(), any());
     }
