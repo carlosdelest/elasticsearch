@@ -102,12 +102,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessCompletionsPostingExtensionRollingUpgradeIT
   method: testClusterUpgrade {upgradedNodes=4}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3327
-- class: org.elasticsearch.xpack.esql.qa.single_node.RestEsqlIT
-  method: testProfile {ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3344
-- class: org.elasticsearch.xpack.esql.qa.single_node.RestEsqlIT
-  method: testProfile {SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3346
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {stats.DocsStatsSumNestedExpression ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3347
