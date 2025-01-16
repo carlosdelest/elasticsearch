@@ -34,3 +34,34 @@ steps:
             EC_REGION: aws-eu-west-1
             RETRY_TESTS_ON_FAIL: "true"
           message: "${BUILDKITE_MESSAGE} (triggered by Elasticsearch QA quality gate)"
+      - label: ":hourglass: Wait 30 minutes for environment health metrics"
+        soft_fail: true
+        key: bake_period
+        command: ".buildkite/scripts/baking-period.sh"
+        env:
+          GATE_WAIT_PERIOD: ${QA_GATE_WAIT_PERIOD:-1800}
+      - label: ":pipeline: Trigger Elasticsearch observability checks in QA"
+        depends_on: bake_period
+        trigger: serverless-quality-gates
+        soft_fail: true
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          env:
+            TARGET_ENV: qa
+            SERVICE: elasticsearch
+            SERVICE_REPOSITORY: docker.elastic.co/elasticsearch-ci/elasticsearch-serverless
+            SERVICE_VERSION: ${SERVICE_VERSION:0:12}
+            SERVICE_TYPE_FIELD: data_stream.dataset
+            ELASTICSEARCH_CHECK_LOG_ERROR_RATE: true
+            MAX_ERROR_PERCENT: 0.2
+            LOG_LEVEL_ERROR_VALUE: ERROR
+            CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
+            MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 0.15
+            EXCLUDE_TESTING_CHANNELS: true
+            QUERY_WINDOW: 30m
+            CHECK_ALERTS: true
+            CHECK_SLO: true
+            CHECK_SLO_TAG: "quality-gate"
+            CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
+            CHECK_ALERTS_TRANSIENT_LOOKBACK: 30m # 30 minutes is the default lookback for transient alerts
+            DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}
