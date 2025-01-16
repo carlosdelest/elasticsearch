@@ -27,6 +27,7 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.env.NodeEnvironment;
+import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.monitor.fs.FsService;
@@ -145,21 +146,33 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     record SPMinInfo(long provisionedMemory, long spMin, double storageRamRatio) {};
 
     static class SPMinProvisionedMemoryProvider implements Function<SampledClusterMetrics, SPMinInfo> {
+        private final SystemIndices systemIndices;
         private final long provisionedStorage;
         private final long provisionedRAM;
         private volatile long searchPowerMin;
 
-        SPMinProvisionedMemoryProvider(ClusterService clusterService, long provisionedStorage, long provisionedRAM) {
+        SPMinProvisionedMemoryProvider(
+            ClusterService clusterService,
+            SystemIndices systemIndices,
+            long provisionedStorage,
+            long provisionedRAM
+        ) {
             assert provisionedStorage > 0;
             assert provisionedRAM > 0;
+            this.systemIndices = systemIndices;
             this.provisionedStorage = provisionedStorage;
             this.provisionedRAM = provisionedRAM;
             clusterService.getClusterSettings().initializeAndWatch(SEARCH_POWER_MIN_SETTING, v -> this.searchPowerMin = v);
         }
 
-        public static Function<SampledClusterMetrics, SPMinInfo> build(ClusterService clusterService, NodeEnvironment nodeEnvironment) {
+        public static Function<SampledClusterMetrics, SPMinInfo> build(
+            ClusterService clusterService,
+            SystemIndices systemIndices,
+            NodeEnvironment nodeEnvironment
+        ) {
             return build(
                 clusterService,
+                systemIndices,
                 () -> new FsService(clusterService.getSettings(), nodeEnvironment).stats().getTotal().getTotal().getBytes(),
                 () -> OsProbe.getInstance().getTotalPhysicalMemorySize()
             );
@@ -167,6 +180,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
 
         static Function<SampledClusterMetrics, SPMinInfo> build(
             ClusterService clusterService,
+            SystemIndices systemIndices,
             Supplier<Long> storageSupplier,
             Supplier<Long> ramSupplier
         ) {
@@ -188,7 +202,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
                 return errorProvider("provisionedRAM must be greater than zero, but values is: " + provisionedRAM);
             }
 
-            return new SPMinProvisionedMemoryProvider(clusterService, provisionedStorage, provisionedRAM);
+            return new SPMinProvisionedMemoryProvider(clusterService, systemIndices, provisionedStorage, provisionedRAM);
         }
 
         private static Function<SampledClusterMetrics, SPMinInfo> errorProvider(String message) {
@@ -203,8 +217,11 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             long spMin = searchPowerMin;
             long boostedDataSetSize = 0;
             long totalDataSetSize = 0;
-            for (var sample : currentInfo.shardSamples().values()) {
-                var shardInfo = sample.shardInfo();
+            for (var entry : currentInfo.shardSamples().entrySet()) {
+                if (systemIndices.isSystemIndex(entry.getKey().indexName())) {
+                    continue; // temporarily skip system indices until VCU for inactivity is reported by index
+                }
+                var shardInfo = entry.getValue().shardInfo();
                 boostedDataSetSize += shardInfo.interactiveSizeInBytes();
                 totalDataSetSize += shardInfo.totalSizeInBytes();
             }

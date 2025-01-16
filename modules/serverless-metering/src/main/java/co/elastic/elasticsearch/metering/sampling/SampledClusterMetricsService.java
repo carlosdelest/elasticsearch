@@ -272,10 +272,11 @@ public class SampledClusterMetricsService {
         return new SampledStorageMetricsProvider(this, clusterService, systemIndices);
     }
 
-    public SampledVCUMetricsProvider createSampledVCUMetricsProvider(NodeEnvironment nodeEnvironment) {
+    public SampledVCUMetricsProvider createSampledVCUMetricsProvider(NodeEnvironment nodeEnvironment, SystemIndices systemIndices) {
         var coolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
         var spMinProvisionedMemoryProvider = SampledVCUMetricsProvider.SPMinProvisionedMemoryProvider.build(
             clusterService,
+            systemIndices,
             nodeEnvironment
         );
         return new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryProvider, meterRegistry);
