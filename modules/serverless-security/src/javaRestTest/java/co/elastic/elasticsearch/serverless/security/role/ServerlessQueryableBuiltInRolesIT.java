@@ -65,6 +65,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
             resources: [ "*" ]
           metadata:
             _public: true
+            _reserved: true
         viewer:
           cluster: [ "manage_own_api_key" ]
           indices:
@@ -76,6 +77,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
             resources: [ "*" ]
           metadata:
             _public: true
+            _reserved: true
         _operator_internal_only:
           cluster: [ "all" ]
           indices:
@@ -85,6 +87,8 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
             - application: "*"
               privileges: [ "*" ]
               resources: [ "*" ]
+          metadata:
+            _reserved: true
         """;
 
     private static final MutableResource rolesFile = MutableResource.from(Resource.fromString(DEFAULT_FILE_ROLES));

@@ -46,6 +46,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
+import static org.elasticsearch.xpack.core.security.support.MetadataUtils.RESERVED_METADATA_KEY;
 
 /**
  * Contains the logic used for validating roles, both Custom (user-provided) and Predefined (Elastic-provided via File config).
@@ -57,7 +58,7 @@ public final class ServerlessRoleValidator implements FileRoleValidator {
     static final Set<String> SUPPORTED_APPLICATION_NAMES = Set.of("apm", "fleet", "kibana-.kibana");
     static final String RESERVED_ROLE_NAME_PREFIX = "_";
     static final String PUBLIC_METADATA_KEY = MetadataUtils.RESERVED_PREFIX + "public";
-    static final Set<String> PREDEFINED_ROLE_METADATA_ALLOWLIST = Set.of(PUBLIC_METADATA_KEY);
+    static final Set<String> PREDEFINED_ROLE_METADATA_ALLOWLIST = Set.of(PUBLIC_METADATA_KEY, RESERVED_METADATA_KEY);
 
     static final int MIN_ROLE_NAME_LENGTH = 1;
     static final int MAX_ROLE_NAME_LENGTH = NativeRealmValidationUtil.MAX_NAME_LENGTH;
