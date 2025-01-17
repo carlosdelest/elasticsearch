@@ -126,3 +126,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testRolesFileUpdateTriggersRolesSynchronization
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3384
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {stats.DocsStatsSumNestedExpression ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3347
