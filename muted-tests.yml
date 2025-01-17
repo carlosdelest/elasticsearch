@@ -123,3 +123,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {stats.DocsStatsSumNestedExpression SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3370
+- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
+  method: testRolesFileUpdateTriggersRolesSynchronization
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3384
