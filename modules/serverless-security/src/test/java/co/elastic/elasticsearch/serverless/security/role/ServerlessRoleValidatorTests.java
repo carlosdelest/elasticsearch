@@ -43,6 +43,7 @@ import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleVa
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.RESERVED_ROLE_NAME_PREFIX;
 import static co.elastic.elasticsearch.serverless.security.role.ServerlessRoleValidator.SUPPORTED_APPLICATION_NAMES;
 import static com.carrotsearch.randomizedtesting.RandomizedTest.randomAsciiAlphanumOfLengthBetween;
+import static org.elasticsearch.xpack.core.security.support.MetadataUtils.RESERVED_METADATA_KEY;
 import static org.elasticsearch.xpack.core.security.support.Validation.Roles.MAX_DESCRIPTION_LENGTH;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -67,7 +68,13 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
 
     public void testValidPublicPredefinedRole() {
         final ServerlessRoleValidator validator = new ServerlessRoleValidator();
-        var role = randomRoleDescriptor(true, false, true, Map.of(PUBLIC_METADATA_KEY, true));
+        var role = randomRoleDescriptor(true, false, true, Map.of(PUBLIC_METADATA_KEY, true, RESERVED_METADATA_KEY, true));
+        assertThat(validator.validatePredefinedRole(role), is(nullValue()));
+    }
+
+    public void testValidNonPublicPredefinedRole() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        var role = randomRoleDescriptor(true, false, true, Map.of(RESERVED_METADATA_KEY, true));
         assertThat(validator.validatePredefinedRole(role), is(nullValue()));
     }
 
@@ -76,6 +83,16 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
         var role = randomRoleDescriptor(true, false, true, Map.of(PUBLIC_METADATA_KEY, true));
         var ex = validator.validateCustomRole(role);
         assertThat(ex.getMessage(), containsString("role descriptor metadata keys may not start with [_] but found these keys: [_public]"));
+    }
+
+    public void testValidCustomRoleCannotHaveReservedMetadataFlag() {
+        final ServerlessRoleValidator validator = new ServerlessRoleValidator();
+        var role = randomRoleDescriptor(true, false, true, Map.of(RESERVED_METADATA_KEY, true));
+        var ex = validator.validateCustomRole(role);
+        assertThat(
+            ex.getMessage(),
+            containsString("role descriptor metadata keys may not start with [_] but found these keys: [_reserved]")
+        );
     }
 
     public void testNonpublicPredefinedRoleNotLimited() {
@@ -95,7 +112,7 @@ public class ServerlessRoleValidatorTests extends ESTestCase {
             null,
             null,
             null,
-            Map.of(),
+            Map.of(RESERVED_METADATA_KEY, true),
             Map.of(),
             null,
             null,

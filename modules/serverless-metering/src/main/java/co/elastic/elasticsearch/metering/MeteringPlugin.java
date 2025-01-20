@@ -116,7 +116,6 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
     private final boolean hasIndexRole;
     public final SetOnce<List<ActionFilter>> actionFilters = new SetOnce<>();
     private volatile IngestMetricsProvider ingestMetricsProvider;
-    private volatile SystemIndices systemIndices;
 
     public MeteringPlugin(Settings settings) {
         this.hasIndexRole = DiscoveryNode.hasRole(settings, DiscoveryNodeRole.INDEX_ROLE);
@@ -157,8 +156,8 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
 
     @Override
     public Collection<?> createComponents(PluginServices services) {
-        this.systemIndices = services.systemIndices();
         ClusterService clusterService = services.clusterService();
+        SystemIndices systemIndices = services.systemIndices();
         ThreadPool threadPool = services.threadPool();
         Environment environment = services.environment();
         NodeEnvironment nodeEnvironment = services.nodeEnvironment();
@@ -196,7 +195,7 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
             // required on search nodes only according to the persistent task node assignment, see
             // SampledClusterMetricsSchedulingTaskExecutor#getNodeAssignment
             sampledMetrics.add(clusterMetricsService.createSampledStorageMetricsProvider(systemIndices));
-            sampledMetrics.add(clusterMetricsService.createSampledVCUMetricsProvider(nodeEnvironment));
+            sampledMetrics.add(clusterMetricsService.createSampledVCUMetricsProvider(nodeEnvironment, systemIndices));
         } else if (hasIndexRole) {
             // ingest metrics are only available on index nodes
             ingestMetricsProvider = new IngestMetricsProvider(nodeEnvironment.nodeId(), clusterStateSupplier, systemIndices);
@@ -287,7 +286,7 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
     @Override
     public DocumentParsingProvider getDocumentParsingProvider() {
         return hasIndexRole
-            ? new MeteringDocumentParsingProvider(isRaStorageMeteringEnabled(projectType), () -> ingestMetricsProvider, () -> systemIndices)
+            ? new MeteringDocumentParsingProvider(isRaStorageMeteringEnabled(projectType), () -> ingestMetricsProvider)
             : DocumentParsingProvider.EMPTY_INSTANCE;
     }
 

@@ -27,6 +27,7 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.NodeEnvironment;
+import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
@@ -69,11 +70,13 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
     private static final long DEFAULT_SP_MIN = 100;
     private ClusterService clusterService;
+    private SystemIndices systemIndices;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         clusterService = mockClusterService(true);
+        systemIndices = mock();
     }
 
     private void setMetricsServiceData(
@@ -338,25 +341,35 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
     }
 
     public void testSpMinProvisionedMemoryBadValue() {
-        var provider = SPMinProvisionedMemoryProvider.build(clusterService, () -> randomNonNegativeLong(), () -> randomLongBetween(-5, 0));
+        var provider = SPMinProvisionedMemoryProvider.build(
+            clusterService,
+            systemIndices,
+            () -> randomNonNegativeLong(),
+            () -> randomLongBetween(-5, 0)
+        );
         assertThat(provider.apply(null), nullValue());
     }
 
     public void testSpMinProvisionedMemoryStorageBadValue() {
-        var provider = SPMinProvisionedMemoryProvider.build(clusterService, () -> randomLongBetween(-5, 0), () -> randomNonNegativeLong());
+        var provider = SPMinProvisionedMemoryProvider.build(
+            clusterService,
+            systemIndices,
+            () -> randomLongBetween(-5, 0),
+            () -> randomNonNegativeLong()
+        );
         assertThat(provider.apply(null), nullValue());
     }
 
     public void testSpMinProvisionedMemoryNotSearchNode() {
         var clusterService = mockClusterService(false);
-        var provider = SPMinProvisionedMemoryProvider.build(clusterService, (NodeEnvironment) null);
+        var provider = SPMinProvisionedMemoryProvider.build(clusterService, systemIndices, (NodeEnvironment) null);
         assertThat(provider.apply(null), nullValue());
     }
 
     public void testSpMinProvisionedMemoryNoShardsReturn0() {
         var clusterService = mockClusterService(true);
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, Map.of(), Set.of());
-        var provider = new SPMinProvisionedMemoryProvider(clusterService, 10, 10);
+        var provider = new SPMinProvisionedMemoryProvider(clusterService, systemIndices, 10, 10);
         assertThat(provider.apply(current).provisionedMemory(), equalTo(0L));
     }
 
@@ -416,6 +429,32 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         assertThat(getSPMinProvisionedMemory(null, 100, 200, 2000, 1000), equalTo(52L));
     }
 
+    public void testSpMinProvisionedMemorySkipSystemIndices() {
+        var clusterService = mockClusterService(true);
+        when(systemIndices.isSystemIndex("my_system_index")).thenReturn(true);
+
+        var shardSamples = Map.of(
+            new SampledClusterMetricsService.ShardKey("regular_index", 0),
+            randomShardSample(500, 1000),
+            new SampledClusterMetricsService.ShardKey("my_system_index", 0),
+            randomShardSample(200, 200)
+
+        );
+        var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
+
+        long provisionedRam = 1000;
+        long storageRamRatio = 10;
+        long provisionedStorage = storageRamRatio * provisionedRam;
+        var provider = new SPMinProvisionedMemoryProvider(clusterService, systemIndices, provisionedStorage, provisionedRam);
+
+        // basePower = 0.05, since default SPMin is 100
+        // boostPower = 0.95, SPMin/100 - basePower
+        // cacheSize = 525, boostSize * boostPower + totalSize * basePower
+        double cacheSize = 500 * 0.95 + 1000 * 0.05;
+        double expectSPMinRam = cacheSize / storageRamRatio;
+        assertThat((double) provider.apply(current).provisionedMemory(), closeTo(expectSPMinRam, 1.0));
+    }
+
     public void testSpMinProvisionedMemoryLotsOfShards() {
         var clusterService = mockClusterService(true);
 
@@ -436,7 +475,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         long provisionedRam = between(1, 1000);
         long storageRamRatio = between(1, 10);
         long provisionedStorage = storageRamRatio * provisionedRam;
-        var provider = new SPMinProvisionedMemoryProvider(clusterService, provisionedStorage, provisionedRam);
+        var provider = new SPMinProvisionedMemoryProvider(clusterService, systemIndices, provisionedStorage, provisionedRam);
 
         // basePower = 0.05, since default SPMin is 100
         // boostPower = 0.95, SPMin/100 - basePower
@@ -456,7 +495,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         var clusterService = mockClusterService(true, spMin);
         var shardSamples = Map.of(randomShardKey(), randomShardSample(interactiveSize, totalSize));
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
-        var provider = new SPMinProvisionedMemoryProvider(clusterService, provisionedStorage, provisionedRam);
+        var provider = new SPMinProvisionedMemoryProvider(clusterService, systemIndices, provisionedStorage, provisionedRam);
         return provider.apply(current).provisionedMemory();
     }
 

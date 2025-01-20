@@ -191,7 +191,7 @@ public class IngestWithRejectionMeteringIT extends AbstractMeteringIntegTestCase
     private long meterDocument() {
         try {
             BytesReference bytesReference = XContentTestUtils.convertToXContent(documentSource(), XContentType.JSON);
-            MeteringDocumentParsingProvider provider = new MeteringDocumentParsingProvider(false, Mockito::mock, Mockito::mock);
+            MeteringDocumentParsingProvider provider = new MeteringDocumentParsingProvider(false, Mockito::mock);
             XContentMeteringParserDecorator meteringParserDecorator = provider.newMeteringParserDecorator(new IndexRequest());
 
             XContentHelper.convertToMap(bytesReference, false, XContentType.JSON, meteringParserDecorator).v2();

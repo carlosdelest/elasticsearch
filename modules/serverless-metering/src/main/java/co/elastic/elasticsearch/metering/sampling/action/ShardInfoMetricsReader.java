@@ -279,9 +279,6 @@ interface ShardInfoMetricsReader {
             Set<ShardId> activeShards = new HashSet<>();
             for (final IndexService indexService : indicesService) {
                 for (final IndexShard shard : indexService) {
-                    if (shard.isSystem()) {
-                        continue;
-                    }
                     shardInfoShardsTotalCounter.increment();
 
                     ShardId shardId = shard.shardId();

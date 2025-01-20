@@ -66,7 +66,7 @@ public class CoreServerlessLocalClusterSpecBuilder extends AbstractLocalClusterS
             .setting(
                 "ingest.geoip.downloader.enabled",
                 () -> "false",
-                s -> s.getModules().contains("ingest-geoip") || s.getDistributionType() == DistributionType.DEFAULT
+                s -> s.getModules().containsKey("ingest-geoip") || s.getDistributionType() == DistributionType.DEFAULT
             )
             .setting("xpack.ml.enabled", () -> "false", s -> s.getDistributionType() == DistributionType.INTEG_TEST)
             .setting("serverless.sigterm.poll_interval", "1s")
