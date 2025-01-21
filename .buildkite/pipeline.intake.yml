@@ -16,7 +16,10 @@ steps:
 
   - label: ":git: Validate elasticsearch submodule"
     command: ".buildkite/scripts/validate-submodule.sh"
-    if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check" && build.branch == "main"
+    if: |
+      pipeline.slug != "elasticsearch-serverless-pull-request" &&
+        pipeline.slug != "elasticsearch-serverless-es-pr-check" &&
+        (build.branch == "main" || build.branch == "patch/serverless-fix")
 
   - label: ":git: Build info"
     command: ".buildkite/scripts/show-build-info.sh"
