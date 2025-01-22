@@ -38,7 +38,6 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.ParentTaskAssigningClient;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
@@ -83,7 +82,6 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
         ClusterService clusterService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
         Client client
     ) {
         super(
@@ -94,7 +92,6 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             threadPool,
             actionFilters,
             Request::new,
-            indexNameExpressionResolver,
             Response::new,
             EsExecutors.DIRECT_EXECUTOR_SERVICE
         );
