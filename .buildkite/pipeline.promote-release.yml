@@ -1,3 +1,5 @@
+env:
+  BLOCK_ON_PATCH_BRANCH_NOT_MERGED: ${BLOCK_ON_PATCH_BRANCH_NOT_MERGED:-true}
 steps:
   - label: ":git: Promote release build"
     command: ".buildkite/scripts/promote-release.sh"
