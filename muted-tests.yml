@@ -132,9 +132,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessCompletionsPostingExtensionRollingUpgradeIT
   method: testClusterUpgrade {upgradedNodes=3}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3396
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  method: test {yaml=synonyms/90_synonyms_reloading_for_synset/Check analyzer reloaded and non failed shards for bwc tests}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3397
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {lookup-join.MvJoinKeyOnFrom ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3399
