@@ -91,6 +91,11 @@ public class ServerlessBuildExtension implements BuildExtension {
         }
 
         @Override
+        public BuildVersion minimumCompatibilityVersion() {
+            throw new UnsupportedOperationException("This method shouldn't be called in Serverless");
+        }
+
+        @Override
         public String toNodeMetadata() {
             return "-1";
         }
