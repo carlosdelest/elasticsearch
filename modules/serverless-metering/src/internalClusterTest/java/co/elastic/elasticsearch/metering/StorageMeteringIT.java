@@ -25,6 +25,7 @@ import co.elastic.elasticsearch.serverless.constants.ProjectType;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import co.elastic.elasticsearch.stateless.Stateless;
 import co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingService;
+import co.elastic.elasticsearch.stateless.commits.HollowShardsService;
 import co.elastic.elasticsearch.stateless.commits.StatelessCommitService;
 import co.elastic.elasticsearch.stateless.engine.IndexEngine;
 import co.elastic.elasticsearch.stateless.engine.RefreshThrottler;
@@ -223,6 +224,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
             TranslogReplicator translogReplicator,
             Function<String, BlobContainer> translogBlobContainer,
             StatelessCommitService statelessCommitService,
+            HollowShardsService hollowShardsService,
             SharedBlobCacheWarmingService sharedBlobCacheWarmingService,
             RefreshThrottler.Factory refreshThrottlerFactory,
             DocumentParsingProvider documentParsingProvider,
@@ -233,6 +235,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
                 translogReplicator,
                 translogBlobContainer,
                 statelessCommitService,
+                hollowShardsService,
                 sharedBlobCacheWarmingService,
                 refreshThrottlerFactory,
                 statelessCommitService.getIndexEngineLocalReaderListenerForShard(engineConfig.getShardId()),
