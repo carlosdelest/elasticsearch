@@ -455,7 +455,7 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             equalTo(404)
         );
         assertThat(getRoles(TEST_USER, "custom_role_1", "custom_role_2"), containsInAnyOrder("custom_role_1", "custom_role_2"));
-        assertThat(getRoles(TEST_USER), containsInAnyOrder("custom_role_1", "custom_role_2"));
+        assertThat(getRoles(TEST_USER), containsInAnyOrder("custom_role_1", "custom_role_2", "_public_predefined_role"));
         assertThat(getRoles(TEST_USER, "custom_role_1", randomFrom(RESERVED_ROLES)), containsInAnyOrder("custom_role_1"));
         assertThat(
             expectThrows(ResponseException.class, () -> getRoles(TEST_USER, randomFrom(RESERVED_ROLES))).getResponse()
@@ -473,6 +473,7 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
         assertThat(getRoles(TEST_OPERATOR_USER, "custom_role_1", "custom_role_2"), containsInAnyOrder("custom_role_1", "custom_role_2"));
         final List<String> allRoles = new ArrayList<>(List.of("custom_role_1", "custom_role_2"));
         allRoles.addAll(RESERVED_ROLES);
+        allRoles.add("_public_predefined_role");
         assertThat(getRoles(TEST_OPERATOR_USER), containsInAnyOrder(allRoles.toArray(new String[0])));
         assertThat(getRoles(TEST_OPERATOR_USER, "custom_role_1", "superuser"), containsInAnyOrder("custom_role_1", "superuser"));
         final List<String> reservedRoles = randomNonEmptySubsetOf(RESERVED_ROLES);

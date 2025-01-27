@@ -108,15 +108,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {stats.DocsStatsSumNestedExpression ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3353
-- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
-  method: testUpdateBuiltInRole
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3355
-- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3363
-  methods:
-  - testGetBuiltInRoles
-  - "testDeleteBuiltInRole"
-  - "testQueryBuiltInRoles"
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {stats.DocsStatsSumNestedExpression SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3368
