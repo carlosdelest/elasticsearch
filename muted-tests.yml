@@ -138,3 +138,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test topN functions from profiling-events}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3408
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=profiling/10_basic/Test topN functions from test-events}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3409
