@@ -155,3 +155,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3411
 - class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3415
+- class: co.elastic.elasticsearch.stateless.recovery.BlockRefreshUponIndexCreationIT
+  method: testRefreshesAreBlockedUntilBlockIsRemoved
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3418
