@@ -52,14 +52,9 @@ tests:
   methods:
   - "test {date_nanos.Bucket Date nanos by 10 minutes ASYNC}"
   - "test {date_nanos.Bucket Date nanos by 10 minutes SYNC}"
-- class: "org.elasticsearch.xpack.esql.qa.mixed.FieldExtractorIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2813"
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
   method: "test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/2899"
-- class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
-  method: testTooManyEval
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2929
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test flamegraph from test-events}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2957
@@ -123,12 +118,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessCompletionsPostingExtensionRollingUpgradeIT
   method: testClusterUpgrade {upgradedNodes=3}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3396
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {lookup-join.MvJoinKeyOnFrom ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3399
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {lookup-join.MvJoinKeyOnFrom SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3400
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {date_nanos.Date nanos date extract SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3411
