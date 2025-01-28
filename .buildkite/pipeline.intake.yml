@@ -79,7 +79,7 @@ steps:
     agents:
       image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
       memory: "4G"
-
+      
   - group: ":k8s: Serverless end-to-end tests"
     steps:
       - label: ":aws: :java: Test newly created project"

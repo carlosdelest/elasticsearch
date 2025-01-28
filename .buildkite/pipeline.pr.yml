@@ -50,6 +50,15 @@ steps:
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
 
+  - label: ":pipeline: Trigger Pull Request specific tests"
+    if: pipeline.slug == "elasticsearch-serverless-pull-request" || pipeline.slug == "elasticsearch-serverless-es-pr-check"
+    command: ".buildkite/scripts/run-pull-request-tests.sh"
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
+    agents:
+      image: "docker.elastic.co/ci-agent-images/eck-region/buildkite-agent:1.5"
+      memory: "4G"
+
   - group: ":k8s: Serverless end-to-end tests"
     steps:
       - label: ":aws: :java: Test newly created project"
