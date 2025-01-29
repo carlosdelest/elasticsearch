@@ -26,6 +26,7 @@ import org.elasticsearch.test.cluster.local.LocalNodeSpecBuilder;
 import org.elasticsearch.test.cluster.local.distribution.DistributionType;
 import org.elasticsearch.test.cluster.local.distribution.LocalDistributionResolver;
 import org.elasticsearch.test.cluster.local.distribution.ReleasedDistributionResolver;
+import org.elasticsearch.test.cluster.local.distribution.SnapshotDistributionResolver;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.serverless.distribution.ServerlessDistributionResolver;
 import org.elasticsearch.test.cluster.serverless.local.DefaultLocalServerlessElasticsearchCluster;
@@ -98,7 +99,9 @@ public class CoreServerlessLocalClusterSpecBuilder extends AbstractLocalClusterS
         return new DefaultLocalServerlessElasticsearchCluster(
             this::buildClusterSpec,
             new ServerlessLocalClusterFactory(
-                new ServerlessDistributionResolver(new LocalDistributionResolver(new ReleasedDistributionResolver()))
+                new ServerlessDistributionResolver(
+                    new LocalDistributionResolver(new SnapshotDistributionResolver(new ReleasedDistributionResolver()))
+                )
             )
         );
     }
