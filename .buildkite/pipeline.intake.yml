@@ -11,8 +11,11 @@ env:
 
 steps:
   # TODO: We can remove this step and all of the related if statements once this code has been out for a few days and we can switch the pipeline in catalog-info without breaking all PRs
-  - command: ".buildkite/pipeline.pr.yml.sh | buildkite-agent pipeline upload"
+  - label: "Upload Pipeline: Dynamic pull request pipeline"
+    command: ".buildkite/pipeline.pr.yml.sh | buildkite-agent pipeline upload"
     if: pipeline.slug == "elasticsearch-serverless-pull-request" || pipeline.slug == "elasticsearch-serverless-es-pr-check"
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
 
   - label: ":git: Validate elasticsearch submodule"
     command: ".buildkite/scripts/validate-submodule.sh"

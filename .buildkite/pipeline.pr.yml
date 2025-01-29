@@ -27,6 +27,22 @@ steps:
           context: "elasticsearch-serverless/functional tests"
         if: build.pull_request.id != null
 
+  - label: ":java: Run serverless Elasticsearch functional tests w/ Entitlements"
+    if: |
+      "$ENTITLEMENTS_TESTING_ENABLED" == "true"
+    command: ".buildkite/scripts/run-gradle.sh check -Dtests.upgrade.skip=true -Dtests.jvm.argline='-Des.entitlements.enabled=true'"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-64"
+      image: family/elasticsearch-ubuntu-2022
+      buildDirectory: /dev/shm/bk
+      zones: us-central1-a,us-central1-b,us-central1-c
+    env:
+      GRADLE_MAX_WORKERS: "10"
+    notify:
+      - github_commit_status:
+          context: "elasticsearch-serverless/functional tests with entitlements"
+
   - label: ":pipeline: :arrow_up: Upload upgrade test steps"
     command: ".buildkite/scripts/run-upgrade-tests.sh"
 

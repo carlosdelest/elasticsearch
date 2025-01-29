@@ -15,6 +15,13 @@ if [[ -z "${ELASTICSEARCH_SUBMODULE_COMMIT:-}" && "${BUILDKITE_PIPELINE_SLUG:-}"
     if [[ -n "$COMMIT" && "$COMMIT" != "null" ]]; then
       export ELASTICSEARCH_SUBMODULE_COMMIT="$COMMIT"
     fi
+
+    if [[ ! "${ELASTICSEARCH_PR_NUMBER:-}" ]]; then
+      prNumber=$(echo "$JSON" | jq -r '.linkedStatefulPr')
+      if [[ -n "$prNumber" && "$prNumber" != "null" ]]; then
+        export ELASTICSEARCH_PR_NUMBER="$prNumber"
+      fi
+    fi
   fi
 fi
 

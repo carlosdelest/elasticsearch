@@ -11,7 +11,12 @@ export JAVA_HOME="/${HOME}/.java/${ES_BUILD_JAVA}"
 
 export GH_TOKEN="$VAULT_GITHUB_TOKEN"
 
-if [[ "${USE_GITHUB_CREDENTIALS:-}" == "true" ]]; then
+IS_UPLOAD_STEP=''
+if [[ "${BUILDKITE_LABEL:-}" == *"Pipeline upload"* || "${BUILDKITE_LABEL:-}" == *"Upload Pipeline"* || "${BUILDKITE_LABEL:-}" == *"Run Dynamic Pipeline"* ]]; then
+  IS_UPLOAD_STEP='true'
+fi
+
+if [[ "${USE_GITHUB_CREDENTIALS:-}" == "true" || "${IS_UPLOAD_STEP}" == "true" ]]; then
   GITHUB_TOKEN=$(vault read -field=token secret/ci/elastic-elasticsearch-serverless/github_api_credentials)
   export GITHUB_TOKEN
 fi
@@ -21,6 +26,11 @@ export BUILDKITE_API_TOKEN
 
 source .buildkite/scripts/utils/submodule-commit.sh
 
+if [[ "$IS_UPLOAD_STEP" == "true" ]]; then
+  source .buildkite/scripts/utils/entitlements-testing.sh
+  export ENTITLEMENTS_TESTING_ENABLED
+fi
+
 if [[ "$BUILDKITE_AGENT_META_DATA_PROVIDER" != *"k8s"* ]]; then
   # Run in the background, while the job continues
   nohup .buildkite/scripts/setup-monitoring.sh </dev/null >/dev/null 2>&1 &
@@ -28,7 +38,7 @@ fi
 
 # Initialize the build scan and gobld annotations with empty/open <details> tags
 # This ensures that they are collapsible when they get appended to
-if [[ "${BUILDKITE_LABEL:-}" == *"Pipeline upload"* || "${BUILDKITE_LABEL:-}" == *"Upload Pipeline"* ]]; then
+if [[ "$IS_UPLOAD_STEP" == "true" ]]; then
   cat << EOF | buildkite-agent annotate --context "gradle-build-scans" --style "info"
 <details>
 
