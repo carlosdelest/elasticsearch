@@ -142,3 +142,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testUpdateBuiltInRole
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3436
+- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
+  method: testGetBuiltInRoles
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3437
