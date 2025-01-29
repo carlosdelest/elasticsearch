@@ -339,7 +339,7 @@ spec:
           cronline: "0 4 * * * America/New_York"
           env:
             ELASTIC_SLACK_NOTIFICATIONS_ENABLED: "true"
-            SLACK_NOTIFICATIONS_CHANNEL: "#lucene"
+            SLACK_NOTIFICATIONS_CHANNEL: "#lucene-ci"
             SLACK_NOTIFICATIONS_ALL_BRANCHES: "true"
             ELASTICSEARCH_SUBMODULE_COMMIT: "lucene_snapshot"
 ---
