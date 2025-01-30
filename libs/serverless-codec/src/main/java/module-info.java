@@ -17,6 +17,7 @@
 
 import co.elastic.elasticsearch.serverless.codec.CodecModuleQualifiedExportsService;
 import co.elastic.elasticsearch.serverless.codec.Elasticsearch900Lucene100CompletionPostingsFormat;
+import co.elastic.elasticsearch.serverless.codec.Elasticsearch900Lucene101CompletionPostingsFormat;
 import co.elastic.elasticsearch.serverless.codec.ServerlessCompletionsPostingsFormatExtension;
 
 import org.elasticsearch.internal.CompletionsPostingsFormatExtension;
@@ -35,6 +36,9 @@ module org.elasticsearch.serverless.codec {
         with
             co.elastic.elasticsearch.serverless.codec.ServerlessSharedSettingsExtension;
     provides CompletionsPostingsFormatExtension with ServerlessCompletionsPostingsFormatExtension;
-    provides org.apache.lucene.codecs.PostingsFormat with Elasticsearch900Lucene100CompletionPostingsFormat;
+    provides org.apache.lucene.codecs.PostingsFormat
+        with
+            Elasticsearch900Lucene100CompletionPostingsFormat,
+            Elasticsearch900Lucene101CompletionPostingsFormat;
     provides ModuleQualifiedExportsService with CodecModuleQualifiedExportsService;
 }

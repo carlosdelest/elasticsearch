@@ -1,1 +1,2 @@
 co.elastic.elasticsearch.serverless.codec.Elasticsearch900Lucene100CompletionPostingsFormat
+co.elastic.elasticsearch.serverless.codec.Elasticsearch900Lucene101CompletionPostingsFormat

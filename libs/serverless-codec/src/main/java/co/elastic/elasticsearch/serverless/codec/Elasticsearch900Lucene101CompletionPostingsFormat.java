@@ -17,9 +17,10 @@
 
 package co.elastic.elasticsearch.serverless.codec;
 
-@Deprecated
-public class Elasticsearch900Lucene100CompletionPostingsFormat extends ElasticsearchCompletionPostingsFormat {
-    public Elasticsearch900Lucene100CompletionPostingsFormat() {
-        super("Elasticsearch900Lucene100CompletionPostingsFormat", "Lucene912");
+public class Elasticsearch900Lucene101CompletionPostingsFormat extends ElasticsearchCompletionPostingsFormat {
+    public static final String NAME = "Elasticsearch900Lucene101CompletionPostingsFormat";
+
+    public Elasticsearch900Lucene101CompletionPostingsFormat() {
+        super(NAME, "Lucene101");
     }
 }

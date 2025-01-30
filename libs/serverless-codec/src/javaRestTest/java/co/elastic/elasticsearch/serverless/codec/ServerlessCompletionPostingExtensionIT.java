@@ -51,7 +51,7 @@ public class ServerlessCompletionPostingExtensionIT extends ESRestTestCase {
         .setting("stateless.enabled", "true")
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
-        .setting("logger.co.elastic.elasticsearch.serverless.codec.Elasticsearch900Lucene100CompletionPostingsFormat", "TRACE")
+        .setting("logger.co.elastic.elasticsearch.serverless.codec.ElasticsearchCompletionPostingsFormat", "TRACE")
         .systemProperty("serverless.codec.configurable_completions_postings_enabled", "true")
         .settings(COMPLETION_POSTING_SETTINGS_PROVIDER)
         .user("admin-user", "x-pack-test-password")

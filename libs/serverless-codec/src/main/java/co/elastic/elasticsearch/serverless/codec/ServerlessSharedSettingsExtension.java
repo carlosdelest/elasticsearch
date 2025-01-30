@@ -25,6 +25,6 @@ import java.util.List;
 public class ServerlessSharedSettingsExtension implements SettingsExtension {
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(Elasticsearch900Lucene100CompletionPostingsFormat.COMPLETION_FST_ON_HEAP);
+        return List.of(ElasticsearchCompletionPostingsFormat.COMPLETION_FST_ON_HEAP);
     }
 }
