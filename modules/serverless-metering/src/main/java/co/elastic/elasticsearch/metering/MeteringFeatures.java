@@ -23,8 +23,8 @@ import org.elasticsearch.features.NodeFeature;
 import java.util.Set;
 
 public class MeteringFeatures implements FeatureSpecification {
-    public static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported");
-    public static final NodeFeature SAMPLED_METRICS_METADATA = new NodeFeature("metering.sampled-metrics-metadata");
+    public static final NodeFeature INDEX_INFO_SUPPORTED = new NodeFeature("index_size.supported", true);
+    public static final NodeFeature SAMPLED_METRICS_METADATA = new NodeFeature("metering.sampled-metrics-metadata", true);
 
     @Override
     public Set<NodeFeature> getFeatures() {
