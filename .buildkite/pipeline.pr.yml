@@ -131,6 +131,33 @@ steps:
             IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
             ELASTICSEARCH_SUBMODULE_COMMIT: "${ELASTICSEARCH_SUBMODULE_COMMIT}"
             UPGRADED_PROJECT: true
+      - label: ":gcp: :java: Test newly created project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        depends_on: pr-docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            DEPLOY_ID: "ess-e2e-gcp-ci-${IMAGE_TAG}"
+            REGION_ID: "gcp-us-central1"
+            IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
+            ELASTICSEARCH_SUBMODULE_COMMIT: "${ELASTICSEARCH_SUBMODULE_COMMIT}"
+      - label: ":gcp: :java: Test upgraded project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        depends_on: pr-docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            DEPLOY_ID: "ess-e2e-ci-gcp-upgrade-${IMAGE_TAG}"
+            REGION_ID: "gcp-us-central1"
+            IMAGE_OVERRIDE: "docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:${IMAGE_TAG}"
+            ELASTICSEARCH_SUBMODULE_COMMIT: "${ELASTICSEARCH_SUBMODULE_COMMIT}"
+            UPGRADED_PROJECT: true
     notify:
       - github_commit_status:
           context: "elasticsearch-serverless/e2e tests"
