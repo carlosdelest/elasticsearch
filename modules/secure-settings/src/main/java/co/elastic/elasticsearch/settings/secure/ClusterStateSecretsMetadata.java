@@ -92,7 +92,7 @@ public class ClusterStateSecretsMetadata extends AbstractNamedDiffable<ClusterSt
         return Iterators.single((builder, params) -> {
             builder.field("success", this.success);
             builder.field("version", this.version);
-            if (errorStackTrace.size() > 0) {
+            if (errorStackTrace.isEmpty() == false) {
                 builder.stringListField("stack_trace", errorStackTrace);
             }
             return builder;
