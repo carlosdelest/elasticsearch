@@ -145,3 +145,6 @@ tests:
 - class: co.elastic.elasticsearch.metering.codec.RAStorageDocValuesConsumerTests
   method: testAttributeWrittenWithAverageValue
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3446
+- class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceIT
+  method: testSearchShardShouldRecoverWhenWarmingFailsOnGetConnection
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3449
