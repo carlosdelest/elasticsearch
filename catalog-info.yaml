@@ -510,6 +510,7 @@ spec:
     spec:
       repository: elastic/elasticsearch-serverless
       pipeline_file: .buildkite/pipeline.promote-emergency-release.yml
+      default_branch: patch/serverless-fix
       provider_settings:
         trigger_mode: none
       teams:
