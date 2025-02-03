@@ -32,11 +32,7 @@ public class ServerlessTransportVersions {
 
     static Set<Integer> IDS = new HashSet<>();
 
-    public static final TransportVersion COMPOUND_COMMITS_WITH_HEADER_SIZE_AND_REPLICATED_RANGES = def(8_757_01_0);
-    public static final TransportVersion SHARD_INFO_METADATA = def(8_768_01_0);
-    public static final TransportVersion COMMIT_NOTIFICATION_TRANSPORT_ACTION_SPLIT = def(8_777_01_0);
-    public static final TransportVersion METERING_BROADCAST_ACTIVITY = def(8_777_02_0);
-    public static final TransportVersion PRIMARY_RELOCATION_SEARCH_NODES = def(8_808_01_0);
+    // public static final TransportVersion EXAMPLE_SERVERLESS_VERSION = def(9_000_1_00);
 
     /*
      * STOP! READ THIS FIRST! No, really,
@@ -56,15 +52,15 @@ public class ServerlessTransportVersions {
      * The new version constant should be based on a version constant from the latest synced elasticsearch submodule.
      * Take the id of the latest version constant defined in TransportVersions. There are two possible cases:
      * - If the server part of the id is equal to the server part from the latest constant defined here, then
-     *   bump the serverless part of the latest version here. eg if the latest id defined in server is 8_501_00_0, and the latest defined
-     *   here is 8_501_01_0, then the next id should be 8_501_02_0.
+     *   bump the serverless part of the latest version here. eg if the latest id defined in server is 8_501_0_00, and the latest defined
+     *   here is 8_501_1_00, then the next id should be 8_501_2_00.
      * - If the server part of the id is newer than the server part from the latest constant defined here, then the next id
-     *   should bump the serverless part of that id. eg if the latest id defined in server is 8_600_00_0, and the latest defined
-     *   here is 8_500_01_0, then the next id should be 8_600_01_0.
+     *   should bump the serverless part of that id. eg if the latest id defined in server is 8_600_0_00, and the latest defined
+     *   here is 8_500_1_00, then the next id should be 8_600_1_00.
      *
      * A patch id should only be created if a patch transport change is needed in serverless code. If so, the next id should be
-     * the latest defined here with the patch increment. eg if the latest id defined here is 8_500_01_0, then the next patch
-     * id should be 8_500_01_1.
+     * the latest defined here with the patch increment. eg if the latest id defined here is 8_500_1_00, then the next patch
+     * id should be 8_500_1_01.
      */
 
     static TransportVersion def(int id) {

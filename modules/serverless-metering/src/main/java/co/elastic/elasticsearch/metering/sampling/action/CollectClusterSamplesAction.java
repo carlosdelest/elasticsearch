@@ -20,7 +20,6 @@ package co.elastic.elasticsearch.metering.sampling.action;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
-import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
@@ -55,22 +54,15 @@ public class CollectClusterSamplesAction {
 
         public Request(StreamInput in) throws IOException {
             super(in);
-            if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_BROADCAST_ACTIVITY)) {
-                this.searchActivity = Activity.readFrom(in);
-                this.indexActivity = Activity.readFrom(in);
-            } else {
-                this.searchActivity = Activity.EMPTY;
-                this.indexActivity = Activity.EMPTY;
-            }
+            this.searchActivity = Activity.readFrom(in);
+            this.indexActivity = Activity.readFrom(in);
         }
 
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             super.writeTo(out);
-            if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_BROADCAST_ACTIVITY)) {
-                searchActivity.writeTo(out);
-                indexActivity.writeTo(out);
-            }
+            searchActivity.writeTo(out);
+            indexActivity.writeTo(out);
         }
 
         @Override

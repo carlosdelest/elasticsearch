@@ -35,7 +35,7 @@ public class ServerlessTransportVersionsTests extends ESTestCase {
         var serverVersions = TransportVersion.getAllVersions();
         for (var serverlessVersion : ServerlessTransportVersions.DEFINED_VERSIONS) {
             var id = serverlessVersion.id();
-            var serverlessPart = id % 1000 / 10; // isolate serverless part of version id
+            var serverlessPart = id % 1000 / 100; // isolate serverless part of version id
             assertThat("serverless part must must be non-zero for transport version " + serverlessVersion, serverlessPart, not(0));
             var upstreamId = id / 1000 * 1000;
             assertThat(
@@ -43,6 +43,18 @@ public class ServerlessTransportVersionsTests extends ESTestCase {
                 Collections.binarySearch(serverVersions, new TransportVersion(upstreamId)),
                 is(not(-1))
             );
+        }
+    }
+
+    public void testServerlessVersionsStillAvailable() {
+        for (TransportVersion serverlessVersion : ServerlessTransportVersions.DEFINED_VERSIONS) {
+            if (serverlessVersion.id() % 1000 >= 900) {
+                fail(
+                    "There are no more Serverless versions available beyond "
+                        + serverlessVersion
+                        + ". Please inform the Core/Infra team to determine remediation steps."
+                );
+            }
         }
     }
 
