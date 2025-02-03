@@ -20,9 +20,7 @@ package co.elastic.elasticsearch.serverless.constants;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.test.ESTestCase;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
+import java.util.Set;
 
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.in;
@@ -32,16 +30,16 @@ import static org.hamcrest.Matchers.not;
 public class ServerlessTransportVersionsTests extends ESTestCase {
 
     public void testIdsOnlyChangeServerlessPart() {
-        var serverVersions = TransportVersion.getAllVersions();
+        Set<TransportVersion> serverVersions = Set.copyOf(TransportVersion.getAllVersions());
         for (var serverlessVersion : ServerlessTransportVersions.DEFINED_VERSIONS) {
-            var id = serverlessVersion.id();
-            var serverlessPart = id % 1000 / 100; // isolate serverless part of version id
+            int id = serverlessVersion.id();
+            int serverlessPart = id % 1000 / 100; // isolate serverless part of version id
             assertThat("serverless part must must be non-zero for transport version " + serverlessVersion, serverlessPart, not(0));
-            var upstreamId = id / 1000 * 1000;
+            int upstreamId = id / 1000 * 1000;
             assertThat(
                 "Serverless transport version " + serverlessVersion + " must be based on a transport version from server",
-                Collections.binarySearch(serverVersions, new TransportVersion(upstreamId)),
-                is(not(-1))
+                new TransportVersion(upstreamId),
+                in(serverVersions)
             );
         }
     }
@@ -59,8 +57,6 @@ public class ServerlessTransportVersionsTests extends ESTestCase {
     }
 
     public void testAllVersionsIncludeServerless() {
-        List<TransportVersion> versions = TransportVersion.getAllVersions();
-
-        assertThat(ServerlessTransportVersions.DEFINED_VERSIONS, everyItem(is(in(new HashSet<>(versions)))));
+        assertThat(ServerlessTransportVersions.DEFINED_VERSIONS, everyItem(is(in(TransportVersion.getAllVersions()))));
     }
 }

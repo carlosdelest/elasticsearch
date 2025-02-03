@@ -19,8 +19,8 @@ package co.elastic.elasticsearch.serverless.constants;
 
 import org.elasticsearch.TransportVersion;
 
+import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 import static org.elasticsearch.TransportVersions.collectAllVersionIdsDefinedInClass;
@@ -75,7 +75,7 @@ public class ServerlessTransportVersions {
     /**
      * Sorted list of all versions defined in this class
      */
-    static final List<TransportVersion> DEFINED_VERSIONS = collectAllVersionIdsDefinedInClass(ServerlessTransportVersions.class);
+    static final Collection<TransportVersion> DEFINED_VERSIONS = collectAllVersionIdsDefinedInClass(ServerlessTransportVersions.class);
 
     static {
         // see comment on IDS field

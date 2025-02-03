@@ -109,7 +109,6 @@ public record ShardInfoMetrics(
         out.writeVLong(rawStoredSizeStats.avgMax());
         out.writeDouble(rawStoredSizeStats.avgTotal());
         out.writeDouble(rawStoredSizeStats.avgSquaredTotal());
-
     }
 
     public boolean isMoreRecentThan(ShardInfoMetrics other) {
