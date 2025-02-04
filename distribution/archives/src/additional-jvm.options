@@ -6,3 +6,6 @@
 # rrf is experimental, and the way it is specified is being changed. We remove the rank/sub_searches
 # elements of search in preparation for the replacement functionality.
 -Des.search.rank_supported=false
+
+# By default, disable entitlements for serverless
+-Des.entitlements.enabled=false
