@@ -37,6 +37,8 @@ import org.elasticsearch.xpack.shutdown.SingleNodeShutdownStatus;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static co.elastic.elasticsearch.serverless.shutdown.SigtermTerminationHandler.SHUTDOWN_STATE_REQUEST_TIMEOUT;
+import static org.elasticsearch.action.support.master.MasterNodeRequest.INFINITE_MASTER_NODE_TIMEOUT;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -64,8 +66,8 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
             when(client.threadPool()).thenReturn(threadPool);
             doAnswer(invocation -> {
                 PutShutdownNodeAction.Request putRequest = invocation.getArgument(1, PutShutdownNodeAction.Request.class);
-                assertEquals(timeout, putRequest.ackTimeout());
-                assertEquals(timeout, putRequest.masterNodeTimeout());
+                assertEquals(SHUTDOWN_STATE_REQUEST_TIMEOUT, putRequest.ackTimeout());
+                assertEquals(SHUTDOWN_STATE_REQUEST_TIMEOUT, putRequest.masterNodeTimeout());
                 assertThat(putRequest.getNodeId(), equalTo(nodeId));
                 assertThat(putRequest.getType(), equalTo(SingleNodeShutdownMetadata.Type.SIGTERM));
                 ActionListener<AcknowledgedResponse> listener = invocation.getArgument(2);
@@ -76,7 +78,7 @@ public class SigtermTerminationHandlerTests extends ESTestCase {
             doAnswer(invocation -> {
                 GetShutdownStatusAction.Request getRequest = invocation.getArgument(1, GetShutdownStatusAction.Request.class);
                 assertThat(getRequest.getNodeIds()[0], equalTo(nodeId));
-                assertEquals(timeout, getRequest.masterNodeTimeout());
+                assertEquals(INFINITE_MASTER_NODE_TIMEOUT, getRequest.masterNodeTimeout());
                 ActionListener<GetShutdownStatusAction.Response> listener = invocation.getArgument(2);
                 listener.onResponse(
                     new GetShutdownStatusAction.Response(

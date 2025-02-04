@@ -45,6 +45,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.elasticsearch.action.support.master.MasterNodeRequest.INFINITE_MASTER_NODE_TIMEOUT;
+
 /**
  * This class actually implements the logic that's invoked when Elasticsearch receives a sigterm - that is, issuing a Put Shutdown request
  * for this node and periodically checking the Get Shutdown Status API for this node until it's done.
@@ -57,6 +59,9 @@ public class SigtermTerminationHandler implements TerminationHandler {
     private final TimeValue pollInterval;
     private final TimeValue timeout;
     private final String nodeId;
+
+    // Use a fixed timeout for transport actions: we are in a termination handler, there is no way to give clients a way to specify it.
+    static final TimeValue SHUTDOWN_STATE_REQUEST_TIMEOUT = TimeValue.timeValueMinutes(1);
 
     public SigtermTerminationHandler(Client client, ThreadPool threadPool, TimeValue pollInterval, TimeValue timeout, String nodeId) {
         this.client = new OriginSettingClient(client, ClientHelper.STACK_ORIGIN);
@@ -149,8 +154,8 @@ public class SigtermTerminationHandler implements TerminationHandler {
 
     private PutShutdownNodeAction.Request shutdownRequest() {
         PutShutdownNodeAction.Request request = new PutShutdownNodeAction.Request(
-            timeout,
-            timeout,
+            SHUTDOWN_STATE_REQUEST_TIMEOUT,
+            SHUTDOWN_STATE_REQUEST_TIMEOUT,
             nodeId,
             SingleNodeShutdownMetadata.Type.SIGTERM,
             "node sigterm",
@@ -163,7 +168,8 @@ public class SigtermTerminationHandler implements TerminationHandler {
     }
 
     private void pollStatusAndLoop(int poll, CountDownLatch latch, AtomicReference<SingleNodeShutdownStatus> lastStatus) {
-        final var request = new GetShutdownStatusAction.Request(timeout, nodeId);
+        // This transport action does not use a timeout, so we use INFINITE_MASTER_NODE_TIMEOUT as a way to express "this will not time out"
+        final var request = new GetShutdownStatusAction.Request(INFINITE_MASTER_NODE_TIMEOUT, nodeId);
         client.execute(GetShutdownStatusAction.INSTANCE, request, ActionListener.wrap(res -> {
             assert res.getShutdownStatuses().size() == 1 : "got more than this node's shutdown status";
             SingleNodeShutdownStatus status = res.getShutdownStatuses().get(0);
