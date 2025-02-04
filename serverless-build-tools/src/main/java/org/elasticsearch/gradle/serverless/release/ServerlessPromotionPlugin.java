@@ -29,7 +29,6 @@ import static org.elasticsearch.gradle.internal.util.ParamsUtils.loadBuildParams
 public abstract class ServerlessPromotionPlugin implements Plugin<Project> {
 
     private static final String TASK_GROUP = "Promotion";
-    private static final String IGNORE_BLOCKER_ENV = "IGNORE_BLOCKER";
     private static final String GITHUB_TOKEN_ENV = "GITHUB_TOKEN";
     private static final String CHECK_PROMOTION_BLOCKER_TASKNAME = "checkPromotionBlocker";
     private static final String GENERATE_PROMOTION_REPORT_TASKNAME = "generatePromotionReport";
@@ -37,6 +36,7 @@ public abstract class ServerlessPromotionPlugin implements Plugin<Project> {
     private static final String PREVIOUS_PROMOTED_VERSION_SYSPROP = "previous.promoted.version";
     private static final String DAYS_BLOCKER_IGNORED_DAYS_ENV = "IGNORED_BLOCKER_DAYS";
     private static final String BLOCK_ON_ISSUES_UNTRIAGED = "BLOCK_ON_ISSUES_UNTRIAGED";
+    private static final String BLOCK_ON_ISSUES_BLOCKER = "BLOCK_ON_ISSUES_BLOCKER";
 
     private static final int DAYS_BLOCKER_IGNORED = 7;
 
@@ -62,8 +62,8 @@ public abstract class ServerlessPromotionPlugin implements Plugin<Project> {
             task.getJsonReportName().set("serverless-promotion-blocker.json");
             task.getFailOnUntriaged()
                 .set(getProviderFactory().environmentVariable(BLOCK_ON_ISSUES_UNTRIAGED).map(Boolean::parseBoolean).orElse(true).get());
-            task.setIgnoreFailures(
-                getProviderFactory().environmentVariable(IGNORE_BLOCKER_ENV).map(Boolean::parseBoolean).orElse(false).get()
+            task.getFailOnBlocker()
+                .set(getProviderFactory().environmentVariable(BLOCK_ON_ISSUES_BLOCKER).map(Boolean::parseBoolean).orElse(true).get()
             );
             task.getCi().set(loadBuildParams(target).map(params -> params.isCi()));
         });

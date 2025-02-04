@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
-
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -69,42 +67,27 @@ public record ShardInfoMetrics(
     }
 
     public static ShardInfoMetrics from(StreamInput in) throws IOException {
-        if (in.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_METADATA)) {
-            return new ShardInfoMetrics(
+        return new ShardInfoMetrics(
+            in.readVLong(),
+            in.readVLong(),
+            in.readVLong(),
+            in.readVLong(),
+            in.readVLong(),
+            in.readVLong(),
+            in.readVLong(),
+            in.readVLong(),
+            in.readVLong(),
+            new RawStoredSizeStats(
                 in.readVLong(),
                 in.readVLong(),
                 in.readVLong(),
                 in.readVLong(),
                 in.readVLong(),
                 in.readVLong(),
-                in.readVLong(),
-                in.readVLong(),
-                in.readVLong(),
-                new RawStoredSizeStats(
-                    in.readVLong(),
-                    in.readVLong(),
-                    in.readVLong(),
-                    in.readVLong(),
-                    in.readVLong(),
-                    in.readVLong(),
-                    in.readDouble(),
-                    in.readDouble()
-                )
-            );
-        } else {
-            return new ShardInfoMetrics(
-                in.readVLong(),
-                in.readVLong(),
-                in.readVLong(),
-                in.readVLong(),
-                in.readVLong(),
-                in.readVLong(),
-                in.readVLong(),
-                0,
-                0,
-                RawStoredSizeStats.EMPTY
-            );
-        }
+                in.readDouble(),
+                in.readDouble()
+            )
+        );
     }
 
     @Override
@@ -116,19 +99,16 @@ public record ShardInfoMetrics(
         out.writeVLong(primaryTerm);
         out.writeVLong(generation);
         out.writeVLong(indexCreationDateEpochMilli);
-
-        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.SHARD_INFO_METADATA)) {
-            out.writeVLong(segmentCount);
-            out.writeVLong(deletedDocCount);
-            out.writeVLong(rawStoredSizeStats.segmentCount());
-            out.writeVLong(rawStoredSizeStats.liveDocCount());
-            out.writeVLong(rawStoredSizeStats.deletedDocCount());
-            out.writeVLong(rawStoredSizeStats.approximatedDocCount());
-            out.writeVLong(rawStoredSizeStats.avgMin());
-            out.writeVLong(rawStoredSizeStats.avgMax());
-            out.writeDouble(rawStoredSizeStats.avgTotal());
-            out.writeDouble(rawStoredSizeStats.avgSquaredTotal());
-        }
+        out.writeVLong(segmentCount);
+        out.writeVLong(deletedDocCount);
+        out.writeVLong(rawStoredSizeStats.segmentCount());
+        out.writeVLong(rawStoredSizeStats.liveDocCount());
+        out.writeVLong(rawStoredSizeStats.deletedDocCount());
+        out.writeVLong(rawStoredSizeStats.approximatedDocCount());
+        out.writeVLong(rawStoredSizeStats.avgMin());
+        out.writeVLong(rawStoredSizeStats.avgMax());
+        out.writeDouble(rawStoredSizeStats.avgTotal());
+        out.writeDouble(rawStoredSizeStats.avgSquaredTotal());
     }
 
     public boolean isMoreRecentThan(ShardInfoMetrics other) {

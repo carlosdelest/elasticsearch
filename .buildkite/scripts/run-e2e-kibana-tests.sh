@@ -3,7 +3,6 @@ set -e
 
 scripts_dir=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
 source $scripts_dir/utils/misc.sh
-
 echo "--- Determining last succesful kibana e2e tests"
 KIBANA_BRANCH='main'
 INTAKE_PIPELINE_SLUG="kibana-elasticsearch-serverless-verify-and-promote"
@@ -22,7 +21,7 @@ cat <<EOF | buildkite-agent pipeline upload
 steps:
     - label: ":rocket: Run Kibana E2E with current ES Serverless"
       trigger: kibana-elasticsearch-serverless-verify-and-promote
-      depends_on: docker-publish
+      depends_on: "${DOCKER_BUILD_STEP:-docker-publish}"
       build:
         commit: "${KIBANA_COMMIT}"
         branch: "${KIBANA_BRANCH}"

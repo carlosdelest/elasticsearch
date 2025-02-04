@@ -29,7 +29,7 @@ public class ServerlessCompletionsPostingsFormatExtension implements Completions
         // This system property can be removed once the codec is deployed. It is included in the interim to allow for testing
         // in a QA environment.
         return Booleans.parseBoolean(System.getProperty("serverless.codec.configurable_completions_postings_enabled"), false)
-            ? Elasticsearch900Lucene100CompletionPostingsFormat.NAME
+            ? Elasticsearch900Lucene101CompletionPostingsFormat.NAME
             : null;
     }
 }

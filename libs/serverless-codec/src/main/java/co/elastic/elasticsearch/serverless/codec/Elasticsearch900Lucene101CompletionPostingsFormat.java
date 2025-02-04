@@ -15,14 +15,12 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.stateless.engine;
+package co.elastic.elasticsearch.serverless.codec;
 
-public class HollowIndexEngineTestUtils {
+public class Elasticsearch900Lucene101CompletionPostingsFormat extends ElasticsearchCompletionPostingsFormat {
+    public static final String NAME = "Elasticsearch900Lucene101CompletionPostingsFormat";
 
-    private HollowIndexEngineTestUtils() {}
-
-    public static void releasePrimaryPermits(HollowIndexEngine hollowIndexEngine) {
-        hollowIndexEngine.releasePrimaryPermits();
+    public Elasticsearch900Lucene101CompletionPostingsFormat() {
+        super(NAME, "Lucene101");
     }
-
 }

@@ -67,10 +67,10 @@ public class TransportGetTierMetricsTests extends ESTestCase {
         );
         ActionFilters actionFilters = new ActionFilters(Set.of());
 
-        new TransportGetAutoscalingMetricsAction(transportService, clusterService, threadPool, actionFilters, null, null);
+        new TransportGetAutoscalingMetricsAction(transportService, clusterService, threadPool, actionFilters, null);
         new TransportGetMachineLearningTierMetrics(transportService, actionFilters, clusterService, null);
-        new TransportGetSearchTierMetrics(transportService, clusterService, threadPool, actionFilters, null, null);
-        new TransportGetIndexTierMetrics(transportService, clusterService, threadPool, actionFilters, null, null);
+        new TransportGetSearchTierMetrics(transportService, clusterService, threadPool, actionFilters, null);
+        new TransportGetIndexTierMetrics(transportService, clusterService, threadPool, actionFilters, null);
     }
 
     public void testCanTripCircuitBreaker() {

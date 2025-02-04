@@ -339,7 +339,7 @@ spec:
           cronline: "0 4 * * * America/New_York"
           env:
             ELASTIC_SLACK_NOTIFICATIONS_ENABLED: "true"
-            SLACK_NOTIFICATIONS_CHANNEL: "#lucene"
+            SLACK_NOTIFICATIONS_CHANNEL: "#lucene-ci"
             SLACK_NOTIFICATIONS_ALL_BRANCHES: "true"
             ELASTICSEARCH_SUBMODULE_COMMIT: "lucene_snapshot"
 ---
@@ -510,6 +510,7 @@ spec:
     spec:
       repository: elastic/elasticsearch-serverless
       pipeline_file: .buildkite/pipeline.promote-emergency-release.yml
+      default_branch: patch/serverless-fix
       provider_settings:
         trigger_mode: none
       teams:

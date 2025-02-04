@@ -233,7 +233,7 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
             SampledClusterMetricsSchedulingTask.TASK_NAME,
             SampledClusterMetricsSchedulingTask.TASK_NAME,
             SampledClusterMetricsSchedulingTaskParams.INSTANCE,
-            null,
+            TimeValue.THIRTY_SECONDS /* TODO should this be configurable? longer by default? infinite? */,
             ActionListener.wrap(r -> logger.debug("Created sampling task for metering"), e -> {
                 Throwable t = e instanceof RemoteTransportException ? e.getCause() : e;
                 if (t instanceof ResourceAlreadyExistsException == false) {
@@ -246,7 +246,7 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
     private void stopTask() {
         persistentTasksService.sendRemoveRequest(
             SampledClusterMetricsSchedulingTask.TASK_NAME,
-            null,
+            TimeValue.THIRTY_SECONDS /* TODO should this be configurable? longer by default? infinite? */,
             ActionListener.wrap(r -> logger.debug("Stopped sampling task for metering"), e -> {
                 Throwable t = e instanceof RemoteTransportException ? e.getCause() : e;
                 if (t instanceof ResourceNotFoundException == false) {

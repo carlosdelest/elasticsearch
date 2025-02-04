@@ -53,6 +53,7 @@ public class ServerlessDistributionDownloadPlugin implements Plugin<Project> {
 
     private static void registerDistributionResolver(Collection<DistributionResolution> resolutions) {
         DistributionResolution serverlessBwcResolution = new DistributionResolution("serverless_bwc");
+        serverlessBwcResolution.setPriority(100);
         serverlessBwcResolution.setResolver((project, distribution) -> {
             if (SERVERLESS_BWC_VERSION.equals(Version.fromString(distribution.getVersion()))) {
                 return new InternalDistributionDownloadPlugin.ProjectBasedDistributionDependency(

@@ -25,26 +25,28 @@ import org.elasticsearch.client.WarningsHandler;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.ESRestTestCase;
+import org.elasticsearch.xcontent.XContentType;
 import org.junit.After;
 import org.junit.ClassRule;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
+import static org.elasticsearch.xpack.core.security.test.TestRestrictedIndices.INTERNAL_SECURITY_MAIN_INDEX_7;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
@@ -83,7 +85,8 @@ public class ServerlessPrivilegeRaceIT extends ESRestTestCase {
         executor.shutdown();
     }
 
-    public void testGetAndPutPrivilegeRace() throws ExecutionException, InterruptedException, TimeoutException {
+    public void testGetAndPutPrivilegeRace() throws Exception {
+        deleteSecurityIndex();
         assertSecurityIndexNotFound();
 
         final List<Exception> exceptions = new CopyOnWriteArrayList<>();
@@ -127,6 +130,15 @@ public class ServerlessPrivilegeRaceIT extends ESRestTestCase {
                 .getStatusCode(),
             equalTo(404)
         );
+    }
+
+    private void deleteSecurityIndex() throws IOException {
+        final Request deleteRequest = new Request("DELETE", INTERNAL_SECURITY_MAIN_INDEX_7);
+        deleteRequest.setOptions(RequestOptions.DEFAULT.toBuilder().setWarningsHandler(ESRestTestCase::ignoreSystemIndexAccessWarnings));
+        final Response response = adminClient().performRequest(deleteRequest);
+        try (InputStream is = response.getEntity().getContent()) {
+            assertTrue((boolean) XContentHelper.convertToMap(XContentType.JSON.xContent(), is, true).get("acknowledged"));
+        }
     }
 
     private void putPrivileges() throws IOException {

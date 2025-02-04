@@ -45,12 +45,21 @@ steps:
     env:
         USE_GITHUB_CREDENTIALS: "true"
         BLOCK_ON_ISSUES_UNTRIAGED: ${BLOCK_ON_ISSUES_UNTRIAGED}
+        BLOCK_ON_ISSUES_BLOCKER: ${BLOCK_ON_ISSUES_BLOCKER}
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
       image: family/elasticsearch-ubuntu-2022
+  - label: ":git: Validate patch branch has been merged"
+    key: "validate-patch-merged"
+    command: ".buildkite/scripts/validate-patch-merged.sh"
+    env:
+      BLOCK_ON_PATCH_BRANCH_NOT_MERGED: ${BLOCK_ON_PATCH_BRANCH_NOT_MERGED}
+      PROMOTED_COMMIT: ${PROMOTED_COMMIT}
   - label: ":argo: Trigger serverless Elasticsearch release"
-    depends_on: "checkblocker"
+    depends_on:
+      - "checkblocker"
+      - "validate-patch-merged"
     trigger: elasticsearch-serverless-intake
     build:
       commit: "${PROMOTED_COMMIT}"

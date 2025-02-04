@@ -70,10 +70,7 @@ public final class SampledMetricsMetadata extends AbstractNamedDiffable<ClusterS
 
     @Override
     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params ignored) {
-        return Iterators.single((builder, params) -> {
-            builder.field("committed_timestamp", committedTimestamp.getEpochSecond());
-            return builder;
-        });
+        return Iterators.single((builder, params) -> builder.field("committed_timestamp", committedTimestamp.getEpochSecond()));
     }
 
     public Instant getCommittedTimestamp() {

@@ -158,7 +158,7 @@ public class GetMeteringStatsAction {
 
         @Override
         public Iterator<ToXContent> toXContentChunked(ToXContent.Params params) {
-            return Iterators.concat(ChunkedToXContentHelper.singleChunk((builder, p) -> {
+            return Iterators.concat(ChunkedToXContentHelper.chunk((builder, p) -> {
                 builder.startObject();
                 builder.startObject("_total");
                 builder.field("num_docs", totalDocCount);
@@ -166,7 +166,7 @@ public class GetMeteringStatsAction {
                 builder.endObject();
                 builder.startArray("indices");
                 return builder;
-            }), Iterators.flatMap(indexToStatsMap.entrySet().iterator(), indexStats -> ChunkedToXContentHelper.singleChunk((builder, p) -> {
+            }), Iterators.flatMap(indexToStatsMap.entrySet().iterator(), indexStats -> ChunkedToXContentHelper.chunk((builder, p) -> {
                 builder.startObject();
                 String indexName = indexStats.getKey();
                 builder.field("name", indexName);
@@ -178,14 +178,14 @@ public class GetMeteringStatsAction {
                 builder.field("size_in_bytes", indexStats.getValue().sizeInBytes());
                 builder.endObject();
                 return builder;
-            })), ChunkedToXContentHelper.singleChunk((builder, p) -> {
+            })), ChunkedToXContentHelper.chunk((builder, p) -> {
                 builder.endArray();
                 builder.startArray("datastreams");
                 return builder;
             }),
                 Iterators.flatMap(
                     datastreamToStatsMap.entrySet().iterator(),
-                    datastreamStats -> ChunkedToXContentHelper.singleChunk((builder, p) -> {
+                    datastreamStats -> ChunkedToXContentHelper.chunk((builder, p) -> {
                         builder.startObject();
                         String datastream = datastreamStats.getKey();
                         builder.field("name", datastream);
@@ -195,7 +195,7 @@ public class GetMeteringStatsAction {
                         return builder;
                     })
                 ),
-                ChunkedToXContentHelper.singleChunk((builder, p) -> {
+                ChunkedToXContentHelper.chunk((builder, p) -> {
                     builder.endArray();
                     builder.endObject();
                     return builder;

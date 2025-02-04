@@ -64,6 +64,9 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
     @Input
     public abstract Property<Boolean> getFailOnUntriaged();
 
+    @Input
+    public abstract Property<Boolean> getFailOnBlocker();
+
     @OutputDirectory
     public abstract DirectoryProperty getReportsDirectory();
 
@@ -182,7 +185,7 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
                 gh.getIssues("elastic", "elasticsearch-serverless", LABEL_BLOCKER).stream()
             ).collect(Collectors.toList()),
             LABEL_BLOCKER + " label",
-            getIgnoreFailures() == false
+            getFailOnBlocker().get()
         );
     }
 

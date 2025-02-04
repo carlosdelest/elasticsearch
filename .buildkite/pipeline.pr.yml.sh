@@ -17,6 +17,6 @@ else
   # So lets just use the build number and pad it
   IMAGE_TAG_SUFFIX="${PREFIX}$(printf %10s "${BUILDKITE_BUILD_NUMBER}" | tr ' ' 0)"
 fi
-
 export IMAGE_TAG_SUFFIX
-envsubst '$IMAGE_TAG_SUFFIX' < .buildkite/pipeline.pr.yml
+
+envsubst '$IMAGE_TAG_SUFFIX $ENTITLEMENTS_TESTING_ENABLED' < .buildkite/pipeline.pr.yml

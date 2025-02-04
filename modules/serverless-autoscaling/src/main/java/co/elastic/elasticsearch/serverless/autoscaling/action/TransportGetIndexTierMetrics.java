@@ -24,7 +24,6 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeAction;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.injection.guice.Inject;
@@ -42,7 +41,6 @@ public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetI
         ClusterService clusterService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
         IngestMetricsService ingestMetricsService
     ) {
         super(
@@ -53,7 +51,6 @@ public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetI
             threadPool,
             actionFilters,
             GetIndexTierMetrics.Request::new,
-            indexNameExpressionResolver,
             GetIndexTierMetrics.Response::new,
             EsExecutors.DIRECT_EXECUTOR_SERVICE
         );

@@ -1,0 +1,249 @@
+[
+    {
+        "Id": "2c7cf9ad395c07ee320c88bff42ccd6c364d1d08bbf45909dd02be737c91b42c",
+        "Created": "2025-01-22T13:44:05.939509129Z",
+        "Path": "/init",
+        "Args": [],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 22521,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2025-01-22T13:54:41.023744839Z",
+            "FinishedAt": "2025-01-22T13:54:32.193569918Z"
+        },
+        "Image": "sha256:f4211dacbab13612ba24e14a03936f5734513eb567c6cd7f9625cf03d696174f",
+        "ResolvConfPath": "/var/lib/docker/containers/2c7cf9ad395c07ee320c88bff42ccd6c364d1d08bbf45909dd02be737c91b42c/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/2c7cf9ad395c07ee320c88bff42ccd6c364d1d08bbf45909dd02be737c91b42c/hostname",
+        "HostsPath": "/var/lib/docker/containers/2c7cf9ad395c07ee320c88bff42ccd6c364d1d08bbf45909dd02be737c91b42c/hosts",
+        "LogPath": "/var/lib/docker/containers/2c7cf9ad395c07ee320c88bff42ccd6c364d1d08bbf45909dd02be737c91b42c/2c7cf9ad395c07ee320c88bff42ccd6c364d1d08bbf45909dd02be737c91b42c-json.log",
+        "Name": "/frosty_goldwasser",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": [
+                "/Users/rene/dev/home-automation/server/config:/config"
+            ],
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "host",
+            "PortBindings": {
+                "8123/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "8123"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "unless-stopped",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                48,
+                193
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": [],
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": null,
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/asound",
+                "/proc/acpi",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/sys/firmware",
+                "/sys/devices/virtual/powercap"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "LowerDir": "/var/lib/docker/overlay2/926fe7618c5cb406b91f2b85d37ad13664188654297199a9ed056a5b52eb0625-init/diff:/var/lib/docker/overlay2/21e992c47430ce8a1c1b5d3307b39583af054e330de5fbf1b8bd76adac0300a6/diff:/var/lib/docker/overlay2/ca90352b864b2f4da3b09b491f42bb3c32176994a6fa865071c12b647023323e/diff:/var/lib/docker/overlay2/201571e45de5ab72df31360e7f53aca552f7a724964b82986a64d8b152c7e330/diff:/var/lib/docker/overlay2/0ef12cfa067197807f82c5e43a40921e7152bb17ef66211b21968ddb50abcfab/diff:/var/lib/docker/overlay2/3844be0a71a96b3774f05d8325dcb01a87e08a6137b1f955e66089fad796c3c3/diff:/var/lib/docker/overlay2/d02a2eeb32ffc24c32995b880a0f48ed16c26914a40ee91926dc9b32b10242e8/diff:/var/lib/docker/overlay2/25cc1b745beada458bbe6a114556e8703ef26ea37e15c36d102876b329df8ed5/diff:/var/lib/docker/overlay2/d81fd2a308d74205cc1ede7e61251d65761b1d8c30901c6679506f1fd6deee95/diff:/var/lib/docker/overlay2/7a97880b29f76a7329fb581bf798e7f2e6428ab4e34a3517e5b730db06020c2d/diff:/var/lib/docker/overlay2/4cb8c9fa8d9a28afc5da946bad02c290de60e3f8fd917e849b80d18ae6ee55dc/diff",
+                "MergedDir": "/var/lib/docker/overlay2/926fe7618c5cb406b91f2b85d37ad13664188654297199a9ed056a5b52eb0625/merged",
+                "UpperDir": "/var/lib/docker/overlay2/926fe7618c5cb406b91f2b85d37ad13664188654297199a9ed056a5b52eb0625/diff",
+                "WorkDir": "/var/lib/docker/overlay2/926fe7618c5cb406b91f2b85d37ad13664188654297199a9ed056a5b52eb0625/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/Users/rene/dev/home-automation/server/config",
+                "Destination": "/config",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "docker-desktop",
+            "Domainname": "",
+            "User": "",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "ExposedPorts": {
+                "8123/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PUID=1000",
+                "PGID=1000",
+                "TZ=Etc/UTC",
+                "PATH=/lsiopy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "PS1=$(whoami)@$(hostname):$(pwd)\\$ ",
+                "HOME=/config",
+                "TERM=xterm",
+                "S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0",
+                "S6_VERBOSITY=1",
+                "S6_STAGE2_HOOK=/docker-mods",
+                "VIRTUAL_ENV=/lsiopy",
+                "LSIO_FIRST_PARTY=true",
+                "S6_SERVICES_GRACETIME=240000",
+                "UV_SYSTEM_PYTHON=true",
+                "UV_NO_CACHE=true",
+                "UV_EXTRA_INDEX_URL=https://wheels.home-assistant.io/musllinux-index/"
+            ],
+            "Cmd": null,
+            "Image": "lscr.io/linuxserver/homeassistant:latest",
+            "Volumes": {
+                "/config": {}
+            },
+            "WorkingDir": "/",
+            "Entrypoint": [
+                "/init"
+            ],
+            "OnBuild": null,
+            "Labels": {
+                "build_version": "Linuxserver.io version:- 2025.1.2-ls66 Build-date:- 2025-01-10T20:32:10+00:00",
+                "maintainer": "saarg, roxedus",
+                "org.opencontainers.image.authors": "linuxserver.io",
+                "org.opencontainers.image.created": "2025-01-10T20:32:10+00:00",
+                "org.opencontainers.image.description": "[Home Assistant Core](https://www.home-assistant.io/) - Open source home automation that puts local control and privacy first. Powered by a worldwide community of tinkerers and DIY enthusiasts. Perfect to run on a Raspberry Pi or a local server",
+                "org.opencontainers.image.documentation": "https://docs.linuxserver.io/images/docker-homeassistant",
+                "org.opencontainers.image.licenses": "GPL-3.0-only",
+                "org.opencontainers.image.ref.name": "7f64e836f6fa65a8d6dca14de41cdb6b13d080fb",
+                "org.opencontainers.image.revision": "7f64e836f6fa65a8d6dca14de41cdb6b13d080fb",
+                "org.opencontainers.image.source": "https://github.com/linuxserver/docker-homeassistant",
+                "org.opencontainers.image.title": "Homeassistant",
+                "org.opencontainers.image.url": "https://github.com/linuxserver/docker-homeassistant/packages",
+                "org.opencontainers.image.vendor": "linuxserver.io",
+                "org.opencontainers.image.version": "2025.1.2-ls66"
+            }
+        },
+        "NetworkSettings": {
+            "Bridge": "",
+            "SandboxID": "c315293184843ec5f963aa97cca605dc92de1cc49f4bf1c4a7af2122ddf51f9c",
+            "SandboxKey": "/var/run/docker/netns/default",
+            "Ports": {},
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "SecondaryIPAddresses": null,
+            "SecondaryIPv6Addresses": null,
+            "EndpointID": "",
+            "Gateway": "",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "IPAddress": "",
+            "IPPrefixLen": 0,
+            "IPv6Gateway": "",
+            "MacAddress": "",
+            "Networks": {
+                "host": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "MacAddress": "",
+                    "DriverOpts": null,
+                    "NetworkID": "5156b9dc56c59cd98fcbc3fd62b657375fcdd4eab9d09d43114a456e0d74e2d0",
+                    "EndpointID": "7e18eb0a402469150ed3af96c60629cae6bcca03ee11fb1dcadfab368b8236c0",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        }
+    }
+]

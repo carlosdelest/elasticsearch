@@ -101,8 +101,9 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
         .user(TEST_USER, PASSWORD.toString(), User.ROOT_USER_ROLE, false)
         .rolesFile(rolesFile)
         .setting("xpack.ml.enabled", "false")
-        .systemProperty("es.queryable_built_in_roles_enabled", "true")
         .setting("logger.org.elasticsearch.xpack.security.support", "TRACE")
+        .setting("logger.co.elastic.elasticsearch.serverless.security.role", "TRACE")
+        .setting("logger.org.elasticsearch.http.HttpTracer", "TRACE")
         .build();
 
     @Override

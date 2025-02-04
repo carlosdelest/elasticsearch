@@ -11,12 +11,18 @@ env:
 
 steps:
   # TODO: We can remove this step and all of the related if statements once this code has been out for a few days and we can switch the pipeline in catalog-info without breaking all PRs
-  - command: ".buildkite/pipeline.pr.yml.sh | buildkite-agent pipeline upload"
+  - label: "Upload Pipeline: Dynamic pull request pipeline"
+    command: ".buildkite/pipeline.pr.yml.sh | buildkite-agent pipeline upload"
     if: pipeline.slug == "elasticsearch-serverless-pull-request" || pipeline.slug == "elasticsearch-serverless-es-pr-check"
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
 
   - label: ":git: Validate elasticsearch submodule"
     command: ".buildkite/scripts/validate-submodule.sh"
-    if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check" && build.branch == "main"
+    if: |
+      pipeline.slug != "elasticsearch-serverless-pull-request" &&
+        pipeline.slug != "elasticsearch-serverless-es-pr-check" &&
+        (build.branch == "main" || build.branch == "patch/serverless-fix")
 
   - label: ":git: Build info"
     command: ".buildkite/scripts/show-build-info.sh"
@@ -130,6 +136,32 @@ steps:
             UPGRADED_PROJECT: true
             DEPLOY_ID: "ess-e2e-ci-azure-upgrade-${IMAGE_TAG}"
             REGION_ID: "azure-eastus2"
+            IMAGE_OVERRIDE: ""
+      - label: ":gcp: :java: Test newly created project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            DEPLOY_ID: "ess-e2e-ci-gcp-${IMAGE_TAG}"
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            REGION_ID: "gcp-us-central1"
+      - label: ":gcp: :java: Test upgraded project"
+        trigger: elasticsearch-serverless-e2e-tests-qa
+        if: pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
+        depends_on: docker-publish
+        build:
+          message: "${BUILDKITE_MESSAGE}"
+          commit: "${BUILDKITE_COMMIT}"
+          branch: "${BUILDKITE_BRANCH}"
+          env:
+            SKIP_DOCKER: "${SKIP_DOCKER}"
+            UPGRADED_PROJECT: true
+            DEPLOY_ID: "ess-e2e-ci-gcp-upgrade-${IMAGE_TAG}"
+            REGION_ID: "gcp-us-central1"
             IMAGE_OVERRIDE: ""
     notify:
       - github_commit_status:

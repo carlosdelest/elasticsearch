@@ -4,6 +4,7 @@
 .idea/
 out/
 build/
+.kotlin/
 
 # Exclude idea config that we want persisted in version control
 !.idea/runConfigurations

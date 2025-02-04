@@ -23,7 +23,6 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeAction;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.tasks.Task;
@@ -43,15 +42,13 @@ public class TransportUpdateSampledMetricsMetadataAction extends TransportMaster
         TransportService transportService,
         ClusterService clusterService,
         ThreadPool threadPool,
-        ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver
+        ActionFilters actionFilters
     ) {
         this(
             transportService,
             clusterService,
             threadPool,
             actionFilters,
-            indexNameExpressionResolver,
             threadPool.executor(ThreadPool.Names.MANAGEMENT),
             new SampledMetricsMetadataService(clusterService)
         );
@@ -62,7 +59,6 @@ public class TransportUpdateSampledMetricsMetadataAction extends TransportMaster
         ClusterService clusterService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        IndexNameExpressionResolver indexNameExpressionResolver,
         Executor executor,
         SampledMetricsMetadataService sampledMetricsMetadataService
     ) {
@@ -74,7 +70,6 @@ public class TransportUpdateSampledMetricsMetadataAction extends TransportMaster
             threadPool,
             actionFilters,
             UpdateSampledMetricsMetadataAction.Request::new,
-            indexNameExpressionResolver,
             in -> ActionResponse.Empty.INSTANCE,
             executor
         );
