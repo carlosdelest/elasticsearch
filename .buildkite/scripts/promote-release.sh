@@ -45,6 +45,7 @@ steps:
     env:
         USE_GITHUB_CREDENTIALS: "true"
         BLOCK_ON_ISSUES_UNTRIAGED: ${BLOCK_ON_ISSUES_UNTRIAGED}
+        BLOCK_ON_ISSUES_BLOCKER: ${BLOCK_ON_ISSUES_BLOCKER}
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
