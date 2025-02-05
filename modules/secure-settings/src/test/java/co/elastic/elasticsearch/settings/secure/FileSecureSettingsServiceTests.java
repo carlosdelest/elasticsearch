@@ -84,7 +84,7 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
         super.setUp();
 
         this.env = newEnvironment();
-        Files.createDirectories(env.configFile().resolve(LocallyMountedSecrets.SECRETS_DIRECTORY));
+        Files.createDirectories(env.configDir().resolve(LocallyMountedSecrets.SECRETS_DIRECTORY));
         this.clusterService = mock(ClusterService.class);
         when(clusterService.state()).thenReturn(ClusterState.EMPTY_STATE);
         when(clusterService.getClusterSettings()).thenReturn(ClusterSettings.createBuiltInClusterSettings());
@@ -97,14 +97,14 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
     public void testDirectoryName() {
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
         Path secureSettingsDir = fileSecureSettingsService.watchedFileDir();
-        assertTrue(secureSettingsDir.startsWith(env.configFile()));
+        assertTrue(secureSettingsDir.startsWith(env.configDir()));
         assertTrue(secureSettingsDir.endsWith("secrets"));
     }
 
     public void testFileName() {
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
         Path secureSettingsFile = fileSecureSettingsService.watchedFile();
-        assertTrue(secureSettingsFile.startsWith(env.configFile()));
+        assertTrue(secureSettingsFile.startsWith(env.configDir()));
         assertTrue(secureSettingsFile.endsWith("secrets.json"));
     }
 
