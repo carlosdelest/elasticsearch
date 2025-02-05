@@ -150,3 +150,6 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3449
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3450
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testRecoverUnhollowedShardFromTranslog
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3463
