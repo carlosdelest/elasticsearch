@@ -105,7 +105,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
                     defaultActivityReturnedCounter
                 )
             );
-        });
+        }, status -> logger.warn("Samples not ready metrics collection [sampling node: {}]", status));
     }
 
     private static MetricValue buildMetricValue(

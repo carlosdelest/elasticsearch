@@ -22,8 +22,12 @@ import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.activitytracking.ActivityTests;
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledShardInfos;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingStatus;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
 import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
@@ -41,6 +45,7 @@ import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.telemetry.InstrumentType;
 import org.elasticsearch.telemetry.Measurement;
 import org.elasticsearch.telemetry.RecordingMeterRegistry;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.FeatureMatcher;
 import org.hamcrest.Matcher;
@@ -58,6 +63,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.ANOTHER_NODE;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 import static java.util.Map.entry;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.aMapWithSize;
@@ -82,7 +89,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
     public void testEmptyShardInfo() {
         var clusterService = createMockClusterService(Set::of);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
         var initialSearchMetrics = service.getSearchTierMetrics();
         var initialIndexMetrics = service.getIndexTierMetrics();
@@ -118,6 +125,72 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         assertThat(measurements, contains(transformedMatch(Measurement::getLong, equalTo(1L))));
     }
 
+    public void testClusterChangedUnchanged() {
+        var service = new SampledClusterMetricsService(createMockClusterService(Set::of), MeterRegistry.NOOP);
+        var initialNodeStatus = randomFrom(PersistentTaskNodeStatus.values());
+        var metrics = SampledClusterMetrics.EMPTY.withAdditionalStatus(SamplingStatus.STALE);
+        service.metricsState.set(new SamplingState(initialNodeStatus, metrics));
+
+        var clusterState = MockedClusterStateTestUtils.createMockClusterState(); // unchanged
+        service.clusterChanged(new ClusterChangedEvent("TEST", clusterState, clusterState));
+        // cluster state is unchanged, so no update to node status
+        assertThat(service.metricsState.get(), is(new SamplingState(initialNodeStatus, metrics)));
+    }
+
+    public void testClusterChangedUnchangedAssignment() {
+        var service = new SampledClusterMetricsService(createMockClusterService(Set::of), MeterRegistry.NOOP);
+        var metrics = SampledClusterMetrics.EMPTY.withAdditionalStatus(SamplingStatus.STALE);
+        service.metricsState.set(new SamplingState(THIS_NODE, metrics));
+
+        var newState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(MockedClusterStateTestUtils.LOCAL_NODE_ID);
+        var oldState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(MockedClusterStateTestUtils.LOCAL_NODE_ID);
+        service.clusterChanged(new ClusterChangedEvent("TEST", newState, oldState));
+        // cluster state is unchanged, so no update to node status
+        assertThat(service.metricsState.get(), is(new SamplingState(THIS_NODE, metrics)));
+    }
+
+    public void testClusterChangedToThisTaskNode() {
+        var service = new SampledClusterMetricsService(createMockClusterService(Set::of), MeterRegistry.NOOP);
+        var initialNodeStatus = randomFrom(PersistentTaskNodeStatus.values());
+        var metrics = SampledClusterMetrics.EMPTY.withAdditionalStatus(SamplingStatus.STALE);
+        service.metricsState.set(new SamplingState(initialNodeStatus, metrics));
+
+        var clusterState = MockedClusterStateTestUtils.createMockClusterState();
+        var previousState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(
+            clusterState,
+            randomFrom(MockedClusterStateTestUtils.NON_LOCAL_NODE_ID, null)
+        );
+        var currentState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(
+            clusterState,
+            MockedClusterStateTestUtils.LOCAL_NODE_ID
+        );
+
+        service.clusterChanged(new ClusterChangedEvent("TEST", currentState, previousState));
+        // cluster state is unchanged, so no update to node status
+        assertThat(service.metricsState.get(), is(new SamplingState(THIS_NODE, SampledClusterMetrics.EMPTY)));
+    }
+
+    public void testClusterChangedToOtherTaskNode() {
+        var service = new SampledClusterMetricsService(createMockClusterService(Set::of), MeterRegistry.NOOP);
+        var initialNodeStatus = randomFrom(PersistentTaskNodeStatus.values());
+        var metrics = SampledClusterMetrics.EMPTY.withAdditionalStatus(SamplingStatus.STALE);
+        service.metricsState.set(new SamplingState(initialNodeStatus, metrics));
+
+        var clusterState = MockedClusterStateTestUtils.createMockClusterState();
+        var previousState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(
+            clusterState,
+            randomFrom(MockedClusterStateTestUtils.LOCAL_NODE_ID, null)
+        );
+        var currentState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(
+            clusterState,
+            MockedClusterStateTestUtils.NON_LOCAL_NODE_ID
+        );
+
+        service.clusterChanged(new ClusterChangedEvent("TEST", currentState, previousState));
+        // cluster state is unchanged, so no update to node status
+        assertThat(service.metricsState.get(), is(new SamplingState(ANOTHER_NODE, SampledClusterMetrics.EMPTY)));
+    }
+
     public void testInitialShardInfoUpdate() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index1", "index1UUID", 2);
@@ -142,7 +215,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
         var initialSearchMetrics = service.getSearchTierMetrics();
         var initialIndexMetrics = service.getIndexTierMetrics();
@@ -218,7 +291,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
         var initialSearchMetrics = service.getSearchTierMetrics();
         var initialIndexMetrics = service.getIndexTierMetrics();
@@ -297,7 +370,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
         var initialSearchMetrics = service.getSearchTierMetrics();
         var initialIndexMetrics = service.getIndexTierMetrics();
@@ -363,7 +436,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
         var initialSearchMetrics = service.getSearchTierMetrics();
         var initialIndexMetrics = service.getIndexTierMetrics();
@@ -458,7 +531,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -522,7 +595,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -585,7 +658,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -640,7 +713,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -693,7 +766,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(activeShards::get);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -729,7 +802,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
 
         var client = mock(Client.class);
@@ -766,7 +839,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
     public void testActivityMetrics() {
         var clusterService = createMockClusterService(Set::of);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
 
         var searchActivity = randomBoolean()
             ? ActivityTests.randomActivityActive(Duration.ofMinutes(1))
@@ -799,7 +872,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
     public void testActivityMetricsEmpty() {
         var clusterService = createMockClusterService(Set::of);
         var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry);
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
 
         // No metrics returned initially when activity is empty
         meterRegistry.getRecorder().collect();
@@ -875,7 +948,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         return new FeatureMatcher<SampledShardInfos, Map<ShardKey, ShardSample>>(allOf((List) matchers), "shard infos", "shardInfos") {
             @Override
             protected Map<ShardKey, ShardSample> featureValueOf(SampledShardInfos actual) {
-                if (actual instanceof SampledClusterMetricsService.SampledClusterMetrics infos) {
+                if (actual instanceof SampledClusterMetrics infos) {
                     return infos.shardSamples();
                 } else {
                     throw new AssertionError("Expected CollectedMeteringShardInfos, but got " + actual.getClass());

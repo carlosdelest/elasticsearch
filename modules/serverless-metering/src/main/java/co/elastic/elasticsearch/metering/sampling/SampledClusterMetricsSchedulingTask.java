@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.sampling;
 
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.TimeValue;
@@ -46,6 +47,22 @@ public class SampledClusterMetricsSchedulingTask extends AllocatedPersistentTask
     private final Runnable notifyCancelled;
 
     private final SampledClusterMetricsService clusterMetricsService;
+
+    public static DiscoveryNode findTaskNode(ClusterState clusterState) {
+        var taskNodeId = findTaskNodeId(clusterState);
+        return taskNodeId != null ? clusterState.nodes().get(taskNodeId) : null;
+    }
+
+    public static String findTaskNodeId(ClusterState clusterState) {
+        var task = findTask(clusterState);
+        return task != null && task.isAssigned() ? task.getExecutorNode() : null;
+    }
+
+    @Nullable
+    public static PersistentTasksCustomMetadata.PersistentTask<?> findTask(ClusterState clusterState) {
+        PersistentTasksCustomMetadata taskMetadata = clusterState.getMetadata().custom(PersistentTasksCustomMetadata.TYPE);
+        return taskMetadata != null ? taskMetadata.getTask(TASK_NAME) : null;
+    }
 
     SampledClusterMetricsSchedulingTask(
         long id,
@@ -77,15 +94,6 @@ public class SampledClusterMetricsSchedulingTask extends AllocatedPersistentTask
         notifyCancelled.run();
     }
 
-    @Nullable
-    public static PersistentTasksCustomMetadata.PersistentTask<?> findTask(ClusterState clusterState) {
-        PersistentTasksCustomMetadata taskMetadata = clusterState.getMetadata().custom(PersistentTasksCustomMetadata.TYPE);
-        if (taskMetadata == null) {
-            return null;
-        }
-        return taskMetadata.getTask(TASK_NAME);
-    }
-
     void run() {
         if (isCancelled() || isCompleted()) {
             return;
@@ -93,7 +101,7 @@ public class SampledClusterMetricsSchedulingTask extends AllocatedPersistentTask
         try {
             clusterMetricsService.updateSamples(client);
         } catch (Exception e) {
-            logger.error("Failed during MeteringIndexInfoTask run", e);
+            logger.error("Sampling task run failed", e);
         }
         scheduleNextRun(pollIntervalSupplier.get());
     }

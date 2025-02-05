@@ -358,7 +358,6 @@ class UsageReportCollector {
                     try {
                         var sampledMetricValues = sampledMetricsProvider.getMetrics();
                         if (sampledMetricValues.isEmpty()) {
-                            log.info("[{}] is not ready for collect yet", sampledMetricsProvider.getClass().getName());
                             // Only process sampled metric values if all providers are ready and successfully returned values
                             // Otherwise we cannot advance the committed sample timestamp.
                             sampledMetricValuesList.clear();

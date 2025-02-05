@@ -21,25 +21,29 @@ import co.elastic.elasticsearch.metering.MeteringPlugin;
 import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 
 import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksRequest;
-import org.elasticsearch.action.admin.cluster.node.tasks.list.ListTasksResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
+import org.elasticsearch.persistent.PersistentTasksCustomMetadata.PersistentTask;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.tasks.TaskInfo;
 import org.elasticsearch.test.ESIntegTestCase;
+import org.hamcrest.Matcher;
 import org.junit.Before;
 
 import java.util.Collection;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
-import static org.hamcrest.Matchers.empty;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 public class SampledClusterMetricsSchedulingTaskIT extends AbstractStatelessIntegTestCase {
@@ -59,18 +63,25 @@ public class SampledClusterMetricsSchedulingTaskIT extends AbstractStatelessInte
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
         assertBusy(() -> {
             var task = SampledClusterMetricsSchedulingTask.findTask(clusterService().state());
-            assertNotNull(task);
-            assertTrue(task.isAssigned());
+            assertThat(task, isAssignedTask());
+            assertThat(getSamplingTask(), isPresentWith(taskInfoOf(task)));
         });
-        assertBusy(() -> {
-            ListTasksResponse tasks = clusterAdmin().listTasks(new ListTasksRequest().setActions("metering-index-info[c]")).actionGet();
-            assertThat(tasks.getTasks(), hasSize(1));
-        });
+
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), false));
+
         assertBusy(() -> {
-            ListTasksResponse tasks2 = clusterAdmin().listTasks(new ListTasksRequest().setActions("metering-index-info[c]")).actionGet();
-            assertThat(tasks2.getTasks(), empty());
+            assertThat(SampledClusterMetricsSchedulingTask.findTask(clusterService().state()), nullValue());
+            assertThat(getSamplingTask(), isEmpty());
         });
+
+        updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
+
+        assertBusy(() -> {
+            var task = SampledClusterMetricsSchedulingTask.findTask(clusterService().state());
+            assertThat(task, isAssignedTask());
+            assertThat(getSamplingTask(), isPresentWith(taskInfoOf(task)));
+        });
+
     }
 
     public void testTaskMoveToAnotherNode() throws Exception {
@@ -80,19 +91,14 @@ public class SampledClusterMetricsSchedulingTaskIT extends AbstractStatelessInte
 
         AtomicLong oldTaskId = new AtomicLong();
         assertBusy(() -> {
-            ListTasksResponse tasks = clusterAdmin().listTasks(new ListTasksRequest().setActions("metering-index-info[c]")).actionGet();
-            assertThat(tasks.getTasks(), hasSize(1));
-
-            oldTaskId.set(tasks.getTasks().get(0).id());
+            var task = getSamplingTask();
+            assertThat(task, isPresent());
+            oldTaskId.set(task.get().id());
         });
 
         assertTrue(internalCluster().stopNode(persistentTaskNode1.getName()));
 
-        assertBusy(() -> {
-            ListTasksResponse tasks = clusterAdmin().listTasks(new ListTasksRequest().setActions("metering-index-info[c]")).actionGet();
-            var taskIds = tasks.getTasks().stream().map(TaskInfo::id).collect(Collectors.toSet());
-            assertFalse(taskIds.contains(oldTaskId.get()));
-        });
+        assertBusy(() -> assertThat(getSamplingTask(), isPresentWith(transformedMatch(TaskInfo::id, not(oldTaskId.get())))));
 
         assertBusy(() -> {
             // Verifying the PersistentTask runs on a new node
@@ -101,6 +107,25 @@ public class SampledClusterMetricsSchedulingTaskIT extends AbstractStatelessInte
             assertThat(persistentTaskNode2, notNullValue());
             assertThat(persistentTaskNode2.getName(), not(equalTo(persistentTaskNode1.getName())));
         });
+    }
+
+    private static Optional<TaskInfo> getSamplingTask() {
+        return clusterAdmin().listTasks(new ListTasksRequest().setActions("metering-index-info[c]"))
+            .actionGet()
+            .getTasks()
+            .stream()
+            .findFirst();
+    }
+
+    private static Matcher<TaskInfo> taskInfoOf(PersistentTask<?> task) {
+        return transformedMatch(t -> t.parentTaskId().getId(), equalTo(task.getAllocationId()));
+    }
+
+    private static Matcher<PersistentTask<?>> isAssignedTask() {
+        return transformedMatch(t -> {
+            assertThat(t, notNullValue());
+            return t.isAssigned();
+        }, equalTo(true));
     }
 
     private DiscoveryNode getMeteringPersistentTaskAssignedNode() throws Exception {

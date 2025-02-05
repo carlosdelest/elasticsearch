@@ -18,6 +18,8 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
@@ -43,6 +45,7 @@ import java.util.stream.IntStream;
 
 import static co.elastic.elasticsearch.metering.TestUtils.hasBackfillStrategy;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
@@ -99,10 +102,9 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         Map<SampledClusterMetricsService.ShardKey, SampledClusterMetricsService.ShardSample> data,
         Set<SampledClusterMetricsService.SamplingStatus> flags
     ) {
-        indexInfoService.collectedMetrics.set(
-            new SampledClusterMetricsService.SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, data, flags)
+        indexInfoService.metricsState.set(
+            new SamplingState(THIS_NODE, new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, data, flags))
         );
-        indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
     }
 
     private static AssertionError elementMustBePresent() {
@@ -131,7 +133,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         Metadata metadata = clusterService.state().metadata();
         mockedMetadata(metadata, mockedIndex(indexName, false, isHidden));
 
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
@@ -195,7 +197,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
 
         when(systemIndices.isSystemIndex(indexName)).thenReturn(true);
 
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
@@ -248,7 +250,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 )
             )
         );
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
@@ -285,7 +287,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 )
             )
         );
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
@@ -322,7 +324,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 )
             )
         );
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
@@ -355,7 +357,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
@@ -421,7 +423,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             }
         }
 
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
@@ -510,7 +512,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             }
         }
 
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
@@ -562,7 +564,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo, Set.of(SampledClusterMetricsService.SamplingStatus.PARTIAL));
 
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
@@ -594,31 +596,9 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         }
     }
 
-    public void testNoPersistentTaskNode() {
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
-
-        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
-        indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.NO_NODE;
-
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isEmpty());
-    }
-
-    public void testAnotherNodeIsPersistentTaskNode() {
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
-
-        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
-        indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.ANOTHER_NODE;
-
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isEmpty());
-    }
-
-    public void testThisNodeIsPersistentTaskNodeButNotReady() {
-        var indexInfoService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
-
-        var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
-        indexInfoService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
+    public void testEmptyMetrics() {
+        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE); // empty initially
+        var sampledStorageMetricsProvider = metricsService.createSampledStorageMetricsProvider(systemIndices);
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
         assertThat(metricValues, isEmpty());

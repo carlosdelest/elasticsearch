@@ -17,23 +17,20 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.MeteringFeatures;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ResourceAlreadyExistsException;
-import org.elasticsearch.ResourceNotFoundException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
-import org.elasticsearch.features.FeatureService;
+import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.persistent.AllocatedPersistentTask;
 import org.elasticsearch.persistent.PersistentTaskState;
 import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
@@ -72,68 +69,56 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
     );
 
     private final Client client;
-    private final ClusterService clusterService;
-    private final FeatureService featureService;
     private final ThreadPool threadPool;
     private final SampledClusterMetricsService clusterMetricsService;
+    private final boolean enabledInitially;
 
     // Holds a reference to the task. This will have a valid value only on the executor node, otherwise it will be null.
     private final AtomicReference<SampledClusterMetricsSchedulingTask> executorNodeTask = new AtomicReference<>();
     private final PersistentTasksService persistentTasksService;
-    private volatile boolean enabled;
     private volatile TimeValue pollInterval;
 
     private SampledClusterMetricsSchedulingTaskExecutor(
         Client client,
-        ClusterService clusterService,
         PersistentTasksService persistentTasksService,
-        FeatureService featureService,
         ThreadPool threadPool,
         SampledClusterMetricsService clusterMetricsService,
         Settings settings
     ) {
         super(SampledClusterMetricsSchedulingTask.TASK_NAME, threadPool.executor(ThreadPool.Names.MANAGEMENT));
         this.client = client;
-
-        this.clusterService = clusterService;
-        this.featureService = featureService;
         this.threadPool = threadPool;
         this.clusterMetricsService = clusterMetricsService;
         this.persistentTasksService = persistentTasksService;
-        this.enabled = ENABLED_SETTING.get(settings);
+        this.enabledInitially = ENABLED_SETTING.get(settings);
         this.pollInterval = POLL_INTERVAL_SETTING.get(settings);
-    }
 
-    private static void registerListeners(
-        ClusterService clusterService,
-        ClusterSettings clusterSettings,
-        SampledClusterMetricsSchedulingTaskExecutor executor
-    ) {
-        clusterService.addListener(executor::startStopTask);
-        clusterService.addListener(executor::shuttingDown);
-        clusterSettings.addSettingsUpdateConsumer(ENABLED_SETTING, executor::setEnabled);
-        clusterSettings.addSettingsUpdateConsumer(POLL_INTERVAL_SETTING, executor::updatePollInterval);
     }
 
     public static SampledClusterMetricsSchedulingTaskExecutor create(
         Client client,
         ClusterService clusterService,
         PersistentTasksService persistentTasksService,
-        FeatureService featureService,
         ThreadPool threadPool,
         SampledClusterMetricsService clusterMetricsService,
         Settings settings
     ) {
         var executor = new SampledClusterMetricsSchedulingTaskExecutor(
             client,
-            clusterService,
             persistentTasksService,
-            featureService,
             threadPool,
             clusterMetricsService,
             settings
         );
-        registerListeners(clusterService, clusterService.getClusterSettings(), executor);
+        boolean hasAssignedRole = DiscoveryNode.hasRole(settings, SampledClusterMetricsSchedulingTask.ASSIGNED_ROLE);
+        boolean hasMasterRole = DiscoveryNode.isMasterNode(settings);
+        if (hasAssignedRole || hasMasterRole) {
+            // only relevant to master and nodes that can be assigned
+            clusterService.addListener(executor::checkTaskAssignment);
+        }
+        if (hasAssignedRole) {
+            clusterService.getClusterSettings().addSettingsUpdateConsumer(POLL_INTERVAL_SETTING, executor::updatePollInterval);
+        }
         return executor;
     }
 
@@ -143,8 +128,8 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         Collection<DiscoveryNode> candidateNodes,
         ClusterState clusterState
     ) {
-        // Require the sampling task to run on a search node. This is a requirement to calculate the storage_ram_ratio,
-        // which is part of the SPmin provisioned memory calculation for the search tier.
+        // Require the sampling task to run on a search node (out of candidateNodes, which won't include nodes shutting down).
+        // This is a requirement to calculate the `storage_ram_ratio` for SPmin provisioned memory of the search tier.
         DiscoveryNode discoveryNode = selectLeastLoadedNode(
             clusterState,
             candidateNodes,
@@ -165,11 +150,8 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
     ) {
         SampledClusterMetricsSchedulingTask clusterMetricsSchedulingTask = (SampledClusterMetricsSchedulingTask) task;
         executorNodeTask.set(clusterMetricsSchedulingTask);
-        DiscoveryNode node = clusterService.localNode();
-        logger.info("Node [{{}}{{}}] is selected as the current sampling node.", node.getName(), node.getId());
-        if (this.enabled) {
-            clusterMetricsSchedulingTask.run();
-        }
+        logger.info("Running persistent sampling task");
+        clusterMetricsSchedulingTask.run();
     }
 
     @Override
@@ -197,44 +179,65 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         );
     }
 
-    void startStopTask(ClusterChangedEvent event) {
-        // Wait until cluster has recovered. Plus, start the task only when every node in the cluster supports IX
-        if (event.state().clusterRecovered() == false
-            || featureService.clusterHasFeature(event.state(), MeteringFeatures.INDEX_INFO_SUPPORTED) == false) {
+    void checkTaskAssignment(ClusterChangedEvent event) {
+        ClusterState state = event.state();
+        Metadata metadata = state.metadata();
+        String localNodeId = state.nodes().getLocalNodeId();
+
+        if (localNodeId == null) {
             return;
         }
 
-        DiscoveryNode masterNode = event.state().nodes().getMasterNode();
-        if (masterNode == null) {
-            // no master yet
-            return;
-        }
-
-        doStartStopTask(event.state());
-    }
-
-    private void doStartStopTask(ClusterState clusterState) {
-        boolean indexSizeTaskRunningInCluster = SampledClusterMetricsSchedulingTask.findTask(clusterState) != null;
-
-        boolean isElectedMaster = clusterService.state().nodes().isLocalNodeElectedMaster();
-        // we should only start/stop task from single node, master is the best as it will go through it anyway
-        if (isElectedMaster) {
-            if (indexSizeTaskRunningInCluster == false && enabled) {
-                startTask();
+        var samplingTask = SampledClusterMetricsSchedulingTask.findTask(state);
+        if (event.localNodeMaster() && samplingTask == null) {
+            // the master node is responsible to create the task initially if it doesn't exist
+            // wait until master is stable before starting persistent task (if enabled)
+            if (state.clusterRecovered() && isSamplingEnabled(metadata.settings())) {
+                sendStartRequest();
             }
-            if (indexSizeTaskRunningInCluster && enabled == false) {
-                stopTask();
+        } else if (samplingTask != null && localNodeId.equals(samplingTask.getExecutorNode()) && event.metadataChanged()) {
+            Metadata previousMetadata = event.previousState().metadata();
+            if (transitionedToDisabled(metadata, previousMetadata)) {
+                markLocalTaskAsCompleted();
+            } else if (isNodeShuttingDown(metadata, previousMetadata, localNodeId)) {
+                markLocalTaskAsAborted();
             }
         }
     }
 
-    private void startTask() {
+    private boolean isSamplingEnabled(Settings settings) {
+        return ENABLED_SETTING.exists(settings) ? ENABLED_SETTING.get(settings) : enabledInitially;
+    }
+
+    // task got disabled, mark as completed to stop it cluster wide
+    private void markLocalTaskAsCompleted() {
+        var task = executorNodeTask.getAndSet(null);
+        if (task != null && task.isCancelled() == false) {
+            logger.info("Sampling task disabled, stopping.");
+            task.markAsCompleted();
+        }
+    }
+
+    // node is shutting down, abort task locally to get it reassigned to another node
+    private void markLocalTaskAsAborted() {
+        var task = executorNodeTask.getAndSet(null);
+        if (task != null && task.isCancelled() == false) {
+            logger.info("Aborting sampling task, node is shutting down");
+            task.markAsLocallyAborted("node shutdown");
+        }
+    }
+
+    private void sendStartRequest() {
         persistentTasksService.sendStartRequest(
             SampledClusterMetricsSchedulingTask.TASK_NAME,
             SampledClusterMetricsSchedulingTask.TASK_NAME,
             SampledClusterMetricsSchedulingTaskParams.INSTANCE,
             TimeValue.THIRTY_SECONDS /* TODO should this be configurable? longer by default? infinite? */,
             ActionListener.wrap(r -> logger.debug("Created sampling task for metering"), e -> {
+                if (e instanceof NodeClosedException) {
+                    logger.debug("Failed to create sampling task because node is shutting down", e);
+                    return;
+                }
                 Throwable t = e instanceof RemoteTransportException ? e.getCause() : e;
                 if (t instanceof ResourceAlreadyExistsException == false) {
                     logger.error("Failed to create sampling task for metering", e);
@@ -243,22 +246,22 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
         );
     }
 
-    private void stopTask() {
-        persistentTasksService.sendRemoveRequest(
-            SampledClusterMetricsSchedulingTask.TASK_NAME,
-            TimeValue.THIRTY_SECONDS /* TODO should this be configurable? longer by default? infinite? */,
-            ActionListener.wrap(r -> logger.debug("Stopped sampling task for metering"), e -> {
-                Throwable t = e instanceof RemoteTransportException ? e.getCause() : e;
-                if (t instanceof ResourceNotFoundException == false) {
-                    logger.error("Failed to remove sampling task for metering", e);
-                }
-            })
-        );
+    private boolean transitionedToDisabled(Metadata metadata, Metadata previousMetadata) {
+        Settings settingsOld = previousMetadata.settings();
+        Settings settingsNew = metadata.settings();
+        if (settingsNew == settingsOld) {// intentionally checking ref equality
+            return false;
+        }
+        return isSamplingEnabled(settingsOld) && isSamplingEnabled(settingsNew) == false;
     }
 
-    private void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-        doStartStopTask(clusterService.state());
+    private static boolean isNodeShuttingDown(Metadata metadata, Metadata previousMetadata, String nodeId) {
+        var shutdownsOld = previousMetadata.nodeShutdowns();
+        var shutdownsNew = metadata.nodeShutdowns();
+        if (shutdownsNew == shutdownsOld) { // intentionally checking ref equality
+            return false;
+        }
+        return shutdownsOld.contains(nodeId) == false && shutdownsNew.contains(nodeId);
     }
 
     private void updatePollInterval(TimeValue pollInterval) {
@@ -269,22 +272,5 @@ public final class SampledClusterMetricsSchedulingTaskExecutor extends Persisten
                 task.requestReschedule();
             }
         }
-    }
-
-    void shuttingDown(ClusterChangedEvent event) {
-        DiscoveryNode node = clusterService.localNode();
-        if (isNodeShuttingDown(event, node.getId())) {
-            var persistentTask = SampledClusterMetricsSchedulingTask.findTask(event.state());
-            if (persistentTask != null && persistentTask.isAssigned()) {
-                if (node.getId().equals(persistentTask.getExecutorNode())) {
-                    stopTask();
-                }
-            }
-        }
-    }
-
-    private static boolean isNodeShuttingDown(ClusterChangedEvent event, String nodeId) {
-        return event.previousState().metadata().nodeShutdowns().contains(nodeId) == false
-            && event.state().metadata().nodeShutdowns().contains(nodeId);
     }
 }
