@@ -151,6 +151,3 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testRecoverUnhollowedShardFromTranslog
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3463
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testStress
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3466
