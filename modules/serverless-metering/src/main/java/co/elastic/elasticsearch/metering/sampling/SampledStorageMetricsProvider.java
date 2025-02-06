@@ -25,6 +25,8 @@ import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.indices.SystemIndices;
+import org.elasticsearch.logging.LogManager;
+import org.elasticsearch.logging.Logger;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -38,6 +40,8 @@ import java.util.stream.Collectors;
 import static org.elasticsearch.core.Strings.format;
 
 class SampledStorageMetricsProvider implements SampledMetricsProvider {
+    private static final Logger logger = LogManager.getLogger(SampledStorageMetricsProvider.class);
+
     private static final String IX_METRIC_TYPE = "es_indexed_data";
     static final String IX_METRIC_ID_PREFIX = "shard-size";
     private static final String RA_S_METRIC_TYPE = "es_raw_stored_data";
@@ -60,7 +64,10 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
 
     @Override
     public Optional<MetricValues> getMetrics() {
-        return sampledClusterMetricsService.withSamplesIfReady(this::sampleToMetricValues);
+        return sampledClusterMetricsService.withSamplesIfReady(
+            this::sampleToMetricValues,
+            status -> logger.warn("Samples not ready metrics collection [sampling node: {}]", status)
+        );
     }
 
     private MetricValues sampleToMetricValues(SampledClusterMetricsService.SampledClusterMetrics sample) {

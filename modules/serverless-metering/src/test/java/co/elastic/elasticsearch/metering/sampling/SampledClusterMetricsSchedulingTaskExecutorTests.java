@@ -32,7 +32,6 @@ import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.features.FeatureService;
 import org.elasticsearch.persistent.PersistentTaskState;
 import org.elasticsearch.persistent.PersistentTasksCustomMetadata;
 import org.elasticsearch.persistent.PersistentTasksService;
@@ -52,13 +51,14 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.elasticsearch.persistent.PersistentTasksExecutor.NO_NODE_FOUND;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase {
     /** Needed by {@link ClusterService} **/
@@ -67,7 +67,6 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
     private Client client;
     private ClusterService clusterService;
     private PersistentTasksService persistentTasksService;
-    private FeatureService featureService;
 
     private SampledClusterMetricsService clusterMetricsService;
     private String localNodeId;
@@ -104,7 +103,6 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
         localNodeId = clusterService.localNode().getId();
         persistentTasksService = mock(PersistentTasksService.class);
         clusterMetricsService = mock(SampledClusterMetricsService.class);
-        featureService = new FeatureService(List.of(new MeteringFeatures()));
     }
 
     private ClusterService createClusterService(Set<DiscoveryNodeRole> localNodeRoles) {
@@ -131,12 +129,11 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
             client,
             clusterService,
             persistentTasksService,
-            featureService,
             threadPool,
             clusterMetricsService,
             settings
         );
-        executor.startStopTask(new ClusterChangedEvent("", initialState(), ClusterState.EMPTY_STATE));
+        executor.checkTaskAssignment(new ClusterChangedEvent("", initialState(), ClusterState.EMPTY_STATE));
         verify(persistentTasksService, times(1)).sendStartRequest(
             eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
             eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
@@ -151,34 +148,12 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
             client,
             clusterService,
             persistentTasksService,
-            featureService,
-            threadPool,
-            clusterMetricsService,
-            settings
-        );
-        executor.startStopTask(new ClusterChangedEvent("", stateWithLocalAssignedIndexSizeTask(initialState()), ClusterState.EMPTY_STATE));
-        verify(persistentTasksService, never()).sendStartRequest(
-            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
-            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
-            eq(new SampledClusterMetricsSchedulingTaskParams()),
-            any(),
-            any()
-        );
-    }
 
-    public void testSkippingTaskCreationIfClusterDoesNotSupportFeature() {
-        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
-            client,
-            clusterService,
-            persistentTasksService,
-            featureService,
             threadPool,
             clusterMetricsService,
             settings
         );
-        executor.startStopTask(
-            new ClusterChangedEvent("", stateWithUnassignedIndexSizeTask(initialStateWithoutFeature()), ClusterState.EMPTY_STATE)
-        );
+        executor.checkTaskAssignment(new ClusterChangedEvent("", stateWithLocalAssignedTask(initialState()), ClusterState.EMPTY_STATE));
         verify(persistentTasksService, never()).sendStartRequest(
             eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
             eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
@@ -193,7 +168,7 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
             client,
             clusterService,
             persistentTasksService,
-            featureService,
+
             threadPool,
             clusterMetricsService,
             settings
@@ -205,94 +180,69 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
     }
 
     public void testAbortOnShutdown() {
-        for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
-            var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
-                client,
-                clusterService,
-                persistentTasksService,
-                featureService,
-                threadPool,
-                clusterMetricsService,
-                settings
-            );
-            SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
-            PersistentTaskState state = mock(PersistentTaskState.class);
-            executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
-
-            ClusterState initialState = stateWithLocalAssignedIndexSizeTask(initialState());
-            ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
-            executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
-        }
-        verify(persistentTasksService, times(REMOVE_SHUTDOWN_TYPES.size())).sendRemoveRequest(
-            eq(SampledClusterMetricsSchedulingTask.TASK_NAME),
-            any(),
-            any()
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
+            client,
+            clusterService,
+            persistentTasksService,
+            threadPool,
+            clusterMetricsService,
+            settings
         );
-    }
+        SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
+        PersistentTaskState state = mock(PersistentTaskState.class);
+        executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
 
-    public void testDoNothingIfAlreadyStoppedOnShutdown() {
-        for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
-            var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
-                client,
-                clusterService,
-                persistentTasksService,
-                featureService,
-                threadPool,
-                clusterMetricsService,
-                settings
-            );
-            SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
-            PersistentTaskState state = mock(PersistentTaskState.class);
-            executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
+        ClusterState initialState = stateWithLocalAssignedTask(initialState());
+        ClusterState withShutdown = stateWithNodeShuttingDown(initialState, randomFrom(REMOVE_SHUTDOWN_TYPES));
 
-            ClusterState initialState = initialState();
-            ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
-            executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
-        }
-        verify(persistentTasksService, never()).sendRemoveRequest(eq(SampledClusterMetricsSchedulingTask.TASK_NAME), any(), any());
+        executor.checkTaskAssignment(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
+        verify(task).markAsLocallyAborted("node shutdown");
+        verifyNoInteractions(persistentTasksService);
     }
 
     public void testDoNothingIfTaskAssignedToAnotherNodeOnShutdown() {
-        for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
-            var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
-                client,
-                clusterService,
-                persistentTasksService,
-                featureService,
-                threadPool,
-                clusterMetricsService,
-                settings
-            );
-            SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
-            PersistentTaskState state = mock(PersistentTaskState.class);
-            executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
+            client,
+            clusterService,
+            persistentTasksService,
+            threadPool,
+            clusterMetricsService,
+            settings
+        );
+        SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
+        PersistentTaskState state = mock(PersistentTaskState.class);
+        executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
 
-            ClusterState initialState = stateWithOtherAssignedIndexSizeTask(initialState());
-            ClusterState withShutdown = stateWithNodeShuttingDown(initialState, type);
-            executor.shuttingDown(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
-        }
-        verify(persistentTasksService, never()).sendRemoveRequest(eq(SampledClusterMetricsSchedulingTask.TASK_NAME), any(), any());
+        ClusterState initialState = stateWithOtherAssignedTask(initialState());
+        ClusterState withShutdown = stateWithNodeShuttingDown(initialState, randomFrom(REMOVE_SHUTDOWN_TYPES));
+        executor.checkTaskAssignment(new ClusterChangedEvent("shutdown node", withShutdown, initialState));
+
+        verify(task).run();
+        verifyNoMoreInteractions(task);
+        verifyNoInteractions(persistentTasksService);
     }
 
     public void testDoNothingIfAlreadyShutdown() {
-        for (SingleNodeShutdownMetadata.Type type : REMOVE_SHUTDOWN_TYPES) {
-            var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
-                client,
-                clusterService,
-                persistentTasksService,
-                featureService,
-                threadPool,
-                clusterMetricsService,
-                settings
-            );
-            SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
-            PersistentTaskState state = mock(PersistentTaskState.class);
-            executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
+        var executor = SampledClusterMetricsSchedulingTaskExecutor.create(
+            client,
+            clusterService,
+            persistentTasksService,
+            threadPool,
+            clusterMetricsService,
+            settings
+        );
+        SampledClusterMetricsSchedulingTask task = mock(SampledClusterMetricsSchedulingTask.class);
+        PersistentTaskState state = mock(PersistentTaskState.class);
+        executor.nodeOperation(task, new SampledClusterMetricsSchedulingTaskParams(), state);
 
-            ClusterState withShutdown = stateWithNodeShuttingDown(stateWithLocalAssignedIndexSizeTask(initialState()), type);
-            executor.shuttingDown(new ClusterChangedEvent("unchanged", withShutdown, withShutdown));
-            verify(persistentTasksService, never()).sendRemoveRequest(eq(SampledClusterMetricsSchedulingTask.TASK_NAME), any(), any());
-        }
+        ClusterState withShutdown = stateWithNodeShuttingDown(
+            stateWithLocalAssignedTask(initialState()),
+            randomFrom(REMOVE_SHUTDOWN_TYPES)
+        );
+        executor.checkTaskAssignment(new ClusterChangedEvent("unchanged", withShutdown, withShutdown));
+        verify(task).run();
+        verifyNoMoreInteractions(task);
+        verifyNoInteractions(persistentTasksService);
     }
 
     public void testAbortOnDisable() {
@@ -300,7 +250,7 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
             client,
             clusterService,
             persistentTasksService,
-            featureService,
+
             threadPool,
             clusterMetricsService,
             settings
@@ -351,7 +301,7 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
             .build();
     }
 
-    private ClusterState stateWithLocalAssignedIndexSizeTask(ClusterState clusterState) {
+    private ClusterState stateWithLocalAssignedTask(ClusterState clusterState) {
         ClusterState.Builder builder = ClusterState.builder(clusterState);
         PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
         tasks.addTask(
@@ -365,7 +315,7 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
         return builder.metadata(metadata).build();
     }
 
-    private ClusterState stateWithOtherAssignedIndexSizeTask(ClusterState clusterState) {
+    private ClusterState stateWithOtherAssignedTask(ClusterState clusterState) {
         ClusterState.Builder builder = ClusterState.builder(clusterState);
         PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
         tasks.addTask(
@@ -373,20 +323,6 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
             SampledClusterMetricsSchedulingTask.TASK_NAME,
             new SampledClusterMetricsSchedulingTaskParams(),
             new PersistentTasksCustomMetadata.Assignment("another-node", "")
-        );
-
-        Metadata.Builder metadata = Metadata.builder(clusterState.metadata()).putCustom(PersistentTasksCustomMetadata.TYPE, tasks.build());
-        return builder.metadata(metadata).build();
-    }
-
-    private ClusterState stateWithUnassignedIndexSizeTask(ClusterState clusterState) {
-        ClusterState.Builder builder = ClusterState.builder(clusterState);
-        PersistentTasksCustomMetadata.Builder tasks = PersistentTasksCustomMetadata.builder();
-        tasks.addTask(
-            SampledClusterMetricsSchedulingTask.TASK_NAME,
-            SampledClusterMetricsSchedulingTask.TASK_NAME,
-            new SampledClusterMetricsSchedulingTaskParams(),
-            NO_NODE_FOUND
         );
 
         Metadata.Builder metadata = Metadata.builder(clusterState.metadata()).putCustom(PersistentTasksCustomMetadata.TYPE, tasks.build());

@@ -63,7 +63,6 @@ import java.util.stream.StreamSupport;
 
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor.MINIMUM_METERING_INFO_UPDATE_PERIOD;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING;
-import static co.elastic.elasticsearch.metering.sampling.utils.PersistentTaskUtils.findPersistentTaskNode;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.PROJECT_TYPE;
 
 abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
@@ -163,7 +162,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         ClusterState clusterState = clusterService.state();
         logger.trace("starting to process GetMeteringStatsAction request with cluster state version [{}]", clusterState.version());
 
-        DiscoveryNode persistentTaskNode = findPersistentTaskNode(clusterState, persistentTaskName);
+        DiscoveryNode persistentTaskNode = SampledClusterMetricsSchedulingTask.findTaskNode(clusterState);
         DiscoveryNode localNode = clusterState.nodes().getLocalNode();
         if (persistentTaskNode == null) {
             listener.onFailure(new PersistentTaskNodeNotAssignedException(persistentTaskName));
@@ -200,7 +199,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
                 public void handleResponse(GetMeteringStatsAction.Response response) {
                     try {
                         ClusterState updatedClusterState = clusterService.state();
-                        DiscoveryNode postActionPersistentTaskNode = findPersistentTaskNode(updatedClusterState, persistentTaskName);
+                        DiscoveryNode postActionPersistentTaskNode = SampledClusterMetricsSchedulingTask.findTaskNode(updatedClusterState);
                         if (postActionPersistentTaskNode == null) {
                             listener.onFailure(new PersistentTaskNodeNotAssignedException(persistentTaskName));
                         } else if (persistentTaskNode.getId().equals(postActionPersistentTaskNode.getId()) == false) {

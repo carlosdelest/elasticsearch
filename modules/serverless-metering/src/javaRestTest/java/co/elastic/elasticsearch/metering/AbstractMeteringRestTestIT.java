@@ -20,8 +20,10 @@ package co.elastic.elasticsearch.metering;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.test.cluster.local.AbstractLocalClusterSpecBuilder;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
+import org.elasticsearch.test.cluster.serverless.local.ServerlessLocalClusterSpecBuilder;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -43,22 +45,33 @@ public class AbstractMeteringRestTestIT extends ESRestTestCase {
 
     @SuppressWarnings("this-escape")
     @Rule
-    public ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
-        .withNode(node("index2", "index"))// first node created by default
-        .withNode(node("index3", "index"))
-        .withNode(node("search2", "search"))// first node created by default
-        .name("javaRestTest")
-        .user("admin-user", "x-pack-test-password")
-        .user("test-user", "x-pack-test-password", User.ROOT_USER_ROLE, false)
-        .setting("xpack.ml.enabled", "false")
-        .setting("metering.url", "http://localhost:" + usageApiTestServer.getAddress().getPort())
-        // speed things up a bit
-        .setting("metering.report_period", "5s")
-        .setting("metering.index-info-task.poll.interval", "1s")
-        .setting("serverless.autoscaling.search_metrics.push_interval", "500ms")
-        .setting("serverless.project_type", projectType())
-        .setting("serverless.project_id", PROJECT_ID)
-        .build();
+    public ServerlessElasticsearchCluster cluster = buildMeteringCluster();
+
+    private ServerlessElasticsearchCluster buildMeteringCluster() {
+        ServerlessLocalClusterSpecBuilder builder = ServerlessElasticsearchCluster.local();
+        configureNodes(builder);
+        configureCluster(builder);
+        return builder.build();
+    }
+
+    protected void configureNodes(AbstractLocalClusterSpecBuilder<ServerlessElasticsearchCluster> builder) {
+        // first nodes created by default
+        builder.withNode(node("index2", "index")).withNode(node("index3", "index")).withNode(node("search2", "search"));
+    }
+
+    protected void configureCluster(AbstractLocalClusterSpecBuilder<ServerlessElasticsearchCluster> builder) {
+        builder.name("javaRestTest")
+            .user("admin-user", "x-pack-test-password")
+            .user("test-user", "x-pack-test-password", User.ROOT_USER_ROLE, false)
+            .setting("xpack.ml.enabled", "false")
+            .setting("metering.url", "http://localhost:" + usageApiTestServer.getAddress().getPort())
+            // speed things up a bit
+            .setting("metering.report_period", "5s")
+            .setting("metering.index-info-task.poll.interval", "1s")
+            .setting("serverless.autoscaling.search_metrics.push_interval", "500ms")
+            .setting("serverless.project_type", projectType())
+            .setting("serverless.project_id", PROJECT_ID);
+    }
 
     protected String projectType() {
         return "ELASTICSEARCH_GENERAL_PURPOSE";

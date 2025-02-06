@@ -113,15 +113,15 @@ public class ServerlessServerCli extends ServerCli {
 
         String fileLogging = processInfo.sysprops().get(FILE_LOGGING_SYSPROP);
         if (fileLogging != null && Booleans.parseBoolean(fileLogging)) {
-            Path loggingConfig = env.configFile().resolve("log4j2.properties");
-            Path serverlessLoggingConfig = env.configFile().resolve("log4j2.serverless.properties");
+            Path loggingConfig = env.configDir().resolve("log4j2.properties");
+            Path serverlessLoggingConfig = env.configDir().resolve("log4j2.serverless.properties");
             // overwrite with new file based logging config
             Files.copy(serverlessLoggingConfig, loggingConfig, StandardCopyOption.REPLACE_EXISTING);
         }
 
         try {
 
-            Path defaultsFile = env.configFile().resolve("serverless-default-settings.yml");
+            Path defaultsFile = env.configDir().resolve("serverless-default-settings.yml");
             if (Files.exists(defaultsFile) == false) {
                 throw new IllegalStateException("Missing serverless defaults");
             }
@@ -154,7 +154,7 @@ public class ServerlessServerCli extends ServerCli {
                 finalSettingsBuilder.put(APM_NODE_ROLE_SETTING, indexOrSearchOrMlNodeRole(nodeSettings));
             }
 
-            var newEnv = new Environment(finalSettingsBuilder.build(), env.configFile());
+            var newEnv = new Environment(finalSettingsBuilder.build(), env.configDir());
 
             serverlessCliFinishedLatch.set(new CountDownLatch(1));
 

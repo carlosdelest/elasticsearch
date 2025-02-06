@@ -63,7 +63,7 @@ public class ClusterStateSecretsTests extends AbstractNamedWriteableTestCase<Clu
         super.setUp();
 
         Environment environment = newEnvironment();
-        writeTestFile(environment.configFile().resolve("secrets").resolve("secrets.json"), MOUNTED_SETTINGS);
+        writeTestFile(environment.configDir().resolve("secrets").resolve("secrets.json"), MOUNTED_SETTINGS);
         locallyMountedSecrets = new LocallyMountedSecrets(environment);
     }
 

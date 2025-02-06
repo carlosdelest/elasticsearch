@@ -38,7 +38,7 @@ public class LocallyMountedSecretsLoader implements SecureSettingsLoader {
     public LoadedSecrets load(Environment environment, Terminal terminal) {
         terminal.println(
             "Using locally mounted secrets from ["
-                + environment.configFile().toAbsolutePath().resolve(SECRETS_DIRECTORY).resolve(SECRETS_FILE_NAME)
+                + environment.configDir().toAbsolutePath().resolve(SECRETS_DIRECTORY).resolve(SECRETS_FILE_NAME)
                 + "]"
         );
         return new LoadedSecrets(new LocallyMountedSecrets(environment), Optional.empty());

@@ -160,7 +160,7 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
     }
 
     private static TrustManager createTrustManager(Environment environment) throws GeneralSecurityException, IOException {
-        Path certificateFile = environment.configFile().resolve(HttpMeteringUsageRecordPublisher.CERTIFICATE_PATH);
+        Path certificateFile = environment.configDir().resolve(HttpMeteringUsageRecordPublisher.CERTIFICATE_PATH);
         try (InputStream fis = Files.newInputStream(certificateFile)) {
             CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
             X509Certificate caCert = (X509Certificate) certificateFactory.generateCertificate(fis);

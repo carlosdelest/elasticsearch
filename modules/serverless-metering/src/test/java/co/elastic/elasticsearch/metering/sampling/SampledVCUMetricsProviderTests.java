@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
@@ -44,6 +45,7 @@ import java.util.function.Function;
 
 import static co.elastic.elasticsearch.metering.TestUtils.hasBackfillStrategy;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
+import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.SPMinInfo;
@@ -84,8 +86,9 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         SampledTierMetrics searchTierMetrics,
         SampledTierMetrics indexTierMetrics
     ) {
-        metricsService.collectedMetrics.set(new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, Map.of(), Set.of()));
-        metricsService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
+        metricsService.metricsState.set(
+            new SamplingState(THIS_NODE, new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, Map.of(), Set.of()))
+        );
     }
 
     private static AssertionError elementMustBePresent() {
@@ -94,7 +97,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
     public void testGetMetricsEmptyActivity() {
 
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
 
         var spMinProvisionedMemory = 789L;
         var searchTierMemorySize = 123L;
@@ -161,7 +164,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
     }
 
     public void testGetMetrics() {
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
 
         var spMinProvisionedMemory = 789L;
         var searchTierMemorySize = 123L;
@@ -256,7 +259,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
     }
 
     public void testDifferentSpMinValues() {
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
         setMetricsServiceData(
             metricsService,
             SampledClusterMetricsServiceTests.randomSampledTierMetrics(),
@@ -298,44 +301,14 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         }
     }
 
-    public void testNoPersistentTaskNode() {
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
+    public void testEmptyMetrics() {
+        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE); // empty initially
         var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
             metricsService,
             Duration.ofMinutes(15),
             buildSpMinTestProvider(),
             MeterRegistry.NOOP
         );
-        metricsService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.NO_NODE;
-
-        var metricValues = sampledVCUMetricsProvider.getMetrics();
-        assertThat(metricValues, isEmpty());
-    }
-
-    public void testAnotherNodeIsPersistentTaskNode() {
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
-        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
-            metricsService,
-            Duration.ofMinutes(15),
-            buildSpMinTestProvider(),
-            MeterRegistry.NOOP
-        );
-        metricsService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.ANOTHER_NODE;
-
-        var metricValues = sampledVCUMetricsProvider.getMetrics();
-        assertThat(metricValues, isEmpty());
-    }
-
-    public void testThisNodeIsPersistentTaskNodeButNotReady() {
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP);
-        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
-            metricsService,
-            Duration.ofMinutes(15),
-            buildSpMinTestProvider(),
-            MeterRegistry.NOOP
-        );
-        metricsService.persistentTaskNodeStatus = SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
-
         var metricValues = sampledVCUMetricsProvider.getMetrics();
         assertThat(metricValues, isEmpty());
     }

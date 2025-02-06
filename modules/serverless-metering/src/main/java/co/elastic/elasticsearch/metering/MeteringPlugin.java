@@ -244,7 +244,6 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
             services.client(),
             clusterService,
             persistentTasksService,
-            services.featureService(),
             threadPool,
             clusterMetricsService,
             environment.settings()

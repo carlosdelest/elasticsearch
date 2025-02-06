@@ -27,6 +27,7 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.SystemIndices;
@@ -46,11 +47,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static co.elastic.elasticsearch.metering.sampling.utils.PersistentTaskUtils.findPersistentTaskNodeId;
 import static org.elasticsearch.core.Strings.format;
 
 public class SampledClusterMetricsService {
@@ -68,10 +69,19 @@ public class SampledClusterMetricsService {
     private final LongCounter collectionsErrorsCounter;
     private final LongCounter collectionsPartialsCounter;
 
-    @SuppressWarnings("this-escape")
     public SampledClusterMetricsService(ClusterService clusterService, MeterRegistry meterRegistry) {
+        this(clusterService, meterRegistry, PersistentTaskNodeStatus.NO_NODE);
+    }
+
+    @SuppressWarnings("this-escape")
+    protected SampledClusterMetricsService(
+        ClusterService clusterService,
+        MeterRegistry meterRegistry,
+        PersistentTaskNodeStatus nodeStatus
+    ) {
         this.clusterService = clusterService;
         this.meterRegistry = meterRegistry;
+        this.metricsState = new AtomicReference<>(new SamplingState(nodeStatus, SampledClusterMetrics.EMPTY));
 
         clusterService.addListener(this::clusterChanged);
         this.coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
@@ -95,13 +105,13 @@ public class SampledClusterMetricsService {
             NODE_INFO_TIER_SEARCH_ACTIVITY_TIME,
             "The seconds since search tier last became active or inactive. Value is positive if active, and negative if inactive",
             "sec",
-            () -> this.withSamplesIfReady(sample -> makeActivityMeter(sample.searchTierMetrics())).stream().toList()
+            () -> this.withSamplesIfReady(sample -> makeActivityMeter(sample.searchTierMetrics()), null).stream().toList()
         );
         meterRegistry.registerLongsGauge(
             NODE_INFO_TIER_INDEX_ACTIVITY_TIME,
             "The seconds since index tier last became active or inactive. Value is positive if active, and negative if inactive",
             "sec",
-            () -> this.withSamplesIfReady(sample -> makeActivityMeter(sample.indexTierMetrics())).stream().toList()
+            () -> this.withSamplesIfReady(sample -> makeActivityMeter(sample.indexTierMetrics()), null).stream().toList()
         );
     }
 
@@ -150,8 +160,10 @@ public class SampledClusterMetricsService {
             return Objects.requireNonNullElse(shardInfo, ShardSample.EMPTY).shardInfo;
         }
 
-        SampledClusterMetrics withStatus(Set<SamplingStatus> newStatus) {
-            return new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, shardSamples, newStatus);
+        SampledClusterMetrics withAdditionalStatus(SamplingStatus newStatus) {
+            var newSet = EnumSet.copyOf(status);
+            newSet.add(newStatus);
+            return new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, shardSamples, newSet);
         }
 
     }
@@ -166,8 +178,9 @@ public class SampledClusterMetricsService {
         ANOTHER_NODE
     }
 
-    final AtomicReference<SampledClusterMetrics> collectedMetrics = new AtomicReference<>(SampledClusterMetrics.EMPTY);
-    volatile PersistentTaskNodeStatus persistentTaskNodeStatus = PersistentTaskNodeStatus.NO_NODE;
+    record SamplingState(PersistentTaskNodeStatus nodeStatus, SampledClusterMetrics metrics) {}
+
+    final AtomicReference<SamplingState> metricsState;
 
     /**
      * Monitors cluster state changes to see if we are not the persistent task node anymore.
@@ -175,20 +188,26 @@ public class SampledClusterMetricsService {
      * Package-private for testing.
      */
     void clusterChanged(ClusterChangedEvent event) {
-        var currentPersistentTaskNode = findPersistentTaskNodeId(event.state(), SampledClusterMetricsSchedulingTask.TASK_NAME);
-        var localNode = event.state().nodes().getLocalNodeId();
-
-        var wasPersistentTaskNode = persistentTaskNodeStatus == PersistentTaskNodeStatus.THIS_NODE;
-        if (currentPersistentTaskNode == null) {
-            persistentTaskNodeStatus = PersistentTaskNodeStatus.NO_NODE;
-        } else if (currentPersistentTaskNode.equals(localNode)) {
-            persistentTaskNodeStatus = PersistentTaskNodeStatus.THIS_NODE;
-        } else {
-            persistentTaskNodeStatus = PersistentTaskNodeStatus.ANOTHER_NODE;
+        if (event.metadataChanged() == false) {
+            return; // metadata (task assignment) unchanged
         }
 
-        if (persistentTaskNodeStatus != PersistentTaskNodeStatus.THIS_NODE && wasPersistentTaskNode) {
-            collectedMetrics.set(SampledClusterMetrics.EMPTY);
+        var previousTaskNodeId = SampledClusterMetricsSchedulingTask.findTaskNodeId(event.previousState());
+        var currentTaskNodeId = SampledClusterMetricsSchedulingTask.findTaskNodeId(event.state());
+
+        var localNodeId = event.state().nodes().getLocalNodeId();
+        var isPersistentTask = localNodeId != null && localNodeId.equals(currentTaskNodeId);
+        var wasPersistentTask = localNodeId != null && localNodeId.equals(previousTaskNodeId);
+
+        if (isPersistentTask && wasPersistentTask == false) {
+            // this node has become the persistent task node
+            metricsState.set(new SamplingState(PersistentTaskNodeStatus.THIS_NODE, SampledClusterMetrics.EMPTY));
+        } else if (currentTaskNodeId == null && previousTaskNodeId != null) {
+            // the persistent task node was unassigned (e.g. node shutdown) or the task was disabled
+            metricsState.set(new SamplingState(PersistentTaskNodeStatus.NO_NODE, SampledClusterMetrics.EMPTY));
+        } else if (currentTaskNodeId != null && currentTaskNodeId.equals(previousTaskNodeId) == false) {
+            // another node has become the persistent task node
+            metricsState.set(new SamplingState(PersistentTaskNodeStatus.ANOTHER_NODE, SampledClusterMetrics.EMPTY));
         }
     }
 
@@ -198,31 +217,23 @@ public class SampledClusterMetricsService {
     void updateSamples(Client client) {
         logger.debug("Calling SampledClusterMetricsService#updateSamples");
         collectionsTotalCounter.increment();
-        // If we get called and ask to update, that request comes from the PersistentTask, so we are definitely on
-        // the PersistentTask node
-        persistentTaskNodeStatus = PersistentTaskNodeStatus.THIS_NODE;
 
+        var state = this.metricsState.get();
         var collectSamplesRequest = new CollectClusterSamplesAction.Request(
-            collectedMetrics.get().searchTierMetrics().activity(),
-            collectedMetrics.get().indexTierMetrics().activity()
+            state.metrics().searchTierMetrics().activity(),
+            state.metrics().indexTierMetrics().activity()
         );
         client.execute(CollectClusterSamplesAction.INSTANCE, collectSamplesRequest, new ActionListener<>() {
             @Override
             public void onResponse(CollectClusterSamplesAction.Response response) {
-                Set<SamplingStatus> status = EnumSet.noneOf(SamplingStatus.class);
                 if (response.isComplete() == false) {
                     collectionsPartialsCounter.increment();
-                    status.add(SamplingStatus.PARTIAL);
                 }
-
                 // Update sample metrics, replacing memory, merging activity, and building new MeteringShardInfo from diffs
-                collectedMetrics.getAndUpdate(
-                    current -> new SampledClusterMetrics(
-                        mergeTierMetrics(current.searchTierMetrics(), response.getSearchTierMemorySize(), response.getSearchActivity()),
-                        mergeTierMetrics(current.indexTierMetrics(), response.getIndexTierMemorySize(), response.getIndexActivity()),
-                        mergeShardInfos(removeStaleEntries(current.shardSamples()), response.getShardInfos()),
-                        status
-                    )
+                SampledClusterMetricsService.this.metricsState.getAndUpdate(
+                    current -> current.nodeStatus() == PersistentTaskNodeStatus.THIS_NODE
+                        ? new SamplingState(current.nodeStatus(), mergeSamplesWithUpdate(current.metrics(), response))
+                        : current
                 );
                 logger.debug(
                     () -> format(
@@ -234,14 +245,24 @@ public class SampledClusterMetricsService {
 
             @Override
             public void onFailure(Exception e) {
-                var previous = collectedMetrics.get();
-                var status = EnumSet.copyOf(previous.status());
-                status.add(SamplingStatus.STALE);
-                collectedMetrics.set(previous.withStatus(status));
                 logger.error("Failed to collect samples in cluster", e);
                 collectionsErrorsCounter.increment();
+                SampledClusterMetricsService.this.metricsState.getAndUpdate(
+                    current -> current.nodeStatus() == PersistentTaskNodeStatus.THIS_NODE
+                        ? new SamplingState(current.nodeStatus(), current.metrics().withAdditionalStatus(SamplingStatus.STALE))
+                        : current
+                );
             }
         });
+    }
+
+    private SampledClusterMetrics mergeSamplesWithUpdate(SampledClusterMetrics current, CollectClusterSamplesAction.Response response) {
+        return new SampledClusterMetrics(
+            mergeTierMetrics(current.searchTierMetrics(), response.getSearchTierMemorySize(), response.getSearchActivity()),
+            mergeTierMetrics(current.indexTierMetrics(), response.getIndexTierMemorySize(), response.getIndexActivity()),
+            mergeShardInfos(removeStaleEntries(current.shardSamples()), response.getShardInfos()),
+            response.isComplete() ? EnumSet.noneOf(SamplingStatus.class) : EnumSet.of(SamplingStatus.PARTIAL)
+        );
     }
 
     private SampledTierMetrics mergeTierMetrics(SampledTierMetrics current, long newMemory, Activity newActivity) {
@@ -264,12 +285,22 @@ public class SampledClusterMetricsService {
             .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    public <T> Optional<T> withSamplesIfReady(Function<SampledClusterMetrics, T> function) {
-        var currentInfo = collectedMetrics.get();
-        if (persistentTaskNodeStatus != PersistentTaskNodeStatus.THIS_NODE || currentInfo == SampledClusterMetrics.EMPTY) {
-            return Optional.empty(); // not the PersistentTask node or not ready to report yet
+    public <T> Optional<T> withSamplesIfReady(
+        Function<SampledClusterMetrics, T> samplesFunction,
+        @Nullable Consumer<PersistentTaskNodeStatus> otherwise
+    ) {
+        var metricsState = this.metricsState.get();
+        var sampledMetrics = metricsState.metrics();
+        // sampledMetrics may only be non-empty if this is the persistent task node
+        assert sampledMetrics == SampledClusterMetrics.EMPTY || metricsState.nodeStatus() == PersistentTaskNodeStatus.THIS_NODE;
+        // if empty, not the persistent task node or not ready to report yet
+        if (sampledMetrics != SampledClusterMetrics.EMPTY) {
+            return Optional.ofNullable(samplesFunction.apply(sampledMetrics));
         }
-        return Optional.ofNullable(function.apply(currentInfo));
+        if (otherwise != null) {
+            otherwise.accept(metricsState.nodeStatus());
+        }
+        return Optional.empty();
     }
 
     public SampledMetricsProvider createSampledStorageMetricsProvider(SystemIndices systemIndices) {
@@ -322,19 +353,21 @@ public class SampledClusterMetricsService {
     }
 
     public SampledShardInfos getMeteringShardInfo() {
-        return collectedMetrics.get();
+        return getSampledClusterMetrics();
+    }
+
+    private SampledClusterMetrics getSampledClusterMetrics() {
+        var metricsState = this.metricsState.get();
+        assert metricsState != null && metricsState.metrics() != null;
+        return metricsState.metrics();
     }
 
     SampledTierMetrics getSearchTierMetrics() {
-        var sampledClusterMetrics = collectedMetrics.get();
-        assert sampledClusterMetrics != null;
-        return sampledClusterMetrics.searchTierMetrics();
+        return getSampledClusterMetrics().searchTierMetrics();
     }
 
     SampledTierMetrics getIndexTierMetrics() {
-        var sampledClusterMetrics = collectedMetrics.get();
-        assert sampledClusterMetrics != null;
-        return sampledClusterMetrics.indexTierMetrics();
+        return getSampledClusterMetrics().indexTierMetrics();
     }
 
     private LongWithAttributes makeActivityMeter(SampledTierMetrics metrics) {
