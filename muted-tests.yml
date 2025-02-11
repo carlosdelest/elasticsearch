@@ -148,9 +148,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceIT
   method: testSearchShardShouldRecoverWhenWarmingFailsOnGetConnection
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3449
-- class: co.elastic.elasticsearch.stateless.recovery.BlockRefreshUponIndexCreationIT
-  method: testRefreshesAreBlockedUntilBlockIsRemoved
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3418
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_crud/Test delete given unused trained model}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3473
