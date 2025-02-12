@@ -10,6 +10,7 @@ steps:
             - "#es-datastore-serverless-alerts"
             - "#es-search-engine-serverless-alerts"
           message: "Elasticsearch serverless promotion started. See $BUILDKITE_BUILD_URL for details."
+        if: (build.branch == "main" || build.branch =~ /^patch\//) && build.message !~ /ES Serverless Release automation - Scheduled Promotion/
     env:
       USE_GITHUB_CREDENTIALS: "true"
       BLOCK_ON_ISSUES_UNTRIAGED: "false"
@@ -19,5 +20,9 @@ steps:
       memory: "4G"
 
 notify:
-  - slack: "#es-serverless-gitops"
+  - slack:
+      channels:
+        - "#es-serverless-gitops"
+        - "#es-datastore-serverless-alerts"
+        - "#es-search-engine-serverless-alerts"
     if: (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"

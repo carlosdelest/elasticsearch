@@ -148,8 +148,15 @@ tests:
 - class: co.elastic.elasticsearch.stateless.cache.SharedBlobCacheWarmingServiceIT
   method: testSearchShardShouldRecoverWhenWarmingFailsOnGetConnection
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3449
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3450
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=ml/inference_crud/Test delete given unused trained model}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3473
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=ml/learning_to_rank_rescorer/Test rescore with no hits model}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3474
+- class: co.elastic.elasticsearch.stateless.autoscaling.search.ReplicasUpdaterServiceTests
+  method: testCancelingTaskClearsState
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3488
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testRecoverUnhollowedShardFromTranslog
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3463
+  method: testStress
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3489
