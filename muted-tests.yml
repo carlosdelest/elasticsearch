@@ -157,9 +157,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.ReplicasUpdaterServiceTests
   method: testCancelingTaskClearsState
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3488
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testRealTimeGet
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3491
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_crud/Test delete model alias}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3498
