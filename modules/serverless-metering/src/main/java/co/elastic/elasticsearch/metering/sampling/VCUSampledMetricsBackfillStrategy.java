@@ -103,28 +103,28 @@ public class VCUSampledMetricsBackfillStrategy implements SampledMetricsProvider
     }
 
     @Nullable
-    static SampledVCUMetricsProvider.SPMinInfo tryExtractSPMinInfo(MetricValue sample) {
+    static SPMinProvisionedMemoryCalculator.SPMinInfo tryExtractSPMinInfo(MetricValue sample) {
         var spMinProvisioned = getSpMinProvisionedMemory(sample);
         if (spMinProvisioned != null) {
-            return new SampledVCUMetricsProvider.SPMinInfo(spMinProvisioned, getSpMin(sample), getSpMinStorageRamRatio(sample));
+            return new SPMinProvisionedMemoryCalculator.SPMinInfo(spMinProvisioned, getSpMin(sample), getSpMinStorageRamRatio(sample));
         }
         return null;
     }
 
     @Nullable
-    static SampledVCUMetricsProvider.SPMinInfo tryInterpolateSPMinInfo(MetricValue currentSample, MetricValue previousSample) {
+    static SPMinProvisionedMemoryCalculator.SPMinInfo tryInterpolateSPMinInfo(MetricValue currentSample, MetricValue previousSample) {
         var currentSpMinProvisioned = getSpMinProvisionedMemory(currentSample);
         var previousSpMinProvisioned = getSpMinProvisionedMemory(previousSample);
         if (previousSpMinProvisioned != null && currentSpMinProvisioned != null) {
             // If sp_min_provisioned_memory is present sp_min and sp_min_storage_ram_ratio are also present
             // Return the values associated with the smallest sp_min_provisioned_memory
             return previousSpMinProvisioned < currentSpMinProvisioned
-                ? new SampledVCUMetricsProvider.SPMinInfo(
+                ? new SPMinProvisionedMemoryCalculator.SPMinInfo(
                     previousSpMinProvisioned,
                     getSpMin(previousSample),
                     getSpMinStorageRamRatio(previousSample)
                 )
-                : new SampledVCUMetricsProvider.SPMinInfo(
+                : new SPMinProvisionedMemoryCalculator.SPMinInfo(
                     currentSpMinProvisioned,
                     getSpMin(currentSample),
                     getSpMinStorageRamRatio(currentSample)
