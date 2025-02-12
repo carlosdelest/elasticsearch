@@ -18,6 +18,7 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
@@ -43,6 +44,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.oneOf;
 import static org.hamcrest.Matchers.startsWith;
 
@@ -57,7 +59,7 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
     @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("stateless.enabled", "true")
-        .setting("xpack.ml.enabled", "false")
+        .setting("xpack.ml.enabled", "true")
         .user(ADMIN_USERNAME, ADMIN_PASSWORD)
         .setting("xpack.watcher.enabled", "false")
         .setting("multi_project.enabled", "true")
@@ -219,6 +221,16 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
             thread.join(30000);
         }
         assertTrue(threads.stream().noneMatch(Thread::isAlive));
+    }
+
+    @FixForMultiProject(description = "Remove once ML autoscaling metrics work. See also https://elasticco.atlassian.net/browse/ES-10838")
+    public void testAutoscalingAPIContainsNoError() throws IOException {
+        final Request getAutoscalingMetricsRequest = new Request("GET", "/_internal/serverless/autoscaling");
+        final Response response = adminClient().performRequest(getAutoscalingMetricsRequest);
+        final ObjectPath objectPath = assertOKAndCreateObjectPath(response);
+        assertThat(objectPath.evaluate("index.failure"), nullValue());
+        assertThat(objectPath.evaluate("search.failure"), nullValue());
+        assertThat(objectPath.evaluate("ml"), nullValue());
     }
 
     private void doTestForOneProjectClient(ProjectClient projectClient) throws IOException {

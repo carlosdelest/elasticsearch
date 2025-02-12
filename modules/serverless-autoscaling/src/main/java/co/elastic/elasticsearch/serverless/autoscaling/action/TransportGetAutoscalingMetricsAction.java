@@ -38,9 +38,11 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.client.internal.ParentTaskAssigningClient;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.project.ProjectResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.tasks.Task;
@@ -74,6 +76,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
 
     private final ClusterService clusterService;
     private final Client client;
+    private final ProjectResolver projectResolver;
     private volatile boolean autoscalingEnabled;
 
     @Inject
@@ -82,7 +85,8 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
         ClusterService clusterService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        Client client
+        Client client,
+        ProjectResolver projectResolver
     ) {
         super(
             GetAutoscalingMetricsAction.NAME,
@@ -97,6 +101,7 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
         );
         this.clusterService = clusterService;
         this.client = client;
+        this.projectResolver = projectResolver;
         clusterService.getClusterSettings()
             .initializeAndWatch(AUTOSCALING_METRICS_ENABLED_SETTING, enabled -> this.autoscalingEnabled = enabled);
     }
@@ -147,17 +152,27 @@ public class TransportGetAutoscalingMetricsAction extends TransportMasterNodeAct
             }),
             countDownListener
         );
-        executeRequest(
-            parentTaskAssigningClient,
-            threadPool,
-            GetMachineLearningTierMetrics.INSTANCE,
-            new GetMachineLearningTierMetrics.Request(request.masterNodeTimeout(), timeoutPerMetric),
-            ActionListener.wrap(response -> machineLearningMetricsRef.set(response.getMetrics()), e -> {
-                logger.warn("failed to retrieve ml tier metrics", e);
-                machineLearningMetricsRef.set(new MachineLearningTierMetrics(getFailureReason(e), wrapExceptionIfNecessary(e)));
-            }),
-            countDownListener
-        );
+        @FixForMultiProject(
+            description = "temporarily skip ML autoscaling metrics, see also https://elasticco.atlassian.net/browse/ES-10838"
+        )
+        final boolean supportsMultipleProjects = projectResolver.supportsMultipleProjects();
+        if (supportsMultipleProjects) {
+            logger.info("multi-project is enabled, skip retrieving ml tier metrics");
+            machineLearningMetricsRef.set(null);
+            countDownListener.onResponse(null);
+        } else {
+            executeRequest(
+                parentTaskAssigningClient,
+                threadPool,
+                GetMachineLearningTierMetrics.INSTANCE,
+                new GetMachineLearningTierMetrics.Request(request.masterNodeTimeout(), timeoutPerMetric),
+                ActionListener.wrap(response -> machineLearningMetricsRef.set(response.getMetrics()), e -> {
+                    logger.warn("failed to retrieve ml tier metrics", e);
+                    machineLearningMetricsRef.set(new MachineLearningTierMetrics(getFailureReason(e), wrapExceptionIfNecessary(e)));
+                }),
+                countDownListener
+            );
+        }
     }
 
     @Override
