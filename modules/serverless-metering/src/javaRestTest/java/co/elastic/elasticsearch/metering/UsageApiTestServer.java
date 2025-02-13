@@ -43,7 +43,7 @@ public class UsageApiTestServer extends ExternalResource {
     private static final Logger logger = LogManager.getLogger(UsageApiTestServer.class);
     private static final XContentProvider.FormatProvider XCONTENT = XContentProvider.provider().getJsonXContent();
     private static HttpServer server;
-    private final BlockingQueue<List<Map<?, ?>>> received = new LinkedBlockingQueue<>();
+    private final BlockingQueue<Map<?, ?>> received = new LinkedBlockingQueue<>();
 
     @Override
     protected void before() throws Throwable {
@@ -60,7 +60,7 @@ public class UsageApiTestServer extends ExternalResource {
 
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
-            received.add(toUsageRecordMaps(exchange.getRequestBody()));
+            received.addAll(toUsageRecordMaps(exchange.getRequestBody()));
             exchange.sendResponseHeaders(201, 0);
         }
     }
@@ -73,7 +73,7 @@ public class UsageApiTestServer extends ExternalResource {
         return XContentParserUtils.parseList(parser, XContentParser::map);
     }
 
-    BlockingQueue<List<Map<?, ?>>> getReceivedRecords() {
+    BlockingQueue<Map<?, ?>> getReceivedRecords() {
         return received;
     }
 
