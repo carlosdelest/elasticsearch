@@ -29,15 +29,16 @@ import org.elasticsearch.xcontent.XContentType;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.StreamSupport;
 
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.startsWith;
 
 public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
 
@@ -67,34 +68,69 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         assertThat(plugins, not(empty()));
     }
 
-    public void testSizeMetricsAreRecorded() throws Exception {
+    private Predicate<UsageRecord> isShardSizeMetric(String indexName, int shardId) {
+        return m -> m.id().startsWith("shard-size:" + indexName + ":" + shardId);
+    }
+
+    private Predicate<UsageRecord> isIndexSizeMetric(String indexName) {
+        return m -> m.id().startsWith("index-size:" + indexName);
+    }
+
+    public void testIndexSizeMetricsAreRecorded() throws Exception {
         startMasterAndIndexNode();
         startSearchNode();
         ensureStableCluster(2);
 
-        String indexName = "idx1";
-        createIndex(indexName);
-        client().index(new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
-        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+        createIndex("idx1");
+        client().index(new IndexRequest("idx1").source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
+        admin().indices().flush(new FlushRequest("idx1").force(true)).actionGet();
 
-        String idPRefix = "shard-size:" + indexName + ":0";
         var usageRecords = new ArrayList<UsageRecord>();
         assertBusy(() -> {
-            pollReceivedRecords(usageRecords);
-            var lastUsageRecord = usageRecords.stream()
-                .filter(m -> m.id().startsWith(idPRefix))
-                .max(Comparator.comparing(UsageRecord::usageTimestamp));
+            pollReceivedRecords(usageRecords, isIndexSizeMetric("idx1"));
+            var lastUsageRecord = usageRecords.stream().max(Comparator.comparing(UsageRecord::usageTimestamp));
 
-            var metric = lastUsageRecord.orElseThrow(() -> new AssertionError("No IX usage records for " + indexName));
+            var metric = lastUsageRecord.orElseThrow(() -> new AssertionError("No IX usage records for " + "idx1"));
 
-            assertThat(metric.id(), startsWith(idPRefix));
             assertThat(metric.usage().type(), equalTo("es_indexed_data"));
             assertThat(metric.usage().quantity(), greaterThan(0L));
             assertThat(
                 metric.source().metadata(),
-                equalTo(Map.of("index", indexName, "shard", "0", "system_index", "false", "hidden_index", "false"))
+                allOf(hasEntry("index", "idx1"), hasEntry("system_index", "false"), hasEntry("hidden_index", "false"))
             );
 
         }, 20, TimeUnit.SECONDS);
     }
+
+    public void testShardSizeMetricsAreRecorded() throws Exception {
+        startMasterAndIndexNode();
+        startSearchNode();
+        ensureStableCluster(2);
+
+        createIndex("idx1");
+        client().index(new IndexRequest("idx1").source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
+        admin().indices().flush(new FlushRequest("idx1").force(true)).actionGet();
+
+        var usageRecords = new ArrayList<UsageRecord>();
+        assertBusy(() -> {
+            pollReceivedRecords(usageRecords, isShardSizeMetric("idx1", 0));
+            var lastUsageRecord = usageRecords.stream().max(Comparator.comparing(UsageRecord::usageTimestamp));
+
+            var metric = lastUsageRecord.orElseThrow(() -> new AssertionError("No IX usage records for " + "idx1"));
+
+            assertThat(metric.usage().type(), equalTo("es_indexed_data"));
+            assertThat(metric.usage().quantity(), greaterThan(0L));
+            assertThat(
+                metric.source().metadata(),
+                allOf(
+                    hasEntry("index", "idx1"),
+                    hasEntry("system_index", "false"),
+                    hasEntry("hidden_index", "false"),
+                    hasEntry("shard", "0")
+                )
+            );
+
+        }, 20, TimeUnit.SECONDS);
+    }
+
 }

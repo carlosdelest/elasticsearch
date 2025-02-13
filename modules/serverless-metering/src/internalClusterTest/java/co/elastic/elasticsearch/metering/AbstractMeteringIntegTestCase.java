@@ -59,6 +59,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.function.Predicate;
 
 @ESIntegTestCase.ClusterScope(scope = ESIntegTestCase.Scope.TEST, numDataNodes = 0, numClientNodes = 0)
 @SuppressForbidden(reason = "Uses an HTTP server for testing")
@@ -161,9 +162,13 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
     }
 
     protected void pollReceivedRecords(List<UsageRecord> usageRecords) {
+        pollReceivedRecords(usageRecords, r -> true);
+    }
+
+    protected void pollReceivedRecords(List<UsageRecord> usageRecords, Predicate<UsageRecord> filter) {
         List<List<UsageRecord>> recordLists = new ArrayList<>();
         receivedMetrics().drainTo(recordLists);
-        recordLists.stream().flatMap(List::stream).forEach(usageRecords::add);
+        recordLists.stream().flatMap(List::stream).filter(filter).forEach(usageRecords::add);
     }
 
     protected static void createDataStreamAndTemplate(String dataStreamName, Settings settings, String mapping) throws IOException {

@@ -94,35 +94,32 @@ public class AbstractMeteringRestTestIT extends ESRestTestCase {
         return cluster.getHttpAddresses();
     }
 
-    private BlockingQueue<List<Map<?, ?>>> getReceivedRecords() {
-        BlockingQueue<List<Map<?, ?>>> records = usageApiTestServer.getReceivedRecords();
+    private BlockingQueue<Map<?, ?>> getReceivedRecords() {
+        var records = usageApiTestServer.getReceivedRecords();
         assertTrue(
             "Expected usage record ids to contain project id",
-            records.stream().flatMap(List::stream).allMatch(r -> ((String) r.get("id")).contains(PROJECT_ID))
+            records.stream().allMatch(r -> ((String) r.get("id")).contains(PROJECT_ID))
         );
         return records;
     }
 
-    protected List<List<Map<?, ?>>> drainAllUsageRecords() {
-        List<List<Map<?, ?>>> recordLists = new ArrayList<>();
+    protected List<Map<?, ?>> drainAllUsageRecords() {
+        List<Map<?, ?>> recordLists = new ArrayList<>();
         usageApiTestServer.getReceivedRecords().drainTo(recordLists);
         return recordLists;
     }
 
     protected List<Map<?, ?>> drainUsageRecords(String prefix) {
-        List<List<Map<?, ?>>> recordLists = drainAllUsageRecords();
+        List<Map<?, ?>> recordLists = drainAllUsageRecords();
         logger.info(recordLists);
         return filterUsageRecords(recordLists, prefix);
     }
 
-    protected List<List<Map<?, ?>>> getAllUsageRecords() {
+    protected List<Map<?, ?>> getAllUsageRecords() {
         return new ArrayList<>(getReceivedRecords());
     }
 
-    protected List<Map<?, ?>> filterUsageRecords(List<List<Map<?, ?>>> recordLists, String prefix) {
-        return recordLists.stream()
-            .flatMap(List::stream)
-            .filter(m -> ((String) m.get("id")).startsWith(prefix))
-            .collect(Collectors.toList());
+    protected List<Map<?, ?>> filterUsageRecords(List<Map<?, ?>> recordLists, String prefix) {
+        return recordLists.stream().filter(m -> ((String) m.get("id")).startsWith(prefix)).collect(Collectors.toList());
     }
 }

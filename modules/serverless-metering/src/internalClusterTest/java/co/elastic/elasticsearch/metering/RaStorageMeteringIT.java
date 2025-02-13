@@ -87,6 +87,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
 import static org.elasticsearch.index.IndexSettings.INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING;
@@ -97,6 +98,7 @@ import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -104,7 +106,7 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
-public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
+public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
     private static final long EXPECTED_SIZE = 3 * ASCII_SIZE + NUMBER_SIZE;
@@ -118,7 +120,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         );
     }
 
-    public StorageMeteringIT(Settings indexSettings) {
+    public RaStorageMeteringIT(Settings indexSettings) {
         super(indexSettings);
     }
 
@@ -414,15 +416,15 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         assertBusy(() -> {
             usageRecords.clear();
             pollReceivedRecords(usageRecords);
-            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
+            var rawStorageRecords = usageRecords.stream().filter(isRaStorageRecord(newIndexName)).toList();
             assertFalse(rawStorageRecords.isEmpty());
         });
 
         // Ensure we no longer receive records for the old, deleted index (eventually)
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size")).toList();
-            var allNewRecords = rawStorageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName));
+            var rawStorageRecords = usageRecords.stream().filter(isRaStorageRecord("")).toList();
+            var allNewRecords = rawStorageRecords.stream().allMatch(isRaStorageRecord(newIndexName));
             if (allNewRecords == false) {
                 usageRecords.clear();
                 fail();
@@ -690,11 +692,11 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         waitUntil(() -> {
             var newRecords = new ArrayList<UsageRecord>();
             pollReceivedRecords(newRecords);
-            usageRecords.addAll(newRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:")).toList());
+            usageRecords.addAll(newRecords.stream().filter(isRaStorageRecord("")).toList());
             return usageRecords.size() >= 3;
         });
         // and make sure we don't report RA-S for the empty index
-        assertTrue(usageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + indexName2)));
+        assertTrue(usageRecords.stream().allMatch(isRaStorageRecord(indexName2)));
     }
 
     public void testRAStorageWithNonTimeSeriesDeleteIndex() throws Exception {
@@ -736,20 +738,19 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         assertBusy(() -> {
             usageRecords.clear();
             pollReceivedRecords(usageRecords);
-            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName)).toList();
-            assertFalse(rawStorageRecords.isEmpty());
+            var rawStorageRecords = usageRecords.stream().filter(isRaStorageRecord(newIndexName)).toList();
+            assertThat(rawStorageRecords, hasSize(greaterThan(0)));
         });
 
         // Ensure we no longer receive records for the old, deleted index (eventually)
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var rawStorageRecords = usageRecords.stream().filter(m -> m.id().startsWith("raw-stored-index-size")).toList();
-            var allNewRecords = rawStorageRecords.stream().allMatch(m -> m.id().startsWith("raw-stored-index-size:" + newIndexName));
+            var rawStorageRecords = usageRecords.stream().filter(isRaStorageRecord("")).toList();
+            var allNewRecords = rawStorageRecords.stream().allMatch(isRaStorageRecord(newIndexName));
             if (allNewRecords == false) {
                 usageRecords.clear();
                 fail();
             }
-
             // We received at least 3 'new' record with no 'old' index in between
             assertThat(rawStorageRecords, hasSize(greaterThanOrEqualTo(3)));
         }, 1, TimeUnit.MINUTES);
@@ -782,7 +783,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
     private void waitAndAssertRAIngestRecords(List<UsageRecord> usageRecords, String indexName, long raIngestedSize) throws Exception {
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var ingestRecords = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).toList();
+            var ingestRecords = usageRecords.stream().filter(isRaIngestRecord(indexName)).toList();
             assertFalse(ingestRecords.isEmpty());
 
             assertThat(ingestRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_raw_data")));
@@ -798,7 +799,7 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
             var lastUsageRecord = usageRecords.stream()
-                .filter(m -> m.id().startsWith("raw-stored-index-size:" + indexName))
+                .filter(isRaStorageRecord(indexName))
                 .max(Comparator.comparing(UsageRecord::usageTimestamp));
             assertFalse(lastUsageRecord.isEmpty());
             assertUsageRecord(
@@ -810,5 +811,13 @@ public class StorageMeteringIT extends AbstractMeteringIntegTestCase {
                 both(greaterThanOrEqualTo(raStorageSize - delta)).and(lessThanOrEqualTo(raStorageSize + delta))
             );
         }, 20, TimeUnit.SECONDS);
+    }
+
+    private Predicate<UsageRecord> isRaIngestRecord(String indexPrefix) {
+        return m -> m.id().startsWith("ingested-doc:" + indexPrefix);
+    }
+
+    private Predicate<UsageRecord> isRaStorageRecord(String indexPrefix) {
+        return m -> m.id().startsWith("raw-stored-index-size:" + indexPrefix);
     }
 }
