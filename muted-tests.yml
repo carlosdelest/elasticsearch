@@ -163,3 +163,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testStress
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3489
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {stats.DocsStatsSumNestedExpression SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3368
