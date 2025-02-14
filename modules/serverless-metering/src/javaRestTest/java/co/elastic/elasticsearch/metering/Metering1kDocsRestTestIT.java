@@ -119,13 +119,13 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
             var allUsageRecords = getAllUsageRecords();
             var ixShardSizeRecords = filterUsageRecords(allUsageRecords, "shard-size");
             var ixIndexSizeRecords = filterUsageRecords(allUsageRecords, "index-size");
-            var raStorageRecords = filterUsageRecords(allUsageRecords, "raw-stored-index-size");
+            var rawStorageRecords = filterUsageRecords(allUsageRecords, "raw-stored-index-size");
 
             // there might be records from multiple metering periods, we are interested in the latest only
 
             // we are expecting 1 record (1 per index)
-            var latestRAStorageBatch = getLatestFullBatch(raStorageRecords, 1);
-            assertThat(usageQuantity(latestRAStorageBatch.get(0)), equalTo(numDocs * rawSizePerDoc));
+            var latestRawStorageBatch = getLatestFullBatch(rawStorageRecords, 1);
+            assertThat(usageQuantity(latestRawStorageBatch.get(0)), equalTo(numDocs * rawSizePerDoc));
 
             // we are expecting 1 record (1 per index)
             latestIXIndexSizes.clear();

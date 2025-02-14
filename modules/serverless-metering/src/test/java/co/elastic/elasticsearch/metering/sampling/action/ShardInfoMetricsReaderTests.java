@@ -49,8 +49,8 @@ import java.util.List;
 import java.util.Map;
 
 import static co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils.matchesDataAndGeneration;
-import static co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
-import static co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
+import static co.elastic.elasticsearch.metering.reporter.RawStorageAccumulator.RA_STORAGE_AVG_KEY;
+import static co.elastic.elasticsearch.metering.reporter.RawStorageAccumulator.RA_STORAGE_KEY;
 import static co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader.SHARD_INFO_CACHED_TOTAL_METRIC;
 import static co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC;
 import static co.elastic.elasticsearch.metering.sampling.action.ShardInfoMetricsReader.DefaultShardInfoMetricsReader.SHARD_INFO_RA_STORAGE_NEWER_GEN_TOTAL_METRIC;
@@ -247,7 +247,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
                 ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                     .withData(30L, 180L, 120L, 8 * 10L + 20 * 6L)
                     .withGeneration(1L, GEN_1, timestampMillis)
-                    .withRAStats(2, 30, 2, 30, 30, 20, 6, 8, 14, 100)
+                    .withRawStats(2, 30, 2, 30, 30, 20, 6, 8, 14, 100)
                     .build()
             )
         );
@@ -308,7 +308,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
                 ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                     .withData(90L, 400L, 200L, 80L + 550L + 120L)
                     .withGeneration(1L, GEN_1, timestampMillis)
-                    .withRAStats(4, 30, 3, 80, 30, 20, 6, 11, 25, 221)
+                    .withRawStats(4, 30, 3, 80, 30, 20, 6, 11, 25, 221)
                     .build()
             )
         );
@@ -382,7 +382,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
         );
     }
 
-    private static SegmentCommitInfo segmentCommitInfo(int maxDoc, int delCount, int softDelCount, Long segmentRASize) {
+    private static SegmentCommitInfo segmentCommitInfo(int maxDoc, int delCount, int softDelCount, Long segmentRawSize) {
         var segmentInfo = new SegmentInfo(
             mock(Directory.class),
             Version.LATEST,
@@ -394,7 +394,7 @@ public class ShardInfoMetricsReaderTests extends ESTestCase {
             mock(Codec.class),
             Map.of(),
             new byte[16],
-            segmentRASize != null ? Map.of(RA_STORAGE_AVG_KEY, Long.toString(segmentRASize)) : Map.of(),
+            segmentRawSize != null ? Map.of(RA_STORAGE_AVG_KEY, Long.toString(segmentRawSize)) : Map.of(),
             Sort.INDEXORDER
         );
         return new SegmentCommitInfo(segmentInfo, delCount, softDelCount, 0, 0, 0, null);

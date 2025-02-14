@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering.reporter;
 
-import co.elastic.elasticsearch.metering.RaStorageMetadataFieldMapper;
+import co.elastic.elasticsearch.metering.RawStorageMetadataFieldMapper;
 
 import org.apache.lucene.document.NumericDocValuesField;
 import org.elasticsearch.index.mapper.MapperService;
@@ -26,11 +26,11 @@ import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 
-public class RAStorageReporter implements DocumentSizeReporter {
+public class RawStorageReporter implements DocumentSizeReporter {
     private final DocumentSizeAccumulator documentSizeAccumulator;
     private final MapperService mapperService;
 
-    public RAStorageReporter(DocumentSizeAccumulator documentSizeAccumulator, MapperService mapperService) {
+    public RawStorageReporter(DocumentSizeAccumulator documentSizeAccumulator, MapperService mapperService) {
         this.documentSizeAccumulator = documentSizeAccumulator;
         this.mapperService = mapperService;
     }
@@ -49,7 +49,7 @@ public class RAStorageReporter implements DocumentSizeReporter {
         long bytesToReport = parsedDocument.getNormalizedSize();
         if (isTimeSeries() == false && bytesToReport > XContentMeteringParserDecorator.UNKNOWN_SIZE) {
             // Store the result in a new, "hidden" field
-            parsedDocument.rootDoc().add(new NumericDocValuesField(RaStorageMetadataFieldMapper.FIELD_NAME, bytesToReport));
+            parsedDocument.rootDoc().add(new NumericDocValuesField(RawStorageMetadataFieldMapper.FIELD_NAME, bytesToReport));
         }
     }
 

@@ -36,7 +36,7 @@ import java.util.Map;
 import static org.elasticsearch.test.cluster.serverless.local.DefaultServerlessLocalConfigProvider.node;
 import static org.hamcrest.Matchers.equalTo;
 
-public class MeteringStatsRAStorageRestTestIT extends MeteringStatsRestTestCase {
+public class MeteringStatsRawStorageRestTestIT extends MeteringStatsRestTestCase {
 
     @Before
     public void resetClient() throws IOException {

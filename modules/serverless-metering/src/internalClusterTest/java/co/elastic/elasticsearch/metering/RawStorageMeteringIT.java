@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering;
 
-import co.elastic.elasticsearch.metering.codec.RAStorageDocValuesFormatFactory;
+import co.elastic.elasticsearch.metering.codec.RawStorageDocValuesFormatFactory;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.usagereports.publisher.UsageRecord;
@@ -106,11 +106,11 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 
-public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
+public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
     private static final int ASCII_SIZE = 1;
     private static final int NUMBER_SIZE = Long.BYTES;
     private static final long EXPECTED_SIZE = 3 * ASCII_SIZE + NUMBER_SIZE;
-    public static final String RAS_FIELD = RaStorageMetadataFieldMapper.FIELD_NAME;
+    public static final String RAS_FIELD = RawStorageMetadataFieldMapper.FIELD_NAME;
 
     @ParametersFactory
     public static List<Object[]> params() {
@@ -120,7 +120,7 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         );
     }
 
-    public RaStorageMeteringIT(Settings indexSettings) {
+    public RawStorageMeteringIT(Settings indexSettings) {
         super(indexSettings);
     }
 
@@ -212,7 +212,7 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         @Override
         public void loadExtensions(ExtensionLoader loader) {
-            this.codecWrapper = createCodecWrapper(new RAStorageDocValuesFormatFactory());
+            this.codecWrapper = createCodecWrapper(new RawStorageDocValuesFormatFactory());
         }
 
         @Override
@@ -295,7 +295,7 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         return 1;
     }
 
-    public void testRaStorageFieldInaccessible() {
+    public void testRawStorageFieldInaccessible() {
         // https://github.com/elastic/elasticsearch-serverless/issues/3244
         assumeTrue("Fails randomly if run multiple times", indexSettings.equals(Settings.EMPTY));
 
@@ -362,12 +362,12 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
         assertThat(usageRecords, everyItem(transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue())));
     }
 
-    public void testRAStorageWithTimeSeries() throws Exception {
+    public void testRawStorageWithTimeSeries() throws Exception {
         String indexName = "idx1";
         createTimeSeriesIndex(indexName);
         ensureGreen(indexName);
@@ -378,12 +378,12 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
         assertThat(usageRecords, everyItem(transformedMatch(metric -> metric.source().metadata().get("datastream"), nullValue())));
     }
 
-    public void testRAStorageWithTimeSeriesDeleteIndex() throws Exception {
+    public void testRawStorageWithTimeSeriesDeleteIndex() throws Exception {
         String indexName = "idx1";
         createTimeSeriesIndex(indexName);
         ensureGreen(indexName);
@@ -401,8 +401,8 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
 
         admin().indices().delete(new DeleteIndexRequest(indexName));
 
@@ -416,15 +416,15 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         assertBusy(() -> {
             usageRecords.clear();
             pollReceivedRecords(usageRecords);
-            var rawStorageRecords = usageRecords.stream().filter(isRaStorageRecord(newIndexName)).toList();
+            var rawStorageRecords = usageRecords.stream().filter(isRawStorageRecord(newIndexName)).toList();
             assertFalse(rawStorageRecords.isEmpty());
         });
 
         // Ensure we no longer receive records for the old, deleted index (eventually)
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var rawStorageRecords = usageRecords.stream().filter(isRaStorageRecord("")).toList();
-            var allNewRecords = rawStorageRecords.stream().allMatch(isRaStorageRecord(newIndexName));
+            var rawStorageRecords = usageRecords.stream().filter(isRawStorageRecord("")).toList();
+            var allNewRecords = rawStorageRecords.stream().allMatch(isRawStorageRecord(newIndexName));
             if (allNewRecords == false) {
                 usageRecords.clear();
                 fail();
@@ -450,15 +450,15 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, dsName, EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, dsName, EXPECTED_SIZE, 0);
         assertThat(
             usageRecords,
             hasItem(transformedMatch((UsageRecord metric) -> metric.source().metadata().get("datastream"), startsWith(indexName)))
         );
     }
 
-    public void testRaStorageIsReportedAfterCommit() throws Exception {
+    public void testRawStorageIsReportedAfterCommit() throws Exception {
         String indexName = "idx1";
         String dsName = ".ds-" + indexName;
         createDataStream(indexName);
@@ -471,8 +471,8 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, dsName, EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, dsName, EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, dsName, EXPECTED_SIZE, 0);
         assertThat(
             usageRecords,
             hasItem(transformedMatch((UsageRecord metric) -> metric.source().metadata().get("datastream"), startsWith(indexName)))
@@ -488,7 +488,7 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
         client().prepareIndex().setIndex(indexName).setId("1").setSource("a", 1, "b", "c").setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
-        long initialRaSize = ASCII_SIZE + NUMBER_SIZE;
+        long initialRawSize = ASCII_SIZE + NUMBER_SIZE;
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
@@ -507,10 +507,10 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
             client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
         }
 
-        long updatedRaSize = initialRaSize + (10 - 1) * ASCII_SIZE;
+        long updatedRawSize = initialRawSize + (10 - 1) * ASCII_SIZE;
         List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAStorageRecords(usageRecords, indexName, updatedRaSize, 0);
-        waitAndAssertRAIngestRecords(usageRecords, indexName, initialRaSize + updatedRaSize);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, updatedRawSize, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, initialRawSize + updatedRawSize);
         receivedMetrics().clear();
     }
 
@@ -528,8 +528,8 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         client().admin().indices().prepareFlush(indexName).get().getStatus().getStatus();
 
         List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, initialSize);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, initialSize, 1);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, initialSize);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, initialSize, 1);
 
         usageRecords.clear();
         receivedMetrics().clear();
@@ -537,13 +537,13 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         long updatedSize = initialSize + NUMBER_SIZE;
         client().prepareUpdate().setIndex(indexName).setId("1").setDoc(jsonBuilder().startObject().field("d", 2).endObject()).get();
 
-        waitAndAssertRAIngestRecords(usageRecords, indexName, updatedSize);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, updatedSize, 1);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, updatedSize);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, updatedSize, 1);
 
         receivedMetrics().clear();
     }
 
-    public void testRAStorageIsAccumulated() throws Exception {
+    public void testRawStorageIsAccumulated() throws Exception {
         String indexName = "idx2";
         ensureStableCluster(2);
         createTimeSeriesIndex(indexName);
@@ -559,11 +559,11 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
     }
 
-    public void testRAStorageWithNonTimeSeries() throws Exception {
+    public void testRawStorageWithNonTimeSeries() throws Exception {
         String indexName = "idx1";
         setupIndex(indexName);
 
@@ -573,11 +573,11 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
     }
 
-    public void testRAStorageWithNonTimeSeriesMultipleUniformDocs() throws Exception {
+    public void testRawStorageWithNonTimeSeriesMultipleUniformDocs() throws Exception {
         String indexName = "idx1";
         setupIndex(indexName);
 
@@ -589,11 +589,11 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, 3 * EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, 3 * EXPECTED_SIZE, 1);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, 3 * EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, 3 * EXPECTED_SIZE, 1);
     }
 
-    public void testRAStorageWithNonTimeSeriesMultipleDifferentDocs() throws Exception {
+    public void testRawStorageWithNonTimeSeriesMultipleDifferentDocs() throws Exception {
         String indexName = "idx1";
         setupIndex(indexName);
 
@@ -604,18 +604,18 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         var doc3RASize = ASCII_SIZE + NUMBER_SIZE;
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 123, "b", "c")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
-        long raIngestedSize = doc1RASize + doc2RASize + doc3RASize;
-        long raAvgPerDoc = raIngestedSize / 3;
-        long raEstimated = raAvgPerDoc * 3;
+        long rawIngestedSize = doc1RASize + doc2RASize + doc3RASize;
+        long rawAvgPerDoc = rawIngestedSize / 3;
+        long rawEstimated = rawAvgPerDoc * 3;
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, raIngestedSize);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, raEstimated, 1);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, rawIngestedSize);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, rawEstimated, 1);
     }
 
-    public void testRAStorageWithNonTimeSeriesAndDeletesNoMerge() throws Exception {
+    public void testRawStorageWithNonTimeSeriesAndDeletesNoMerge() throws Exception {
         CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(NoMergePolicy.INSTANCE);
         String indexName = "idx1";
         setupIndex(indexName);
@@ -625,18 +625,18 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         var result = client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 123, "b", "c")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
         client().delete(new DeleteRequest(indexName, result.getId())).actionGet();
-        var raIngestedSize = 2 * EXPECTED_SIZE + (ASCII_SIZE + NUMBER_SIZE);
-        var raAvgPerDoc = raIngestedSize / 3;
-        var raEstimated = raAvgPerDoc * 2;
+        var rawIngestedSize = 2 * EXPECTED_SIZE + (ASCII_SIZE + NUMBER_SIZE);
+        var rawAvgPerDoc = rawIngestedSize / 3;
+        var rawEstimated = rawAvgPerDoc * 2;
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, raIngestedSize);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, raEstimated, 1);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, rawIngestedSize);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, rawEstimated, 1);
     }
 
-    public void testRAStorageWithNonTimeSeriesAndDeletesAndMerge() throws Exception {
+    public void testRawStorageWithNonTimeSeriesAndDeletesAndMerge() throws Exception {
         CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(CustomMergePolicyStatelessPlugin.simpleMergePolicy);
 
         String indexName = "idx1";
@@ -659,11 +659,11 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, 3 * EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, 3 * EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, EXPECTED_SIZE, 0);
     }
 
-    public void testRAStorageWithNonTimeSeriesAllDeleted() throws Exception {
+    public void testRawStorageWithNonTimeSeriesAllDeleted() throws Exception {
         // Explicitly disable merging to test that even with no merge, we still stop reporting RA-S size for indexes with all deleted docs
         CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(NoMergePolicy.INSTANCE);
 
@@ -683,23 +683,23 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
-        waitAndAssertRAIngestRecords(usageRecords, indexName2, EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName2, EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
+        waitAndAssertRawIngestRecords(usageRecords, indexName2, EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName2, EXPECTED_SIZE, 0);
         usageRecords.clear();
 
         // wait until we've received at least 3 more RA-S records (which should be for the second index only)
         waitUntil(() -> {
             var newRecords = new ArrayList<UsageRecord>();
             pollReceivedRecords(newRecords);
-            usageRecords.addAll(newRecords.stream().filter(isRaStorageRecord("")).toList());
+            usageRecords.addAll(newRecords.stream().filter(isRawStorageRecord("")).toList());
             return usageRecords.size() >= 3;
         });
         // and make sure we don't report RA-S for the empty index
-        assertTrue(usageRecords.stream().allMatch(isRaStorageRecord(indexName2)));
+        assertTrue(usageRecords.stream().allMatch(isRawStorageRecord(indexName2)));
     }
 
-    public void testRAStorageWithNonTimeSeriesDeleteIndex() throws Exception {
+    public void testRawStorageWithNonTimeSeriesDeleteIndex() throws Exception {
         CustomMergePolicyStatelessPlugin.enableCustomMergePolicy(CustomMergePolicyStatelessPlugin.simpleMergePolicy);
 
         String indexName = "idx1";
@@ -722,8 +722,8 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
         final List<UsageRecord> usageRecords = new ArrayList<>();
-        waitAndAssertRAIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
-        waitAndAssertRAStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
+        waitAndAssertRawIngestRecords(usageRecords, indexName, 2 * EXPECTED_SIZE);
+        waitAndAssertRawStorageRecords(usageRecords, indexName, 2 * EXPECTED_SIZE, 0);
         usageRecords.clear();
 
         admin().indices().delete(new DeleteIndexRequest(indexName));
@@ -738,15 +738,15 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         assertBusy(() -> {
             usageRecords.clear();
             pollReceivedRecords(usageRecords);
-            var rawStorageRecords = usageRecords.stream().filter(isRaStorageRecord(newIndexName)).toList();
+            var rawStorageRecords = usageRecords.stream().filter(isRawStorageRecord(newIndexName)).toList();
             assertThat(rawStorageRecords, hasSize(greaterThan(0)));
         });
 
         // Ensure we no longer receive records for the old, deleted index (eventually)
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var rawStorageRecords = usageRecords.stream().filter(isRaStorageRecord("")).toList();
-            var allNewRecords = rawStorageRecords.stream().allMatch(isRaStorageRecord(newIndexName));
+            var rawStorageRecords = usageRecords.stream().filter(isRawStorageRecord("")).toList();
+            var allNewRecords = rawStorageRecords.stream().allMatch(isRawStorageRecord(newIndexName));
             if (allNewRecords == false) {
                 usageRecords.clear();
                 fail();
@@ -780,26 +780,26 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
         assertThat(metric.usage().quantity(), matcher);
     }
 
-    private void waitAndAssertRAIngestRecords(List<UsageRecord> usageRecords, String indexName, long raIngestedSize) throws Exception {
+    private void waitAndAssertRawIngestRecords(List<UsageRecord> usageRecords, String indexName, long rawIngestedSize) throws Exception {
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var ingestRecords = usageRecords.stream().filter(isRaIngestRecord(indexName)).toList();
+            var ingestRecords = usageRecords.stream().filter(isRawIngestRecord(indexName)).toList();
             assertFalse(ingestRecords.isEmpty());
 
             assertThat(ingestRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_raw_data")));
             assertThat(ingestRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexName)));
 
             var totalQuantity = ingestRecords.stream().mapToLong(x -> x.usage().quantity()).sum();
-            assertThat(totalQuantity, equalTo(raIngestedSize));
+            assertThat(totalQuantity, equalTo(rawIngestedSize));
         }, 20, TimeUnit.SECONDS);
     }
 
-    private void waitAndAssertRAStorageRecords(List<UsageRecord> usageRecords, String indexName, long raStorageSize, long delta)
+    private void waitAndAssertRawStorageRecords(List<UsageRecord> usageRecords, String indexName, long rawStorageSize, long delta)
         throws Exception {
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
             var lastUsageRecord = usageRecords.stream()
-                .filter(isRaStorageRecord(indexName))
+                .filter(isRawStorageRecord(indexName))
                 .max(Comparator.comparing(UsageRecord::usageTimestamp));
             assertFalse(lastUsageRecord.isEmpty());
             assertUsageRecord(
@@ -808,16 +808,16 @@ public class RaStorageMeteringIT extends AbstractMeteringIntegTestCase {
                 "raw-stored-index-size:" + indexName,
                 "es_raw_stored_data",
                 // +/-delta to account for approximation on averages
-                both(greaterThanOrEqualTo(raStorageSize - delta)).and(lessThanOrEqualTo(raStorageSize + delta))
+                both(greaterThanOrEqualTo(rawStorageSize - delta)).and(lessThanOrEqualTo(rawStorageSize + delta))
             );
         }, 20, TimeUnit.SECONDS);
     }
 
-    private Predicate<UsageRecord> isRaIngestRecord(String indexPrefix) {
+    private Predicate<UsageRecord> isRawIngestRecord(String indexPrefix) {
         return m -> m.id().startsWith("ingested-doc:" + indexPrefix);
     }
 
-    private Predicate<UsageRecord> isRaStorageRecord(String indexPrefix) {
+    private Predicate<UsageRecord> isRawStorageRecord(String indexPrefix) {
         return m -> m.id().startsWith("raw-stored-index-size:" + indexPrefix);
     }
 }

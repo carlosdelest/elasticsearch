@@ -18,7 +18,7 @@
 package co.elastic.elasticsearch.metering.xcontent;
 
 import co.elastic.elasticsearch.metering.IngestMetricsProvider;
-import co.elastic.elasticsearch.metering.reporter.RAIngestMetricReporter;
+import co.elastic.elasticsearch.metering.reporter.RawIngestMetricReporter;
 
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
@@ -46,6 +46,6 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
             mapperService,
             DocumentSizeAccumulator.EMPTY_INSTANCE
         );
-        assertThat(documentSizeReporter, instanceOf(RAIngestMetricReporter.class));
+        assertThat(documentSizeReporter, instanceOf(RawIngestMetricReporter.class));
     }
 }

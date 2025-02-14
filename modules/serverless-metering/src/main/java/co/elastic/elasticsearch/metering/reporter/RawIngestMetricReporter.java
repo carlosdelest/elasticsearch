@@ -22,11 +22,11 @@ import co.elastic.elasticsearch.metering.IngestMetricsProvider;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
-public class RAIngestMetricReporter implements DocumentSizeReporter {
+public class RawIngestMetricReporter implements DocumentSizeReporter {
     private final IngestMetricsProvider ingestMetricsCollector;
     private final String indexName;
 
-    public RAIngestMetricReporter(String indexName, IngestMetricsProvider ingestMetricsCollector) {
+    public RawIngestMetricReporter(String indexName, IngestMetricsProvider ingestMetricsCollector) {
         this.indexName = indexName;
         this.ingestMetricsCollector = ingestMetricsCollector;
     }

@@ -267,13 +267,13 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
         return List.of(new RestGetMeteringStatsAction());
     }
 
-    public static boolean isRaStorageMeteringEnabled(ProjectType projectType) {
+    public static boolean isRawStorageMeteringEnabled(ProjectType projectType) {
         return projectType == ProjectType.OBSERVABILITY || projectType == ProjectType.SECURITY;
     }
 
     @Override
     public Map<String, MetadataFieldMapper.TypeParser> getMetadataMappers() {
-        return Map.of(RaStorageMetadataFieldMapper.FIELD_NAME, RaStorageMetadataFieldMapper.PARSER);
+        return Map.of(RawStorageMetadataFieldMapper.FIELD_NAME, RawStorageMetadataFieldMapper.PARSER);
     }
 
     /**
@@ -285,7 +285,7 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
     @Override
     public DocumentParsingProvider getDocumentParsingProvider() {
         return hasIndexRole
-            ? new MeteringDocumentParsingProvider(isRaStorageMeteringEnabled(projectType), () -> ingestMetricsProvider)
+            ? new MeteringDocumentParsingProvider(isRawStorageMeteringEnabled(projectType), () -> ingestMetricsProvider)
             : DocumentParsingProvider.EMPTY_INSTANCE;
     }
 

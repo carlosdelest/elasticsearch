@@ -340,7 +340,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                     ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                         .withData(110L, size, 0L, hasIngestSize ? size : 0L)
                         .withGeneration(1, 1, creationDate.toEpochMilli())
-                        .withRAStats(id, 10L, id, 100L, 20L, 11L, 3, 3, 3 * id, 9 * id)
+                        .withRawStats(id, 10L, id, 100L, 20L, 11L, 3, 3, 3 * id, 9 * id)
                         .build()
                 )
             );
@@ -410,7 +410,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                         ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                             .withData(110L, size, 0L, hasIngestSize ? size : 0L)
                             .withGeneration(1, 1, creationDate.toEpochMilli())
-                            .withRAStats(10, 10L, 8, 100L, 20L, 11L, 3, 10, 31, 163)
+                            .withRawStats(10, 10L, 8, 100L, 20L, 11L, 3, 10, 31, 163)
                             .build()
                     )
                 );

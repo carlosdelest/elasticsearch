@@ -41,7 +41,7 @@ public class ShardInfoMetricsTestUtils {
         long indexCreationDateEpochMilli = EPOCH.toEpochMilli();
         long segmentCount;
         long deletedDocCount;
-        ShardInfoMetrics.RawStoredSizeStats raStats = ShardInfoMetrics.RawStoredSizeStats.EMPTY;
+        ShardInfoMetrics.RawStoredSizeStats rawStats = ShardInfoMetrics.RawStoredSizeStats.EMPTY;
 
         public ShardInfoMetricsBuilder withData(
             long docCount,
@@ -78,13 +78,13 @@ public class ShardInfoMetricsTestUtils {
             return this;
         }
 
-        public ShardInfoMetricsBuilder withRAStats(
+        public ShardInfoMetricsBuilder withRawStats(
             long segmentCount,
             long deletedDocCount,
-            long raSegmentCount,
-            long raLiveDocCount,
-            long raDeletedDocCount,
-            long raApproximatedDocCount,
+            long rawSegmentCount,
+            long rawLiveDocCount,
+            long rawDeletedDocCount,
+            long rawApproximatedDocCount,
             long rawStoredSizeAvgMin,
             long rawStoredSizeAvgMax,
             double rawStoredSizeAvgTotal,
@@ -92,11 +92,11 @@ public class ShardInfoMetricsTestUtils {
         ) {
             this.segmentCount = segmentCount;
             this.deletedDocCount = deletedDocCount;
-            this.raStats = new ShardInfoMetrics.RawStoredSizeStats(
-                raSegmentCount,
-                raLiveDocCount,
-                raDeletedDocCount,
-                raApproximatedDocCount,
+            this.rawStats = new ShardInfoMetrics.RawStoredSizeStats(
+                rawSegmentCount,
+                rawLiveDocCount,
+                rawDeletedDocCount,
+                rawApproximatedDocCount,
                 rawStoredSizeAvgMin,
                 rawStoredSizeAvgMax,
                 rawStoredSizeAvgTotal,
@@ -116,7 +116,7 @@ public class ShardInfoMetricsTestUtils {
                 indexCreationDateEpochMilli,
                 segmentCount,
                 deletedDocCount,
-                raStats
+                rawStats
             );
         }
 

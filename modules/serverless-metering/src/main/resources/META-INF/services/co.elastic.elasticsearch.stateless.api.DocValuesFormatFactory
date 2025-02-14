@@ -15,4 +15,4 @@
 # permission is obtained from Elasticsearch B.V.
 #
 
-co.elastic.elasticsearch.metering.codec.RAStorageDocValuesFormatFactory
+co.elastic.elasticsearch.metering.codec.RawStorageDocValuesFormatFactory

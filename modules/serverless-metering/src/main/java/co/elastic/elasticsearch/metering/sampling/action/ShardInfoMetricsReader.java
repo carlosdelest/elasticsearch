@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling.action;
 
-import co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator;
+import co.elastic.elasticsearch.metering.reporter.RawStorageAccumulator;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 import co.elastic.elasticsearch.stateless.api.ShardSizeStatsProvider;
 import co.elastic.elasticsearch.stateless.api.ShardSizeStatsReader.ShardSize;
@@ -69,8 +69,8 @@ interface ShardInfoMetricsReader {
         private final LongCounter shardInfoShardsTotalCounter;
         private final LongCounter shardInfoCachedTotalCounter;
         private final LongCounter shardInfoUnavailableTotalCounter;
-        private final LongCounter shardInfoRaStorageNewerGenTotalCounter;
-        private final DoubleHistogram shardInfoRaStorageApproximatedRatio;
+        private final LongCounter shardInfoRawStorageNewerGenTotalCounter;
+        private final DoubleHistogram shardInfoRawStorageApproximatedRatio;
 
         DefaultShardInfoMetricsReader(
             IndicesService indicesService,
@@ -105,52 +105,52 @@ interface ShardInfoMetricsReader {
                 "Total number of shard infos skipped due to shard unavailability",
                 "unit"
             );
-            this.shardInfoRaStorageNewerGenTotalCounter = meterRegistry.registerLongCounter(
+            this.shardInfoRawStorageNewerGenTotalCounter = meterRegistry.registerLongCounter(
                 SHARD_INFO_RA_STORAGE_NEWER_GEN_TOTAL_METRIC,
                 "Total number of shard infos with RA-S on a newer generation",
                 "unit"
             );
-            this.shardInfoRaStorageApproximatedRatio = meterRegistry.registerDoubleHistogram(
+            this.shardInfoRawStorageApproximatedRatio = meterRegistry.registerDoubleHistogram(
                 SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC,
                 "Percentage of approximated segment sizes per shard",
                 "unit"
             );
         }
 
-        private static Long getRAStorageFromUserData(SegmentInfos segmentInfos, ShardId shardId) {
-            var raStorageString = segmentInfos.getUserData().get(RAStorageAccumulator.RA_STORAGE_KEY);
-            if (raStorageString == null) {
+        private static Long getRawStorageFromUserData(SegmentInfos segmentInfos, ShardId shardId) {
+            var rawStorageString = segmentInfos.getUserData().get(RawStorageAccumulator.RA_STORAGE_KEY);
+            if (rawStorageString == null) {
                 return null;
             }
-            long raStorage = Long.parseLong(raStorageString);
-            if (raStorage < 0) {
-                logger.info("skipping negative RA-S in UserData [{}] for shard [{}]", raStorageString, shardId);
+            long rawStorage = Long.parseLong(rawStorageString);
+            if (rawStorage < 0) {
+                logger.info("skipping negative RA-S in UserData [{}] for shard [{}]", rawStorageString, shardId);
                 return null;
             }
 
-            logger.trace("using RA-S from UserData [{}] for shard [{}]", raStorageString, shardId);
-            return raStorage;
+            logger.trace("using RA-S from UserData [{}] for shard [{}]", rawStorageString, shardId);
+            return rawStorage;
         }
 
-        private static Long getRAStorageFromSegmentAttribute(
+        private static Long getRawStorageFromSegmentAttribute(
             ShardId shardId,
             SegmentCommitInfo si,
             long commitLiveDocs,
             boolean isExact,
-            List<Long> avgRASizeList
+            List<Long> avgRawSizeList
         ) {
-            var avgRASizeAttribute = si.info.getAttribute(RAStorageAccumulator.RA_STORAGE_AVG_KEY);
-            if (avgRASizeAttribute == null) {
+            var avgRawSizeAttribute = si.info.getAttribute(RawStorageAccumulator.RA_STORAGE_AVG_KEY);
+            if (avgRawSizeAttribute == null) {
                 return null;
             }
-            var avgRASize = Long.parseLong(avgRASizeAttribute);
-            if (avgRASize < 0) {
+            var avgRawSize = Long.parseLong(avgRawSizeAttribute);
+            if (avgRawSize < 0) {
                 // Due to bug related to ES-8577, we recorded the default raw size (-1, meaning not metered) for documents
                 // replayed from translog, potentially resulting into a negative RA-S avg per doc. We have to skip such
                 // segments here to minimize the impact.
                 logger.info(
                     "skipping negative RA-S (avg: [{}], live docs: [{}]) for segment [{}/{}]",
-                    avgRASize,
+                    avgRawSize,
                     commitLiveDocs,
                     shardId,
                     si.info.name
@@ -158,32 +158,32 @@ interface ShardInfoMetricsReader {
                 return null;
             }
 
-            avgRASizeList.add(avgRASize);
-            var raStorage = avgRASize * commitLiveDocs;
+            avgRawSizeList.add(avgRawSize);
+            var rawStorage = avgRawSize * commitLiveDocs;
             logger.trace(
                 "using {} RA-S [{}] (avg: [{}], live docs: [{}]) for segment [{}/{}]",
                 isExact ? "exact" : "approximated",
-                raStorage,
-                avgRASize,
+                rawStorage,
+                avgRawSize,
                 commitLiveDocs,
                 shardId,
                 si.info.name
             );
-            return raStorage;
+            return rawStorage;
         }
 
         ShardInfoMetrics computeShardInfo(ShardId shardId, ShardSize shardSize, long indexCreationDate, SegmentInfos segmentInfos) {
             // TODO: Moving liveDocCount into ShardSize would allow to skip this entirely if a project doesn't track RA-S.
             long liveDocCount = 0;
-            long raLiveDocCount = 0;
+            long rawLiveDocCount = 0;
             long deletedDocCount = 0;
-            long raDeletedDocCount = 0;
-            long raApproximatedDocCount = 0;
-            Long totalRAValue = null;
+            long rawDeletedDocCount = 0;
+            long rawApproximatedDocCount = 0;
+            Long totalRawValue = null;
             int segmentCount = segmentInfos.size();
-            int raSegmentCount = 0;
-            int raApproximatedSegmentCount = 0;
-            List<Long> avgRASizeList = new ArrayList<>();
+            int rawSegmentCount = 0;
+            int rawApproximatedSegmentCount = 0;
+            List<Long> avgRawSizeList = new ArrayList<>();
 
             for (SegmentCommitInfo si : segmentInfos) {
                 long commitTotalDocCount = si.info.maxDoc();
@@ -194,50 +194,50 @@ interface ShardInfoMetricsReader {
                 deletedDocCount += commitDeletedDocCount;
 
                 boolean isExact = commitLiveDocCount == commitTotalDocCount;
-                var raStorage = getRAStorageFromSegmentAttribute(shardId, si, commitLiveDocCount, isExact, avgRASizeList);
-                if (raStorage != null) {
-                    totalRAValue = raStorage + (totalRAValue != null ? totalRAValue : 0);
-                    ++raSegmentCount;
-                    raLiveDocCount += commitLiveDocCount;
-                    raDeletedDocCount += commitDeletedDocCount;
+                var rawStorage = getRawStorageFromSegmentAttribute(shardId, si, commitLiveDocCount, isExact, avgRawSizeList);
+                if (rawStorage != null) {
+                    totalRawValue = rawStorage + (totalRawValue != null ? totalRawValue : 0);
+                    ++rawSegmentCount;
+                    rawLiveDocCount += commitLiveDocCount;
+                    rawDeletedDocCount += commitDeletedDocCount;
                     if (isExact == false) {
-                        ++raApproximatedSegmentCount;
-                        raApproximatedDocCount += commitLiveDocCount;
+                        ++rawApproximatedSegmentCount;
+                        rawApproximatedDocCount += commitLiveDocCount;
                     }
                 }
             }
 
-            if (totalRAValue != null) {
+            if (totalRawValue != null) {
                 // report ratio of approximated segments per shard in histogram
-                double approximatedSegmentsRatio = raSegmentCount == 0 ? 0 : (double) raApproximatedSegmentCount / raSegmentCount;
-                this.shardInfoRaStorageApproximatedRatio.record(
+                double approximatedSegmentsRatio = rawSegmentCount == 0 ? 0 : (double) rawApproximatedSegmentCount / rawSegmentCount;
+                this.shardInfoRawStorageApproximatedRatio.record(
                     approximatedSegmentsRatio,
                     Map.of("index", shardId.getIndexName(), "shard", Integer.toString(shardId.id()))
                 );
             } else {
                 // Try to use the per shard RA value (timeseries indices)
-                totalRAValue = getRAStorageFromUserData(segmentInfos, shardId);
-                if (totalRAValue == null) {
+                totalRawValue = getRawStorageFromUserData(segmentInfos, shardId);
+                if (totalRawValue == null) {
                     logger.trace("No RA-S available for shard [{}]", shardId);
-                    totalRAValue = 0L;
+                    totalRawValue = 0L;
                 }
             }
 
-            boolean hasRAStats = avgRASizeList.isEmpty() == false;
-            final ShardInfoMetrics.RawStoredSizeStats raStats;
-            if (hasRAStats == false) {
-                raStats = ShardInfoMetrics.RawStoredSizeStats.EMPTY;
+            boolean hasRawStats = avgRawSizeList.isEmpty() == false;
+            final ShardInfoMetrics.RawStoredSizeStats rawStats;
+            if (hasRawStats == false) {
+                rawStats = ShardInfoMetrics.RawStoredSizeStats.EMPTY;
             } else {
-                var avgRASizeStats = fillAvgRASizeStats(avgRASizeList);
-                raStats = new ShardInfoMetrics.RawStoredSizeStats(
-                    raSegmentCount,
-                    raLiveDocCount,
-                    raDeletedDocCount,
-                    raApproximatedDocCount,
-                    avgRASizeStats.min(),
-                    avgRASizeStats.max(),
-                    avgRASizeStats.total(),
-                    avgRASizeStats.squaredTotal()
+                var avgRawSizeStats = fillAvgRawSizeStats(avgRawSizeList);
+                rawStats = new ShardInfoMetrics.RawStoredSizeStats(
+                    rawSegmentCount,
+                    rawLiveDocCount,
+                    rawDeletedDocCount,
+                    rawApproximatedDocCount,
+                    avgRawSizeStats.min(),
+                    avgRawSizeStats.max(),
+                    avgRawSizeStats.total(),
+                    avgRawSizeStats.squaredTotal()
                 );
             }
 
@@ -245,31 +245,31 @@ interface ShardInfoMetricsReader {
                 liveDocCount,
                 shardSize.interactiveSizeInBytes(),
                 shardSize.nonInteractiveSizeInBytes(),
-                totalRAValue,
+                totalRawValue,
                 shardSize.primaryTerm(),
                 shardSize.generation(),
                 indexCreationDate,
                 segmentCount,
                 deletedDocCount,
-                raStats
+                rawStats
             );
         }
 
-        private record AvgRASizeStats(long min, long max, double total, double squaredTotal) {}
+        private record AvgRawSizeStats(long min, long max, double total, double squaredTotal) {}
 
-        private static AvgRASizeStats fillAvgRASizeStats(List<Long> avgRASizeList) {
+        private static AvgRawSizeStats fillAvgRawSizeStats(List<Long> avgRawSizeList) {
             double total = 0.0;
             double squaredTotal = 0.0;
             long min = Long.MAX_VALUE;
             long max = 0;
-            for (Long x : avgRASizeList) {
+            for (Long x : avgRawSizeList) {
                 total += x;
                 squaredTotal += (x * x);
                 min = Math.min(min, x);
                 max = Math.max(max, x);
             }
 
-            return new AvgRASizeStats(min, max, total, squaredTotal);
+            return new AvgRawSizeStats(min, max, total, squaredTotal);
         }
 
         @Override
@@ -326,7 +326,7 @@ interface ShardInfoMetricsReader {
                         // Total RA-S is an approximation, using a slightly newer generation than the pre-calculated shard size is ok.
                         // However, track this using an APM metric which is to be looked at relative to #shards - #unavailable - #cached
                         if (segmentInfos.getGeneration() != shardSize.generation()) {
-                            shardInfoRaStorageNewerGenTotalCounter.increment();
+                            shardInfoRawStorageNewerGenTotalCounter.increment();
                         }
                         var indexCreationDate = indexService.getMetadata().getCreationDate();
                         var shardInfo = computeShardInfo(shardId, shardSize, indexCreationDate, segmentInfos);

@@ -95,8 +95,8 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
             if (indexInfo.getValue().totalSize > 0) {
                 metrics.add(ixIndexMetric(indexInfo.getKey(), indexInfo.getValue(), stateMetadata, partial));
             }
-            if (indexInfo.getValue().raStorageSize > 0) {
-                metrics.add(raStorageIndexMetric(indexInfo.getKey(), indexInfo.getValue(), stateMetadata, partial));
+            if (indexInfo.getValue().rawStorageSize > 0) {
+                metrics.add(rawStorageIndexMetric(indexInfo.getKey(), indexInfo.getValue(), stateMetadata, partial));
             }
         }
         return SampledMetricsProvider.metricValues(metrics, DefaultSampledMetricsBackfillStrategy.INSTANCE);
@@ -136,13 +136,13 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
         );
     }
 
-    private MetricValue raStorageIndexMetric(String indexName, IndexInfo indexInfo, Metadata metadata, boolean partial) {
+    private MetricValue rawStorageIndexMetric(String indexName, IndexInfo indexInfo, Metadata metadata, boolean partial) {
         return new MetricValue(
             format("%s:%s", RA_S_METRIC_ID_PREFIX, indexName),
             RA_S_METRIC_TYPE,
             indexSourceMetadata(metadata, indexName, partial),
             rasUsageMetadata(indexInfo),
-            indexInfo.raStorageSize,
+            indexInfo.rawStorageSize,
             indexInfo.indexCreationDate
         );
     }
@@ -182,18 +182,18 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
     }
 
     private Map<String, String> rasUsageMetadata(IndexInfo info) {
-        Map<String, String> usageMetadata = Maps.newHashMapWithExpectedSize(info.hasRAStats ? 3 + 8 : 3);
+        Map<String, String> usageMetadata = Maps.newHashMapWithExpectedSize(info.hasRawStats ? 3 + 8 : 3);
         fillIndexUsageMetadata(usageMetadata, info);
-        if (info.hasRAStats) {
-            usageMetadata.put("ra_size_segment_count", Long.toString(info.raSegmentCount));
-            usageMetadata.put("ra_size_doc_count", Long.toString(info.raLiveDocCount));
-            usageMetadata.put("ra_size_deleted_doc_count", Long.toString(info.raDeletedDocCount));
-            usageMetadata.put("ra_size_approximated_doc_count", Long.toString(info.raApproximatedDocCount));
+        if (info.hasRawStats) {
+            usageMetadata.put("ra_size_segment_count", Long.toString(info.rawSegmentCount));
+            usageMetadata.put("ra_size_doc_count", Long.toString(info.rawLiveDocCount));
+            usageMetadata.put("ra_size_deleted_doc_count", Long.toString(info.rawDeletedDocCount));
+            usageMetadata.put("ra_size_approximated_doc_count", Long.toString(info.rawApproximatedDocCount));
 
-            long avg = (long) (info.raAvgTotal / info.raSegmentCount);
-            long stddev = (long) Math.sqrt(info.raAvgSquaredTotal / info.raSegmentCount - Math.pow(avg, 2));
-            usageMetadata.put("ra_size_segment_min_ra_avg", Long.toString(info.raAvgMin));
-            usageMetadata.put("ra_size_segment_max_ra_avg", Long.toString(info.raAvgMax));
+            long avg = (long) (info.rawAvgTotal / info.rawSegmentCount);
+            long stddev = (long) Math.sqrt(info.rawAvgSquaredTotal / info.rawSegmentCount - Math.pow(avg, 2));
+            usageMetadata.put("ra_size_segment_min_ra_avg", Long.toString(info.rawAvgMin));
+            usageMetadata.put("ra_size_segment_max_ra_avg", Long.toString(info.rawAvgMax));
             usageMetadata.put("ra_size_segment_avg_ra_avg", Long.toString(avg));
             usageMetadata.put("ra_size_segment_stddev_ra_avg", Long.toString(stddev));
         }
@@ -205,44 +205,44 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
         private long totalSize;
         private long interactiveSize;
 
-        private long raStorageSize;
+        private long rawStorageSize;
 
         private long segmentCount;
         private long liveDocCount;
         private long deletedDocCount;
 
-        private long raSegmentCount;
-        private long raLiveDocCount;
-        private long raDeletedDocCount;
-        private long raApproximatedDocCount;
-        private long raAvgMin = Long.MAX_VALUE;
-        private long raAvgMax = 0;
-        private double raAvgTotal;
-        private double raAvgSquaredTotal;
+        private long rawSegmentCount;
+        private long rawLiveDocCount;
+        private long rawDeletedDocCount;
+        private long rawApproximatedDocCount;
+        private long rawAvgMin = Long.MAX_VALUE;
+        private long rawAvgMax = 0;
+        private double rawAvgTotal;
+        private double rawAvgSquaredTotal;
 
-        private boolean hasRAStats = false;
+        private boolean hasRawStats = false;
 
         void accumulate(Map.Entry<ShardKey, SampledClusterMetricsService.ShardSample> t) {
             var shardInfo = t.getValue().shardInfo();
 
             totalSize += shardInfo.totalSizeInBytes();
             interactiveSize += shardInfo.interactiveSizeInBytes();
-            raStorageSize += shardInfo.rawStoredSizeInBytes();
+            rawStorageSize += shardInfo.rawStoredSizeInBytes();
 
             segmentCount += shardInfo.segmentCount();
             liveDocCount += shardInfo.docCount();
             deletedDocCount += shardInfo.deletedDocCount();
 
             if (shardInfo.rawStoredSizeStats().isEmpty() == false) {
-                hasRAStats = true;
-                raSegmentCount += shardInfo.rawStoredSizeStats().segmentCount();
-                raLiveDocCount += shardInfo.rawStoredSizeStats().liveDocCount();
-                raDeletedDocCount += shardInfo.rawStoredSizeStats().deletedDocCount();
-                raApproximatedDocCount += shardInfo.rawStoredSizeStats().approximatedDocCount();
-                raAvgMin = Math.min(raAvgMin, shardInfo.rawStoredSizeStats().avgMin());
-                raAvgMax = Math.max(raAvgMax, shardInfo.rawStoredSizeStats().avgMax());
-                raAvgTotal += shardInfo.rawStoredSizeStats().avgTotal();
-                raAvgSquaredTotal += shardInfo.rawStoredSizeStats().avgSquaredTotal();
+                hasRawStats = true;
+                rawSegmentCount += shardInfo.rawStoredSizeStats().segmentCount();
+                rawLiveDocCount += shardInfo.rawStoredSizeStats().liveDocCount();
+                rawDeletedDocCount += shardInfo.rawStoredSizeStats().deletedDocCount();
+                rawApproximatedDocCount += shardInfo.rawStoredSizeStats().approximatedDocCount();
+                rawAvgMin = Math.min(rawAvgMin, shardInfo.rawStoredSizeStats().avgMin());
+                rawAvgMax = Math.max(rawAvgMax, shardInfo.rawStoredSizeStats().avgMax());
+                rawAvgTotal += shardInfo.rawStoredSizeStats().avgTotal();
+                rawAvgSquaredTotal += shardInfo.rawStoredSizeStats().avgSquaredTotal();
             }
 
             indexCreationDate = getEarlierValidCreationDate(
@@ -254,20 +254,20 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
         IndexInfo combine(IndexInfo b) {
             totalSize += b.totalSize;
             interactiveSize += b.interactiveSize;
-            raStorageSize += b.raStorageSize;
+            rawStorageSize += b.rawStorageSize;
 
             segmentCount += b.segmentCount;
             liveDocCount += b.liveDocCount;
             deletedDocCount += b.deletedDocCount;
 
-            raSegmentCount += b.raSegmentCount;
-            raLiveDocCount += b.raLiveDocCount;
-            raDeletedDocCount += b.raDeletedDocCount;
-            raApproximatedDocCount += b.raApproximatedDocCount;
-            raAvgMin = Math.min(raAvgMin, b.raAvgMin);
-            raAvgMax = Math.max(raAvgMax, b.raAvgMax);
-            raAvgTotal += b.raAvgTotal;
-            raAvgSquaredTotal += b.raAvgSquaredTotal;
+            rawSegmentCount += b.rawSegmentCount;
+            rawLiveDocCount += b.rawLiveDocCount;
+            rawDeletedDocCount += b.rawDeletedDocCount;
+            rawApproximatedDocCount += b.rawApproximatedDocCount;
+            rawAvgMin = Math.min(rawAvgMin, b.rawAvgMin);
+            rawAvgMax = Math.max(rawAvgMax, b.rawAvgMax);
+            rawAvgTotal += b.rawAvgTotal;
+            rawAvgSquaredTotal += b.rawAvgSquaredTotal;
 
             indexCreationDate = getEarlierValidCreationDate(indexCreationDate, b.indexCreationDate);
             return this;
