@@ -157,3 +157,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
   method: testPreferredNodeIdsAreUsedDuringRelocation
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3508
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testRealTimeGet
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3510
