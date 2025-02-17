@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
-import co.elastic.elasticsearch.metering.sampling.SPMinProvisionedMemoryCalculator.SPMinProvisionedMemoryCalculatorImpl;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
@@ -27,7 +26,6 @@ import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
@@ -42,7 +40,6 @@ import java.util.function.Function;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -59,35 +56,23 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
     }
 
     public void testSpMinProvisionedMemoryBadValue() {
-        var calculator = SPMinProvisionedMemoryCalculator.build(
-            clusterService,
-            systemIndices,
-            () -> randomNonNegativeLong(),
-            () -> randomLongBetween(-5, 0)
+        assertThrows(
+            IllegalStateException.class,
+            () -> SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, randomNonNegativeLong(), randomLongBetween(-5, 0))
         );
-        assertThat(calculator.calculate(null), nullValue());
     }
 
     public void testSpMinProvisionedMemoryStorageBadValue() {
-        var calculator = SPMinProvisionedMemoryCalculator.build(
-            clusterService,
-            systemIndices,
-            () -> randomLongBetween(-5, 0),
-            () -> randomNonNegativeLong()
+        assertThrows(
+            IllegalStateException.class,
+            () -> SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, randomLongBetween(-5, 0), randomNonNegativeLong())
         );
-        assertThat(calculator.calculate(null), nullValue());
-    }
-
-    public void testSpMinProvisionedMemoryNotSearchNode() {
-        var clusterService = mockClusterService(false);
-        var calculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, (NodeEnvironment) null);
-        assertThat(calculator.calculate(null), nullValue());
     }
 
     public void testSpMinProvisionedMemoryNoShardsReturn0() {
         var clusterService = mockClusterService(true);
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, Map.of(), Set.of());
-        var calculator = new SPMinProvisionedMemoryCalculatorImpl(clusterService, systemIndices, 10, 10);
+        var calculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, 10, 10);
         assertThat(calculator.calculate(current).provisionedMemory(), equalTo(0L));
     }
 
@@ -155,7 +140,7 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
         long provisionedRam = 1000;
         long storageRamRatio = 10;
         long provisionedStorage = storageRamRatio * provisionedRam;
-        var calculator = new SPMinProvisionedMemoryCalculatorImpl(clusterService, systemIndices, provisionedStorage, provisionedRam);
+        var calculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, provisionedStorage, provisionedRam);
 
         // basePower = 0.05, since default SPMin is 100
         // boostPower = 0.95, SPMin/100 - basePower
@@ -185,7 +170,7 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
         long provisionedRam = between(1, 1000);
         long storageRamRatio = between(1, 10);
         long provisionedStorage = storageRamRatio * provisionedRam;
-        var calculator = new SPMinProvisionedMemoryCalculatorImpl(clusterService, systemIndices, provisionedStorage, provisionedRam);
+        var calculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, provisionedStorage, provisionedRam);
 
         // basePower = 0.05, since default SPMin is 100
         // boostPower = 0.95, SPMin/100 - basePower
@@ -207,7 +192,7 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
         var clusterService = mockClusterService(true, spMin);
         var shardSamples = Map.of(randomShardKey(), randomShardSample(interactiveSize, totalSize));
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
-        var calculator = new SPMinProvisionedMemoryCalculatorImpl(clusterService, systemIndices, provisionedStorage, provisionedRam);
+        var calculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, provisionedStorage, provisionedRam);
         long provisionedMemory = calculator.calculate(interactiveSize, totalSize).provisionedMemory();
         assertThat(provisionedMemory, is(calculator.calculate(current).provisionedMemory()));
         return provisionedMemory;
