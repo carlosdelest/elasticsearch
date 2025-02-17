@@ -42,6 +42,7 @@ import java.util.function.Consumer;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.emptyIterable;
 import static org.hamcrest.Matchers.iterableWithSize;
 import static org.hamcrest.Matchers.nullValue;
@@ -142,12 +143,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
 
         // 1. Test get all roles as an operator user
         {
-            final String[] builtInRoles = new String[] {
-                "editor",
-                "viewer",
-                "superuser",
-                "remote_monitoring_agent",
-                "remote_monitoring_collector" };
+            final String[] builtInRoles = new String[] { "superuser", "remote_monitoring_agent", "remote_monitoring_collector" };
             assertBusy(() -> {
                 Request request = new Request("GET", "/_security/role");
                 Response response = client().performRequest(request);
@@ -159,7 +155,6 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
 
         // 2. Test get all roles as a regular user
         {
-            final String[] builtInRoles = new String[] { "editor", "viewer" };
             assertBusy(() -> {
                 Request request = new Request("GET", "/_security/role");
                 request.setOptions(
@@ -168,7 +163,7 @@ public class ServerlessQueryableBuiltInRolesIT extends ESRestTestCase {
                 Response response = client().performRequest(request);
                 assertOK(response);
                 Map<String, ?> responseAsMap = responseAsMap(response);
-                assertThat(responseAsMap.keySet(), containsInAnyOrder(builtInRoles));
+                assertThat(responseAsMap.keySet(), is(empty()));
             }, MAX_WAIT_TIME_IN_SECONDS, TimeUnit.SECONDS);
         }
     }

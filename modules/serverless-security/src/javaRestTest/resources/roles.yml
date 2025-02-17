@@ -1,4 +1,6 @@
 _es_test_root:
+  metadata:
+    _reserved: true
   cluster: [ "ALL" ]
   indices:
     - names: [ "*" ]
@@ -14,6 +16,7 @@ file_based_role:
 _public_predefined_role:
   metadata:
     _public: true
+    _reserved: true
   cluster: [ "ALL" ]
   indices:
     - names: [ "*" ]
@@ -21,6 +24,7 @@ _public_predefined_role:
 _nonpublic_predefined_role:
   metadata:
     _public: false
+    _reserved: true
   cluster: [ "ALL" ]
   indices:
     - names: [ "*" ]
