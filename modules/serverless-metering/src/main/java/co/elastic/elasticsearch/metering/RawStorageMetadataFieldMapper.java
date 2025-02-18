@@ -30,17 +30,17 @@ import java.util.Collections;
  * The field mapper for the {@code _rastorage} field. This doesn't allow any access,
  * as all access is done through lucene directly.
  */
-public class RaStorageMetadataFieldMapper extends MetadataFieldMapper {
+public class RawStorageMetadataFieldMapper extends MetadataFieldMapper {
 
     public static final String FIELD_NAME = "_rastorage";
 
-    private static final RaStorageMetadataFieldMapper INSTANCE = new RaStorageMetadataFieldMapper();
+    private static final RawStorageMetadataFieldMapper INSTANCE = new RawStorageMetadataFieldMapper();
 
     static final TypeParser PARSER = new FixedTypeParser(c -> INSTANCE);
 
-    private static final class RaStorageMetaFieldType extends MappedFieldType {
+    private static final class RawStorageMetaFieldType extends MappedFieldType {
 
-        private RaStorageMetaFieldType() {
+        private RawStorageMetaFieldType() {
             super(FIELD_NAME, false, false, false, TextSearchInfo.NONE, Collections.emptyMap());
         }
 
@@ -65,8 +65,8 @@ public class RaStorageMetadataFieldMapper extends MetadataFieldMapper {
         }
     }
 
-    private RaStorageMetadataFieldMapper() {
-        super(new RaStorageMetaFieldType());
+    private RawStorageMetadataFieldMapper() {
+        super(new RawStorageMetaFieldType());
     }
 
     @Override

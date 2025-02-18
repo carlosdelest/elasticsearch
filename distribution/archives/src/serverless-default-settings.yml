@@ -12,9 +12,10 @@ cluster.routing.allocation.node_concurrent_recoveries: 6
 # also raise this for same reason, though we accept that translog replay may take a short while, requiring mainly
 # CPU/IO.
 cluster.routing.allocation.node_initial_primaries_recoveries: 6
-# increase to 5K in serverless. This is not unheard of on frozen, so should work. Also, stats is not available to
-# users so we have some control. Finally, if this does not work, we would likely like to investigate it.
-cluster.max_shards_per_node: 5000
+# We would like to avoid hitting shard count limits and allow auto-scaling to handle providing sufficient resources.
+# Increasing to 10k in serverless. Also, stats is not available to users so we have some control. If this does not
+# work, we would likely like to investigate it.
+cluster.max_shards_per_node: 10000
 
 # New default value for target merge factor after rollover in order to reduce heap usage of open readers
 # May want to revisit after ES-7337

@@ -111,7 +111,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     private SampledClusterMetricsService clusterMetricsService;
 
     private class TestTransportGetMeteringStatsAction extends TransportGetMeteringStatsAction {
-        TestTransportGetMeteringStatsAction(TimeValue meteringShardInfoUpdatePeriod, boolean projectUsesRaStorageMetric) {
+        TestTransportGetMeteringStatsAction(TimeValue meteringShardInfoUpdatePeriod, boolean projectUsesRawStorageMetric) {
             super(
                 GetMeteringStatsAction.FOR_SECONDARY_USER_NAME,
                 transportService,
@@ -121,7 +121,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                 clusterMetricsService,
                 transportService.getThreadPool().executor(TEST_THREAD_POOL_NAME),
                 meteringShardInfoUpdatePeriod,
-                projectUsesRaStorageMetric
+                projectUsesRawStorageMetric
             );
         }
     }
@@ -169,7 +169,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
     private TestTransportGetMeteringStatsAction createActionAndInitTransport(
         CapturingTransport transport,
         TimeValue meteringShardInfoUpdatePeriod,
-        boolean projectUsesRaStorageMetric
+        boolean projectUsesRawStorageMetric
     ) {
         transportService = transport.createTransportService(
             clusterService.getSettings(),
@@ -181,7 +181,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         );
         transportService.start();
         transportService.acceptIncomingRequests();
-        return new TestTransportGetMeteringStatsAction(meteringShardInfoUpdatePeriod, projectUsesRaStorageMetric);
+        return new TestTransportGetMeteringStatsAction(meteringShardInfoUpdatePeriod, projectUsesRawStorageMetric);
     }
 
     @After
@@ -479,7 +479,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         assertThat(response.indexToStatsMap.get(index2.getName()).sizeInBytes(), is(20L));
     }
 
-    public void testCreateResponseTwoIndicesRAStorageProject() {
+    public void testCreateResponseTwoIndicesRawStorageProject() {
         var transport = new CapturingTransport();
         var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 

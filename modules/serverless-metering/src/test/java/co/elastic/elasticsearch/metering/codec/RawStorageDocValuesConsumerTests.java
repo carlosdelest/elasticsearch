@@ -41,11 +41,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator.RA_STORAGE_AVG_KEY;
-import static co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator.RA_STORAGE_KEY;
+import static co.elastic.elasticsearch.metering.reporter.RawStorageAccumulator.RA_STORAGE_AVG_KEY;
+import static co.elastic.elasticsearch.metering.reporter.RawStorageAccumulator.RA_STORAGE_KEY;
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
-public class RAStorageDocValuesConsumerTests extends BaseDocValuesFormatTestCase {
+public class RawStorageDocValuesConsumerTests extends BaseDocValuesFormatTestCase {
 
     static {
         LogConfigurator.loadLog4jPlugins();
@@ -55,7 +55,7 @@ public class RAStorageDocValuesConsumerTests extends BaseDocValuesFormatTestCase
     @Override
     protected Codec getCodec() {
         var parentCodecDocValuesFormat = new ES87TSDBDocValuesFormat();
-        var extensionDocValuesFormat = new RAStorageDocValuesFormatFactory().createDocValueFormat(parentCodecDocValuesFormat);
+        var extensionDocValuesFormat = new RawStorageDocValuesFormatFactory().createDocValueFormat(parentCodecDocValuesFormat);
         return TestUtil.alwaysDocValuesFormat(extensionDocValuesFormat);
     }
 

@@ -16,7 +16,7 @@
  */
 
 import co.elastic.elasticsearch.metering.MeteringFeatures;
-import co.elastic.elasticsearch.metering.codec.RAStorageDocValuesFormatFactory;
+import co.elastic.elasticsearch.metering.codec.RawStorageDocValuesFormatFactory;
 
 module org.elasticsearch.metering {
     requires org.apache.logging.log4j;
@@ -34,7 +34,7 @@ module org.elasticsearch.metering {
     requires org.elasticsearch.sslconfig;
 
     provides org.elasticsearch.features.FeatureSpecification with MeteringFeatures;
-    provides co.elastic.elasticsearch.stateless.api.DocValuesFormatFactory with RAStorageDocValuesFormatFactory;
+    provides co.elastic.elasticsearch.stateless.api.DocValuesFormatFactory with RawStorageDocValuesFormatFactory;
 
     exports co.elastic.elasticsearch.metering.action to org.elasticsearch.server;
     exports co.elastic.elasticsearch.metering.codec to org.elasticsearch.server;

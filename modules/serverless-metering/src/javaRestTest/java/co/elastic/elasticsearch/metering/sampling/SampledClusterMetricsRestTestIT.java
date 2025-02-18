@@ -24,7 +24,6 @@ import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -48,7 +47,6 @@ public class SampledClusterMetricsRestTestIT extends AbstractMeteringRestTestIT 
 
     private Set<String> latestSamplingNodeIds() {
         return drainAllUsageRecords().stream()
-            .flatMap(List::stream)
             .map(m -> (String) ((Map<?, ?>) m.get("source")).get("id"))
             .map(id -> id.startsWith("es-") ? id.substring(3) : id)
             .collect(Collectors.toSet());

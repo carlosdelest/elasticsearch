@@ -19,9 +19,9 @@ package co.elastic.elasticsearch.metering.xcontent;
 
 import co.elastic.elasticsearch.metering.IngestMetricsProvider;
 import co.elastic.elasticsearch.metering.reporter.CompositeDocumentSizeReporter;
-import co.elastic.elasticsearch.metering.reporter.RAIngestMetricReporter;
-import co.elastic.elasticsearch.metering.reporter.RAStorageAccumulator;
-import co.elastic.elasticsearch.metering.reporter.RAStorageReporter;
+import co.elastic.elasticsearch.metering.reporter.RawIngestMetricReporter;
+import co.elastic.elasticsearch.metering.reporter.RawStorageAccumulator;
+import co.elastic.elasticsearch.metering.reporter.RawStorageReporter;
 
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.index.mapper.MapperService;
@@ -37,10 +37,10 @@ import java.util.function.Supplier;
 
 public class MeteringDocumentParsingProvider implements DocumentParsingProvider {
     private final Supplier<IngestMetricsProvider> ingestMetricsCollectorSupplier;
-    private final boolean meterRaStorage;
+    private final boolean meterRawStorage;
 
-    public MeteringDocumentParsingProvider(boolean meterRaStorage, Supplier<IngestMetricsProvider> ingestMetricsCollectorSupplier) {
-        this.meterRaStorage = meterRaStorage;
+    public MeteringDocumentParsingProvider(boolean meterRawStorage, Supplier<IngestMetricsProvider> ingestMetricsCollectorSupplier) {
+        this.meterRawStorage = meterRawStorage;
         this.ingestMetricsCollectorSupplier = ingestMetricsCollectorSupplier;
     }
 
@@ -55,18 +55,18 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
         MapperService mapperService,
         DocumentSizeAccumulator documentSizeAccumulator
     ) {
-        if (meterRaStorage) {
-            DocumentSizeReporter raStorageReporter = new RAStorageReporter(documentSizeAccumulator, mapperService);
-            DocumentSizeReporter raIngestReporter = new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
-            return new CompositeDocumentSizeReporter(List.of(raStorageReporter, raIngestReporter));
+        if (meterRawStorage) {
+            DocumentSizeReporter rawStorageReporter = new RawStorageReporter(documentSizeAccumulator, mapperService);
+            DocumentSizeReporter rawIngestReporter = new RawIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
+            return new CompositeDocumentSizeReporter(List.of(rawStorageReporter, rawIngestReporter));
         }
-        return new RAIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
+        return new RawIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
     }
 
     @Override
     public DocumentSizeAccumulator createDocumentSizeAccumulator() {
-        if (meterRaStorage) {
-            return new RAStorageAccumulator();
+        if (meterRawStorage) {
+            return new RawStorageAccumulator();
         }
         return DocumentSizeAccumulator.EMPTY_INSTANCE;
     }

@@ -31,24 +31,24 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class RAIngestMetricReporterTests extends ESTestCase {
+public class RawIngestMetricReporterTests extends ESTestCase {
     IngestMetricsProvider ingestMetricsProvider = mock(IngestMetricsProvider.class);
     String indexName = "indexName";
-    RAIngestMetricReporter raIngestMetricReporter = new RAIngestMetricReporter(indexName, ingestMetricsProvider);
+    RawIngestMetricReporter rawIngestMetricReporter = new RawIngestMetricReporter(indexName, ingestMetricsProvider);
     ParsedDocument parsedDocument = mock(ParsedDocument.class);
     XContentParserDecorator parserDecorator = mock(XContentParserDecorator.class);
 
     public void testZeroMeteredIsNotReported() {
         //empty instance returns 0
         when(parsedDocument.getNormalizedSize()).thenReturn(XContentMeteringParserDecorator.UNKNOWN_SIZE);
-        raIngestMetricReporter.onIndexingCompleted(parsedDocument);
+        rawIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
         verify(ingestMetricsProvider, times(0)).addIngestedDocValue(any(String.class), any(Long.class));
     }
 
     public void testMeteredValueIsReported() {
         when(parsedDocument.getNormalizedSize()).thenReturn(123L);
-        raIngestMetricReporter.onIndexingCompleted(parsedDocument);
+        rawIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
         verify(ingestMetricsProvider).addIngestedDocValue(eq(indexName), eq(123L));
     }

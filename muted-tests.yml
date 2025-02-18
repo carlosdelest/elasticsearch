@@ -109,9 +109,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {stats.DocsStatsSumNestedExpression SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3370
-- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
-  method: testRolesFileUpdateTriggersRolesSynchronization
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3384
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {stats.DocsStatsSumNestedExpression ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3347
@@ -133,15 +130,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3415
   method: testHugeManyConcat
-- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
-  method: testDeleteBuiltInRole
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3427
-- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
-  method: testUpdateBuiltInRole
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3436
-- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
-  method: testGetBuiltInRoles
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3437
 - class: co.elastic.elasticsearch.metering.codec.RAStorageDocValuesConsumerTests
   method: testAttributeWrittenWithAverageValue
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3446
@@ -157,6 +145,18 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.ReplicasUpdaterServiceTests
   method: testCancelingTaskClearsState
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3488
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=ml/inference_crud/Test delete model alias}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3498
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testStress
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3489
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {stats.DocsStatsSumNestedExpression SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3368
+- class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
+  method: testPreferredNodeIdsAreUsedDuringRelocation
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3508
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testRealTimeGet
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3510

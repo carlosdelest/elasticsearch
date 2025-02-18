@@ -78,7 +78,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private final SampledClusterMetricsService clusterMetricsService;
     private final ExecutorService executor;
-    private final boolean meterRaStorage;
+    private final boolean meterRawStorage;
     private final TransportService transportService;
     private final String persistentTaskName;
 
@@ -101,7 +101,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
             clusterMetricsService,
             transportService.getThreadPool().executor(ThreadPool.Names.MANAGEMENT),
             POLL_INTERVAL_SETTING.get(clusterService.getSettings()),
-            MeteringPlugin.isRaStorageMeteringEnabled(PROJECT_TYPE.get(clusterService.getSettings()))
+            MeteringPlugin.isRawStorageMeteringEnabled(PROJECT_TYPE.get(clusterService.getSettings()))
         );
 
         clusterService.getClusterSettings().addSettingsUpdateConsumer(POLL_INTERVAL_SETTING, this::setMeteringShardInfoUpdatePeriod);
@@ -116,7 +116,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         SampledClusterMetricsService clusterMetricsService,
         ExecutorService executor,
         TimeValue meteringShardInfoUpdatePeriod,
-        boolean meterRaStorage
+        boolean meterRawStorage
     ) {
         super(actionName, transportService, actionFilters, GetMeteringStatsAction.Request::new, executor);
         this.transportService = transportService;
@@ -124,7 +124,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         this.clusterMetricsService = clusterMetricsService;
         this.executor = executor;
-        this.meterRaStorage = meterRaStorage;
+        this.meterRawStorage = meterRawStorage;
         this.persistentTaskName = SampledClusterMetricsSchedulingTask.TASK_NAME;
         this.meteringShardInfoUpdatePeriod = meteringShardInfoUpdatePeriod;
     }
@@ -294,7 +294,7 @@ abstract class TransportGetMeteringStatsAction extends HandledTransportAction<
      */
     @Deprecated
     long getSizeToDisplay(ShardId shardId, ShardInfoMetrics shardInfo) {
-        if (meterRaStorage) {
+        if (meterRawStorage) {
             logger.trace("display _rastorage [{}] for [{}:{}]", shardInfo.rawStoredSizeInBytes(), shardId.getIndexName(), shardId.getId());
             return shardInfo.rawStoredSizeInBytes();
         }

@@ -309,12 +309,8 @@ public class SampledClusterMetricsService {
 
     public SampledVCUMetricsProvider createSampledVCUMetricsProvider(NodeEnvironment nodeEnvironment, SystemIndices systemIndices) {
         var coolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
-        var spMinProvisionedMemoryProvider = SampledVCUMetricsProvider.SPMinProvisionedMemoryProvider.build(
-            clusterService,
-            systemIndices,
-            nodeEnvironment
-        );
-        return new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryProvider, meterRegistry);
+        var spMinProvisionedMemoryCalculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, nodeEnvironment);
+        return new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryCalculator, meterRegistry);
     }
 
     private static Map<ShardKey, ShardSample> mergeShardInfos(Map<ShardKey, ShardSample> current, Map<ShardId, ShardInfoMetrics> updated) {

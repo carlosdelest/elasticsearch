@@ -84,7 +84,7 @@ RA-I is reported _per node_. During document parsing we compute RA-I creating a 
 Code references:
 
 * [`XContentMeteringParser`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/xcontent/XContentMeteringParser.java): Metering of RA-I while parsing a document source
-* [`RAIngestMetricReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAIngestMetricReporter.java): Reports RA-I per doc to `IngestMetricsProvider` once indexing completed
+* [`RawIngestMetricReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RawIngestMetricReporter.java): Reports RA-I per doc to `IngestMetricsProvider` once indexing completed
 * [`IngestMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/IngestMetricsProvider.java): Accumulates RA-I per index in memory and generates ingest usage metrics based on that
 * [`UsageReportCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/usagereports/UsageReportCollector.java): Periodically collects usage metrics from all metrics providers and publishes those
 
@@ -106,8 +106,8 @@ Once indexing of a document completes successfully, the per-document RA-I size (
 For reporting, total RA-S of a shard is read from the above-mentioned attribute in the segment infos user data (of the latest generation of that shard).
 
 Code references:
-* [`RAStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAStorageReporter.java): Reports RA-Storage per doc to the `RaStorageAccumulator`
-* [`RaStorageAccumulator`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAStorageAccumulator.java): Accumulates the RA-S delta of indexed documents since the last commit and provides the update commit user data.
+* [`RawStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RawStorageReporter.java): Reports RA-Storage per doc to the `RawStorageAccumulator`
+* [`RawStorageAccumulator`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RawStorageAccumulator.java): Accumulates the RA-S delta of indexed documents since the last commit and provides the update commit user data.
 
 #### Calculation of RA-S for regular indices
 
@@ -167,8 +167,8 @@ For reporting, total RA-S of a shard can then be calculated by summing the appro
 ```
 
 Code references:
-* [`RAStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RAStorageReporter.java): Writes RA-S as additional, hidden field to each document
-* [`RAStorageDocValuesFormatFactory`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/codec/RAStorageDocValuesFormatFactory.java): Creates the `DocValuesConsumer` responsible for calculating the average RA-S per document of a segment
+* [`RawStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RawStorageReporter.java): Writes RA-S as additional, hidden field to each document
+* [`RawStorageDocValuesFormatFactory`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/codec/RawStorageDocValuesFormatFactory.java): Creates the `DocValuesConsumer` responsible for calculating the average RA-S per document of a segment
 
 ### Index size IX (`es_indexed_data`)
 

@@ -21,17 +21,9 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.S
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
-import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.node.DiscoveryNodeRole;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.unit.ByteSizeValue;
-import org.elasticsearch.env.NodeEnvironment;
-import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
-import org.elasticsearch.monitor.fs.FsService;
-import org.elasticsearch.monitor.os.OsProbe;
 import org.elasticsearch.telemetry.metric.LongCounter;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
@@ -41,10 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
-import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 import static org.elasticsearch.core.Strings.format;
 
 public class SampledVCUMetricsProvider implements SampledMetricsProvider {
@@ -62,19 +51,19 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     public static final String METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN = "es.metering.reporting.backfill.activity.unknown.total";
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
-    private final Function<SampledClusterMetrics, SPMinInfo> spMinProvisionedMemoryProvider;
+    private final SPMinProvisionedMemoryCalculator spMinProvisionedMemoryCalculator;
     private final Duration activityCoolDownPeriod;
     private final LongCounter defaultActivityReturnedCounter;
 
     SampledVCUMetricsProvider(
         SampledClusterMetricsService sampledClusterMetricsService,
         Duration activityCoolDownPeriod,
-        Function<SampledClusterMetrics, SPMinInfo> spMinProvisionedMemoryProvider,
+        SPMinProvisionedMemoryCalculator spMinProvisionedMemoryCalculator,
         MeterRegistry meterRegistry
     ) {
         this.sampledClusterMetricsService = sampledClusterMetricsService;
         this.activityCoolDownPeriod = activityCoolDownPeriod;
-        this.spMinProvisionedMemoryProvider = spMinProvisionedMemoryProvider;
+        this.spMinProvisionedMemoryCalculator = spMinProvisionedMemoryCalculator;
         this.defaultActivityReturnedCounter = meterRegistry.registerLongCounter(
             METERING_REPORTING_BACKFILL_ACTIVITY_UNKNOWN,
             "The number of activity backfill attempts where activity data was not present so default value was returned.",
@@ -88,7 +77,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             boolean partial = sample.status().contains(SampledClusterMetricsService.SamplingStatus.PARTIAL);
             List<MetricValue> metrics = List.of(
                 buildMetricValue(
-                    spMinProvisionedMemoryProvider.apply(sample),
+                    spMinProvisionedMemoryCalculator.calculate(sample),
                     sample.searchTierMetrics(),
                     "search",
                     activityCoolDownPeriod,
@@ -109,7 +98,7 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     }
 
     private static MetricValue buildMetricValue(
-        SPMinInfo spMinInfo,
+        SPMinProvisionedMemoryCalculator.SPMinInfo spMinInfo,
         SampledClusterMetricsService.SampledTierMetrics tierMetrics,
         String tier,
         Duration coolDown,
@@ -128,7 +117,12 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
         );
     }
 
-    public static Map<String, String> buildUsageMetadata(boolean isActive, Instant lastActivityTime, SPMinInfo spMinInfo, String tier) {
+    public static Map<String, String> buildUsageMetadata(
+        boolean isActive,
+        Instant lastActivityTime,
+        SPMinProvisionedMemoryCalculator.SPMinInfo spMinInfo,
+        String tier
+    ) {
         Map<String, String> usageMetadata = new HashMap<>();
         usageMetadata.put(USAGE_METADATA_APPLICATION_TIER, tier);
         usageMetadata.put(USAGE_METADATA_ACTIVE, Boolean.toString(isActive));
@@ -136,127 +130,10 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
             usageMetadata.put(USAGE_METADATA_LATEST_ACTIVITY_TIME, lastActivityTime.toString());
         }
         if (spMinInfo != null) {
-            usageMetadata.put(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY, Long.toString(spMinInfo.provisionedMemory));
-            usageMetadata.put(USAGE_METADATA_SP_MIN, Long.toString(spMinInfo.spMin));
-            usageMetadata.put(USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO, Strings.format1Decimals(spMinInfo.storageRamRatio, ""));
+            usageMetadata.put(USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY, Long.toString(spMinInfo.provisionedMemory()));
+            usageMetadata.put(USAGE_METADATA_SP_MIN, Long.toString(spMinInfo.spMin()));
+            usageMetadata.put(USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO, Strings.format1Decimals(spMinInfo.storageRamRatio(), ""));
         }
         return usageMetadata;
-    }
-
-    record SPMinInfo(long provisionedMemory, long spMin, double storageRamRatio) {};
-
-    static class SPMinProvisionedMemoryProvider implements Function<SampledClusterMetrics, SPMinInfo> {
-        private final SystemIndices systemIndices;
-        private final long provisionedStorage;
-        private final long provisionedRAM;
-        private volatile long searchPowerMin;
-
-        SPMinProvisionedMemoryProvider(
-            ClusterService clusterService,
-            SystemIndices systemIndices,
-            long provisionedStorage,
-            long provisionedRAM
-        ) {
-            assert provisionedStorage > 0;
-            assert provisionedRAM > 0;
-            this.systemIndices = systemIndices;
-            this.provisionedStorage = provisionedStorage;
-            this.provisionedRAM = provisionedRAM;
-            clusterService.getClusterSettings().initializeAndWatch(SEARCH_POWER_MIN_SETTING, v -> this.searchPowerMin = v);
-        }
-
-        public static Function<SampledClusterMetrics, SPMinInfo> build(
-            ClusterService clusterService,
-            SystemIndices systemIndices,
-            NodeEnvironment nodeEnvironment
-        ) {
-            return build(
-                clusterService,
-                systemIndices,
-                () -> new FsService(clusterService.getSettings(), nodeEnvironment).stats().getTotal().getTotal().getBytes(),
-                () -> OsProbe.getInstance().getTotalPhysicalMemorySize()
-            );
-        }
-
-        static Function<SampledClusterMetrics, SPMinInfo> build(
-            ClusterService clusterService,
-            SystemIndices systemIndices,
-            Supplier<Long> storageSupplier,
-            Supplier<Long> ramSupplier
-        ) {
-            boolean isSearchNode = DiscoveryNode.hasRole(clusterService.getSettings(), DiscoveryNodeRole.SEARCH_ROLE);
-            if (isSearchNode == false) {
-                return errorProvider(
-                    "sp_min_provisioned_memory can only be computed on a search node. The metering persistent task is only run "
-                        + "on search nodes, so this should not occur."
-                );
-            }
-
-            long provisionedStorage = storageSupplier.get();
-            if (provisionedStorage <= 0) {
-                return errorProvider("provisionedStorage must be greater than zero, but values is: " + provisionedStorage);
-            }
-
-            long provisionedRAM = ramSupplier.get();
-            if (provisionedRAM <= 0) {
-                return errorProvider("provisionedRAM must be greater than zero, but values is: " + provisionedRAM);
-            }
-
-            return new SPMinProvisionedMemoryProvider(clusterService, systemIndices, provisionedStorage, provisionedRAM);
-        }
-
-        private static Function<SampledClusterMetrics, SPMinInfo> errorProvider(String message) {
-            return current -> {
-                logger.error(message);
-                return null;
-            };
-        }
-
-        @Override
-        public SPMinInfo apply(SampledClusterMetrics currentInfo) {
-            long spMin = searchPowerMin;
-            long boostedDataSetSize = 0;
-            long totalDataSetSize = 0;
-            for (var entry : currentInfo.shardSamples().entrySet()) {
-                if (systemIndices.isSystemIndex(entry.getKey().indexName())) {
-                    continue; // temporarily skip system indices until VCU for inactivity is reported by index
-                }
-                var shardInfo = entry.getValue().shardInfo();
-                boostedDataSetSize += shardInfo.interactiveSizeInBytes();
-                totalDataSetSize += shardInfo.totalSizeInBytes();
-            }
-
-            double storageRamRatio = provisionedStorage / (double) provisionedRAM;
-            double basePower = 0.05 * spMin / 100.0;
-            double boostPower = spMin / 100.0 - basePower;
-            double cacheSize = boostedDataSetSize * boostPower + totalDataSetSize * basePower;
-            long provisionedMemory = (long) (cacheSize / storageRamRatio);
-
-            if (provisionedMemory > currentInfo.searchTierMetrics().memorySize()) {
-                logger.warn(
-                    "spMinProvisionedMemory [{}] for inactivity billing exceeded actual provisioned search tier memory [{}] "
-                        + "[spMin: {}, storage: {}, memory: {}, interactiveData: {}, totalData: {}]",
-                    ByteSizeValue.ofBytes(provisionedMemory),
-                    ByteSizeValue.ofBytes(currentInfo.searchTierMetrics().memorySize()),
-                    spMin,
-                    ByteSizeValue.ofBytes(provisionedStorage),
-                    ByteSizeValue.ofBytes(provisionedRAM),
-                    ByteSizeValue.ofBytes(boostedDataSetSize),
-                    ByteSizeValue.ofBytes(totalDataSetSize)
-                );
-            } else if (logger.isTraceEnabled()) {
-                logger.trace(
-                    "spMinProvisionedMemory: {} [spMin: {}, storage: {}, memory: {}, interactiveData: {}, totalData: {}]",
-                    ByteSizeValue.ofBytes(provisionedMemory),
-                    spMin,
-                    ByteSizeValue.ofBytes(provisionedStorage),
-                    ByteSizeValue.ofBytes(provisionedRAM),
-                    ByteSizeValue.ofBytes(boostedDataSetSize),
-                    ByteSizeValue.ofBytes(totalDataSetSize)
-                );
-            }
-
-            return new SPMinInfo(provisionedMemory, spMin, storageRamRatio);
-        }
     }
 }

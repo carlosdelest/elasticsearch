@@ -195,7 +195,7 @@ public class UsageReportIT extends AbstractMeteringIntegTestCase {
         // Provoke usage records to be generated
         client().index(new IndexRequest(indexName).source(XContentType.JSON, "a", 1, "b", "c")).actionGet();
         List<UsageRecord> newMetrics = new ArrayList<>();
-        waitAndAssertRAIngestRecords(newMetrics, indexName);
+        waitAndAssertRawIngestRecords(newMetrics, indexName);
 
         // Re-enable the persistent task
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
@@ -272,7 +272,7 @@ public class UsageReportIT extends AbstractMeteringIntegTestCase {
         });
     }
 
-    private void waitAndAssertRAIngestRecords(List<UsageRecord> usageRecords, String indexName) throws Exception {
+    private void waitAndAssertRawIngestRecords(List<UsageRecord> usageRecords, String indexName) throws Exception {
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
             var ingestRecords = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).toList();

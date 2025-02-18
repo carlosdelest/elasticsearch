@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.S
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
+import co.elastic.elasticsearch.metrics.SampledMetricsProvider.MetricValues;
 
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
@@ -29,27 +30,36 @@ import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.iterable.Iterables;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
+import org.hamcrest.Matcher;
 import org.junit.Before;
 
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.StreamSupport;
 
 import static co.elastic.elasticsearch.metering.TestUtils.hasBackfillStrategy;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
-import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.IX_METRIC_ID_PREFIX;
+import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.IX_INDEX_METRIC_ID_PREFIX;
+import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.IX_METRIC_TYPE;
+import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.IX_SHARD_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.RA_S_METRIC_ID_PREFIX;
+import static co.elastic.elasticsearch.metering.sampling.SampledStorageMetricsProvider.RA_S_METRIC_TYPE;
 import static java.util.Map.entry;
 import static java.util.function.Function.identity;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
@@ -57,27 +67,35 @@ import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.both;
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.either;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.isA;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.oneOf;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class SampledStorageMetricsProviderTests extends ESTestCase {
+
+    static final Predicate<MetricValue> isIxShardMetric = m -> m.type().equals(IX_METRIC_TYPE)
+        && m.id().startsWith(IX_SHARD_METRIC_ID_PREFIX);
+    static final Predicate<MetricValue> isIxIndexMetric = m -> m.type().equals(IX_METRIC_TYPE)
+        && m.id().startsWith(IX_INDEX_METRIC_ID_PREFIX);
+    static final Predicate<MetricValue> isRasMetric = m -> m.type().equals(RA_S_METRIC_TYPE);
+    static final Supplier<AssertionError> elementMustBePresent = () -> new AssertionError("Element must be present");
 
     private ClusterService clusterService;
     private SystemIndices systemIndices;
@@ -116,8 +134,12 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         );
     }
 
-    private static AssertionError elementMustBePresent() {
-        return new AssertionError("Element must be present");
+    private MetricValue findFirstMatch(MetricValues metrics, Predicate<MetricValue> predicate) {
+        return StreamSupport.stream(metrics.spliterator(), false).filter(predicate).findFirst().orElseThrow(elementMustBePresent);
+    }
+
+    private List<MetricValue> findAllMetrics(MetricValues metrics, Predicate<MetricValue> predicate) {
+        return StreamSupport.stream(metrics.spliterator(), false).filter(predicate).toList();
     }
 
     public void testGetMetrics() {
@@ -146,27 +168,18 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        var metrics = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
+        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, transformedMatch(Iterables::size, is(3L)));
 
-        assertThat(metrics, hasSize(2));
+        var shardIX = findFirstMatch(metrics, isIxShardMetric);
+        var indexIX = findFirstMatch(metrics, isIxIndexMetric);
+        var indexRAS = findFirstMatch(metrics, isRasMetric);
 
-        var metric1 = metrics.stream()
-            .filter(m -> m.type().equals("es_indexed_data"))
-            .findFirst()
-            .orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent);
-        var metric2 = metrics.stream()
-            .filter(m -> m.type().equals("es_raw_stored_data"))
-            .findFirst()
-            .orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent);
-
-        assertThat(metric1.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
+        assertThat(shardIX.id(), equalTo(IX_SHARD_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
         assertThat(
-            metric1.sourceMetadata(),
+            shardIX.sourceMetadata(),
             allOf(
                 hasEntry("index", indexName),
                 hasEntry("system_index", "false"),
@@ -174,16 +187,23 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 hasEntry("hidden_index", Boolean.toString(isHidden))
             )
         );
-        assertThat(metric1.value(), is(11L));
-        assertThat(metric1.meteredObjectCreationTime(), notNullValue());
-        assertTrue(metric1.meteredObjectCreationTime().isAfter(Instant.EPOCH));
+        assertThat(shardIX.value(), is(11L));
+        assertThat(shardIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
 
-        assertThat(metric2.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
         assertThat(
-            metric2.sourceMetadata(),
+            indexIX.sourceMetadata(),
             allOf(hasEntry("index", indexName), hasEntry("system_index", "false"), hasEntry("hidden_index", Boolean.toString(isHidden)))
         );
-        assertThat(metric2.value(), is(11L));
+        assertThat(indexIX.value(), is(11L));
+        assertThat(indexIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
+
+        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(
+            indexRAS.sourceMetadata(),
+            allOf(hasEntry("index", indexName), hasEntry("system_index", "false"), hasEntry("hidden_index", Boolean.toString(isHidden)))
+        );
+        assertThat(indexRAS.value(), is(11L));
     }
 
     public void testSystemMetrics() {
@@ -195,7 +215,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             entry(
                 shard1Id,
                 new SampledClusterMetricsService.ShardSample(
-                    "myIndexUUID",
+                    indexName,
                     ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                         .withData(110L, 11L, 0L, 11L)
                         .withGeneration(1, 1, Instant.now().toEpochMilli())
@@ -210,39 +230,34 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        var metrics = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
+        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, transformedMatch(Iterables::size, is(3L)));
 
-        assertThat(metrics, hasSize(2));
+        var shardIX = findFirstMatch(metrics, isIxShardMetric);
+        var indexIX = findFirstMatch(metrics, isIxIndexMetric);
+        var indexRAS = findFirstMatch(metrics, isRasMetric);
 
-        var metric1 = metrics.stream()
-            .filter(m -> m.type().equals("es_indexed_data"))
-            .findFirst()
-            .orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent);
-        var metric2 = metrics.stream()
-            .filter(m -> m.type().equals("es_raw_stored_data"))
-            .findFirst()
-            .orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent);
-
-        assertThat(metric1.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
+        assertThat(shardIX.id(), equalTo(IX_SHARD_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
         assertThat(
-            metric1.sourceMetadata(),
+            shardIX.sourceMetadata(),
             allOf(hasEntry("index", indexName), hasEntry("system_index", "true"), hasEntry("shard", "" + shardIdInt))
         );
-        assertThat(metric1.value(), is(11L));
-        assertThat(metric1.meteredObjectCreationTime(), notNullValue());
-        assertTrue(metric1.meteredObjectCreationTime().isAfter(Instant.EPOCH));
+        assertThat(shardIX.value(), is(11L));
+        assertThat(shardIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
 
-        assertThat(metric2.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
-        assertThat(metric2.sourceMetadata(), allOf(hasEntry("index", indexName), hasEntry("system_index", "true")));
-        assertThat(metric2.value(), is(11L));
+        assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(indexIX.sourceMetadata(), allOf(hasEntry("index", indexName), hasEntry("system_index", "true")));
+        assertThat(indexIX.value(), is(11L));
+        assertThat(indexIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
+
+        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(indexRAS.sourceMetadata(), allOf(hasEntry("index", indexName), hasEntry("system_index", "true")));
+        assertThat(indexRAS.value(), is(11L));
     }
 
-    public void testGetMetricsWithNoStoredIngestSize() {
+    public void testGetMetricsWithNoRasSize() {
         String indexName = "myIndex";
         int shardIdInt = 0;
         var shard1Id = new SampledClusterMetricsService.ShardKey(indexName, shardIdInt);
@@ -263,23 +278,11 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
-
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
-        assertThat(metrics, hasSize(1));
-
-        var metric = (MetricValue) metrics.toArray()[0];
-        assertThat(metric.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shardIdInt));
-        assertThat(metric.type(), equalTo("es_indexed_data"));
-        assertThat(metric.sourceMetadata(), allOf(hasEntry("index", indexName), hasEntry("shard", "" + shardIdInt)));
-
-        assertThat(metric.value(), is(11L));
+        var metricValues = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
+        assertThat(metricValues, not(hasItem(transformedMatch(MetricValue::type, equalTo(RA_S_METRIC_TYPE)))));
     }
 
-    public void testGetMetricsWithNoIndexSize() {
+    public void testGetMetricsWithNoIXSize() {
         String indexName = "myIndex";
         int shardIdInt = 0;
         var shard1Id = new SampledClusterMetricsService.ShardKey(indexName, shardIdInt);
@@ -300,20 +303,8 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
-
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
-        assertThat(metrics, hasSize(1));
-
-        var metric = (MetricValue) metrics.toArray()[0];
-        assertThat(metric.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
-        assertThat(metric.type(), equalTo("es_raw_stored_data"));
-        assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
-
-        assertThat(metric.value(), is(11L));
+        var metricValues = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
+        assertThat(metricValues, not(hasItem(transformedMatch(MetricValue::type, equalTo(IX_METRIC_TYPE)))));
     }
 
     public void testGetMetricsWithNoSize() {
@@ -340,9 +331,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         var metricValues = sampledStorageMetricsProvider.getMetrics();
         assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
 
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
+        Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(elementMustBePresent));
         assertThat(metrics, empty());
     }
 
@@ -356,11 +345,11 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             return entry(
                 shardId,
                 new SampledClusterMetricsService.ShardSample(
-                    "myIndexUUID",
+                    indexName,
                     ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                         .withData(110L, size, 0L, hasIngestSize ? size : 0L)
                         .withGeneration(1, 1, creationDate.toEpochMilli())
-                        .withRAStats(id, 10L, id, 100L, 20L, 11L, 3, 3, 3 * id, 9 * id)
+                        .withRawStats(id, 10L, id, 100L, 20L, 11L, 3, 3, 3 * id, 9 * id)
                         .build()
                 )
             );
@@ -370,29 +359,35 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        var metrics = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
+        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, transformedMatch(Iterables::size, is(12L)));
 
-        var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
-        var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
+        var ixShardMetrics = findAllMetrics(metrics, isIxShardMetric);
+        var ixIndexMetrics = findAllMetrics(metrics, isIxIndexMetric);
+        var rasMetrics = findAllMetrics(metrics, isRasMetric);
 
-        assertThat(metrics, hasSize(11));
-        assertThat(indexedDataMetrics, hasSize(10));
-        assertThat(rawStoredDataMetrics, hasSize(1));
+        assertThat(ixShardMetrics, hasSize(10));
+        assertThat(ixIndexMetrics, hasSize(1));
+        assertThat(rasMetrics, hasSize(1));
 
         int shard = 0;
-        for (MetricValue metric : indexedDataMetrics) {
-            assertThat(metric.id(), equalTo(IX_METRIC_ID_PREFIX + ":" + indexName + ":" + shard));
+        for (MetricValue metric : ixShardMetrics) {
+            assertThat(metric.id(), equalTo(IX_SHARD_METRIC_ID_PREFIX + ":" + indexName + ":" + shard));
             assertThat(metric.sourceMetadata(), allOf(hasEntry("index", indexName), hasEntry("shard", "" + shard)));
             assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
             shard++;
         }
 
-        for (MetricValue metric : rawStoredDataMetrics) {
+        for (MetricValue metric : ixIndexMetrics) {
+            assertThat(metric.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
+            assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
+            assertThat(metric.sourceMetadata(), not(hasKey("shard")));
+            assertThat(metric.value(), is(145L));
+        }
+
+        for (MetricValue metric : rasMetrics) {
             assertThat(metric.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
             assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
             assertThat(metric.usageMetadata(), hasEntry("ra_size_segment_count", "45"));
@@ -404,7 +399,6 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
             assertThat(metric.usageMetadata(), hasEntry("ra_size_deleted_doc_count", "200"));
             assertThat(metric.usageMetadata(), hasEntry("ra_size_approximated_doc_count", "110"));
             assertThat(metric.value(), is(60L));
-            shard++;
         }
     }
 
@@ -421,11 +415,11 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shardsInfo.put(
                     shardId,
                     new SampledClusterMetricsService.ShardSample(
-                        "myIndexUUID",
+                        indexName,
                         ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                             .withData(110L, size, 0L, hasIngestSize ? size : 0L)
                             .withGeneration(1, 1, creationDate.toEpochMilli())
-                            .withRAStats(10, 10L, 8, 100L, 20L, 11L, 3, 10, 31, 163)
+                            .withRawStats(10, 10L, 8, 100L, 20L, 11L, 3, 10, 31, 163)
                             .build()
                     )
                 );
@@ -436,66 +430,53 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        var metrics = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
+        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
 
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
+        assertThat(metrics, transformedMatch(Iterables::size, is(57L)));
 
-        var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
-        var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
+        var ixShardMetrics = findAllMetrics(metrics, isIxShardMetric);
+        var ixIndexMetrics = findAllMetrics(metrics, isIxIndexMetric);
+        var rasMetrics = findAllMetrics(metrics, isRasMetric);
 
-        assertThat(metrics, hasSize(52));
-        assertThat(indexedDataMetrics, hasSize(50));
-        assertThat(rawStoredDataMetrics, hasSize(2));
+        assertThat(ixShardMetrics, hasSize(50));
+        assertThat(ixIndexMetrics, hasSize(5));
+        assertThat(rasMetrics, hasSize(2));
 
-        for (MetricValue metric : indexedDataMetrics) {
-            assertThat(metric.id(), startsWith(IX_METRIC_ID_PREFIX + ":" + baseIndexName));
+        for (MetricValue metric : ixShardMetrics) {
+            assertThat(metric.id(), startsWith(IX_SHARD_METRIC_ID_PREFIX + ":" + baseIndexName));
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
             assertThat(metric.sourceMetadata(), hasEntry(is("shard"), not(emptyOrNullString())));
             assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
         }
 
-        assertThat(
-            rawStoredDataMetrics.stream().map(MetricValue::id).toList(),
-            containsInAnyOrder(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 0, RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 1)
-        );
-        var metadataList = rawStoredDataMetrics.stream().map(MetricValue::sourceMetadata).toList();
-        assertThat(metadataList, everyItem(aMapWithSize(greaterThanOrEqualTo(1))));
-        assertThat(metadataList, everyItem(hasEntry(is("index"), startsWith(baseIndexName))));
+        for (MetricValue metric : ixIndexMetrics) {
+            assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + baseIndexName));
+            assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
+            assertThat(metric.sourceMetadata(), not(hasKey("shard")));
+            assertThat(metric.value(), is(145L));
+        }
 
-        var usageMetadataList = rawStoredDataMetrics.stream().map(MetricValue::usageMetadata).toList();
-        assertThat(usageMetadataList, everyItem(aMapWithSize(greaterThanOrEqualTo(11))));
+        for (MetricValue metric : rasMetrics) {
+            assertThat(
+                metric.id(),
+                oneOf(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 0, RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 1)
+            );
+            assertThat(metric.sourceMetadata(), hasEntry(is("index"), oneOf(baseIndexName + 0, baseIndexName + 1)));
+            assertThat(metric.usageMetadata(), hasEntry(is("ra_size_segment_count"), matchAsLong(greaterThan(0L))));
+            assertThat(metric.usageMetadata(), hasEntry(is("ra_size_segment_min_ra_avg"), matchAsLong(greaterThan(0L))));
+            assertThat(metric.usageMetadata(), hasEntry(is("ra_size_segment_max_ra_avg"), matchAsLong(greaterThan(0L))));
+            assertThat(metric.usageMetadata(), hasEntry(is("ra_size_segment_avg_ra_avg"), matchAsLong(greaterThan(0L))));
+            assertThat(metric.usageMetadata(), hasEntry(is("ra_size_segment_stddev_ra_avg"), matchAsLong(greaterThan(0L))));
+            assertThat(metric.usageMetadata(), hasEntry(is("ra_size_doc_count"), matchAsLong(greaterThan(0L))));
+            assertThat(metric.usageMetadata(), hasEntry(is("ra_size_deleted_doc_count"), matchAsLong(greaterThan(0L))));
+            assertThat(metric.usageMetadata(), hasEntry(is("ra_size_approximated_doc_count"), matchAsLong(greaterThan(0L))));
+            assertThat(metric.value(), is(145L));
+        }
+    }
 
-        assertThat(usageMetadataList, everyItem(hasEntry(is("ra_size_segment_count"), transformedMatch(Long::parseLong, greaterThan(0L)))));
-        assertThat(
-            usageMetadataList,
-            everyItem(hasEntry(is("ra_size_segment_min_ra_avg"), transformedMatch(Long::parseLong, greaterThan(0L))))
-        );
-        assertThat(
-            usageMetadataList,
-            everyItem(hasEntry(is("ra_size_segment_max_ra_avg"), transformedMatch(Long::parseLong, greaterThan(0L))))
-        );
-        assertThat(
-            usageMetadataList,
-            everyItem(hasEntry(is("ra_size_segment_avg_ra_avg"), transformedMatch(Long::parseLong, greaterThan(0L))))
-        );
-        assertThat(
-            usageMetadataList,
-            everyItem(hasEntry(is("ra_size_segment_stddev_ra_avg"), transformedMatch(Long::parseLong, greaterThan(0L))))
-        );
-        assertThat(usageMetadataList, everyItem(hasEntry(is("ra_size_doc_count"), transformedMatch(Long::parseLong, greaterThan(0L)))));
-        assertThat(
-            usageMetadataList,
-            everyItem(hasEntry(is("ra_size_deleted_doc_count"), transformedMatch(Long::parseLong, greaterThan(0L))))
-        );
-        assertThat(
-            usageMetadataList,
-            everyItem(hasEntry(is("ra_size_approximated_doc_count"), transformedMatch(Long::parseLong, greaterThan(0L))))
-        );
-
-        assertThat(rawStoredDataMetrics.stream().map(MetricValue::value).toList(), everyItem(is(145L)));
+    private Matcher<String> matchAsLong(Matcher<Long> matcher) {
+        return transformedMatch(Long::parseLong, matcher);
     }
 
     public void testMultipleIndicesWithMixedShardSizeType() {
@@ -511,7 +492,7 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
                 shardsInfo.put(
                     shardId,
                     new SampledClusterMetricsService.ShardSample(
-                        "myIndexUUID",
+                        indexName,
                         ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                             .withData(110L, size, 0L, hasIngestSize ? size : 0)
                             .withGeneration(1, 1, creationDate.toEpochMilli())
@@ -525,28 +506,34 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
         setInternalIndexInfoServiceData(indexInfoService, shardsInfo);
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        var metrics = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
+        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, transformedMatch(Iterables::size, is(60L)));
 
-        var indexedDataMetrics = metrics.stream().filter(x -> x.type().equals("es_indexed_data")).toList();
-        var rawStoredDataMetrics = metrics.stream().filter(x -> x.type().equals("es_raw_stored_data")).toList();
+        var ixShardMetrics = findAllMetrics(metrics, isIxShardMetric);
+        var ixIndexMetrics = findAllMetrics(metrics, isIxIndexMetric);
+        var rasMetrics = findAllMetrics(metrics, isRasMetric);
 
-        assertThat(metrics, hasSize(55));
-        assertThat(indexedDataMetrics, hasSize(50));
-        assertThat(rawStoredDataMetrics, hasSize(5));
+        assertThat(ixShardMetrics, hasSize(50));
+        assertThat(ixIndexMetrics, hasSize(5));
+        assertThat(rasMetrics, hasSize(5));
 
-        for (MetricValue metric : indexedDataMetrics) {
-            assertThat(metric.id(), startsWith(IX_METRIC_ID_PREFIX + ":" + baseIndexName));
+        for (MetricValue metric : ixShardMetrics) {
+            assertThat(metric.id(), startsWith(IX_SHARD_METRIC_ID_PREFIX + ":" + baseIndexName));
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
             assertThat(metric.sourceMetadata(), hasEntry(is("shard"), not(emptyOrNullString())));
             assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
         }
 
-        for (MetricValue metric : rawStoredDataMetrics) {
+        for (MetricValue metric : ixIndexMetrics) {
+            assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + baseIndexName));
+            assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
+            assertThat(metric.sourceMetadata(), not(hasKey("shard")));
+            assertThat(metric.value(), is(145L));
+        }
+
+        for (MetricValue metric : rasMetrics) {
             assertThat(metric.id(), startsWith(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName));
             assertThat(metric.sourceMetadata(), aMapWithSize(greaterThanOrEqualTo(1)));
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
@@ -556,15 +543,15 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
 
     public void testFailedShards() {
         String indexName = "myMultiShardIndex";
-        int failedIndex = 7;
+        int failedShardId = 7;
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardId = new SampledClusterMetricsService.ShardKey(indexName, id);
-            var size = failedIndex == id ? 0 : 10L + id;
+            var shardKey = new SampledClusterMetricsService.ShardKey(indexName, id);
+            var size = failedShardId == id ? 0 : 10L + id;
             return entry(
-                shardId,
+                shardKey,
                 new SampledClusterMetricsService.ShardSample(
-                    "myIndexUUID",
+                    indexName,
                     ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
                         .withData(110L, size, 0L, size)
                         .withGeneration(1, 1, creationDate.toEpochMilli())
@@ -578,25 +565,24 @@ public class SampledStorageMetricsProviderTests extends ESTestCase {
 
         var sampledStorageMetricsProvider = indexInfoService.createSampledStorageMetricsProvider(systemIndices);
 
-        var metricValues = sampledStorageMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        var metrics = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
+        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
 
-        Collection<MetricValue> metrics = iterableToList(
-            metricValues.orElseThrow(SampledStorageMetricsProviderTests::elementMustBePresent)
-        );
-
-        assertThat(metrics, hasSize(10));
-        var hasPartial = hasEntry("partial", "" + true);
+        assertThat(metrics, transformedMatch(Iterables::size, is(11L)));
         for (MetricValue metric : metrics) {
             assertThat(
                 metric.id(),
-                either(startsWith(IX_METRIC_ID_PREFIX + ":" + indexName)).or(startsWith(RA_S_METRIC_ID_PREFIX + ":" + indexName))
+                anyOf(
+                    startsWith(IX_SHARD_METRIC_ID_PREFIX + ":" + indexName),
+                    startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName),
+                    startsWith(RA_S_METRIC_ID_PREFIX + ":" + indexName)
+                )
             );
-            assertThat(metric.type(), is(either(equalTo("es_indexed_data")).or(equalTo("es_raw_stored_data"))));
+            assertThat(metric.type(), is(either(equalTo(IX_METRIC_TYPE)).or(equalTo(RA_S_METRIC_TYPE))));
             assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
-            assertThat(metric.sourceMetadata(), hasPartial);
+            assertThat(metric.sourceMetadata(), hasEntry("partial", "true"));
 
-            var isFailed = metric.id().endsWith(":" + failedIndex);
+            var isFailed = metric.id().endsWith(":" + failedShardId);
             if (isFailed) {
                 assertThat(metric.value(), is(0L));
             } else {
