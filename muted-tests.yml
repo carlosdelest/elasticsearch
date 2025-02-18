@@ -166,3 +166,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
   method: testTranslogMasterFailureOnlyStressRecoveryTest
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3515
+- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
+  method: testDeleteBuiltInRole
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3516
