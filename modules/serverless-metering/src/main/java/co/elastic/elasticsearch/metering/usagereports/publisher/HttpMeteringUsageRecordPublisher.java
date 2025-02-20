@@ -22,7 +22,6 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
-import org.elasticsearch.common.ssl.KeyStoreUtil;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
@@ -35,15 +34,14 @@ import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.xcontent.ToXContent;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
+import org.elasticsearch.xpack.core.ssl.CertParsingUtils;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.AccessController;
 import java.security.GeneralSecurityException;
@@ -51,12 +49,9 @@ import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -141,7 +136,8 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
     private static SSLContext createSslContext(Environment environment) {
         SSLContext context;
         try {
-            TrustManager trustManager = createTrustManager(environment);
+            Path certificateFile = environment.configDir().resolve(HttpMeteringUsageRecordPublisher.CERTIFICATE_PATH);
+            TrustManager trustManager = CertParsingUtils.getTrustManagerFromPEM(List.of(certificateFile));
             log.debug("Certificate {} successfully loaded", CERTIFICATE_PATH);
 
             context = SSLContext.getInstance("TLS");
@@ -157,15 +153,6 @@ public class HttpMeteringUsageRecordPublisher implements MeteringUsageRecordPubl
             throw new RuntimeException(e);
         }
         return context;
-    }
-
-    private static TrustManager createTrustManager(Environment environment) throws GeneralSecurityException, IOException {
-        Path certificateFile = environment.configDir().resolve(HttpMeteringUsageRecordPublisher.CERTIFICATE_PATH);
-        try (InputStream fis = Files.newInputStream(certificateFile)) {
-            CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-            X509Certificate caCert = (X509Certificate) certificateFactory.generateCertificate(fis);
-            return KeyStoreUtil.createTrustManager(Collections.singleton(caCert));
-        }
     }
 
     /**
