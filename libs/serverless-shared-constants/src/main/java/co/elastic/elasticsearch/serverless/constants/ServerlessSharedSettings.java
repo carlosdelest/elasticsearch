@@ -109,7 +109,7 @@ public class ServerlessSharedSettings {
     );
     public static final Setting<Boolean> ENABLE_REPLICAS_FOR_INSTANT_FAILOVER = Setting.boolSetting(
         "serverless.search.enable_replicas_for_instant_failover",
-        false,
+        true,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
