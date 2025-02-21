@@ -166,6 +166,3 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testDeleteBuiltInRole
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3516
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testUnhollowOnBulkUpdates
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3528
