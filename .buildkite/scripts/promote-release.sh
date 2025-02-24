@@ -31,8 +31,11 @@ if [ -z "${PREVIOUS_PROMOTED_COMMIT}" ]; then
   SERVICE_VERSION_YAML=$(echo "${SERVICE_VERSION_YAML_ENCODED}" | base64 -d)
   PREVIOUS_PROMOTED_COMMIT=$(echo "${SERVICE_VERSION_YAML}" | yq e '.services.elasticsearch.versions.production-noncanary-ds-1' -)
 fi
+
 echo "Promoting from commit '$PREVIOUS_PROMOTED_COMMIT' to commit '${PROMOTED_COMMIT}'"
 buildkite-agent meta-data set "promoted-commit" "${PROMOTED_COMMIT}"
+SHORT_COMMIT=$(echo "${PROMOTED_COMMIT}" | cut -c1-12)
+DOCKER_IMAGE="docker.elastic.co/elasticsearch-ci/elasticsearch-serverless:git-${SHORT_COMMIT}"
 
 echo "--- Trigger release build"
 cat <<EOF | buildkite-agent pipeline upload
@@ -56,10 +59,20 @@ steps:
     env:
       BLOCK_ON_PATCH_BRANCH_NOT_MERGED: ${BLOCK_ON_PATCH_BRANCH_NOT_MERGED}
       PROMOTED_COMMIT: ${PROMOTED_COMMIT}
+  - label: ":docker: Trigger cve-slo-status check"
+    key: "cve-slo-status"
+    trigger: cve-slo-status
+    build:
+      message: "Checking CVE SLO status for ${DOCKER_IMAGE}"
+      env:
+        CONTAINER: "${DOCKER_IMAGE}"
+      	USE_VM_AGENT: "true"
+    soft_fail: true
   - label: ":argo: Trigger serverless Elasticsearch release"
     depends_on:
       - "checkblocker"
       - "validate-patch-merged"
+      - "cve-slo-status"
     trigger: elasticsearch-serverless-intake
     build:
       commit: "${PROMOTED_COMMIT}"

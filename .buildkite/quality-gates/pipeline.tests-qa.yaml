@@ -60,7 +60,7 @@ steps:
             LOG_LEVEL_ERROR_VALUE: ERROR
             CHECK_ELASTICSEARCH_RED_HEALTH_RATE: true
             MAX_ELASTICSEARCH_RED_HEALTH_PERCENT: 0.15
-            EXCLUDE_TESTING_CHANNELS: true
+            CHANNEL: ${CHANNEL:-default}
             QUERY_WINDOW: 30m
             CHECK_ALERTS: true
             CHECK_SLO: true

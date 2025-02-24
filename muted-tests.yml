@@ -166,3 +166,9 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testDeleteBuiltInRole
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3516
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testStress
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3537
+- class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
+  method: testTranslogIsolatedNodeOnlyStressRecoveryTest
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3539
