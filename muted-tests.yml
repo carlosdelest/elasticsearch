@@ -172,3 +172,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
   method: testTranslogIsolatedNodeOnlyStressRecoveryTest
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3539
+- class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
+  method: testRolesFileUpdateTriggersRolesSynchronization
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3541
