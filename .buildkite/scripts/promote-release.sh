@@ -66,7 +66,7 @@ steps:
       message: "Checking CVE SLO status for ${DOCKER_IMAGE}"
       env:
         CONTAINER: "${DOCKER_IMAGE}"
-      	USE_VM_AGENT: "true"
+        USE_VM_AGENT: "true"
     soft_fail: true
   - label: ":argo: Trigger serverless Elasticsearch release"
     depends_on:
