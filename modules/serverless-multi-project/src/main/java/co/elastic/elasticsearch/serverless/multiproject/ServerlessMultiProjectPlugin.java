@@ -33,7 +33,6 @@ import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsFilter;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.features.NodeFeature;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -43,6 +42,7 @@ import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.rest.RestHeaderDefinition;
 import org.elasticsearch.tasks.Task;
+import org.elasticsearch.xpack.core.security.SecurityContext;
 
 import java.util.Collection;
 import java.util.List;
@@ -61,7 +61,7 @@ public class ServerlessMultiProjectPlugin extends Plugin implements ActionPlugin
     private static final Logger logger = LogManager.getLogger(ServerlessMultiProjectPlugin.class);
 
     private final boolean multiProjectEnabled;
-    public final SetOnce<ThreadContext> threadContext = new SetOnce<>();
+    public final SetOnce<SecurityContext> threadContext = new SetOnce<>();
 
     public ServerlessMultiProjectPlugin(Settings settings) {
         /*
@@ -78,8 +78,8 @@ public class ServerlessMultiProjectPlugin extends Plugin implements ActionPlugin
         return multiProjectEnabled;
     }
 
-    public ThreadContext getThreadContext() {
-        return threadContext.get();
+    public SecurityContext getSecurityContext() {
+        return this.threadContext.get();
     }
 
     @Override
@@ -93,7 +93,7 @@ public class ServerlessMultiProjectPlugin extends Plugin implements ActionPlugin
 
     @Override
     public Collection<?> createComponents(PluginServices services) {
-        this.threadContext.set(services.threadPool().getThreadContext());
+        this.threadContext.set(new SecurityContext(services.environment().settings(), services.threadPool().getThreadContext()));
         return List.of();
     }
 

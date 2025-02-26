@@ -25,10 +25,12 @@ import co.elastic.elasticsearch.stateless.AbstractStatelessIntegTestCase;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.support.PlainActionFuture;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.persistent.PersistentTasksClusterService;
@@ -186,7 +188,10 @@ public class GetMeteringStatsTransportActionIT extends AbstractStatelessIntegTes
 
         var currentTask = SampledClusterMetricsSchedulingTask.findTask(clusterService().state());
 
+        @FixForMultiProject
+        final var projectId = Metadata.DEFAULT_PROJECT_ID;
         persistentTasksClusterService.unassignPersistentTask(
+            projectId,
             currentTask.getId(),
             currentTask.getAllocationId(),
             "unassignment test",

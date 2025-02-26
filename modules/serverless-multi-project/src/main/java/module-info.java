@@ -17,9 +17,25 @@
 
 module org.elasticsearch.serverless.multiproject {
     requires org.elasticsearch.base;
+    requires org.elasticsearch.xcontent;
     requires org.elasticsearch.server;
     requires org.elasticsearch.logging;
     requires org.elasticsearch.xcore;
 
     requires org.apache.lucene.core;
+    requires org.apache.logging.log4j;
+
+    exports co.elastic.elasticsearch.serverless.multiproject.action to org.elasticsearch.server;
+
+    provides org.elasticsearch.cluster.project.ProjectResolverFactory
+        with
+            co.elastic.elasticsearch.serverless.multiproject.ServerlessProjectResolverFactory;
+
+    provides org.elasticsearch.reservedstate.service.FileSettingsServiceProvider
+        with
+            co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceProvider;
+
+    provides org.elasticsearch.features.FeatureSpecification
+        with
+            co.elastic.elasticsearch.serverless.multiproject.ServerlessMultiProjectFeatureSpecification;
 }

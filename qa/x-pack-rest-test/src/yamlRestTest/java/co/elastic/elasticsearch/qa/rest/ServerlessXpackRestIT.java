@@ -32,7 +32,7 @@ public class ServerlessXpackRestIT extends AbstractServerlessXpackMultiProjectCl
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("yamlRestTest")
-        .setting("multi_project.enabled", String.valueOf(MULTI_PROJECT_ENABLED))
+        .setting("serverless.multi_project.enabled", String.valueOf(MULTI_PROJECT_ENABLED))
         .setting("xpack.ml.enabled", "true")
         .setting("xpack.profiling.enabled", "true")
         .setting("xpack.security.enabled", "true")

@@ -23,7 +23,7 @@ public class ServerlessClientYamlTestSuiteIT extends AbstractServerlessMultiProj
 
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
-        .setting("multi_project.enabled", String.valueOf(MULTI_PROJECT_ENABLED))
+        .setting("serverless.multi_project.enabled", String.valueOf(MULTI_PROJECT_ENABLED))
         .setting("xpack.ml.enabled", "false")
         .setting("xpack.watcher.enabled", "false")
         .setting("indices.disk.interval", "-1") // Disable IndexingDiskController to avoid scewing stats

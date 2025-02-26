@@ -18,14 +18,20 @@
 package co.elastic.elasticsearch.serverless.multiproject;
 
 import org.elasticsearch.ElasticsearchSecurityException;
+import org.elasticsearch.TransportVersion;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.threadpool.TestThreadPool;
+import org.elasticsearch.xpack.core.security.SecurityContext;
+import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
+import org.elasticsearch.xpack.core.security.user.InternalUsers;
+import org.elasticsearch.xpack.core.security.user.User;
 
 import java.util.Set;
 
@@ -36,27 +42,62 @@ public class ServerlessProjectResolverTests extends ESTestCase {
 
     public void testAllowAccessToAllProjectsForOperator() {
         try (TestThreadPool threadPool = new TestThreadPool(getTestName())) {
-            threadPool.getThreadContext()
-                .putHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY, AuthenticationField.PRIVILEGE_CATEGORY_VALUE_OPERATOR);
+            final SecurityContext context = new SecurityContext(Settings.EMPTY, threadPool.getThreadContext());
+            final Authentication authentication = Authentication.newRealmAuthentication(
+                new User(randomAlphanumericOfLength(4)),
+                new Authentication.RealmRef(randomAlphanumericOfLength(3), randomAlphanumericOfLength(3), randomAlphanumericOfLength(3))
+            );
+            context.executeWithAuthentication(authentication, ignore -> {
+                threadPool.getThreadContext()
+                    .putHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY, AuthenticationField.PRIVILEGE_CATEGORY_VALUE_OPERATOR);
+                final ServerlessProjectResolver resolver = new ServerlessProjectResolver(() -> context);
+                assertThat(resolver.allowAccessToAllProjects(threadPool.getThreadContext()), is(true));
 
-            final ServerlessProjectResolver resolver = new ServerlessProjectResolver(threadPool::getThreadContext);
-            assertThat(resolver.allowAccessToAllProjects(threadPool.getThreadContext()), is(true));
+                final Set<ProjectId> projectIds = randomProjectIds();
+                final ClusterState clusterState = buildClusterStateWithProjects(projectIds);
+                assertThat(resolver.getProjectIds(clusterState), equalTo(projectIds));
+                return null;
+            });
+        }
+    }
 
-            final Set<ProjectId> projectIds = randomProjectIds();
-            final ClusterState clusterState = buildClusterStateWithProjects(projectIds);
-            assertThat(resolver.getProjectIds(clusterState), equalTo(projectIds));
+    public void testAllowAccessToAllProjectsForSystemUser() {
+        try (TestThreadPool threadPool = new TestThreadPool(getTestName())) {
+            final SecurityContext context = new SecurityContext(Settings.EMPTY, threadPool.getThreadContext());
+            final Authentication authentication = Authentication.newInternalAuthentication(
+                InternalUsers.SYSTEM_USER,
+                TransportVersion.current(),
+                "node01"
+            );
+            context.executeWithAuthentication(authentication, ignore -> {
+                final ServerlessProjectResolver resolver = new ServerlessProjectResolver(() -> context);
+                assertThat(resolver.allowAccessToAllProjects(threadPool.getThreadContext()), is(true));
+
+                final Set<ProjectId> projectIds = randomProjectIds();
+                final ClusterState clusterState = buildClusterStateWithProjects(projectIds);
+                assertThat(resolver.getProjectIds(clusterState), equalTo(projectIds));
+                return null;
+            });
         }
     }
 
     public void testRejectAccessToAllProjectsForNonOperator() {
         try (TestThreadPool threadPool = new TestThreadPool(getTestName())) {
-            threadPool.getThreadContext().putHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY, null);
+            final SecurityContext context = new SecurityContext(Settings.EMPTY, threadPool.getThreadContext());
+            final Authentication authentication = Authentication.newRealmAuthentication(
+                new User(randomAlphanumericOfLength(4)),
+                new Authentication.RealmRef(randomAlphanumericOfLength(3), randomAlphanumericOfLength(3), randomAlphanumericOfLength(3))
+            );
+            context.executeWithAuthentication(authentication, ignore -> {
+                threadPool.getThreadContext().putHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY, null);
+                final ServerlessProjectResolver resolver = new ServerlessProjectResolver(() -> context);
+                assertThat(resolver.allowAccessToAllProjects(threadPool.getThreadContext()), is(false));
 
-            final ServerlessProjectResolver resolver = new ServerlessProjectResolver(threadPool::getThreadContext);
-            assertThat(resolver.allowAccessToAllProjects(threadPool.getThreadContext()), is(false));
+                final ClusterState clusterState = buildClusterStateWithProjects(randomProjectIds());
+                expectThrows(ElasticsearchSecurityException.class, () -> resolver.getProjectIds(clusterState));
+                return null;
+            });
 
-            final ClusterState clusterState = buildClusterStateWithProjects(randomProjectIds());
-            expectThrows(ElasticsearchSecurityException.class, () -> resolver.getProjectIds(clusterState));
         }
     }
 

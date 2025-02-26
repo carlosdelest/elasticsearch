@@ -14,19 +14,19 @@
  * this material is strictly forbidden unless prior written
  * permission is obtained from Elasticsearch B.V.
  */
-plugins {
-    id("elasticsearch.internal-java-rest-test")
-    id("elasticsearch.internal-cluster-test")
-}
 
-esplugin {
-    name = "serverless-multi-project"
-    description = "Multi-Project module for Serverless Elasticsearch"
-    classname = "co.elastic.elasticsearch.serverless.multiproject.ServerlessMultiProjectPlugin"
-    extendedPlugins = listOf("x-pack-core")
-}
+package co.elastic.elasticsearch.serverless.multiproject;
 
-dependencies {
-    compileOnly(xpackModule("core"))
-}
+import org.elasticsearch.cluster.project.MultiProjectFeatures;
+import org.elasticsearch.features.FeatureSpecification;
+import org.elasticsearch.features.NodeFeature;
 
+import java.util.Set;
+
+public class ServerlessMultiProjectFeatureSpecification implements FeatureSpecification {
+
+    @Override
+    public Set<NodeFeature> getFeatures() {
+        return Set.of(MultiProjectFeatures.MULTI_PROJECT_FEATURE);
+    }
+}

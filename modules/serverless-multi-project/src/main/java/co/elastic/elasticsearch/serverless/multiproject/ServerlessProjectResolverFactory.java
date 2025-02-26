@@ -36,7 +36,7 @@ public class ServerlessProjectResolverFactory implements ProjectResolverFactory 
     @Override
     public ProjectResolver create() {
         if (plugin.isMultiProjectEnabled()) {
-            return new ServerlessProjectResolver(plugin::getThreadContext);
+            return new ServerlessProjectResolver(plugin::getSecurityContext);
         } else {
             return DefaultProjectResolver.INSTANCE;
         }

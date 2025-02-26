@@ -62,7 +62,7 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         .setting("xpack.ml.enabled", "true")
         .user(ADMIN_USERNAME, ADMIN_PASSWORD)
         .setting("xpack.watcher.enabled", "false")
-        .setting("multi_project.enabled", "true")
+        .setting("serverless.multi_project.enabled", "true")
         .build();
 
     @BeforeClass
