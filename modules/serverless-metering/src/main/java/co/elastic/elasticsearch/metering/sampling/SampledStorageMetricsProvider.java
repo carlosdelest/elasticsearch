@@ -150,7 +150,7 @@ class SampledStorageMetricsProvider implements SampledMetricsProvider {
     private Map<String, String> indexSourceMetadata(Metadata clusterMetadata, String indexName, boolean partial) {
         // note: this is intentionally not resolved via IndexAbstraction, see https://elasticco.atlassian.net/browse/ES-10384
         final var isSystemIndex = systemIndices.isSystemIndex(indexName);
-        final var indexAbstraction = clusterMetadata.getIndicesLookup().get(indexName);
+        final var indexAbstraction = clusterMetadata.getProject().getIndicesLookup().get(indexName);
         final var datastream = indexAbstraction != null ? indexAbstraction.getParentDataStream() : null;
 
         Map<String, String> sourceMetadata = Maps.newHashMapWithExpectedSize(4);

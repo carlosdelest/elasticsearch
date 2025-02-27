@@ -28,12 +28,14 @@ import co.elastic.elasticsearch.metering.sampling.action.TransportCollectCluster
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.IndexComponentSelector;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.DataStream;
 import org.elasticsearch.cluster.metadata.DataStreamMetadata;
 import org.elasticsearch.cluster.metadata.DataStreamTestHelper;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
@@ -606,8 +608,10 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var query = new String[] { "foo*", "bar*" };
 
         when(clusterMetricsService.getMeteringShardInfo()).thenReturn(mockShardsInfo);
-        when(indexNameExpressionResolver.concreteIndexNames(any(), any())).thenReturn(new String[] { "foo1", "foo2", "bar" });
-        when(indexNameExpressionResolver.dataStreamNames(any(), any(), eq(query))).thenReturn(List.of());
+        when(indexNameExpressionResolver.concreteIndexNames(any(ClusterState.class), any())).thenReturn(
+            new String[] { "foo1", "foo2", "bar" }
+        );
+        when(indexNameExpressionResolver.dataStreamNames(any(ProjectMetadata.class), any(), eq(query))).thenReturn(List.of());
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
         when(task.isAssigned()).thenReturn(true);
@@ -680,8 +684,8 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var query = new String[] { "foo*" };
 
         when(clusterMetricsService.getMeteringShardInfo()).thenReturn(mockShardsInfo);
-        when(indexNameExpressionResolver.concreteIndexNames(any(), any())).thenReturn(new String[] { "foo1", "foo2" });
-        when(indexNameExpressionResolver.dataStreams(any(), any(), eq(query))).thenReturn(
+        when(indexNameExpressionResolver.concreteIndexNames(any(ClusterState.class), any())).thenReturn(new String[] { "foo1", "foo2" });
+        when(indexNameExpressionResolver.dataStreams(any(ProjectMetadata.class), any(), eq(query))).thenReturn(
             List.of(new IndexNameExpressionResolver.ResolvedExpression("fooDs", IndexComponentSelector.DATA))
         );
 

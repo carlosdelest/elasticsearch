@@ -35,6 +35,7 @@ import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -44,17 +45,23 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
 
     private static final Logger logger = LogManager.getLogger(FileSecureSettingsService.class);
 
+    private final Path file;
     private final Environment environment;
     private final ClusterService clusterService;
     private final MasterServiceTaskQueue<SecretsUpdateTask> updateQueue;
     private final MasterServiceTaskQueue<ErrorUpdateTask> errorQueue;
 
     public FileSecureSettingsService(ClusterService clusterService, Environment environment) {
-        super(clusterService, LocallyMountedSecrets.resolveSecretsFile(environment));
+        super(clusterService, LocallyMountedSecrets.resolveSecretsDir(environment));
+        this.file = LocallyMountedSecrets.resolveSecretsFile(environment);
         this.clusterService = clusterService;
         this.updateQueue = clusterService.createTaskQueue("secure_settings", Priority.NORMAL, new SecretsTaskExecutor());
         this.errorQueue = clusterService.createTaskQueue("secure_settings_errors", Priority.NORMAL, new ErrorTaskExecutor());
         this.environment = environment;
+    }
+
+    Path watchedFile() {
+        return file;
     }
 
     /**
@@ -65,7 +72,12 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
      * @throws InterruptedException if the file processing is interrupted by another thread.
      */
     @Override
-    protected void processFileChanges() throws InterruptedException, ExecutionException, IOException {
+    protected void processFileChanges(Path file) throws InterruptedException, ExecutionException, IOException {
+        if (file.equals(this.file) == false) {
+            logger.debug("Received update for unknown file {}", file);
+            return;
+        }
+
         ClusterStateSecrets settings;
         ClusterStateSecretsMetadata metadata;
         LocallyMountedSecrets secrets = null;
@@ -89,7 +101,7 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
     }
 
     @Override
-    protected void processInitialFileMissing() {
+    protected void processInitialFilesMissing() {
         // TODO: this should add an empty cluster state for secure settings state, but
         // until readiness allows plugging in additional ready state hooks there is no need
     }

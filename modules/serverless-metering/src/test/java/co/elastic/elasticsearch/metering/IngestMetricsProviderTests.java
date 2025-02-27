@@ -23,6 +23,7 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateSupplier;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.Matcher;
@@ -236,7 +237,11 @@ public class IngestMetricsProviderTests extends ESTestCase {
         TreeMap<String, IndexAbstraction> lookup = new TreeMap<>(
             Arrays.stream(indices).collect(Collectors.toMap(IndexAbstraction::getName, identity()))
         );
-        when(mock.getIndicesLookup()).thenReturn(lookup);
+        final ProjectMetadata projectMetadata = mock(ProjectMetadata.class);
+        when(projectMetadata.id()).thenReturn(Metadata.DEFAULT_PROJECT_ID);
+        when(mock.projects()).thenReturn(Map.of(Metadata.DEFAULT_PROJECT_ID, projectMetadata));
+        when(mock.getProject()).thenReturn(projectMetadata);
+        when(projectMetadata.getIndicesLookup()).thenReturn(lookup);
         return mock;
     }
 

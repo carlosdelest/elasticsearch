@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.security;
 
+import co.elastic.elasticsearch.serverless.security.authc.saml.MultiProjectSpSamlRealmSettings;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
@@ -34,6 +36,7 @@ import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
 import org.elasticsearch.xpack.core.security.SecurityContext;
 import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
+import org.elasticsearch.xpack.core.security.authc.saml.SingleSpSamlRealmSettings;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -41,6 +44,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import static org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings.EXCLUDE_ROLES;
 import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDED_RESERVED_ROLES_SETTING;
@@ -131,14 +135,17 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(
-            INCLUDED_RESERVED_ROLES_SETTING,
-            NATIVE_USERS_SETTING,
-            NATIVE_ROLES_SETTING,
-            CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
-            NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
-            EXCLUDE_ROLES
-        );
+        return Stream.concat(
+            MultiProjectSpSamlRealmSettings.getSettings().stream(),
+            Stream.of(
+                INCLUDED_RESERVED_ROLES_SETTING,
+                NATIVE_USERS_SETTING,
+                NATIVE_ROLES_SETTING,
+                CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
+                NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
+                EXCLUDE_ROLES.apply(SingleSpSamlRealmSettings.TYPE)
+            )
+        ).toList();
     }
 
     @Override

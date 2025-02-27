@@ -34,6 +34,7 @@ import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MetadataUpdateSettingsService;
+import org.elasticsearch.cluster.project.ProjectResolver;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -59,6 +60,7 @@ public class TransportUpdateReplicasAction extends TransportMasterNodeAction<Tra
 
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private final MetadataUpdateSettingsService metadataUpdateSettingsService;
+    private final ProjectResolver projectResolver;
 
     @Inject
     public TransportUpdateReplicasAction(
@@ -67,7 +69,8 @@ public class TransportUpdateReplicasAction extends TransportMasterNodeAction<Tra
         ThreadPool threadPool,
         ActionFilters actionFilters,
         IndexNameExpressionResolver indexNameExpressionResolver,
-        MetadataUpdateSettingsService metadataUpdateSettingsService
+        MetadataUpdateSettingsService metadataUpdateSettingsService,
+        ProjectResolver projectResolver
     ) {
         super(
             TYPE.name(),
@@ -81,6 +84,7 @@ public class TransportUpdateReplicasAction extends TransportMasterNodeAction<Tra
         );
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         this.metadataUpdateSettingsService = metadataUpdateSettingsService;
+        this.projectResolver = projectResolver;
     }
 
     @Override
@@ -89,6 +93,7 @@ public class TransportUpdateReplicasAction extends TransportMasterNodeAction<Tra
         final Index[] concreteIndices = indexNameExpressionResolver.concreteIndices(state, request);
         metadataUpdateSettingsService.updateSettings(
             new UpdateSettingsClusterStateUpdateRequest(
+                projectResolver.getProjectId(),
                 request.masterNodeTimeout(),
                 TimeValue.MINUS_ONE,
                 Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, request.numReplicas).build(),

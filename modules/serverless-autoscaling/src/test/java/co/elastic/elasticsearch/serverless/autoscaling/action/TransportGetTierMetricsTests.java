@@ -17,6 +17,7 @@
 package co.elastic.elasticsearch.serverless.autoscaling.action;
 
 import org.elasticsearch.action.support.ActionFilters;
+import org.elasticsearch.cluster.project.TestProjectResolvers;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -67,7 +68,14 @@ public class TransportGetTierMetricsTests extends ESTestCase {
         );
         ActionFilters actionFilters = new ActionFilters(Set.of());
 
-        new TransportGetAutoscalingMetricsAction(transportService, clusterService, threadPool, actionFilters, null);
+        new TransportGetAutoscalingMetricsAction(
+            transportService,
+            clusterService,
+            threadPool,
+            actionFilters,
+            null,
+            randomBoolean() ? TestProjectResolvers.DEFAULT_PROJECT_ONLY : TestProjectResolvers.allProjects()
+        );
         new TransportGetMachineLearningTierMetrics(transportService, actionFilters, clusterService, null);
         new TransportGetSearchTierMetrics(transportService, clusterService, threadPool, actionFilters, null);
         new TransportGetIndexTierMetrics(transportService, clusterService, threadPool, actionFilters, null);

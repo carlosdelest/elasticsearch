@@ -26,17 +26,21 @@ import java.util.function.Supplier;
 
 class FastShutdownFileWatcher extends AbstractFileWatchingService {
 
+    private final Path file;
     private final Terminal terminal;
     private final Supplier<ServerProcess> server;
 
     FastShutdownFileWatcher(Terminal terminal, Path fastShutdownMarkerFile, Supplier<ServerProcess> server) {
-        super(fastShutdownMarkerFile);
+        super(fastShutdownMarkerFile.getParent());
+        this.file = fastShutdownMarkerFile;
         this.terminal = terminal;
         this.server = server;
     }
 
     @Override
-    protected void processFileChanges() throws IOException {
+    protected void processFileChanges(Path file) throws IOException {
+        if (file.equals(this.file) == false) return;    // not our file
+
         ServerProcess process = server.get();
         if (process != null) {
             terminal.println("Fast shutdown marker detected. Killing Elasticsearch...");
@@ -45,5 +49,5 @@ class FastShutdownFileWatcher extends AbstractFileWatchingService {
     }
 
     @Override
-    protected void processInitialFileMissing() {}
+    protected void processInitialFilesMissing() {}
 }
