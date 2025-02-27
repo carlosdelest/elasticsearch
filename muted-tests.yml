@@ -181,3 +181,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessCompletionsPostingExtensionRollingUpgradeIT
   method: testClusterUpgrade {upgradedNodes=2}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3561
+- class: co.elastic.elasticsearch.qa.upgrade.ServerlessRollingUpgradeIT
+  method: testClusterUpgrade
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3562
