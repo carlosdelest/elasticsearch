@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.multiproject;
 
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
@@ -82,6 +83,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+@LuceneTestCase.SuppressFileSystems("ExtrasFS")
 public class MultiProjectFileSettingsServiceTests extends ESTestCase {
 
     private Environment env;

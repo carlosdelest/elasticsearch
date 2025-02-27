@@ -175,6 +175,3 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testRolesFileUpdateTriggersRolesSynchronization
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3541
-- class: co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceTests
-  method: testProcessFileChanges
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3556
