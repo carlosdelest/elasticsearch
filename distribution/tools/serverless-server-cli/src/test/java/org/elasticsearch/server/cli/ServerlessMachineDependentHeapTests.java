@@ -38,11 +38,15 @@ public class ServerlessMachineDependentHeapTests extends ESTestCase {
     public void testVectorSearchMaxMemory() throws Exception {
         // For bigger nodes we have a max heap of 31Gb == 31744Mb
         assertHeapOptions(256, "31744m", ProjectType.ELASTICSEARCH_VECTOR, "data");
+        assertHeapOptions(256, "31744m", ProjectType.ELASTICSEARCH_VECTOR, "data", "search");
+        assertHeapOptions(256, "31744m", ProjectType.ELASTICSEARCH_VECTOR, "data", "index");
     }
 
     public void testVectorSearch8GbNode() throws Exception {
         // For 8Gb nodes and up to max heap we have a 0.25 memory to heap ratio
         assertHeapOptions(8, "2048m", ProjectType.ELASTICSEARCH_VECTOR, "data");
+        assertHeapOptions(8, "2048m", ProjectType.ELASTICSEARCH_VECTOR, "data", "search");
+        assertHeapOptions(8, "4096m", ProjectType.ELASTICSEARCH_VECTOR, "data", "index");
     }
 
     public void testVectorSearchRandomMidSizeNode() throws Exception {
@@ -55,11 +59,15 @@ public class ServerlessMachineDependentHeapTests extends ESTestCase {
     public void testVectorSearch4GbNode() throws Exception {
         // For nodes with less than 8Gb we have a 0.5 memory to heap ratio
         assertHeapOptions(4, "2048m", ProjectType.ELASTICSEARCH_VECTOR, "data");
+        assertHeapOptions(4, "2048m", ProjectType.ELASTICSEARCH_VECTOR, "data", "index");
+        assertHeapOptions(4, "2048m", ProjectType.ELASTICSEARCH_VECTOR, "data", "search");
     }
 
     public void testVectorSearch2GbNode() throws Exception {
         // For nodes with less than 8Gb we have a 0.5 memory to heap ratio
         assertHeapOptions(2, "1024m", ProjectType.ELASTICSEARCH_VECTOR, "data");
+        assertHeapOptions(2, "1024m", ProjectType.ELASTICSEARCH_VECTOR, "data", "index");
+        assertHeapOptions(2, "1024m", ProjectType.ELASTICSEARCH_VECTOR, "data", "search");
     }
 
     private void assertHeapOptions(double memoryInGigabytes, String expectedMemory, ProjectType projectType, String... roles)
