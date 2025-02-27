@@ -148,18 +148,8 @@ public class ClusterStateSecretsTests extends AbstractNamedWriteableTestCase<Clu
     protected ClusterStateSecrets createTestInstance() {
         return new ClusterStateSecrets(
             randomLong(),
-            new ClusterStateSecrets.Secrets(
-                randomMap(
-                    0,
-                    3,
-                    () -> Tuple.tuple(
-                        randomAlphaOfLength(10),
-                        new ClusterStateSecrets.Entry(
-                            randomAlphaOfLength(15).getBytes(Charset.defaultCharset()),
-                            randomByteArrayOfLength(8)
-                        )
-                    )
-                )
+            new SecureClusterStateSettings(
+                randomMap(0, 3, () -> Tuple.tuple(randomAlphaOfLength(10), randomAlphaOfLength(15).getBytes(Charset.defaultCharset())))
             )
         );
     }

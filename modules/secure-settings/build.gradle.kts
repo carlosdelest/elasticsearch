@@ -18,5 +18,7 @@ configurations {
 
 dependencies {
     testImplementation(testArtifact("org.elasticsearch:server"))
+    testImplementation(project(":modules:serverless-multi-project"))
+    testImplementation(xpackModule("core"))
 }
 

@@ -15,13 +15,18 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-import co.elastic.elasticsearch.settings.secure.ReservedProjectSecureSettingsHandlerProvider;
+package co.elastic.elasticsearch.settings.secure;
 
-module org.elasticsearch.settings.secure {
-    requires org.elasticsearch.server;
-    requires org.elasticsearch.xcontent;
-    requires org.apache.logging.log4j;
-    requires org.elasticsearch.base;
+import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
+import org.elasticsearch.reservedstate.ReservedClusterStateHandlerProvider;
 
-    provides org.elasticsearch.reservedstate.ReservedClusterStateHandlerProvider with ReservedProjectSecureSettingsHandlerProvider;
+import java.util.Collection;
+import java.util.List;
+
+public class ReservedProjectSecureSettingsHandlerProvider implements ReservedClusterStateHandlerProvider {
+    @Override
+    public Collection<ReservedClusterStateHandler<ProjectMetadata, ?>> projectHandlers() {
+        return List.of(new ReservedProjectSecretsAction());
+    }
 }

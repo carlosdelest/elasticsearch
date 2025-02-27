@@ -20,8 +20,8 @@ package co.elastic.elasticsearch.settings.secure;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.TransportVersions;
 import org.elasticsearch.cluster.AbstractNamedDiffable;
-import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.NamedDiff;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.SecureSettings;
@@ -29,63 +29,44 @@ import org.elasticsearch.xcontent.ToXContent;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.Objects;
 
 /**
- * Secrets that are stored in cluster state
+ * Secrets that are stored in project state as a {@link Metadata.ProjectCustom}
  *
- * <p>Cluster state secrets are initially loaded on each node, from a file on disk,
- * in the format defined by {@link org.elasticsearch.common.settings.LocallyMountedSecrets}.
+ * <p>Project state secrets are initially loaded on the master node, from a file on disk.
  * Once the cluster is running, the master node watches the file for changes. This class
- * propagates changes in the file-based secure settings from the master node out to other
- * nodes.
+ * propagates changes in the file-based secure settings for each project from the master
+ * node out to other nodes using the transport protocol.
  *
  * <p>Since the master node should always have settings on disk, we don't need to
  * persist this class to saved cluster state, either on disk or in the cloud. Therefore,
- * we have defined this {@link ClusterState.Custom} as a private custom object. Additionally,
- * we don't want to ever write this class's secrets out in a client response, so
- * {@link #toXContentChunked(ToXContent.Params)} returns an empty iterator.
+ * we have defined this {@link Metadata.ProjectCustom} as a "private custom" object by not
+ * serializing its content in {@link #toXContentChunked(ToXContent.Params)}.
  */
-public class ClusterStateSecrets extends AbstractNamedDiffable<ClusterState.Custom> implements ClusterState.Custom {
+public class ProjectSecrets extends AbstractNamedDiffable<Metadata.ProjectCustom> implements Metadata.ProjectCustom {
 
-    /**
-     * The name for this data class
-     *
-     * <p>This name will be used to identify this {@link org.elasticsearch.common.io.stream.NamedWriteable} in cluster
-     * state. See {@link #getWriteableName()}.
-     */
-    public static final String TYPE = "cluster_state_secrets";
+    public static final String TYPE = "project_state_secrets";
 
     private final SecureClusterStateSettings settings;
-    private final long version;
 
-    public ClusterStateSecrets(long version, SecureSettings settings) {
-        this.version = version;
-        this.settings = new SecureClusterStateSettings(settings);
+    public ProjectSecrets(SecureClusterStateSettings settings) {
+        this.settings = settings;
     }
 
-    public ClusterStateSecrets(StreamInput in) throws IOException {
-        this.version = in.readLong();
+    public ProjectSecrets(StreamInput in) throws IOException {
         this.settings = new SecureClusterStateSettings(in);
     }
 
     SecureSettings getSettings() {
-        return new SecureClusterStateSettings(settings);
-    }
-
-    long getVersion() {
-        return version;
-    }
-
-    @Override
-    public boolean isPrivate() {
-        return true;
+        return settings;
     }
 
     @Override
     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {
-        // never render this to the user
+        // No need to persist in index or return to user, so do not serialize the secrets
         return Collections.emptyIterator();
     }
 
@@ -96,34 +77,38 @@ public class ClusterStateSecrets extends AbstractNamedDiffable<ClusterState.Cust
 
     @Override
     public TransportVersion getMinimalSupportedVersion() {
-        return TransportVersions.V_8_9_X;
+        return TransportVersions.MULTI_PROJECT;
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeLong(version);
         settings.writeTo(out);
     }
 
-    public static NamedDiff<ClusterState.Custom> readDiffFrom(StreamInput in) throws IOException {
-        return readDiffFrom(ClusterState.Custom.class, TYPE, in);
+    public static NamedDiff<Metadata.ProjectCustom> readDiffFrom(StreamInput in) throws IOException {
+        return readDiffFrom(Metadata.ProjectCustom.class, TYPE, in);
     }
 
     @Override
     public String toString() {
-        return "ClusterStateSecrets{[all secret]}";
+        return "ProjectSecrets{[all secret]}";
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        ClusterStateSecrets that = (ClusterStateSecrets) o;
-        return version == that.version && Objects.equals(settings, that.settings);
+        ProjectSecrets that = (ProjectSecrets) o;
+        return Objects.equals(settings, that.settings);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(settings, version);
+        return Objects.hash(settings);
+    }
+
+    @Override
+    public EnumSet<Metadata.XContentContext> context() {
+        return EnumSet.noneOf(Metadata.XContentContext.class);
     }
 }
