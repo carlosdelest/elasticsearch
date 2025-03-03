@@ -54,7 +54,7 @@ public class ServerlessXpackRestIT extends AbstractServerlessXpackMultiProjectCl
         .configFile("testnode.pem", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.pem"))
         .configFile("testnode.crt", Resource.fromClasspath("/org/elasticsearch/xpack/security/transport/ssl/certs/simple/testnode.crt"))
         .configFile("service_tokens", Resource.fromClasspath("service_tokens"))
-        .withNode(mlNodeSpec -> mlNodeSpec.setting("node.roles", "[master,remote_cluster_client,ml,transform]"))
+        .withNode(mlNodeSpec -> mlNodeSpec.setting("node.roles", "[remote_cluster_client,ml,transform]"))
         .build();
 
     public ServerlessXpackRestIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {

@@ -29,10 +29,10 @@ val runCluster by testClusters.registering {
     nodes["runCluster-0"].setting("node.roles", "[master,remote_cluster_client,ingest,index]")
     nodes["runCluster-0"].setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
     nodes["runCluster-0"].setting("xpack.searchable.snapshot.shared_cache.region_size", "256K")
-    nodes["runCluster-1"].setting("node.roles", "[master,remote_cluster_client,search]")
+    nodes["runCluster-1"].setting("node.roles", "[remote_cluster_client,search]")
     nodes["runCluster-1"].setting("xpack.searchable.snapshot.shared_cache.size", "16MB")
     nodes["runCluster-1"].setting("xpack.searchable.snapshot.shared_cache.region_size", "256K")
-    nodes["runCluster-2"].setting("node.roles", "[master,remote_cluster_client,ml,transform]")
+    nodes["runCluster-2"].setting("node.roles", "[remote_cluster_client,ml,transform]")
 }
 
 tasks {
