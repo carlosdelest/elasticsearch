@@ -178,3 +178,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=analytics/rate/value rate}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3570
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=search/410_named_queries/named_queries}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3577
