@@ -36,7 +36,7 @@ dependencies {
     api("com.fasterxml.jackson.core:jackson-core:2.12.7")
     api("com.fasterxml.jackson.core:jackson-annotations:2.12.7")
     api("org.apache.httpcomponents:httpclient:4.5.14")
-    api("org.apache.httpcomponents:httpcore:4.4.13")
+    api("org.apache.httpcomponents:httpcore:4.4.16")
     api("joda-time:joda-time:2.8.1")
 
     // Azure sdk
