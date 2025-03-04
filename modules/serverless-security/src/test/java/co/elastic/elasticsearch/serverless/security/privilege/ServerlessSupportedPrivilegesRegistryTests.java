@@ -17,12 +17,16 @@
 
 package co.elastic.elasticsearch.serverless.security.privilege;
 
+import org.elasticsearch.cluster.metadata.DataStream;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
 import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.equalTo;
 
@@ -92,14 +96,15 @@ public class ServerlessSupportedPrivilegesRegistryTests extends ESTestCase {
      * or add it to {@code unsupported} below.
      */
     public void testSupportedIndexPrivileges() {
-        var unsupported = Set.of(
+        var unsupported = Stream.of(
             "cross_cluster_replication", // no CCR
             "cross_cluster_replication_internal", // no CCR
             "manage_follow_index", // no CCR
             "manage_ilm", // no ILM
             "manage_leader_index", // no CCR
-            "read_cross_cluster" // no CCS
-        );
+            "read_cross_cluster", // no CCS
+            DataStream.isFailureStoreFeatureFlagEnabled() ? "read_failure_store" : null
+        ).filter(Objects::nonNull).collect(Collectors.toSet());
         var supported = ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames();
         var all = Sets.union(unsupported, supported);
         assertThat(all, equalTo(IndexPrivilege.names()));
