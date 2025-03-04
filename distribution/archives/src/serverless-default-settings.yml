@@ -580,7 +580,7 @@ search.aggs.allowed_inline_metric_scripts:
      \n\
      \n            return response;\
      \n          "
-  ### APM service map reduce_script: current version
+  ### APM service map reduce_script:  can be removed as soon as Kibana is on newer version in all environments
   - "\n            def getDestination(def event) {\
      \n              def destination = new HashMap();\
      \n              destination['span.destination.service.resource'] = event['span.destination.service.resource'];\
@@ -674,6 +674,147 @@ search.aggs.allowed_inline_metric_scripts:
      \n                while (!reprocessQueue.isEmpty()) {\
      \n                  stack.push(reprocessQueue.remove());\
      \n                }\
+     \n              }\
+     \n\
+     \n              return null;\
+     \n            }\
+     \n      \
+     \n            def context = new HashMap();\
+     \n      \
+     \n            context.processedEvents = new HashMap();\
+     \n            context.eventsById = new HashMap();\
+     \n            context.paths = new HashSet();\
+     \n            context.externalToServiceMap = new HashMap();\
+     \n            context.locationsToRemove = new HashSet();\
+     \n      \
+     \n            for (state in states) {\
+     \n              context.eventsById.putAll(state.eventsById);\
+     \n              state.eventsById.clear();\
+     \n            }\
+     \n\
+     \n            states.clear();\
+     \n            \
+     \n            for (entry in context.eventsById.entrySet()) {\
+     \n              processAndReturnEvent(context, entry.getKey());\
+     \n            }\
+     \n\
+     \n            context.processedEvents.clear();\
+     \n            context.eventsById.clear();\
+     \n      \
+     \n            def response = new HashMap();\
+     \n            response.paths = new HashSet();\
+     \n            response.discoveredServices = new HashSet();\
+     \n      \
+     \n            for (foundPath in context.paths) {\
+     \n              if (!context.locationsToRemove.contains(foundPath)) {\
+     \n                response.paths.add(foundPath);\
+     \n              }\
+     \n            }\
+     \n\
+     \n            context.locationsToRemove.clear();\
+     \n            context.paths.clear();\
+     \n      \
+     \n            for (entry in context.externalToServiceMap.entrySet()) {\
+     \n              def map = new HashMap();\
+     \n              map.from = entry.getKey();\
+     \n              map.to = entry.getValue();\
+     \n              response.discoveredServices.add(map);\
+     \n            }\
+     \n\
+     \n            context.externalToServiceMap.clear();\
+     \n\
+     \n            return response;\
+     \n          "
+  ### APM service map reduce_script: current version
+  - "\n            def getDestination(def event) {\
+     \n              def destination = new HashMap();\
+     \n              destination['span.destination.service.resource'] = event['span.destination.service.resource'];\
+     \n              destination['span.type'] = event['span.type'];\
+     \n              destination['span.subtype'] = event['span.subtype'];\
+     \n              return destination;\
+     \n            }\
+     \n      \
+     \n            def processAndReturnEvent(def context, def eventId) {\
+     \n              def pathStack = new Stack();\
+     \n              def visited = new HashSet();\
+     \n\
+     \n              def event = context.eventsById.get(eventId);\
+     \n\
+     \n              if (event == null) {\
+     \n                return null;\
+     \n              }\
+     \n\
+     \n              pathStack.push(eventId);\
+     \n\
+     \n              // build a stack with the path from the current event to the root\
+     \n              def parentId = event['parent.id'];\
+     \n              while (parentId != null && !parentId.equals(eventId)) {\
+     \n                def parent = context.eventsById.get(parentId);\
+     \n                if (parent == null || visited.contains(parentId)) {\
+     \n                  break;\
+     \n                }\
+     \n\
+     \n                pathStack.push(parentId);\
+     \n                visited.add(parentId);\
+     \n                parentId = parent['parent.id'];\
+     \n              }\
+     \n\
+     \n              // pop the stack starting from the root to current event to build the path\
+     \n              while (!pathStack.isEmpty()) {\
+     \n                def currentEventId = pathStack.pop();\
+     \n                def currentEvent = context.eventsById.get(currentEventId);\
+     \n\
+     \n                def basePath = new ArrayList();\
+     \n\
+     \n                if (currentEvent == null || context.processedEvents.get(currentEventId) != null) {\
+     \n                  continue;\
+     \n                }\
+     \n\
+     \n                def service = new HashMap();\
+     \n                service['service.name'] = currentEvent['service.name'];\
+     \n                service['service.environment'] = currentEvent['service.environment'];\
+     \n                service['agent.name'] = currentEvent['agent.name'];\
+     \n\
+     \n                def currentParentId = currentEvent['parent.id'];\
+     \n                def parent = currentParentId != null ? context.processedEvents.get(currentParentId) : null;\
+     \n\
+     \n                if (parent != null) {\
+     \n                  // copy the path from the parent\
+     \n                  basePath.addAll(parent.path);\
+     \n                  // flag parent path for removal, as it has children\
+     \n                  context.locationsToRemove.add(parent.path);\
+     \n\
+     \n                  // if the parent has 'span.destination.service.resource' set, and the service is different, we've discovered a service\
+     \n                  if (parent['span.destination.service.resource'] != null\
+     \n                    && parent['span.destination.service.resource'] != \"\"\
+     \n                    && (parent['service.name'] != currentEvent['service.name']\
+     \n                      || parent['service.environment'] != currentEvent['service.environment'])\
+     \n                  ) {\
+     \n                    def parentDestination = getDestination(parent);\
+     \n                    context.externalToServiceMap.put(parentDestination, service);\
+     \n                  }\
+     \n                }\
+     \n\
+     \n                def lastLocation = basePath.size() > 0 ? basePath[basePath.size() - 1] : null;\
+     \n                def currentLocation = service;\
+     \n\
+     \n                // only add the current location to the path if it's different from the last one\
+     \n                if (lastLocation == null || !lastLocation.equals(currentLocation)) {\
+     \n                  basePath.add(currentLocation);\
+     \n                }\
+     \n\
+     \n                // if there is an outgoing span, create a new path\
+     \n                if (currentEvent['span.destination.service.resource'] != null\
+     \n                  && !currentEvent['span.destination.service.resource'].equals(\"\")) {\
+     \n\
+     \n                  def outgoingLocation = getDestination(currentEvent);\
+     \n                  def outgoingPath = new ArrayList(basePath);\
+     \n                  outgoingPath.add(outgoingLocation);\
+     \n                  context.paths.add(outgoingPath);\
+     \n                }\
+     \n\
+     \n                currentEvent.path = basePath;\
+     \n                context.processedEvents[currentEventId] = currentEvent;\
      \n              }\
      \n\
      \n              return null;\
