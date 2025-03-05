@@ -157,7 +157,7 @@ public class DeleteProjectAction extends ActionType<AcknowledgedResponse> {
 
         public Request(StreamInput in) throws IOException {
             super(in);
-            this.projectId = new ProjectId(in);
+            this.projectId = ProjectId.readFrom(in);
         }
 
         @Override

@@ -94,14 +94,14 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
 
     private ProjectId tryParseProjectSecretsFileName(String fileName) {
         if (fileName.startsWith(PROJECT_FILE_PREFIX) && fileName.endsWith(SECRETS_FILE_SUFFIX)) {
-            return new ProjectId(fileName.substring(PROJECT_FILE_PREFIX.length(), fileName.length() - SECRETS_FILE_SUFFIX.length()));
+            return ProjectId.fromId(fileName.substring(PROJECT_FILE_PREFIX.length(), fileName.length() - SECRETS_FILE_SUFFIX.length()));
         }
         return null;
     }
 
     private ProjectId tryParseProjectFileName(String fileName) {
         if (fileName.startsWith(PROJECT_FILE_PREFIX) && fileName.endsWith(PROJECT_FILE_SUFFIX)) {
-            return new ProjectId(fileName.substring(PROJECT_FILE_PREFIX.length(), fileName.length() - PROJECT_FILE_SUFFIX.length()));
+            return ProjectId.fromId(fileName.substring(PROJECT_FILE_PREFIX.length(), fileName.length() - PROJECT_FILE_SUFFIX.length()));
         }
         return null;
     }
@@ -168,7 +168,7 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
             return ((Collection<?>) data.getOrDefault(PROJECTS_KEY, List.of())).stream().map(o -> {
                 if (o instanceof String s) return s;
                 throw new XContentParseException("Project key [" + o + "] is not a String");
-            }).map(ProjectId::new).filter(s -> registeredProjects.contains(s) == false).collect(Collectors.toSet());
+            }).map(ProjectId::fromId).filter(s -> registeredProjects.contains(s) == false).collect(Collectors.toSet());
         } catch (Exception e) {
             logger().error("Could not read list of projects from settings file", e);
             throw e;

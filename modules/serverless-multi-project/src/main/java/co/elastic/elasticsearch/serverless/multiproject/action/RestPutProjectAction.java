@@ -49,7 +49,7 @@ public class RestPutProjectAction extends BaseRestHandler {
         final PutProjectAction.Request putProjectRequest = new PutProjectAction.Request(
             getMasterNodeTimeout(restRequest),
             getAckTimeout(restRequest),
-            new ProjectId(restRequest.param("id"))
+            ProjectId.fromId(restRequest.param("id"))
         );
         return channel -> client.execute(PutProjectAction.INSTANCE, putProjectRequest, new RestToXContentListener<>(channel));
     }

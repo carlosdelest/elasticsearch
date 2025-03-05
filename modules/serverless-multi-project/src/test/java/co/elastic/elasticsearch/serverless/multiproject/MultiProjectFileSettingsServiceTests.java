@@ -348,15 +348,15 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         writeTestFile(projectSecretsFile("0"), "{}");
         assertThat(processSettings, empty());
         // Process secrets and config for project 0
-        assertThat(longPoll(processProject), equalTo(new ProjectId("0")));
-        assertThat(longPoll(processProject), equalTo(new ProjectId("0")));
+        assertThat(longPoll(processProject), equalTo(ProjectId.fromId("0")));
+        assertThat(longPoll(processProject), equalTo(ProjectId.fromId("0")));
 
         // register project 1 (and 0) - this triggers project 1 creation
         writeTestFile(settingsFile, settingsFileForProjects(2));
         assertThat(longPoll(processSettings), notNullValue());
         // Process secrets and config for project 1
-        assertThat(longPoll(processProject), equalTo(new ProjectId("1")));
-        assertThat(longPoll(processProject), equalTo(new ProjectId("1")));
+        assertThat(longPoll(processProject), equalTo(ProjectId.fromId("1")));
+        assertThat(longPoll(processProject), equalTo(ProjectId.fromId("1")));
     }
 
     @SuppressWarnings("unchecked")
