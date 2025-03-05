@@ -115,7 +115,8 @@ tasks {
         systemProperty("tests.rest.blacklist", listOf(
             "indices.create/20_synthetic_source/*",
             "indices.create/21_synthetic_source_stored/*",
-            "indices.create/10_basic/Create lookup index*"
+            "indices.create/10_basic/Create lookup index*",
+            "indices.create/10_basic/Create index with hunspell missing dict*"
         ).joinToString(","))
     }
 }
