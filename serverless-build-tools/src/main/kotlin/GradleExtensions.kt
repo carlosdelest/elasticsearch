@@ -43,7 +43,7 @@ fun DependencyHandler.testArtifact(dependency: ModuleDependency, sourceSet: Stri
  *
  */
 fun Project.isCi(): Boolean {
-    return loadBuildParams(this).map { it.isCi }.get()
+    return loadBuildParams(this).map { it.ci }.get()
 }
 
 val Project.buildParams: BuildParameterExtension

@@ -65,7 +65,7 @@ public abstract class ServerlessPromotionPlugin implements Plugin<Project> {
             task.getFailOnBlocker()
                 .set(getProviderFactory().environmentVariable(BLOCK_ON_ISSUES_BLOCKER).map(Boolean::parseBoolean).orElse(true).get()
             );
-            task.getCi().set(loadBuildParams(target).map(params -> params.isCi()));
+            task.getCi().set(loadBuildParams(target).map(params -> params.getCi()));
         });
         target.getTasks().register(GENERATE_PROMOTION_REPORT_TASKNAME, GenerateServerlessPromotionNotesTask.class, task -> {
             task.setDescription("Generates promotion report for serverless distributions");
