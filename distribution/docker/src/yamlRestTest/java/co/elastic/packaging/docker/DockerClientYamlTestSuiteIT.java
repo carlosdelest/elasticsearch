@@ -27,13 +27,28 @@ import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.test.rest.yaml.ClientYamlTestCandidate;
 import org.elasticsearch.test.rest.yaml.ESClientYamlSuiteTestCase;
 import org.junit.ClassRule;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.output.Slf4jLogConsumer;
 import org.testcontainers.utility.MountableFile;
 
 @ThreadLeakFilters(filters = { TestContainersThreadFilter.class })
 public class DockerClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
+
+    protected static final Logger LOGGER = LoggerFactory.getLogger(DockerClientYamlTestSuiteIT.class);
+
+    private static String currentArch() {
+        final String architecture = System.getProperty("os.arch", "");
+        return switch (architecture) {
+            case "amd64", "x86_64" -> "x86_64";
+            case "aarch64" -> "aarch64";
+            default -> throw new IllegalArgumentException("can not determine architecture from [" + architecture + "]");
+        };
+    }
+
     @ClassRule
-    public static GenericContainer<?> dockerContainer = new GenericContainer<>("elasticsearch-serverless:latest")
+    public static GenericContainer<?> dockerContainer = new GenericContainer<>("elasticsearch-serverless:" + currentArch())
         .withCreateContainerCmdModifier(cmd -> cmd.getHostConfig().withMemory(2 * 1024 * 1024 * 1024L))
         .withEnv("stateless.object_store.bucket", "stateless")
         .withEnv("stateless.object_store.type", "fs")
@@ -49,6 +64,7 @@ public class DockerClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
         .withCopyFileToContainer(MountableFile.forClasspathResource("roles.yml"), "/usr/share/elasticsearch/config/roles.yml")
         .withCopyFileToContainer(MountableFile.forClasspathResource("users"), "/usr/share/elasticsearch/config/users")
         .withCopyFileToContainer(MountableFile.forClasspathResource("users_roles"), "/usr/share/elasticsearch/config/users_roles")
+        .withLogConsumer(new Slf4jLogConsumer(LOGGER))
         .withExposedPorts(9200);
 
     public DockerClientYamlTestSuiteIT(@Name("yaml") ClientYamlTestCandidate testCandidate) {
