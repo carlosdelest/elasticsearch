@@ -5,8 +5,6 @@ import org.elasticsearch.gradle.internal.conventions.info.GitInfo
 import org.elasticsearch.gradle.internal.docker.DockerBuildTask
 import org.elasticsearch.gradle.internal.docker.DockerSupportPlugin
 import org.elasticsearch.gradle.internal.docker.DockerSupportService
-import org.elasticsearch.gradle.internal.info.BuildParameterExtension
-import org.elasticsearch.gradle.internal.util.ParamsUtils.loadBuildParams
 import org.elasticsearch.gradle.util.GradleUtils
 
 plugins {
@@ -59,11 +57,11 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
 
     val transformTask = tasks.register<Sync>("transform${baseName}DockerContext") {
         into(layout.buildDirectory.dir("docker-context/${architecture.name}"))
+        val serverlessRevision = GitInfo.gitInfo(rootDir).revision;
         from(upstreamContext) {
             exclude("elasticsearch-*/**")
             eachFile {
                 if (name == "Dockerfile") {
-                    val serverlessRevision = GitInfo.gitInfo(rootDir).revision;
 
                     filter { contents ->
                         return@filter contents.replace("COPY elasticsearch-${VersionProperties.getElasticsearch()} .", "COPY elasticsearch .")
@@ -99,7 +97,8 @@ val dockerBuildTasks = Architecture.values().associateWith { architecture ->
             arrayOf("elasticsearch-serverless:${architecture.classifier}")
         }
 
-        onlyIf { isArchitectureSupported(architecture) }
+        val archSupported = isArchitectureSupported(architecture)
+        onlyIf { archSupported }
     }
 }
 
