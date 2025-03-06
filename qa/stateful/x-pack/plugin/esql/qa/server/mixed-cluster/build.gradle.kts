@@ -30,7 +30,7 @@ tasks {
                 // Tests with lossy source params, not allowed in serverless
                 "esql/30_types/_source disabled",
                 // Uses number_of_replicas: 0
-                "esql/170_no_replicas/*",
+                "esql/170_no_replicas/*"
             ).joinToString(",")
         )
     }

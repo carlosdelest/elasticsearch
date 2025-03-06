@@ -35,6 +35,9 @@ public class Clusters {
                 System.getProperty("tests.rest.cluster.password", "x-pack-test-password")
             )
             .setting("cluster.routing.rebalance.enable", "none") // disable relocation until we have retry in ESQL
+            // TODO: remove after serverless release
+            .jvmArg("-da:org.elasticsearch.index.mapper.DocumentMapper")
+            .jvmArg("-da:org.elasticsearch.index.mapper.MapperService")
             .build();
     }
 }
