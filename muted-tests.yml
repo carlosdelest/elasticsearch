@@ -172,3 +172,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testRolesFileUpdateTriggersRolesSynchronization
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3541
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=analytics/rate/value rate}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3590
