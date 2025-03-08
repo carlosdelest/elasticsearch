@@ -175,3 +175,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=analytics/rate/value rate}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3590
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testGetFromTranslogRetriesOnAlreadyClosedException
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3597
