@@ -134,8 +134,10 @@ public class MultiProjectSamlRealmIT extends ESRestTestCase {
     }
 
     @Before
-    public void initProjects() {
-        PROJECT_IDS.forEach(this::createProject);
+    public void initProjects() throws IOException {
+        for (String PROJECT_ID : PROJECT_IDS) {
+            createProject(PROJECT_ID);
+        }
     }
 
     @After
@@ -297,15 +299,6 @@ public class MultiProjectSamlRealmIT extends ESRestTestCase {
         assertThat(resp.keySet(), containsInAnyOrder("realm", "redirect", "id"));
         assertThat(resp.get("redirect").toString(), startsWith(IDP_ENTITY_ID));
         assertEquals(resp.get("realm"), MULTI_REALM_NAME);
-    }
-
-    private void createProject(String projectId) {
-        final Request request = new Request("PUT", "/_project/" + projectId);
-        try {
-            adminClient().performRequest(request);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     private void deleteProject(String project) {

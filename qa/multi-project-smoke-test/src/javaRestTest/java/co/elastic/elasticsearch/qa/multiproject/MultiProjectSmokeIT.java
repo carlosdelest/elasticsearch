@@ -31,7 +31,6 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 
 import java.io.IOException;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -39,7 +38,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
@@ -77,9 +75,9 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
     public void configureProjects() throws Exception {
         initClient();
         projectClients = new HashMap<>();
-        projectClients.put(activeProject, createProject(activeProject));
+        projectClients.put(activeProject, createProjectAndClient(activeProject));
         for (var project : extraProjects) {
-            projectClients.put(project, createProject(project));
+            projectClients.put(project, createProjectAndClient(project));
         }
 
         // The admin client does not set a project id, and can see all projects
@@ -93,24 +91,16 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
 
     @After
     public void removeProjects() throws Exception {
+        assertEmptyProject(Metadata.DEFAULT_PROJECT_ID.id());
         for (var project : extraProjects) {
             deleteProject(project);
         }
         deleteProject(activeProject);
     }
 
-    private ProjectClient createProject(String project) throws IOException {
-        RestClient client = adminClient();
-        final Request request = new Request("PUT", "/_project/" + project);
-        try {
-            logger.info("--> Creating project {}", project);
-            final Response response = client.performRequest(request);
-            logger.info("--> Created project {} : {}", project, response.getStatusLine());
-            return new ProjectClient(client(), project);
-        } catch (ResponseException e) {
-            logger.error("--> Failed to create project: {}", project);
-            throw e;
-        }
+    private ProjectClient createProjectAndClient(String project) throws IOException {
+        createProject(project);
+        return new ProjectClient(client(), project);
     }
 
     private void deleteProject(String project) throws IOException {
@@ -122,27 +112,6 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
             logger.info("--> Deleted project {} : {}", project, response.getStatusLine());
         } catch (ResponseException e) {
             logger.error("--> Failed to delete project: {}", project, e);
-            throw e;
-        }
-    }
-
-    private void assertProjectIds(RestClient client, List<String> expectedProjects) throws IOException {
-        final Collection<String> actualProjects = getProjectIds(client);
-        assertThat(
-            "Cluster returned project ids: " + actualProjects,
-            actualProjects,
-            containsInAnyOrder(expectedProjects.toArray(String[]::new))
-        );
-    }
-
-    protected Collection<String> getProjectIds(RestClient client) throws IOException {
-        final Request request = new Request("GET", "/_cluster/state/routing_table?multi_project=true");
-        try {
-            final ObjectPath response = ObjectPath.createFromResponse(client.performRequest(request));
-            final List<Map<String, Object>> projectRouting = response.evaluate("routing_table.projects");
-            return projectRouting.stream().map(obj -> (String) obj.get("id")).toList();
-        } catch (ResponseException e) {
-            logger.error("--> Failed to retrieve cluster state", e);
             throw e;
         }
     }
