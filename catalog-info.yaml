@@ -184,6 +184,7 @@ spec:
       teams:
         elasticsearch-team: {}
         ml-core: {}
+        search-inference-team: {}
         everyone:
           access_level: READ_ONLY
 
@@ -212,6 +213,7 @@ spec:
       teams:
         elasticsearch-team: {}
         ml-core: {}
+        search-inference-team: {}
         everyone:
           access_level: READ_ONLY
 
