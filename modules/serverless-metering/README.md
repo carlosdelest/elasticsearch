@@ -32,16 +32,16 @@ The metrics metered can be categorized into two types:
 
 The normalized raw size of ingested data (RA-I) is metered when parsing the source of ingested documents before indexing. This normalized counter metric is metered in bytes and is independent of the actual XContent type used, making it independent of the actual size on the wire.
 
-It is calculated as the sum of the size of all field names in addition to the respective field value size based on the actual data type in the source. The type mapping is not considered, disabled fields (skipped children) are metered as well.
+It is calculated as the sum of the size of all field values based on the actual data type in the source, field names are ignored. The type mapping is not considered, disabled fields (skipped children) are metered as well.
 
 Data types are treated as follows (for further details see [here](https://docs.google.com/document/d/1N2v8dZ4hyd_u7Q3suiRYDOKAwVR984JdffQADPmO7Kw/edit#heading=h.45ony4j9gyzn)):
 
-| Data type   | Size in bytes                                                                                       | Notes                                                                    |
-|-------------|-----------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| text        | size of bytes using variable-width UTF-8 encoding, for ASCII characters that’s 1 byte per character | applies also to field names and string encoded numbers or boolean values |
-| number      | 8 bytes                                                                                             |                                                                          |
-| boolean     | 1 byte                                                                                              |                                                                          |
-| binary data | base 64 encoded text size                                                                           |                                                                          |
+| Data type   | Size in bytes                                                                                       | Notes                                                           |
+|-------------|-----------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| text        | size of bytes using variable-width UTF-8 encoding, for ASCII characters that’s 1 byte per character | applies also to string encoded numbers, dates or boolean values |
+| number      | 8 bytes                                                                                             |                                                                 |
+| boolean     | 1 byte                                                                                              |                                                                 |
+| binary data | base 64 encoded text size                                                                           |                                                                 |
 
 RA-I (and RA-S, described below) are applied differently based on the operation type: "regular" index/update, update-by-doc, or update-by-script.
 
