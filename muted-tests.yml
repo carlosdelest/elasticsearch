@@ -172,6 +172,3 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testRolesFileUpdateTriggersRolesSynchronization
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3541
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testGetFromTranslogRetriesOnAlreadyClosedException
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3597
