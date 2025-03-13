@@ -6,6 +6,7 @@ logger.co.elastic.elasticsearch.stateless.objectstore.ObjectStoreService.shard_f
 # TODO remove the following lines once we are confident that shard snapshots are not stalling during shutdown, see ES-8773
 logger.org.elasticsearch.repositories.blobstore.BlobStoreRepository.ShutdownLogger: DEBUG
 logger.org.elasticsearch.snapshots.SnapshotShardsService: DEBUG
+logger.org.elasticsearch.snapshots.SnapshotShardsService.ShardStatusConsistencyChecker: DEBUG
 
 # allow more concurrent recoveries in serverless, since we wait for object store during recovery.
 cluster.routing.allocation.node_concurrent_recoveries: 6
