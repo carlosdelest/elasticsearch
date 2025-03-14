@@ -178,3 +178,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   method: test {p0=esql/46_downsample/Render stats from downsampled index}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3629
+- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
+  method: test {p0=esql/40_tsdb/render aggregate_metric_double when missing value}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3630
