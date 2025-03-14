@@ -61,6 +61,7 @@ public class MachineLearningTierMetrics extends AbstractBaseTierMetrics implemen
             serializeMetric(builder, "nodes", autoscalingResources.currentTotalNodes(), MetricQuality.EXACT);
             serializeMetric(builder, "node_memory_in_bytes", autoscalingResources.currentPerNodeMemoryBytes(), MetricQuality.EXACT);
             serializeMetric(builder, "model_memory_in_bytes", autoscalingResources.currentTotalModelMemoryBytes(), MetricQuality.EXACT);
+            serializeMetric(builder, "model_processors", autoscalingResources.currentTotalProcessorsInUse(), MetricQuality.EXACT);
             serializeMetric(builder, "min_nodes", autoscalingResources.wantedMinNodes(), MetricQuality.EXACT);
             serializeMetric(
                 builder,
