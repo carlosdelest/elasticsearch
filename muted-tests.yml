@@ -172,15 +172,3 @@ tests:
 - class: co.elastic.elasticsearch.serverless.security.role.ServerlessQueryableBuiltInRolesIT
   method: testRolesFileUpdateTriggersRolesSynchronization
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3541
-- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
-  method: test {p0=esql/46_downsample/Render stats from downsampled index}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3629
-- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
-  method: test {p0=esql/40_tsdb/render aggregate_metric_double when missing value}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3630
-- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
-  method: test {p0=esql/40_tsdb/_source}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3631
-- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
-  method: test {p0=esql/40_tsdb/load a document}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3632
