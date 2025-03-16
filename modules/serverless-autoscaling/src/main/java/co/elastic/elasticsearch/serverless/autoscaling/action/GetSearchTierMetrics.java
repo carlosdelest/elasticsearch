@@ -53,7 +53,6 @@ public class GetSearchTierMetrics {
         }
 
         public Response(StreamInput in) throws IOException {
-            super(in);
             searchTierMetrics = new SearchTierMetrics(in);
         }
 

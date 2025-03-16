@@ -148,7 +148,6 @@ public class GetMeteringStatsAction {
         }
 
         public Response(final StreamInput in) throws IOException {
-            super(in);
             totalDocCount = in.readLong();
             totalSizeInBytes = in.readLong();
             indexToStatsMap = in.readImmutableMap(StreamInput::readString, GetMeteringStatsAction.MeteringStats::new);

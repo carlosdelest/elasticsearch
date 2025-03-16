@@ -100,7 +100,6 @@ public class GetAutoscalingMetricsAction {
         }
 
         public Response(final StreamInput input) throws IOException {
-            super(input);
             indexTierMetrics = input.readOptionalWriteable(IndexTierMetrics::new);
             searchTierMetrics = input.readOptionalWriteable(SearchTierMetrics::new);
             machineLearningTierMetrics = input.readOptionalWriteable(MachineLearningTierMetrics::new);
