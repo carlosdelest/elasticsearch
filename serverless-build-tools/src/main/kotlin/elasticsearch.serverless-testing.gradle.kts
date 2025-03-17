@@ -11,7 +11,8 @@ allprojects {
         }
 
         tasks.withType<StandaloneRestIntegTestTask>().configureEach {
-            usesDefaultDistribution()
+            // We should not require this for _ALL_ our yaml rest tests
+            usesDefaultDistribution("to be triaged")
         }
     }
     pluginManager.withPlugin("elasticsearch.internal-java-rest-test") {
@@ -24,7 +25,8 @@ allprojects {
         }
 
         tasks.withType<StandaloneRestIntegTestTask>().configureEach {
-            usesDefaultDistribution()
+            // We should not require this for _ALL_ our yaml rest tests
+            usesDefaultDistribution("to be triaged")
         }
     }
     pluginManager.withPlugin("elasticsearch.internal-distribution-download") {

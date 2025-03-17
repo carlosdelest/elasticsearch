@@ -49,10 +49,11 @@ fun Project.isCi(): Boolean {
 val Project.buildParams: BuildParameterExtension
     get() = loadBuildParams(this).get()
 
-fun StandaloneRestIntegTestTask.usesDefaultDistribution() {
+fun StandaloneRestIntegTestTask.usesDefaultDistribution(reason:String) {
     if (!this.extra.has("usingDefaultDistro")) {
         val closure = this.extra.get("usesDefaultDistribution") as Closure<*>
-        closure.call(this)
+        closure.delegate = this
+        closure.call(reason)
         this.extra.set("usingDefaultDistro", true)
     }
 }
