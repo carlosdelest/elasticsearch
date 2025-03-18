@@ -45,7 +45,10 @@ public abstract class DataStreamLifecycleValidator<RequestType> implements Mappe
 
     @Nullable
     protected static DataStreamLifecycle fromTemplate(@Nullable Template template) {
-        return template == null ? null : template.lifecycle();
+        if (template == null || template.lifecycle() == null) {
+            return null;
+        }
+        return template.lifecycle().toDataStreamLifecycle();
     }
 
     @Nullable
@@ -80,7 +83,7 @@ public abstract class DataStreamLifecycleValidator<RequestType> implements Mappe
      */
     void validateLifecycle(@Nullable DataStreamLifecycle lifecycle) {
         if (isOperator() == false) {
-            if (lifecycle != null && lifecycle.isEnabled() == false) {
+            if (lifecycle != null && lifecycle.enabled() == false) {
                 throw new IllegalArgumentException("Data stream lifecycle cannot be disabled in serverless, please remove 'enabled=false'");
             }
         }

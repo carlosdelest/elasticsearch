@@ -74,18 +74,16 @@ public class DataStreamLifecycleValidatorTests extends ESTestCase {
     }
 
     private DataStreamLifecycle randomLifecycle(boolean enabled) {
-        DataStreamLifecycle.Builder builder = DataStreamLifecycle.newBuilder().enabled(enabled);
+        DataStreamLifecycle.Builder builder = DataStreamLifecycle.builder().enabled(enabled);
         if (randomBoolean()) {
             builder.dataRetention(TimeValue.timeValueDays(randomIntBetween(10, 100)));
         }
         if (randomBoolean()) {
             builder.downsampling(
-                new DataStreamLifecycle.Downsampling(
-                    List.of(
-                        new DataStreamLifecycle.Downsampling.Round(
-                            TimeValue.timeValueDays(randomIntBetween(1, 5)),
-                            new DownsampleConfig(new DateHistogramInterval("10m"))
-                        )
+                List.of(
+                    new DataStreamLifecycle.DownsamplingRound(
+                        TimeValue.timeValueDays(randomIntBetween(1, 5)),
+                        new DownsampleConfig(new DateHistogramInterval("10m"))
                     )
                 )
             );
