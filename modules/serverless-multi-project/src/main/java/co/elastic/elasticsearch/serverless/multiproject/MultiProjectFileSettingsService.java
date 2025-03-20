@@ -25,11 +25,13 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.reservedstate.service.FileSettingsService;
 import org.elasticsearch.reservedstate.service.ReservedClusterStateService;
+import org.elasticsearch.reservedstate.service.ReservedStateChunk;
 import org.elasticsearch.reservedstate.service.ReservedStateVersionCheck;
 import org.elasticsearch.xcontent.XContentParseException;
 import org.elasticsearch.xcontent.XContentParser;
@@ -40,6 +42,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,7 +66,6 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
     private static final String PROJECT_FILE_SUFFIX = ".json";
     private static final String SECRETS_FILE_SUFFIX = ".secrets.json";
     private static final String PROJECTS_KEY = "projects";
-    public static final String SECRETS_NAMESPACE = "file_settings_secrets";
 
     private final Set<ProjectId> registeredProjects = new HashSet<>();
     private final Map<ProjectId, Path> projectFiles = new HashMap<>();
@@ -179,28 +181,42 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
         InterruptedException, ExecutionException {
         // only process a project if it's in the list of registered projects, has a project settings file (even if its empty) and a
         // secrets file
-        Path projectFile;
-        Path secretsFile;
-        if (registeredProjects.contains(projectId)
-            && (projectFile = projectFiles.get(projectId)) != null
-            && (secretsFile = secretsFiles.get(projectId)) != null) {
+        Path projectFile = projectFiles.get(projectId);
+        Path secretsFile = secretsFiles.get(projectId);
+        if (registeredProjects.contains(projectId) && projectFile != null && secretsFile != null) {
             logger().debug("Processing changes for project [{}] with settings file [{}]", projectId, projectFile);
-            processReservedClusterStateFile(projectId, projectFile, versionCheck, NAMESPACE);
+            processReservedClusterStateFiles(projectId, versionCheck, projectFile, secretsFile);
             logger().debug("Processing changes for project [{}] with secrets file [{}]", projectId, secretsFile);
-            processReservedClusterStateFile(projectId, secretsFile, versionCheck, SECRETS_NAMESPACE);
+        } else {
+            logger.debug(
+                Strings.format(
+                    "Partial project configuration detected for project: [%s] with project in settings: [%s] project "
+                        + "file: [%s] secrets file [%s]",
+                    projectId.id(),
+                    registeredProjects.contains(projectId),
+                    projectFile,
+                    secretsFile
+                )
+            );
         }
     }
 
-    private void processReservedClusterStateFile(ProjectId projectId, Path file, ReservedStateVersionCheck versionCheck, String namespace)
+    private void processReservedClusterStateFiles(ProjectId projectId, ReservedStateVersionCheck versionCheck, Path... files)
         throws IOException, InterruptedException, ExecutionException {
         PlainActionFuture<Void> completion = new PlainActionFuture<>();
-        try (
-            var bis = new BufferedInputStream(Files.newInputStream(file));
-            var parser = JSON.xContent().createParser(XContentParserConfiguration.EMPTY, bis)
-        ) {
-            // TODO: what needs doing with health reporting?
-            stateService.process(projectId, namespace, parser, versionCheck, e -> completeProcessing(e, completion));
+
+        List<ReservedStateChunk> chunks = new ArrayList<>(files.length);
+        for (var file : files) {
+            try (
+                var stream = new BufferedInputStream(Files.newInputStream(file));
+                var parser = JSON.xContent().createParser(XContentParserConfiguration.EMPTY, stream)
+            ) {
+                chunks.add(stateService.parse(projectId, NAMESPACE, parser));
+            }
         }
+
+        // TODO: what needs doing with health reporting?
+        stateService.process(projectId, NAMESPACE, chunks, versionCheck, e -> completeProcessing(e, completion));
         // TODO: parallelise somehow
         completion.get();
     }

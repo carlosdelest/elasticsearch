@@ -54,6 +54,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.test.NodeRoles.dataOnlyNode;
@@ -189,7 +190,7 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
         writeProjectFile(masterNode, testProjectJSON, projectId.id(), logger, versionCounter.incrementAndGet());
         writeSecretsFile(
             masterNode,
-            Strings.format(testSecretsJSON, versionCounter.incrementAndGet(), testStringSettingsValue, testFileSettingsValueEncoded),
+            Strings.format(testSecretsJSON, versionCounter.get(), testStringSettingsValue, testFileSettingsValueEncoded),
             projectId.id(),
             logger
         );
@@ -222,7 +223,7 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
         writeProjectFile(dataNode, testProjectJSON, projectId.id(), logger, versionCounter.incrementAndGet());
         writeSecretsFile(
             dataNode,
-            Strings.format(testSecretsJSON, versionCounter.incrementAndGet(), testStringSettingsValue, testFileSettingsValueEncoded),
+            Strings.format(testSecretsJSON, versionCounter.get(), testStringSettingsValue, testFileSettingsValueEncoded),
             projectId.id(),
             logger
         );
@@ -262,14 +263,14 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
             var projectsWithSecretsLatch = setupProjectsWithSecretsLatch(masterNode, Set.of(projectId));
 
             // Write settings, project and secrets file
+            writeSettingsFile(masterNode, testSettingsJSON, List.of(projectId.id()), logger, versionCounter.incrementAndGet());
             writeSecretsFile(
                 masterNode,
                 Strings.format(testSecretsJSON, versionCounter.incrementAndGet(), testStringSettingsValue, testFileSettingsValueEncoded),
                 projectId.id(),
                 logger
             );
-            writeSettingsFile(masterNode, testSettingsJSON, List.of(projectId.id()), logger, versionCounter.incrementAndGet());
-            writeProjectFile(masterNode, testProjectJSON, projectId.id(), logger, versionCounter.incrementAndGet());
+            writeProjectFile(masterNode, testProjectJSON, projectId.id(), logger, versionCounter.get());
             safeAwait(createdProjectsLatch.v1());
             safeAwait(projectsWithSecretsLatch.v1());
             assertProjectSecrets(projectsWithSecretsLatch.v2().get(projectId), testStringSettingsValue, testFileSettingsValue);
@@ -307,14 +308,14 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
         var projectsWithSecretsLatch = setupProjectsWithSecretsLatch(masterNode, Set.of(projectId));
 
         // Write settings, project and secrets file
+        writeSettingsFile(masterNode, testSettingsJSON, List.of(projectId.id()), logger, versionCounter.incrementAndGet());
         writeSecretsFile(
             masterNode,
             Strings.format(testSecretsJSON, versionCounter.incrementAndGet(), testStringSettingsValue, testFileSettingsValueEncoded),
             projectId.id(),
             logger
         );
-        writeSettingsFile(masterNode, testSettingsJSON, List.of(projectId.id()), logger, versionCounter.incrementAndGet());
-        writeProjectFile(masterNode, testProjectJSON, projectId.id(), logger, versionCounter.incrementAndGet());
+        writeProjectFile(masterNode, testProjectJSON, projectId.id(), logger, versionCounter.get());
 
         safeAwait(createdProjectsLatch.v1());
         safeAwait(projectsWithSecretsLatch.v1());
@@ -322,10 +323,11 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
         assertProjectSecrets(projectsWithSecretsLatch.v2().get(projectId), testStringSettingsValue, testFileSettingsValue);
 
         // Now write invalid secure settings
-        var latchAndVersion = setupErrorOccurredLatch(masterNode, projectId);
+        var latchAndMetadata = setupErrorOccurredLatch(masterNode, projectId);
 
-        writeSecretsFile(masterNode, Strings.format(testErrorJSON, versionCounter.incrementAndGet()), projectId.id(), logger);
-        assertReservedMetadataNotSaved(latchAndVersion.v1(), latchAndVersion.v2(), projectId, "not_written.hopefully", masterNode);
+        writeProjectFile(masterNode, testProjectJSON, projectId.id(), logger, versionCounter.incrementAndGet());
+        writeSecretsFile(masterNode, Strings.format(testErrorJSON, versionCounter.get()), projectId.id(), logger);
+        assertReservedMetadataNotSaved(latchAndMetadata.v1(), latchAndMetadata.v2(), projectId, "not_written.hopefully");
     }
 
     private void assertProjectSecrets(ProjectSecrets projectSecrets, String stringSetting, byte[] fileSetting)
@@ -337,23 +339,25 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
 
     private void assertReservedMetadataNotSaved(
         CountDownLatch errorOccurredLatch,
-        AtomicLong expectedClusterMetadataVersion,
+        AtomicReference<ReservedStateMetadata> reservedStateMetadataRef,
         ProjectId projectId,
-        String keyNotSaved,
-        String masterNode
+        String keyNotSaved
     ) {
         safeAwait(errorOccurredLatch);
-        ClusterService clusterService = internalCluster().clusterService(masterNode);
+        ClusterService clusterService = internalCluster().clusterService(internalCluster().getMasterName());
         var metadata = clusterService.state().projectState(projectId).metadata();
         ProjectSecrets projectSecrets = metadata.custom(ProjectSecrets.TYPE);
         assertThat(projectSecrets.getSettings().getString(keyNotSaved), nullValue());
-        assertEquals(clusterService.state().metadata().version(), expectedClusterMetadataVersion.get());
+        assertThat(
+            reservedStateMetadataRef.get().errorMetadata().errors().get(0),
+            containsString("Missing handler definition for content key [not_project_secrets]")
+        );
     }
 
-    private Tuple<CountDownLatch, AtomicLong> setupErrorOccurredLatch(String node, ProjectId projectId) {
+    private Tuple<CountDownLatch, AtomicReference<ReservedStateMetadata>> setupErrorOccurredLatch(String node, ProjectId projectId) {
         ClusterService clusterService = internalCluster().clusterService(node);
         CountDownLatch savedClusterState = new CountDownLatch(1);
-        AtomicLong metadataVersion = new AtomicLong(-1);
+        final AtomicReference<ReservedStateMetadata> reservedStateMetadataRef = new AtomicReference<>();
         clusterService.addListener(new ClusterStateListener() {
             @Override
             public void clusterChanged(ClusterChangedEvent event) {
@@ -361,26 +365,22 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
                     return;
                 }
 
-                ReservedStateMetadata reservedState = event.state()
+                ReservedStateMetadata reservedStateMetadata = event.state()
                     .metadata()
                     .getProject(projectId)
                     .reservedStateMetadata()
-                    .get(MultiProjectFileSettingsService.SECRETS_NAMESPACE);
-                if (reservedState != null && reservedState.errorMetadata() != null) {
-                    assertEquals(ReservedStateErrorMetadata.ErrorKind.PARSING, reservedState.errorMetadata().errorKind());
-                    assertThat(reservedState.errorMetadata().errors(), allOf(notNullValue(), hasSize(1)));
-                    assertThat(
-                        reservedState.errorMetadata().errors().get(0),
-                        containsString("Missing handler definition for content key [not_project_secrets]")
-                    );
+                    .get(MultiProjectFileSettingsService.NAMESPACE);
+                if (reservedStateMetadata != null && reservedStateMetadata.errorMetadata() != null) {
+                    assertEquals(ReservedStateErrorMetadata.ErrorKind.PARSING, reservedStateMetadata.errorMetadata().errorKind());
+                    assertThat(reservedStateMetadata.errorMetadata().errors(), allOf(notNullValue(), hasSize(1)));
                     clusterService.removeListener(this);
-                    metadataVersion.set(event.state().metadata().version());
+                    reservedStateMetadataRef.set(reservedStateMetadata);
                     savedClusterState.countDown();
                 }
             }
         });
 
-        return new Tuple<>(savedClusterState, metadataVersion);
+        return new Tuple<>(savedClusterState, reservedStateMetadataRef);
     }
 
     private Tuple<CountDownLatch, Map<ProjectId, ProjectMetadata>> setupProjectsCreatedLatch(String node, Set<ProjectId> expectedProjects) {

@@ -202,7 +202,7 @@ public class MultiProjectIngestFileSettingsIT extends ESIntegTestCase {
             StandardCopyOption.ATOMIC_MOVE
         );
 
-        String secret = Strings.format(projectSecretsJSON, versionCounter.incrementAndGet());
+        String secret = Strings.format(projectSecretsJSON, versionCounter.get());
         tempFilePath = createTempFile();
         logger.info("--> writing project secrets config to node {} with path {}", node, tempFilePath);
         logger.info(secret);

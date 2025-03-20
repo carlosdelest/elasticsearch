@@ -33,10 +33,13 @@ import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.env.BuildVersion;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.reservedstate.action.ReservedClusterSettingsAction;
 import org.elasticsearch.reservedstate.service.FileSettingsService.FileSettingsHealthIndicatorService;
 import org.elasticsearch.reservedstate.service.ReservedClusterStateService;
+import org.elasticsearch.reservedstate.service.ReservedStateChunk;
+import org.elasticsearch.reservedstate.service.ReservedStateVersion;
 import org.elasticsearch.reservedstate.service.ReservedStateVersionCheck;
 import org.elasticsearch.tasks.TaskManager;
 import org.elasticsearch.test.ClusterServiceUtils;
@@ -59,6 +62,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -75,6 +79,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -230,7 +235,9 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         doAnswer(i -> {
             ((Consumer<Exception>) i.getArgument(4)).accept(null);
             return null;
-        }).when(controller).process(any(), any(), any(XContentParser.class), any(), any());
+        }).when(controller).process(any(), any(), anyList(), any(), any());
+        doAnswer(i -> new ReservedStateChunk(Map.of(), new ReservedStateVersion(1L, BuildVersion.current()))).when(controller)
+            .parse(any(), any(), any());
 
         final int projectNum = 3;
 
@@ -252,17 +259,11 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         // 2 file writes per project (secrets + config) and the global settings file
         verify(fileSettingsService, times(2 * projectNum + 1)).processFile(argThat(nonExtraFsFile()), eq(true));
         verify(controller, times(1)).process(any(), any(XContentParser.class), eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION), any());
-        verify(controller, times(2 * projectNum)).process(
-            any(),
-            any(),
-            any(XContentParser.class),
-            eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION),
-            any()
-        );
+        verify(controller, times(projectNum)).process(any(), any(), anyList(), eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION), any());
 
         assertEquals(GREEN, healthIndicatorService.calculate(false, null).status());
         verify(healthIndicatorService, times(1)).changeOccurred();
-        verify(healthIndicatorService, times(2 * projectNum + 1)).successOccurred();
+        verify(healthIndicatorService, times(projectNum + 1)).successOccurred();
     }
 
     @SuppressWarnings("unchecked")
@@ -317,7 +318,9 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
             ((Consumer<Exception>) i.getArgument(4)).accept(null);
             processProject.add(i.getArgument(0));
             return null;
-        }).when(controller).process(any(), any(), any(XContentParser.class), any(), any());
+        }).when(controller).process(any(), any(), anyList(), any(), any());
+        doAnswer(i -> new ReservedStateChunk(Map.of(), new ReservedStateVersion(1L, BuildVersion.current()))).when(controller)
+            .parse(any(), any(), any());
 
         // initial file
         CountDownLatch processFileCreationLatch = new CountDownLatch(1);
@@ -349,13 +352,11 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         assertThat(processSettings, empty());
         // Process secrets and config for project 0
         assertThat(longPoll(processProject), equalTo(ProjectId.fromId("0")));
-        assertThat(longPoll(processProject), equalTo(ProjectId.fromId("0")));
 
         // register project 1 (and 0) - this triggers project 1 creation
         writeTestFile(settingsFile, settingsFileForProjects(2));
         assertThat(longPoll(processSettings), notNullValue());
         // Process secrets and config for project 1
-        assertThat(longPoll(processProject), equalTo(ProjectId.fromId("1")));
         assertThat(longPoll(processProject), equalTo(ProjectId.fromId("1")));
     }
 
@@ -369,6 +370,8 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
             ((Consumer<Exception>) i.getArgument(4)).accept(null);
             return null;
         }).when(controller).process(any(), any(), any(XContentParser.class), any(), any());
+        doAnswer(i -> new ReservedStateChunk(Map.of(), new ReservedStateVersion(1L, BuildVersion.current()))).when(controller)
+            .parse(any(), any(), any());
 
         final int projectNum = 2;
 
@@ -389,13 +392,7 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
 
         verify(fileSettingsService, times(2 * projectNum + 1)).processFile(argThat(nonExtraFsFile()), eq(true));
         verify(controller, times(1)).process(any(), any(XContentParser.class), eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION), any());
-        verify(controller, times(2 * projectNum)).process(
-            any(),
-            any(),
-            any(XContentParser.class),
-            eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION),
-            any()
-        );
+        verify(controller, times(projectNum)).process(any(), any(), anyList(), eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION), any());
 
         // Touch a project file to update it
         Path projectFile = projectFile(Integer.toString(0));
@@ -409,16 +406,8 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         longAwait(processFileChangeLatch);
 
         verify(fileSettingsService, times(1)).processFile(eq(projectFile), eq(false));
-        // Process once for config and once for secrets
-        verify(controller, times(2)).process(
-            any(),
-            any(),
-            any(XContentParser.class),
-            eq(ReservedStateVersionCheck.HIGHER_VERSION_ONLY),
-            any()
-        );
-
-        // TODO: health outputs
+        // Process once per project
+        verify(controller, times(1)).process(any(), any(), anyList(), eq(ReservedStateVersionCheck.HIGHER_VERSION_ONLY), any());
     }
 
     private static Answer<?> countDownOnInvoke(CountDownLatch latch) {
