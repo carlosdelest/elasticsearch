@@ -11,9 +11,9 @@ package co.elastic.elasticsearch.qa.multiproject;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
-import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.cluster.metadata.Metadata;
+import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
@@ -23,19 +23,30 @@ import org.elasticsearch.core.Strings;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
+import org.elasticsearch.test.cluster.util.resource.MutableResource;
+import org.elasticsearch.test.cluster.util.resource.Resource;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.elasticsearch.test.rest.ObjectPath;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.rules.RuleChain;
+import org.junit.rules.TemporaryFolder;
+import org.junit.rules.TestRule;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -48,20 +59,47 @@ import static org.hamcrest.Matchers.startsWith;
 
 public class MultiProjectSmokeIT extends ESRestTestCase {
 
+    private static final AtomicInteger RESERVED_STATE_VERSION_COUNTER = new AtomicInteger(1);
+    private static final String SETTINGS_JSON_TEMPLATE = """
+        {
+             "projects": [%s],
+             "metadata": {
+                 "version": "%s",
+                 "compatibility": "8.4.0"
+             },
+             "state": {
+             }
+        }""";
+
+    private static final MutableResource mutableSettings = MutableResource.from(
+        Resource.fromString(
+            Strings.format(SETTINGS_JSON_TEMPLATE, projectIdsToCommaSeparatedList(Set.of()), RESERVED_STATE_VERSION_COUNTER.get())
+        )
+    );
+
+    private static String projectIdsToCommaSeparatedList(Set<String> projectIds) {
+        return projectIds.stream().map(id -> '"' + id + '"').collect(Collectors.joining(","));
+    }
+
     private static final String ADMIN_USERNAME = "admin-user";
     private static final String ADMIN_PASSWORD = "x-pack-test-password";
 
     private static String activeProject = null;
     private static Set<String> extraProjects = null;
+    private static TemporaryFolder CONFIG_DIR = new TemporaryFolder();
 
-    @ClassRule
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("stateless.enabled", "true")
         .setting("xpack.ml.enabled", "true")
         .user(ADMIN_USERNAME, ADMIN_PASSWORD)
         .setting("xpack.watcher.enabled", "false")
         .setting("serverless.multi_project.enabled", "true")
+        .configFile("operator/settings.json", mutableSettings)
+        .node(0, nodeSpecBuilder -> nodeSpecBuilder.withConfigDir(() -> CONFIG_DIR.getRoot().toPath()))
         .build();
+
+    @ClassRule
+    public static TestRule testRule = RuleChain.outerRule(CONFIG_DIR).around(cluster);
 
     @BeforeClass
     public static void randomizeProjectIds() {
@@ -69,11 +107,13 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         extraProjects = randomSet(1, 5, ESTestCase::randomIdentifier);
     }
 
+    private Set<String> provisionedProjects;
     private Map<String, ProjectClient> projectClients;
 
     @Before
     public void configureProjects() throws Exception {
         initClient();
+        provisionedProjects = new HashSet<>();
         projectClients = new HashMap<>();
         projectClients.put(activeProject, createProjectAndClient(activeProject));
         for (var project : extraProjects) {
@@ -81,10 +121,13 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         }
 
         // The admin client does not set a project id, and can see all projects
-        assertProjectIds(
-            adminClient(),
-            CollectionUtils.concatLists(List.of(Metadata.DEFAULT_PROJECT_ID.id(), activeProject), extraProjects)
+        assertBusy(
+            () -> assertProjectIds(
+                adminClient(),
+                CollectionUtils.concatLists(List.of(ProjectId.DEFAULT.id(), activeProject), extraProjects)
+            )
         );
+
         // The test client can only see the project it targets
         assertProjectIds(client(), List.of(activeProject));
     }
@@ -96,24 +139,63 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
             deleteProject(project);
         }
         deleteProject(activeProject);
+
+        @FixForMultiProject(
+            description = "Delete projects via file settings does NOT work currently. This test class does NOT depend on it either."
+                + "Uncomment the assertBusy once deletion works."
+        )
+        final String defaultProjectId = ProjectId.DEFAULT.id();
+        // assertBusy(() -> assertProjectIds(adminClient(), List.of(defaultProjectId)));
     }
 
     private ProjectClient createProjectAndClient(String project) throws IOException {
-        createProject(project);
+        final int version = RESERVED_STATE_VERSION_COUNTER.incrementAndGet();
+        final Path configPath = CONFIG_DIR.getRoot().toPath();
+        writeConfigFile(configPath.resolve("operator/project-" + project + ".json"), Strings.format("""
+            {
+                 "metadata": {
+                     "version": "%s",
+                     "compatibility": "8.4.0"
+                 },
+                 "state": {}
+            }""", version));
+        writeConfigFile(configPath.resolve("operator/project-" + project + ".secrets.json"), Strings.format("""
+            {
+                 "metadata": {
+                     "version": "%s",
+                     "compatibility": "8.4.0"
+                 },
+                 "state": {}
+            }""", version));
+
+        provisionedProjects.add(project);
+        mutableSettings.update(
+            Resource.fromString(Strings.format(SETTINGS_JSON_TEMPLATE, projectIdsToCommaSeparatedList(provisionedProjects), version))
+        );
         return new ProjectClient(client(), project);
     }
 
-    private void deleteProject(String project) throws IOException {
-        var client = adminClient();
-        final Request request = new Request("DELETE", "/_project/" + project);
-        try {
-            logger.info("--> Deleting project {}", project);
-            final Response response = client.performRequest(request);
-            logger.info("--> Deleted project {} : {}", project, response.getStatusLine());
-        } catch (ResponseException e) {
-            logger.error("--> Failed to delete project: {}", project, e);
-            throw e;
+    private void writeConfigFile(Path target, String content) throws IOException {
+        final Path directory = target.getParent();
+        if (Files.exists(directory) == false) {
+            try {
+                Files.createDirectories(directory);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
         }
+        Files.writeString(target, content);
+    }
+
+    private void deleteProject(String project) throws IOException {
+        final int version = RESERVED_STATE_VERSION_COUNTER.incrementAndGet();
+        provisionedProjects.remove(project);
+        mutableSettings.update(
+            Resource.fromString(Strings.format(SETTINGS_JSON_TEMPLATE, projectIdsToCommaSeparatedList(provisionedProjects), version))
+        );
+        final Path configPath = CONFIG_DIR.getRoot().toPath();
+        Files.deleteIfExists(configPath.resolve("operator/project-" + project + ".json"));
+        Files.deleteIfExists(configPath.resolve("operator/project-" + project + ".secrets.json"));
     }
 
     @Override
@@ -229,7 +311,7 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
             assertOK(projectClient.performRequest(bulkRequest));
 
             final ObjectPath searchResponse = assertOKAndCreateObjectPath(
-                projectClient.performRequest(new Request("GET", "/_search?size=" + numDocs))
+                projectClient.performRequest(new Request("GET", "/" + index + "," + anotherIndex + "/_search?size=" + numDocs))
             );
 
             assertThat("project " + projectId, searchResponse.evaluate("hits.total.value"), equalTo(numDocs));
