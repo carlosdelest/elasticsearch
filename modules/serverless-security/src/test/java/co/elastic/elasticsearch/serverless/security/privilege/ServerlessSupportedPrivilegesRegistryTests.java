@@ -103,7 +103,8 @@ public class ServerlessSupportedPrivilegesRegistryTests extends ESTestCase {
             "manage_ilm", // no ILM
             "manage_leader_index", // no CCR
             "read_cross_cluster", // no CCS
-            DataStream.isFailureStoreFeatureFlagEnabled() ? "read_failure_store" : null
+            DataStream.isFailureStoreFeatureFlagEnabled() ? "read_failure_store" : null,
+            DataStream.isFailureStoreFeatureFlagEnabled() ? "manage_failure_store" : null
         ).filter(Objects::nonNull).collect(Collectors.toSet());
         var supported = ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames();
         var all = Sets.union(unsupported, supported);
