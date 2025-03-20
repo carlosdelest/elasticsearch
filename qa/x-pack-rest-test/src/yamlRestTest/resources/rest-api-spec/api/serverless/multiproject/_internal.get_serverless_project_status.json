@@ -1,0 +1,29 @@
+{
+  "_internal.get_serverless_project_status":{
+    "documentation":{
+      "url":"",
+      "description": "This API returns the status of a given project"
+    },
+    "stability":"experimental",
+    "visibility":"private",
+    "headers":{
+      "accept": [ "application/json"]
+    },
+    "url":{
+      "paths":[
+        {
+          "path":"/_internal/serverless/project_status/{id}",
+          "methods":[
+            "GET"
+          ],
+          "parts":{
+            "id":{
+              "type":"string",
+              "description":"Project ID"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

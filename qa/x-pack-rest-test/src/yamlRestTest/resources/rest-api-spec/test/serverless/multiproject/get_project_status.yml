@@ -1,0 +1,17 @@
+"Test get project status":
+  - do:
+      _internal.get_serverless_project_status:
+        id: default
+  - match: {project_id: default}
+---
+"Test get unknown project status":
+  - do:
+      catch: missing
+      _internal.get_serverless_project_status:
+        id: non-existing-project
+---
+"Test get project status with malformed ID":
+  - do:
+      catch: bad_request
+      _internal.get_serverless_project_status:
+        id: "project#2"

@@ -11,6 +11,7 @@ package co.elastic.elasticsearch.qa.multiproject;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.Response;
+import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
@@ -20,6 +21,7 @@ import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
@@ -187,6 +189,8 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         Files.writeString(target, content);
     }
 
+    @FixForMultiProject
+    // The API cal to delete the project should not be needed once file-based settings for projects initiates the actual deletion
     private void deleteProject(String project) throws IOException {
         final int version = RESERVED_STATE_VERSION_COUNTER.incrementAndGet();
         provisionedProjects.remove(project);
@@ -196,6 +200,17 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         final Path configPath = CONFIG_DIR.getRoot().toPath();
         Files.deleteIfExists(configPath.resolve("operator/project-" + project + ".json"));
         Files.deleteIfExists(configPath.resolve("operator/project-" + project + ".secrets.json"));
+        // temporarily call the API to delete the project.
+        var client = adminClient();
+        final Request request = new Request("DELETE", "/_project/" + project);
+        try {
+            logger.info("--> Deleting project {}", project);
+            final Response response = client.performRequest(request);
+            logger.info("--> Deleted project {} : {}", project, response.getStatusLine());
+        } catch (ResponseException e) {
+            logger.error("--> Failed to delete project: {}", project, e);
+            throw e;
+        }
     }
 
     @Override
@@ -256,6 +271,35 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         final ObjectPath searchResponse = assertOKAndCreateObjectPath(projectClient.performRequest(new Request("GET", "/_search")));
         assertThat(searchResponse.evaluate("hits.total.value"), equalTo(1));
         assertThat(searchResponse.evaluate("hits.hits.0._id"), equalTo(docId));
+    }
+
+    public void testProjectStatusAPI() throws Exception {
+        List<String> existingProjects = CollectionUtils.concatLists(List.of(activeProject), extraProjects);
+        {
+            var existingProjectId = randomFrom(existingProjects);
+            var resp = getProjectStatus(existingProjectId);
+            assertOK(resp);
+            var projectStatusResponse = ObjectPath.createFromResponse(resp);
+            assertThat(projectStatusResponse.evaluate("project_id"), equalTo(existingProjectId));
+        }
+        {
+            String newProjectId = randomValueOtherThanMany(existingProjects::contains, ESTestCase::randomIdentifier);
+            var responseException = expectThrows(ResponseException.class, () -> getProjectStatus(newProjectId));
+            assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.NOT_FOUND.getStatus()));
+            createProject(newProjectId);
+            var resp = getProjectStatus(newProjectId);
+            assertOK(resp);
+            var projectStatusResponse = ObjectPath.createFromResponse(resp);
+            assertThat(projectStatusResponse.evaluate("project_id"), equalTo(newProjectId));
+            deleteProject(newProjectId);
+            responseException = expectThrows(ResponseException.class, () -> getProjectStatus(newProjectId));
+            assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.NOT_FOUND.getStatus()));
+        }
+        {
+            // invalid project ID
+            var responseException = expectThrows(ResponseException.class, () -> getProjectStatus("****"));
+            assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.BAD_REQUEST.getStatus()));
+        }
     }
 
     public void testConcurrentOperationsFromMultipleProjects() throws Exception {
@@ -328,6 +372,10 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         } finally {
             assertOK(projectClient.performRequest(new Request("DELETE", "/" + index + "*," + anotherIndex + "*")));
         }
+    }
+
+    private Response getProjectStatus(String projectId) throws Exception {
+        return adminClient().performRequest(new Request("GET", "/_internal/serverless/project_status/" + projectId));
     }
 
     static class ProjectClient {

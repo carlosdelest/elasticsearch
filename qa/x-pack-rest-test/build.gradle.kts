@@ -118,7 +118,12 @@ tasks {
         "graph/*/*"
     )
     yamlRestTest {
-        systemProperty("tests.rest.blacklist", blacklist.joinToString(","))
+        val blacklistNonMultiprojectServerless = mutableListOf(
+            // Multi-project only and should be excluded from non-multiproject serverless tests
+            "^serverless/multiproject/*/*"
+        )
+        blacklistNonMultiprojectServerless.addAll(blacklist)
+        systemProperty("tests.rest.blacklist", blacklistNonMultiprojectServerless.joinToString(","))
     }
 
     val yamlRestTestWithMultiProject = register<RestIntegTestTask>("yamlRestTestWithMultiProject") {
