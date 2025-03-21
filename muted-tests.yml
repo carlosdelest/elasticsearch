@@ -190,3 +190,9 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   method: test {p0=esql/40_tsdb/render aggregate_metric_double when missing value}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3630
+- class: co.elastic.elasticsearch.qa.multiproject.MultiProjectSmokeIT
+  methods:
+    - testBasicIndexOperationsWithOneProject
+    - testProjectStatusAPI
+    - testConcurrentOperationsFromMultipleProjects
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3663
