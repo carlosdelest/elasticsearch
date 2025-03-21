@@ -17,7 +17,6 @@
 
 package co.elastic.elasticsearch.serverless.security.privilege;
 
-import org.elasticsearch.cluster.metadata.DataStream;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
@@ -102,9 +101,7 @@ public class ServerlessSupportedPrivilegesRegistryTests extends ESTestCase {
             "manage_follow_index", // no CCR
             "manage_ilm", // no ILM
             "manage_leader_index", // no CCR
-            "read_cross_cluster", // no CCS
-            DataStream.isFailureStoreFeatureFlagEnabled() ? "read_failure_store" : null,
-            DataStream.isFailureStoreFeatureFlagEnabled() ? "manage_failure_store" : null
+            "read_cross_cluster" // no CCS
         ).filter(Objects::nonNull).collect(Collectors.toSet());
         var supported = ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames();
         var all = Sets.union(unsupported, supported);

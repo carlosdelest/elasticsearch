@@ -522,7 +522,13 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             );
             assertThat(
                 (Collection<String>) responseAsMap.get("index"),
-                contains(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames().stream().sorted().toArray())
+                contains(
+                    ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames()
+                        .stream()
+                        .filter(p -> false == (p.equals("read_failure_store") || p.equals("manage_failure_store")))
+                        .sorted()
+                        .toArray()
+                )
             );
         }
         // Same for operator users
@@ -535,7 +541,13 @@ public class ServerlessCustomRolesIT extends AbstractServerlessCustomRolesRestTe
             );
             assertThat(
                 (Collection<String>) responseAsMap.get("index"),
-                contains(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames().stream().sorted().toArray())
+                contains(
+                    ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames()
+                        .stream()
+                        .filter(p -> false == (p.equals("read_failure_store") || p.equals("manage_failure_store")))
+                        .sorted()
+                        .toArray()
+                )
             );
         }
     }

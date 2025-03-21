@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.security.privilege;
 
+import org.elasticsearch.action.support.IndexComponentSelector;
+import org.elasticsearch.cluster.metadata.DataStream;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
@@ -25,10 +27,13 @@ import org.elasticsearch.xpack.core.security.authz.privilege.NamedClusterPrivile
 import org.elasticsearch.xpack.core.security.authz.privilege.Privilege;
 
 import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -68,28 +73,56 @@ public record ServerlessSupportedPrivilegesRegistry() {
         )
     );
 
-    private static final Map<String, IndexPrivilege> SUPPORTED_INDEX_PRIVILEGES = Privilege.sortByAccessLevel(
-        Stream.of(
-            IndexPrivilege.ALL,
-            IndexPrivilege.AUTO_CONFIGURE,
-            IndexPrivilege.CREATE,
-            IndexPrivilege.CREATE_DOC,
-            IndexPrivilege.CREATE_INDEX,
-            IndexPrivilege.DELETE,
-            IndexPrivilege.DELETE_INDEX,
-            IndexPrivilege.INDEX,
-            IndexPrivilege.MAINTENANCE,
-            IndexPrivilege.MANAGE,
-            IndexPrivilege.MANAGE_DATA_STREAM_LIFECYCLE,
-            IndexPrivilege.MONITOR,
-            IndexPrivilege.NONE,
-            IndexPrivilege.READ,
-            IndexPrivilege.VIEW_METADATA,
-            IndexPrivilege.WRITE
+    private static final Map<String, IndexPrivilege> SUPPORTED_INDEX_PRIVILEGES = combineSortedInOrder(
+        Privilege.sortByAccessLevel(
+            Stream.of(
+                DataStream.isFailureStoreFeatureFlagEnabled() ? IndexPrivilege.READ_FAILURE_STORE : null,
+                DataStream.isFailureStoreFeatureFlagEnabled() ? IndexPrivilege.MANAGE_FAILURE_STORE : null
+            )
+                .filter(Objects::nonNull)
+                .map(ServerlessSupportedPrivilegesRegistry::nameWithPrivilegeEntry)
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue))
+        ),
+        Privilege.sortByAccessLevel(
+            Stream.of(
+                IndexPrivilege.ALL,
+                IndexPrivilege.AUTO_CONFIGURE,
+                IndexPrivilege.CREATE,
+                IndexPrivilege.CREATE_DOC,
+                IndexPrivilege.CREATE_INDEX,
+                IndexPrivilege.DELETE,
+                IndexPrivilege.DELETE_INDEX,
+                IndexPrivilege.INDEX,
+                IndexPrivilege.MAINTENANCE,
+                IndexPrivilege.MANAGE,
+                IndexPrivilege.MANAGE_DATA_STREAM_LIFECYCLE,
+                IndexPrivilege.MONITOR,
+                IndexPrivilege.NONE,
+                IndexPrivilege.READ,
+                IndexPrivilege.VIEW_METADATA,
+                IndexPrivilege.WRITE
+            )
+                .filter(Objects::nonNull)
+                .map(ServerlessSupportedPrivilegesRegistry::nameWithPrivilegeEntry)
+                .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue))
         )
-            .map(ServerlessSupportedPrivilegesRegistry::nameWithPrivilegeEntry)
-            .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue))
     );
+
+    // TODO consolidate with elasticsearch repo
+    private static Map<String, IndexPrivilege> combineSortedInOrder(
+        SortedMap<String, IndexPrivilege> first,
+        SortedMap<String, IndexPrivilege> second
+    ) {
+        if (first.isEmpty()) {
+            return second;
+        }
+        if (second.isEmpty()) {
+            return first;
+        }
+        final Map<String, IndexPrivilege> combined = new LinkedHashMap<>(first);
+        combined.putAll(second);
+        return Collections.unmodifiableMap(combined);
+    }
 
     public static boolean isSupportedClusterPrivilege(String clusterPrivilegeName) {
         final String name = canonicalize(clusterPrivilegeName);
@@ -131,7 +164,10 @@ public record ServerlessSupportedPrivilegesRegistry() {
     }
 
     public static Collection<String> findIndexPrivilegesThatGrant(String action) {
-        return findPrivilegesThatGrant(SUPPORTED_INDEX_PRIVILEGES, e -> e.getValue().predicate().test(action));
+        return findPrivilegesThatGrant(
+            SUPPORTED_INDEX_PRIVILEGES,
+            e -> e.getValue().getSelectorPredicate().test(IndexComponentSelector.DATA) && e.getValue().predicate().test(action)
+        );
     }
 
     private static <T> Collection<String> findPrivilegesThatGrant(
