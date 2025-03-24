@@ -25,7 +25,6 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.env.Environment;
@@ -138,11 +137,8 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
                 registeredProjects.add(p);
                 try {
                     checkProcessProjectFiles(p, versionCheck);
-                } catch (InterruptedException e) {
-                    // we've been told to stop - so just exit immediately
-                    throw e;
-                } catch (Exception e) {
-                    error = ExceptionsHelper.useOrSuppress(error, new ExecutionException("Error processing project " + p, e));
+                } catch (ExecutionException e) {
+                    error = ExceptionsHelper.useOrSuppress(error, e);
                 }
             }
             if (error != null) {
@@ -177,32 +173,29 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
         }
     }
 
-    private void checkProcessProjectFiles(ProjectId projectId, ReservedStateVersionCheck versionCheck) throws IOException,
-        InterruptedException, ExecutionException {
+    private void checkProcessProjectFiles(ProjectId projectId, ReservedStateVersionCheck versionCheck) throws InterruptedException,
+        ExecutionException {
         // only process a project if it's in the list of registered projects, has a project settings file (even if its empty) and a
         // secrets file
         Path projectFile = projectFiles.get(projectId);
         Path secretsFile = secretsFiles.get(projectId);
         if (registeredProjects.contains(projectId) && projectFile != null && secretsFile != null) {
-            logger().debug("Processing changes for project [{}] with settings file [{}]", projectId, projectFile);
+            logger.info("Processing changes for project [{}] with settings file [{}]", projectId, projectFile);
             processReservedClusterStateFiles(projectId, versionCheck, projectFile, secretsFile);
-            logger().debug("Processing changes for project [{}] with secrets file [{}]", projectId, secretsFile);
         } else {
             logger.debug(
-                Strings.format(
-                    "Partial project configuration detected for project: [%s] with project in settings: [%s] project "
-                        + "file: [%s] secrets file [%s]",
-                    projectId.id(),
-                    registeredProjects.contains(projectId),
-                    projectFile,
-                    secretsFile
-                )
+                "Partial project configuration detected for project: [{}] with project in settings: [{}] project "
+                    + "file: [{}] secrets file [{}]",
+                projectId.id(),
+                registeredProjects.contains(projectId),
+                projectFile,
+                secretsFile
             );
         }
     }
 
     private void processReservedClusterStateFiles(ProjectId projectId, ReservedStateVersionCheck versionCheck, Path... files)
-        throws IOException, InterruptedException, ExecutionException {
+        throws InterruptedException, ExecutionException {
         PlainActionFuture<Void> completion = new PlainActionFuture<>();
 
         List<ReservedStateChunk> chunks = new ArrayList<>(files.length);
@@ -212,6 +205,8 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
                 var parser = JSON.xContent().createParser(XContentParserConfiguration.EMPTY, stream)
             ) {
                 chunks.add(stateService.parse(projectId, NAMESPACE, parser));
+            } catch (Exception exception) {
+                throw new ExecutionException("Error processing project: [" + projectId.id() + "]", exception);
             }
         }
 

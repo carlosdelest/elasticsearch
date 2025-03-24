@@ -88,7 +88,7 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
 
     private static String activeProject = null;
     private static Set<String> extraProjects = null;
-    private static TemporaryFolder CONFIG_DIR = new TemporaryFolder();
+    private static final TemporaryFolder CONFIG_DIR = new TemporaryFolder();
 
     public static ServerlessElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("stateless.enabled", "true")
