@@ -2,6 +2,9 @@
 # Incorporate any necessary additional logic to validate the service's integrity. A failure in
 # this pipeline build will prevent further progression to the subsequent stage.
 
+env:
+  DISABLE_PATCH_MERGE: ${DISABLE_PATCH_MERGE:-"false"}
+
 steps:
   - group: "Run quality gates"
     key: quality-gates
@@ -43,6 +46,7 @@ steps:
         if: build.env("ENVIRONMENT") == "production-noncanary"
         depends_on: production_bake_period
         soft_fail: true
+        key: production-noncanary-quality-gates
         trigger: serverless-quality-gates
         build:
           message: "${BUILDKITE_MESSAGE}"
@@ -56,3 +60,10 @@ steps:
             CHECK_ALERTS_OF_UPDATED_CLUSTERS: true
             CHECK_ALERTS_IGNORE_TRANSIENT: true
             DEPLOYMENT_SLICES: ${DEPLOYMENT_SLICES:-""}
+
+      - label: ":git: Merge patch/serverless-fix branches to main"
+        if: build.env("ENVIRONMENT") == "production-noncanary" && build.env("DISABLE_PATCH_MERGE") != "true"
+        depends_on: production-noncanary-quality-gates
+        command: ".buildkite/scripts/merge-patch-branches.sh"
+        env:
+          PROMOTED_COMMIT: ${SERVICE_VERSION}
