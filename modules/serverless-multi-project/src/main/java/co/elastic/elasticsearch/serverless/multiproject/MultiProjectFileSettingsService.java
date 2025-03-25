@@ -217,8 +217,9 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
     }
 
     @Override
-    @FixForMultiProject // implement for multiple projects
     public void handleSnapshotRestore(ClusterState clusterState, Metadata.Builder mdBuilder) {
+        assert clusterState.metadata().projects().size() == 1
+            : "Cluster snapshot restore not supported for multiple projects " + clusterState.metadata().projects().keySet();
         super.handleSnapshotRestore(clusterState, mdBuilder);
     }
 }
