@@ -19,7 +19,6 @@ package co.elastic.elasticsearch.settings.secure;
 
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.NamedDiff;
-import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.common.io.stream.NamedWriteable;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.plugins.Plugin;
@@ -55,12 +54,8 @@ public class ServerlessSecureSettingsPlugin extends Plugin implements ReloadAwar
     @Override
     public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
         return List.of(
-            new NamedWriteableRegistry.Entry(ClusterState.Custom.class, ClusterStateSecrets.TYPE, ClusterStateSecrets::new),
-            new NamedWriteableRegistry.Entry(NamedDiff.class, ClusterStateSecrets.TYPE, ClusterStateSecrets::readDiffFrom),
             new NamedWriteableRegistry.Entry(ClusterState.Custom.class, ClusterStateSecretsMetadata.TYPE, ClusterStateSecretsMetadata::new),
-            new NamedWriteableRegistry.Entry(NamedDiff.class, ClusterStateSecretsMetadata.TYPE, ClusterStateSecretsMetadata::readDiffFrom),
-            new NamedWriteableRegistry.Entry(NamedDiff.class, ProjectSecrets.TYPE, ProjectSecrets::readDiffFrom),
-            new NamedWriteableRegistry.Entry(Metadata.ProjectCustom.class, ProjectSecrets.TYPE, ProjectSecrets::new)
+            new NamedWriteableRegistry.Entry(NamedDiff.class, ClusterStateSecretsMetadata.TYPE, ClusterStateSecretsMetadata::readDiffFrom)
         );
     }
 }

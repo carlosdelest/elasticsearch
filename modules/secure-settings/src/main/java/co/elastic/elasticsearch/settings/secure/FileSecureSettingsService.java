@@ -28,7 +28,9 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.cluster.service.MasterServiceTaskQueue;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.file.MasterNodeFileWatchingService;
+import org.elasticsearch.common.settings.ClusterSecrets;
 import org.elasticsearch.common.settings.LocallyMountedSecrets;
+import org.elasticsearch.common.settings.SecureClusterStateSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.core.Tuple;
@@ -78,7 +80,7 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
             return;
         }
 
-        ClusterStateSecrets settings;
+        ClusterSecrets settings;
         ClusterStateSecretsMetadata metadata;
         LocallyMountedSecrets secrets = null;
         try {
@@ -86,7 +88,7 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
 
             clusterService.getClusterSettings().validate(Settings.builder().setSecureSettings(secrets).build(), true);
 
-            settings = new ClusterStateSecrets(secrets.getVersion(), secrets);
+            settings = new ClusterSecrets(secrets.getVersion(), new SecureClusterStateSettings(secrets));
             metadata = ClusterStateSecretsMetadata.createSuccessful(secrets.getVersion());
             process(settings, metadata);
         } catch (Exception e) {
@@ -115,7 +117,7 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
         errorQueue.submitTask("file-secure-settings[error]", task, TimeValue.timeValueSeconds(30L));
     }
 
-    public void process(ClusterStateSecrets settings, ClusterStateSecretsMetadata metadata) {
+    public void process(ClusterSecrets settings, ClusterStateSecretsMetadata metadata) {
         ClusterState initialState = clusterService.state();
         ClusterStateSecretsMetadata existingMetadata = initialState.custom(ClusterStateSecretsMetadata.TYPE);
 
@@ -128,12 +130,12 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
     }
 
     private static class SecretsUpdateTask extends MetadataHoldingUpdateTask {
-        private final ClusterStateSecrets settings;
+        private final ClusterSecrets settings;
         private final ClusterStateSecretsMetadata metadata;
         private final Consumer<ClusterStateSecretsMetadata> errorHandler;
 
         SecretsUpdateTask(
-            ClusterStateSecrets settings,
+            ClusterSecrets settings,
             ClusterStateSecretsMetadata metadata,
             Consumer<ClusterStateSecretsMetadata> errorHandler
         ) {
@@ -147,7 +149,7 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
             ClusterState.Builder builder = ClusterState.builder(currentState);
             builder.putCustom(ClusterStateSecretsMetadata.TYPE, metadata);
             if (this.settings != null) {
-                builder.putCustom(ClusterStateSecrets.TYPE, settings);
+                builder.putCustom(ClusterSecrets.TYPE, settings);
             }
             return builder.build();
         }

@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.settings.secure;
 
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.common.settings.ProjectSecrets;
 import org.elasticsearch.reservedstate.TransformState;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xcontent.XContentParseException;

@@ -18,6 +18,8 @@
 package co.elastic.elasticsearch.settings.secure;
 
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.common.settings.ProjectSecrets;
+import org.elasticsearch.common.settings.SecureClusterStateSettings;
 import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
 import org.elasticsearch.reservedstate.TransformState;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
@@ -31,12 +33,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ReservedProjectSecretsAction implements ReservedClusterStateHandler<ProjectMetadata, SecureClusterStateSettings> {
+public class ReservedProjectSecretsAction implements ReservedClusterStateHandler<ProjectMetadata, ProjectSecrets> {
+    public static final String NAME = "project_secrets";
 
     public static final ParseField STRING_SECRETS_FIELD = new ParseField("string_secrets");
     public static final ParseField FILE_SECRETS_FIELD = new ParseField("file_secrets");
-
-    public static final String NAME = "project_secrets";
 
     @SuppressWarnings("unchecked")
     private static final ConstructingObjectParser<Map<String, byte[]>, Void> PARSER = new ConstructingObjectParser<>(
@@ -81,19 +82,16 @@ public class ReservedProjectSecretsAction implements ReservedClusterStateHandler
     }
 
     @Override
-    public TransformState<ProjectMetadata> transform(
-        SecureClusterStateSettings projectSecureSettings,
-        TransformState<ProjectMetadata> prevState
-    ) {
+    public TransformState<ProjectMetadata> transform(ProjectSecrets projecetSecret, TransformState<ProjectMetadata> prevState) {
         ProjectMetadata projectMetadata = prevState.state();
         return new TransformState<>(
-            ProjectMetadata.builder(projectMetadata).putCustom(ProjectSecrets.TYPE, new ProjectSecrets(projectSecureSettings)).build(),
-            projectSecureSettings.getSettingNames()
+            ProjectMetadata.builder(projectMetadata).putCustom(ProjectSecrets.TYPE, projecetSecret).build(),
+            projecetSecret.getSettings().getSettingNames()
         );
     }
 
     @Override
-    public SecureClusterStateSettings fromXContent(XContentParser parser) {
-        return new SecureClusterStateSettings(PARSER.apply(parser, null));
+    public ProjectSecrets fromXContent(XContentParser parser) {
+        return new ProjectSecrets(new SecureClusterStateSettings(PARSER.apply(parser, null)));
     }
 }

@@ -23,6 +23,7 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.ClusterSecrets;
 import org.elasticsearch.common.settings.SecureSetting;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -252,7 +253,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
             .cluster()
             .state(new ClusterStateRequest(TEST_REQUEST_TIMEOUT).waitForMetadataVersion(metadataVersion.get()))
             .actionGet();
-        assertThat(clusterStateResponse.getState().custom(ClusterStateSecrets.TYPE), nullValue());
+        assertThat(clusterStateResponse.getState().custom(ClusterSecrets.TYPE), nullValue());
 
         assertThat(clusterStateResponse.getState().custom(ClusterStateSecretsMetadata.TYPE), not(nullValue()));
         ClusterStateSecretsMetadata metadata = clusterStateResponse.getState().custom(ClusterStateSecretsMetadata.TYPE);
@@ -273,11 +274,11 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
             .cluster()
             .state(new ClusterStateRequest(TEST_REQUEST_TIMEOUT).waitForMetadataVersion(metadataVersion.get()))
             .actionGet();
-        assertThat(clusterStateResponse.getState().custom(ClusterStateSecrets.TYPE), nullValue());
+        assertThat(clusterStateResponse.getState().custom(ClusterSecrets.TYPE), nullValue());
 
         // but it will be visible directly from the cluster service?
         var clusterService = internalCluster().clusterService(masterNode);
-        var clusterStateSecrets = clusterService.state().<ClusterStateSecrets>custom(ClusterStateSecrets.TYPE);
+        var clusterStateSecrets = clusterService.state().<ClusterSecrets>custom(ClusterSecrets.TYPE);
         assertThat(clusterStateSecrets, not(nullValue()));
         assertThat(clusterStateSecrets.getVersion(), equalTo(versionCounter.get()));
         assertThat(clusterStateSecrets.getSettings().getString("test.setting"), equalTo(expectedValue));

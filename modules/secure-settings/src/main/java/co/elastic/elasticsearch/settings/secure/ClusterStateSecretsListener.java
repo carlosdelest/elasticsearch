@@ -22,6 +22,7 @@ import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.ClusterSecrets;
 import org.elasticsearch.common.settings.SecureSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
@@ -49,8 +50,8 @@ public class ClusterStateSecretsListener implements ClusterStateListener {
     public void clusterChanged(ClusterChangedEvent event) {
         assert reloadCallback != null : "Cluster state secrets listener has not been initialized";
 
-        ClusterStateSecrets previousSecrets = event.previousState().custom(ClusterStateSecrets.TYPE);
-        ClusterStateSecrets currentSecrets = event.state().custom(ClusterStateSecrets.TYPE);
+        ClusterSecrets previousSecrets = event.previousState().custom(ClusterSecrets.TYPE);
+        ClusterSecrets currentSecrets = event.state().custom(ClusterSecrets.TYPE);
 
         if (currentSecrets == null) {
             return;
