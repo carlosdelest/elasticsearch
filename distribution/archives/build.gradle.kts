@@ -1,4 +1,5 @@
 import org.apache.tools.ant.filters.ConcatFilter
+import org.elasticsearch.gradle.plugin.BasePluginBuildPlugin
 import java.nio.file.Path
 import java.util.*
 
@@ -18,6 +19,7 @@ val serverWipeDataCli by configurations.creating
 val bundledPlugins by configurations.creating {
     attributes {
         attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.DIRECTORY_TYPE)
+        attribute(BasePluginBuildPlugin.EXPLODED_PLUGIN_BUNDLE_ATTRIBUTE, true)
     }
 }
 val xpackTemplateResources by configurations.creating
