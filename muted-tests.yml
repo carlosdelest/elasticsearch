@@ -191,6 +191,3 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testUnhollowOnIndexing
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3680
-- class: co.elastic.elasticsearch.stateless.autoscaling.memory.AutoscalingMemoryMetricsIT
-  method: testShardMemoryMetricsForHollowEngine
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3682
