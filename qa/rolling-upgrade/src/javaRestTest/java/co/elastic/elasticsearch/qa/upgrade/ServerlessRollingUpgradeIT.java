@@ -9,11 +9,14 @@
 package co.elastic.elasticsearch.qa.upgrade;
 
 import org.elasticsearch.client.Request;
+import org.elasticsearch.client.Response;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.core.Tuple;
+import org.elasticsearch.repositories.fs.FsRepository;
 import org.elasticsearch.test.cluster.MutableSettingsProvider;
 import org.elasticsearch.test.cluster.serverless.ServerlessBwcVersion;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
@@ -24,6 +27,7 @@ import org.elasticsearch.xcontent.json.JsonXContent;
 import org.junit.ClassRule;
 
 import java.io.IOException;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.equalTo;
 
@@ -77,12 +81,25 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
             indexDocument(index1);
             indexDocument(index2);
         }
+
+        // Repository and snapshot remain valid after upgrade
+        String repoName = "test-repo";
+        String snapshotName = "test-snapshot";
+        registerRepository(repoName, FsRepository.TYPE, randomBoolean(), Settings.builder().put("location", "backup").build());
+        createSnapshot(repoName, snapshotName, true);
+        var repoAndSnapshotsMap = getRepoAndSnapshotsMap(repoName);
+
         performUpgrade();
         waitForNodes(4);
         ensureGreen(index1);
         ensureGreen(index2);
         assertDocCount(client(), index1, docCount);
         assertDocCount(client(), index2, docCount);
+        assertThat(getRepoAndSnapshotsMap(repoName), equalTo(repoAndSnapshotsMap));
+        deleteIndex(index1);
+        restoreSnapshotWithGlobalState(repoName, snapshotName, index1);
+        ensureGreen(index1);
+        assertDocCount(client(), index1, docCount);
     }
 
     private void indexDocument(String index) throws IOException {
@@ -111,5 +128,25 @@ public class ServerlessRollingUpgradeIT extends ESRestTestCase {
             ObjectPath nodesPath = assertOKAndCreateObjectPath(client().performRequest(nodesRequest));
             assertThat(nodesPath.evaluate("_nodes.total"), equalTo(numberOfNodes));
         });
+    }
+
+    private Tuple<Map<String, Object>, Map<String, Object>> getRepoAndSnapshotsMap(String repoName) throws Exception {
+        Response getRepoResponse = client().performRequest(new Request("GET", "/_snapshot/" + repoName));
+        assertOK(getRepoResponse);
+        Response getSnapshotsResponse = client().performRequest(new Request("GET", "/_snapshot/" + repoName + "/_all"));
+        assertOK(getSnapshotsResponse);
+        return new Tuple<>(responseAsMap(getRepoResponse), responseAsMap(getSnapshotsResponse));
+    }
+
+    private void restoreSnapshotWithGlobalState(String repoName, String snapshotName, String indexName) throws Exception {
+        final Request request = new Request("POST", "/_snapshot/" + repoName + '/' + snapshotName + "/_restore");
+        request.addParameter("wait_for_completion", "true");
+        request.setJsonEntity(Strings.format("""
+            {
+              "indices": "%s",
+              "include_global_state": true
+            }""", indexName));
+        final Response response = client().performRequest(request);
+        assertOK(response);
     }
 }
