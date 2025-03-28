@@ -191,3 +191,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testUnhollowOnIndexing
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3680
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=synonyms/110_synonyms_invalid/Load index with non existent synonyms set}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3687
