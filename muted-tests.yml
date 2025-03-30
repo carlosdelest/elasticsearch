@@ -194,3 +194,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=synonyms/110_synonyms_invalid/Load index with non existent synonyms set}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3687
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {range.Invalid Boundaries, date nanos ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3692
