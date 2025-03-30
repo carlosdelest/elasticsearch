@@ -197,3 +197,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {range.Invalid Boundaries, date nanos ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3692
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {range.Invalid Boundaries, date nanos SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3693
