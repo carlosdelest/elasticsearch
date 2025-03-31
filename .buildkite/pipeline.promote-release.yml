@@ -3,14 +3,6 @@ env:
 steps:
   - label: ":git: Promote release build"
     command: ".buildkite/scripts/promote-release.sh"
-    notify:
-      - slack:
-          channels:
-            - "#es-serverless-gitops"
-            - "#es-datastore-serverless-alerts"
-            - "#es-search-engine-serverless-alerts"
-          message: "Elasticsearch serverless promotion started. See $BUILDKITE_BUILD_URL for details."
-        if: (build.branch == "main" || build.branch =~ /^patch\//) && build.message !~ /ES Serverless Release automation - Scheduled Promotion/
     env:
       USE_GITHUB_CREDENTIALS: "true"
       BLOCK_ON_ISSUES_UNTRIAGED: "false"
@@ -23,6 +15,4 @@ notify:
   - slack:
       channels:
         - "#es-serverless-gitops"
-        - "#es-datastore-serverless-alerts"
-        - "#es-search-engine-serverless-alerts"
     if: (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"
