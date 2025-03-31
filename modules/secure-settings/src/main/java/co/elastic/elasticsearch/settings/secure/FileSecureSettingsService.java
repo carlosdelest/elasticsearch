@@ -37,11 +37,16 @@ import org.elasticsearch.core.Tuple;
 import org.elasticsearch.env.Environment;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 public class FileSecureSettingsService extends MasterNodeFileWatchingService {
 
@@ -240,5 +245,38 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
         public void taskSucceeded(ErrorUpdateTask errorUpdateTask, Void unused) {
             // do nothing
         }
+    }
+
+    // the following methods are a workaround to ensure exclusive access for files
+    // required by child watchers; this is required because we only check the caller's module
+    // not the entire stack
+    @Override
+    protected boolean filesExists(Path path) {
+        return Files.exists(path);
+    }
+
+    @Override
+    protected boolean filesIsDirectory(Path path) {
+        return Files.isDirectory(path);
+    }
+
+    @Override
+    protected <A extends BasicFileAttributes> A filesReadAttributes(Path path, Class<A> clazz) throws IOException {
+        return Files.readAttributes(path, clazz);
+    }
+
+    @Override
+    protected Stream<Path> filesList(Path dir) throws IOException {
+        return Files.list(dir);
+    }
+
+    @Override
+    protected Path filesSetLastModifiedTime(Path path, FileTime time) throws IOException {
+        return Files.setLastModifiedTime(path, time);
+    }
+
+    @Override
+    protected InputStream filesNewInputStream(Path path) throws IOException {
+        return Files.newInputStream(path);
     }
 }
