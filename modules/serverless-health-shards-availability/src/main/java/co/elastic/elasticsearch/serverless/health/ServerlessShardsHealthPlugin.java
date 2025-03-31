@@ -38,7 +38,8 @@ public class ServerlessShardsHealthPlugin extends Plugin implements HealthPlugin
             new ServerlessShardsAvailabilityHealthIndicatorService(
                 services.clusterService(),
                 services.allocationService(),
-                services.systemIndices()
+                services.systemIndices(),
+                services.projectResolver()
             )
         );
         return Set.of(this.shardHealthService.get());
