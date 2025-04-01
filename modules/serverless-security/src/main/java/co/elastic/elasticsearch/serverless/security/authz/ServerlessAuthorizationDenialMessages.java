@@ -21,9 +21,11 @@ import co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupporte
 
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
+import org.elasticsearch.xpack.core.security.authz.privilege.IndexPrivilege;
 import org.elasticsearch.xpack.security.authz.AuthorizationDenialMessages;
 
 import java.util.Collection;
+import java.util.function.Predicate;
 
 public class ServerlessAuthorizationDenialMessages extends AuthorizationDenialMessages.Default {
     @Override
@@ -32,7 +34,7 @@ public class ServerlessAuthorizationDenialMessages extends AuthorizationDenialMe
     }
 
     @Override
-    protected Collection<String> findIndexPrivilegesThatGrant(String action) {
-        return ServerlessSupportedPrivilegesRegistry.findIndexPrivilegesThatGrant(action);
+    protected Collection<String> findIndexPrivilegesThatGrant(String action, Predicate<IndexPrivilege> preCondition) {
+        return ServerlessSupportedPrivilegesRegistry.findIndexPrivilegesThatGrant(action, preCondition);
     }
 }

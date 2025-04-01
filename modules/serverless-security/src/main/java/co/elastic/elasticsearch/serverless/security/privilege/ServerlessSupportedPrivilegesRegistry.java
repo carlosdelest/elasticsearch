@@ -17,7 +17,6 @@
 
 package co.elastic.elasticsearch.serverless.security.privilege;
 
-import org.elasticsearch.action.support.IndexComponentSelector;
 import org.elasticsearch.cluster.metadata.DataStream;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
@@ -163,10 +162,10 @@ public record ServerlessSupportedPrivilegesRegistry() {
         return findPrivilegesThatGrant(SUPPORTED_CLUSTER_PRIVILEGES, e -> e.getValue().permission().check(action, request, authentication));
     }
 
-    public static Collection<String> findIndexPrivilegesThatGrant(String action) {
+    public static Collection<String> findIndexPrivilegesThatGrant(String action, Predicate<IndexPrivilege> preCondition) {
         return findPrivilegesThatGrant(
             SUPPORTED_INDEX_PRIVILEGES,
-            e -> e.getValue().getSelectorPredicate().test(IndexComponentSelector.DATA) && e.getValue().predicate().test(action)
+            e -> preCondition.test(e.getValue()) && e.getValue().predicate().test(action)
         );
     }
 
