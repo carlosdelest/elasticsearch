@@ -27,13 +27,7 @@ public class ServerlessGetBuiltinPrivilegesResponseTranslator implements GetBuil
     public GetBuiltinPrivilegesResponse translate(GetBuiltinPrivilegesResponse response) {
         return new GetBuiltinPrivilegesResponse(
             new TreeSet<>(ServerlessSupportedPrivilegesRegistry.supportedClusterPrivilegeNames()),
-            new TreeSet<>(
-                ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames()
-                    .stream()
-                    // TODO remove once doc tests are fixed
-                    .filter(p -> false == (p.equals("read_failure_store") || p.equals("manage_failure_store")))
-                    .toList()
-            )
+            new TreeSet<>(ServerlessSupportedPrivilegesRegistry.supportedIndexPrivilegeNames())
         );
     }
 }
