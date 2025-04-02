@@ -55,12 +55,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.test.NodeRoles.dataOnlyNode;
 import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
@@ -323,12 +321,15 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
 
         assertProjectSecrets(projectsWithSecretsLatch.v2().get(projectId), testStringSettingsValue, testFileSettingsValue);
 
-        // Now write invalid secure settings
-        var latchAndMetadata = setupErrorOccurredLatch(masterNode, projectId);
+        var errorOccurredLatch = setupErrorOccurredLatch(
+            masterNode,
+            projectId,
+            "Missing handler definition for content key [not_project_secrets]"
+        );
 
         writeProjectFile(masterNode, testProjectJSON, projectId.id(), logger, versionCounter.incrementAndGet());
         writeSecretsFile(masterNode, Strings.format(testErrorJSON, versionCounter.get()), projectId.id(), logger);
-        assertReservedMetadataNotSaved(latchAndMetadata.v1(), latchAndMetadata.v2(), projectId, "not_written.hopefully");
+        assertReservedMetadataNotSaved(errorOccurredLatch, projectId, "not_written.hopefully");
     }
 
     private void assertProjectSecrets(ProjectSecrets projectSecrets, String stringSetting, byte[] fileSetting)
@@ -338,27 +339,17 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
         assertArrayEquals(fileSetting, projectSecrets.getSettings().getFile("test.file.setting").readAllBytes());
     }
 
-    private void assertReservedMetadataNotSaved(
-        CountDownLatch errorOccurredLatch,
-        AtomicReference<ReservedStateMetadata> reservedStateMetadataRef,
-        ProjectId projectId,
-        String keyNotSaved
-    ) {
+    private void assertReservedMetadataNotSaved(CountDownLatch errorOccurredLatch, ProjectId projectId, String keyNotSaved) {
         safeAwait(errorOccurredLatch);
         ClusterService clusterService = internalCluster().clusterService(internalCluster().getMasterName());
         var metadata = clusterService.state().projectState(projectId).metadata();
         ProjectSecrets projectSecrets = metadata.custom(ProjectSecrets.TYPE);
         assertThat(projectSecrets.getSettings().getString(keyNotSaved), nullValue());
-        assertThat(
-            reservedStateMetadataRef.get().errorMetadata().errors().get(0),
-            containsString("Missing handler definition for content key [not_project_secrets]")
-        );
     }
 
-    private Tuple<CountDownLatch, AtomicReference<ReservedStateMetadata>> setupErrorOccurredLatch(String node, ProjectId projectId) {
+    private CountDownLatch setupErrorOccurredLatch(String node, ProjectId projectId, String expectedError) {
         ClusterService clusterService = internalCluster().clusterService(node);
-        CountDownLatch savedClusterState = new CountDownLatch(1);
-        final AtomicReference<ReservedStateMetadata> reservedStateMetadataRef = new AtomicReference<>();
+        CountDownLatch errorOccurredLatch = new CountDownLatch(1);
         clusterService.addListener(new ClusterStateListener() {
             @Override
             public void clusterChanged(ClusterChangedEvent event) {
@@ -371,17 +362,18 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
                     .getProject(projectId)
                     .reservedStateMetadata()
                     .get(MultiProjectFileSettingsService.NAMESPACE);
-                if (reservedStateMetadata != null && reservedStateMetadata.errorMetadata() != null) {
+                if (reservedStateMetadata != null
+                    && reservedStateMetadata.errorMetadata() != null
+                    && reservedStateMetadata.errorMetadata().errors().get(0).contains(expectedError)) {
                     assertEquals(ReservedStateErrorMetadata.ErrorKind.PARSING, reservedStateMetadata.errorMetadata().errorKind());
                     assertThat(reservedStateMetadata.errorMetadata().errors(), allOf(notNullValue(), hasSize(1)));
                     clusterService.removeListener(this);
-                    reservedStateMetadataRef.set(reservedStateMetadata);
-                    savedClusterState.countDown();
+                    errorOccurredLatch.countDown();
                 }
             }
         });
 
-        return new Tuple<>(savedClusterState, reservedStateMetadataRef);
+        return errorOccurredLatch;
     }
 
     private Tuple<CountDownLatch, Map<ProjectId, ProjectMetadata>> setupProjectsCreatedLatch(String node, Set<ProjectId> expectedProjects) {
