@@ -4,8 +4,8 @@ set -euo pipefail
 # Name of the branches in elasticsearch and elasticsearch-serverless to be prepared for the patch release
 PATCH_BRANCH='patch/serverless-fix'
 
-git config user.name "elasticsearchmachine"
-git config user.email "infra-root+elasticsearchmachine@elastic.co"
+git config --global user.name "elasticsearchmachine"
+git config --global user.email "infra-root+elasticsearchmachine@elastic.co"
 
 if [[ "$BUILDKITE_BRANCH" != "main" ]]; then
   echo "This script should be run only on the 'main' branch"
@@ -49,6 +49,9 @@ merge_patch_branch() {
     git --no-pager log $promoted_commit --not main
   fi
 
+  # Checkout the patch branch
+  git fetch origin $PATCH_BRANCH:$PATCH_BRANCH
+
   # Check for merge conflicts
   if ! check_merge_conflicts $PATCH_BRANCH; then
     buildkite-agent annotate --style error --context "merge-patch-branches" \
@@ -60,8 +63,7 @@ Instructions can be found <a href='https://docs.elastic.dev/elasticsearch-team/s
   fi
 
   echo "[$repo_name] Merging $PATCH_BRANCH branch into main"
-  # Check out the main and merge patch branch
-  git fetch origin $PATCH_BRANCH:$PATCH_BRANCH
+  # Merge patch branch
   git merge $PATCH_BRANCH --no-ff --no-commit
 
   # Commit and push
