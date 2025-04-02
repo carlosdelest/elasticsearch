@@ -122,9 +122,8 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
     public void testValidSetting() throws Exception {
         // we need the secure setting defined to pass validation
         when(clusterService.getClusterSettings()).thenReturn(
-            new ClusterSettings(Settings.EMPTY, Set.of(
-                SecureSetting.secureString("foo", null)
-            )));
+            new ClusterSettings(Settings.EMPTY, Set.of(SecureSetting.secureString("foo", null)))
+        );
 
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
         writeTestFile(fileSecureSettingsService.watchedFile(), WITH_STRING_SECRET);
@@ -207,9 +206,8 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
     public void testClusterStateApplicationError() throws Exception {
         // we need the secure setting defined to pass validation
         when(clusterService.getClusterSettings()).thenReturn(
-            new ClusterSettings(Settings.EMPTY, Set.of(
-                SecureSetting.secureString("foo", null)
-            )));
+            new ClusterSettings(Settings.EMPTY, Set.of(SecureSetting.secureString("foo", null)))
+        );
 
         FileSecureSettingsService fileSecureSettingsService = new FileSecureSettingsService(clusterService, env);
 
@@ -252,12 +250,11 @@ public class FileSecureSettingsServiceTests extends ESTestCase {
         FileSecureSettingsService fileSecureSettingsService,
         ClusterStateSecretsMetadata metadata,
         int updateQueueEvents,
-        int errorQueueEvents) throws InterruptedException, ExecutionException, IOException {
+        int errorQueueEvents
+    ) throws InterruptedException, ExecutionException, IOException {
         // simulate this metadata in cluster state
         when(clusterService.state()).thenReturn(
-            ClusterState.builder(ClusterState.EMPTY_STATE)
-                .putCustom(ClusterStateSecretsMetadata.TYPE, metadata)
-                .build()
+            ClusterState.builder(ClusterState.EMPTY_STATE).putCustom(ClusterStateSecretsMetadata.TYPE, metadata).build()
         );
         fileSecureSettingsService.processFileChanges(fileSecureSettingsService.watchedFile());
         verify(updateQueue, times(updateQueueEvents)).submitTask(any(), any(), any());

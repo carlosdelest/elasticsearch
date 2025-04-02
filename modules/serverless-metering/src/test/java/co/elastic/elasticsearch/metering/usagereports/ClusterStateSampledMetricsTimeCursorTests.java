@@ -141,8 +141,7 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
 
     @SuppressWarnings("unchecked")
     public void testCommitUpToFails() {
-        when(featureService.clusterHasFeature(Mockito.any(), Mockito.eq(MeteringFeatures.SAMPLED_METRICS_METADATA)))
-            .thenReturn(true);
+        when(featureService.clusterHasFeature(Mockito.any(), Mockito.eq(MeteringFeatures.SAMPLED_METRICS_METADATA))).thenReturn(true);
         Instant timestamp = Instant.now();
 
         Mockito.doAnswer(invocation -> {

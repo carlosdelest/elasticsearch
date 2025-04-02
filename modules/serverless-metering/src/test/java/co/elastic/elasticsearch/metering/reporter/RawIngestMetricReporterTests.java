@@ -39,7 +39,7 @@ public class RawIngestMetricReporterTests extends ESTestCase {
     XContentParserDecorator parserDecorator = mock(XContentParserDecorator.class);
 
     public void testZeroMeteredIsNotReported() {
-        //empty instance returns 0
+        // empty instance returns 0
         when(parsedDocument.getNormalizedSize()).thenReturn(XContentMeteringParserDecorator.UNKNOWN_SIZE);
         rawIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
