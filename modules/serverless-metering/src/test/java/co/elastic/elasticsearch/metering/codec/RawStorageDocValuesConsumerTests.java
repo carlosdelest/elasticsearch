@@ -35,7 +35,7 @@ import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.apache.lucene.tests.util.TestUtil;
 import org.elasticsearch.common.logging.LogConfigurator;
 import org.elasticsearch.common.lucene.Lucene;
-import org.elasticsearch.index.codec.tsdb.ES87TSDBDocValuesFormat;
+import org.elasticsearch.index.codec.tsdb.es819.ES819TSDBDocValuesFormat;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -54,7 +54,7 @@ public class RawStorageDocValuesConsumerTests extends BaseDocValuesFormatTestCas
 
     @Override
     protected Codec getCodec() {
-        var parentCodecDocValuesFormat = new ES87TSDBDocValuesFormat();
+        var parentCodecDocValuesFormat = new ES819TSDBDocValuesFormat();
         var extensionDocValuesFormat = new RawStorageDocValuesFormatFactory().createDocValueFormat(parentCodecDocValuesFormat);
         return TestUtil.alwaysDocValuesFormat(extensionDocValuesFormat);
     }
