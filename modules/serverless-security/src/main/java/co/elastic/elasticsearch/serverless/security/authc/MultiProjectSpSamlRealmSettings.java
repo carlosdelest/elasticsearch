@@ -14,7 +14,7 @@
  * this material is strictly forbidden unless prior written
  * permission is obtained from Elasticsearch B.V.
  */
-package co.elastic.elasticsearch.serverless.security.authc.saml;
+package co.elastic.elasticsearch.serverless.security.authc;
 
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings;

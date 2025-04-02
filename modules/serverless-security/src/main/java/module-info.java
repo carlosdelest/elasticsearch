@@ -20,7 +20,7 @@ import co.elastic.elasticsearch.serverless.security.apikey.ServerlessBulkUpdateA
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessCreateApiKeyRequestBuilderFactory;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessGrantApiKeyRequestTranslator;
 import co.elastic.elasticsearch.serverless.security.apikey.ServerlessUpdateApiKeyRequestTranslator;
-import co.elastic.elasticsearch.serverless.security.authc.saml.MultiProjectSamlAuthExtension;
+import co.elastic.elasticsearch.serverless.security.authc.ServerlessSecurityExtension;
 import co.elastic.elasticsearch.serverless.security.authz.ServerlessAuthorizationDenialMessages;
 import co.elastic.elasticsearch.serverless.security.logging.ServerlessUserLoggingDataProvider;
 import co.elastic.elasticsearch.serverless.security.operator.ServerlessOperatorOnlyRegistry;
@@ -60,9 +60,9 @@ module org.elasticsearch.internal.security {
     exports co.elastic.elasticsearch.serverless.security.privilege to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.authz to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.logging to org.elasticsearch.server;
-    exports co.elastic.elasticsearch.serverless.security.authc.saml to org.elasticsearch.server;
+    exports co.elastic.elasticsearch.serverless.security.authc to org.elasticsearch.server;
 
-    provides SecurityExtension with MultiProjectSamlAuthExtension;
+    provides SecurityExtension with ServerlessSecurityExtension;
     provides RestGrantApiKeyAction.RequestTranslator with ServerlessGrantApiKeyRequestTranslator;
     provides UpdateApiKeyRequestTranslator with ServerlessUpdateApiKeyRequestTranslator;
     provides BulkUpdateApiKeyRequestTranslator with ServerlessBulkUpdateApiKeyRequestTranslator;

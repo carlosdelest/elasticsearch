@@ -17,7 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.security;
 
-import co.elastic.elasticsearch.serverless.security.authc.saml.MultiProjectSpSamlRealmSettings;
+import co.elastic.elasticsearch.serverless.security.authc.MultiProjectSpSamlRealmSettings;
 
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings;

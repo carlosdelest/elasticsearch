@@ -15,7 +15,9 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.serverless.security.authc.saml;
+package co.elastic.elasticsearch.serverless.security.authc;
+
+import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 
 import org.elasticsearch.xpack.core.XPackPlugin;
 import org.elasticsearch.xpack.core.security.SecurityExtension;
@@ -24,10 +26,17 @@ import org.elasticsearch.xpack.security.authc.saml.SamlRealm;
 
 import java.util.Map;
 
-public class MultiProjectSamlAuthExtension implements SecurityExtension {
+public class ServerlessSecurityExtension implements SecurityExtension {
+    ServerlessSecurityPlugin plugin;
+
+    public ServerlessSecurityExtension() {}
+
+    public ServerlessSecurityExtension(ServerlessSecurityPlugin plugin) {
+        this.plugin = plugin;
+    }
+
     @Override
     public Map<String, Realm.Factory> getRealms(SecurityComponents components) {
-        var clusterService = components.clusterService();
         return Map.of(
             MultiProjectSpSamlRealmSettings.TYPE,
             config -> SamlRealm.create(
@@ -35,8 +44,14 @@ public class MultiProjectSamlAuthExtension implements SecurityExtension {
                 XPackPlugin.getSharedSslService(),
                 components.resourceWatcherService(),
                 components.roleMapper(),
-                MultiProjectSamlSpConfiguration.create(components.projectResolver(), config, clusterService.getClusterSettings())
-            )
+                MultiProjectSamlSpConfiguration.create(
+                    components.projectResolver(),
+                    config,
+                    components.clusterService().getClusterSettings()
+                )
+            ),
+            ProjectFileSettingsRealmSettings.TYPE,
+            config -> new ProjectFileSettingsRealm(config, components.projectResolver(), components.clusterService())
         );
     }
 }

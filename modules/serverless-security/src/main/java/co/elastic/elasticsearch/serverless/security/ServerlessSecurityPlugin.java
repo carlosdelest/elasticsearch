@@ -17,7 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.security;
 
-import co.elastic.elasticsearch.serverless.security.authc.saml.MultiProjectSpSamlRealmSettings;
+import co.elastic.elasticsearch.serverless.security.authc.MultiProjectSpSamlRealmSettings;
+import co.elastic.elasticsearch.serverless.security.authc.ProjectFileSettingsRealmSettings;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -136,7 +137,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
     @Override
     public List<Setting<?>> getSettings() {
         return Stream.concat(
-            MultiProjectSpSamlRealmSettings.getSettings().stream(),
+            Stream.concat(MultiProjectSpSamlRealmSettings.getSettings().stream(), ProjectFileSettingsRealmSettings.getSettings().stream()),
             Stream.of(
                 INCLUDED_RESERVED_ROLES_SETTING,
                 NATIVE_USERS_SETTING,

@@ -14,7 +14,7 @@
  * this material is strictly forbidden unless prior written
  * permission is obtained from Elasticsearch B.V.
  */
-package co.elastic.elasticsearch.serverless.security.authc.saml;
+package co.elastic.elasticsearch.serverless.security.authc;
 
 import org.elasticsearch.cluster.project.ProjectResolver;
 import org.elasticsearch.common.settings.ClusterSettings;
@@ -32,9 +32,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
-import static co.elastic.elasticsearch.serverless.security.authc.saml.MultiProjectSpSamlRealmSettings.SP_ACS;
-import static co.elastic.elasticsearch.serverless.security.authc.saml.MultiProjectSpSamlRealmSettings.SP_ENTITY_ID;
-import static co.elastic.elasticsearch.serverless.security.authc.saml.MultiProjectSpSamlRealmSettings.SP_LOGOUT;
+import static co.elastic.elasticsearch.serverless.security.authc.MultiProjectSpSamlRealmSettings.SP_ACS;
+import static co.elastic.elasticsearch.serverless.security.authc.MultiProjectSpSamlRealmSettings.SP_ENTITY_ID;
+import static co.elastic.elasticsearch.serverless.security.authc.MultiProjectSpSamlRealmSettings.SP_LOGOUT;
 import static org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings.REQUESTED_AUTHN_CONTEXT_CLASS_REF;
 import static org.elasticsearch.xpack.security.authc.saml.SamlRealm.buildEncryptionCredential;
 import static org.elasticsearch.xpack.security.authc.saml.SamlRealm.buildSigningConfiguration;
