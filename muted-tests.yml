@@ -190,3 +190,6 @@ tests:
 - class: co.elastic.elasticsearch.settings.secure.MultiProjectFileSecureSettingsIT
   method: testErrorSaved
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3704
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeIT
+  method: test
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
