@@ -39,11 +39,7 @@ public class ServerlessAuthorizationDenialMessagesTests extends ESTestCase {
             .realmRef(new Authentication.RealmRef("test", "test", "foo"))
             .build(false);
 
-        final TransportRequest request = new GetLifecycleAction.Request(
-            TEST_REQUEST_TIMEOUT,
-            TEST_REQUEST_TIMEOUT,
-            randomAlphaOfLengthBetween(6, 8)
-        );
+        final TransportRequest request = new GetLifecycleAction.Request(TEST_REQUEST_TIMEOUT, randomAlphaOfLengthBetween(6, 8));
 
         // Note: in practice this should never happen since ILM is unavailable, but it's a valid test to exercise the overall flow
         final String actionName = GetLifecycleAction.NAME;
