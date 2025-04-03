@@ -18,6 +18,7 @@ public class Clusters {
             .distribution(DistributionType.DEFAULT)
             .module("test-esql-heap-attack")
             .setting("xpack.security.enabled", "false")
+            .setting("esql.query.allow_partial_results", "false")
             .setting("xpack.license.self_generated.type", "trial");
         String javaVersion = JvmInfo.jvmInfo().version();
         if (javaVersion.equals("20") || javaVersion.equals("21")) {
