@@ -114,6 +114,7 @@ tasks {
         "roles/40_global_privileges/*",
         // The migrate functionality will not be used in serverless yet
         "migrate/*/*",
+        "migration/*/*",
         // Graph API is not available in Serverless
         "graph/*/*"
     )
