@@ -193,6 +193,3 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
-- class: "org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/3732"
-  method: "test {rerank.Reranker add the _score column when missing SYNC}"
