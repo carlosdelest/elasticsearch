@@ -307,11 +307,21 @@ public class MultiMatch extends FullTextFunction implements OptionalArgument, Po
 
     @Override
     public Expression replaceChildren(List<Expression> newChildren) {
+        if (newChildren.getLast() instanceof MapExpression) {
+            // if the last child is a MapExpression, it is the options map
+            return new MultiMatch(
+                source(),
+                newChildren.getFirst(),
+                newChildren.subList(1, newChildren.size() - 1),
+                newChildren.getLast(),
+                queryBuilder()
+            );
+        }
         return new MultiMatch(
             source(),
             newChildren.getFirst(),
-            newChildren.subList(1, newChildren.size() - 1),
-            newChildren.getLast(),
+            newChildren.subList(1, newChildren.size()),
+            null,
             queryBuilder()
         );
     }
