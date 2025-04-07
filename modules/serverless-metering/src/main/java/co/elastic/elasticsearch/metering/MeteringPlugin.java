@@ -44,8 +44,6 @@ import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
 
 import org.apache.lucene.util.SetOnce;
-import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
@@ -325,24 +323,24 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
     }
 
     @Override
-    public Collection<ActionPlugin.ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        var collectMeteringShardInfo = new ActionPlugin.ActionHandler<>(
+    public Collection<ActionPlugin.ActionHandler> getActions() {
+        var collectMeteringShardInfo = new ActionPlugin.ActionHandler(
             CollectClusterSamplesAction.INSTANCE,
             TransportCollectClusterSamplesAction.class
         );
-        var getMeteringStatsSecondaryUser = new ActionPlugin.ActionHandler<>(
+        var getMeteringStatsSecondaryUser = new ActionPlugin.ActionHandler(
             GetMeteringStatsAction.FOR_SECONDARY_USER_INSTANCE,
             TransportGetMeteringStatsForSecondaryUserAction.class
         );
-        var getMeteringStatsPrimaryUser = new ActionPlugin.ActionHandler<>(
+        var getMeteringStatsPrimaryUser = new ActionPlugin.ActionHandler(
             GetMeteringStatsAction.FOR_PRIMARY_USER_INSTANCE,
             TransportGetMeteringStatsForPrimaryUserAction.class
         );
-        var updateSampledMetricsMetadata = new ActionPlugin.ActionHandler<>(
+        var updateSampledMetricsMetadata = new ActionPlugin.ActionHandler(
             UpdateSampledMetricsMetadataAction.INSTANCE,
             TransportUpdateSampledMetricsMetadataAction.class
         );
-        var getNodeSamples = new ActionPlugin.ActionHandler<>(GetNodeSamplesAction.INSTANCE, TransportGetNodeSamplesAction.class);
+        var getNodeSamples = new ActionPlugin.ActionHandler(GetNodeSamplesAction.INSTANCE, TransportGetNodeSamplesAction.class);
         return List.of(
             getNodeSamples,
             getMeteringStatsSecondaryUser,

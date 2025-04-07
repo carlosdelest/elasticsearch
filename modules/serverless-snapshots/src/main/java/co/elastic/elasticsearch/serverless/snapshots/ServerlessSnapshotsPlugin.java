@@ -20,8 +20,6 @@ package co.elastic.elasticsearch.serverless.snapshots;
 import co.elastic.elasticsearch.serverless.snapshots.action.TransportRestoreProjectAction;
 import co.elastic.elasticsearch.serverless.snapshots.rest.action.RestRestoreProjectAction;
 
-import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -45,8 +43,8 @@ public class ServerlessSnapshotsPlugin extends Plugin implements ActionPlugin {
     public ServerlessSnapshotsPlugin(Settings settings) {}
 
     @Override
-    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        return List.of(new ActionHandler<>(TransportRestoreProjectAction.TYPE, TransportRestoreProjectAction.class));
+    public List<ActionHandler> getActions() {
+        return List.of(new ActionHandler(TransportRestoreProjectAction.TYPE, TransportRestoreProjectAction.class));
     }
 
     @Override

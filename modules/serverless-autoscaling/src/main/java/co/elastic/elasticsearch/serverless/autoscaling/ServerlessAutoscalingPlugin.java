@@ -27,8 +27,6 @@ import co.elastic.elasticsearch.serverless.autoscaling.action.TransportGetMachin
 import co.elastic.elasticsearch.serverless.autoscaling.action.TransportGetSearchTierMetrics;
 import co.elastic.elasticsearch.serverless.autoscaling.rest.action.RestGetAutoscalingMetricsAction;
 
-import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -59,12 +57,12 @@ public class ServerlessAutoscalingPlugin extends Plugin implements ActionPlugin 
     public ServerlessAutoscalingPlugin(Settings settings) {}
 
     @Override
-    public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
+    public List<ActionHandler> getActions() {
         return List.of(
-            new ActionHandler<>(GetAutoscalingMetricsAction.INSTANCE, TransportGetAutoscalingMetricsAction.class),
-            new ActionHandler<>(GetSearchTierMetrics.INSTANCE, TransportGetSearchTierMetrics.class),
-            new ActionHandler<>(GetIndexTierMetrics.INSTANCE, TransportGetIndexTierMetrics.class),
-            new ActionHandler<>(GetMachineLearningTierMetrics.INSTANCE, TransportGetMachineLearningTierMetrics.class)
+            new ActionHandler(GetAutoscalingMetricsAction.INSTANCE, TransportGetAutoscalingMetricsAction.class),
+            new ActionHandler(GetSearchTierMetrics.INSTANCE, TransportGetSearchTierMetrics.class),
+            new ActionHandler(GetIndexTierMetrics.INSTANCE, TransportGetIndexTierMetrics.class),
+            new ActionHandler(GetMachineLearningTierMetrics.INSTANCE, TransportGetMachineLearningTierMetrics.class)
         );
     }
 
