@@ -68,7 +68,7 @@ Instructions can be found <a href='https://docs.elastic.dev/elasticsearch-team/s
 
   # Commit and push
   git commit -m "Merge $PATCH_BRANCH into main"
-  git push origin main
+  VAULT_GITHUB_TOKEN="$GITHUB_TOKEN" git push origin main
   echo "The $repo_name $PATCH_BRANCH branch has been merged into main"
 
   cd "$original_path" || exit

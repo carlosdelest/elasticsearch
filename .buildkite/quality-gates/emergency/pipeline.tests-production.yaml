@@ -67,3 +67,4 @@ steps:
         command: ".buildkite/scripts/merge-patch-branches.sh"
         env:
           PROMOTED_COMMIT: ${SERVICE_VERSION}
+          USE_GITHUB_CREDENTIALS: "true"
