@@ -45,7 +45,6 @@ import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
 
 public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
 
@@ -113,11 +112,9 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
             assertThat(ingestedDocsRecords, empty());
         });
 
-        List<Map<?, ?>> latestIXShardSizes = new ArrayList<>();
         List<Map<?, ?>> latestIXIndexSizes = new ArrayList<>();
         assertBusy(() -> {
             var allUsageRecords = getAllUsageRecords();
-            var ixShardSizeRecords = filterUsageRecords(allUsageRecords, "shard-size");
             var ixIndexSizeRecords = filterUsageRecords(allUsageRecords, "index-size");
             var rawStorageRecords = filterUsageRecords(allUsageRecords, "raw-stored-index-size");
 
@@ -130,31 +127,14 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
             // we are expecting 1 record (1 per index)
             latestIXIndexSizes.clear();
             latestIXIndexSizes.addAll(getLatestFullBatch(ixIndexSizeRecords, 1));
-
-            // we are expecting 3 records (1 per shard)
-            latestIXShardSizes.clear();
-            latestIXShardSizes.addAll(getLatestFullBatch(ixShardSizeRecords, 3));
-            logger.info(debugInfoForShardSize(INDEX_NAME, latestIXShardSizes, ixShardSizeRecords));
         }, 30, TimeUnit.SECONDS);
 
-        // those are the expected values taken from the /_cat/segments api
-        // we are asserting that there will be only 1 segment per shard and taking its sizeInBytes
-        Map<Integer, Integer> expectedShardSizes = getExpectedReplicaShardSizes();
-        int expectedIndexSize = expectedShardSizes.values().stream().mapToInt(Integer::intValue).sum();
+        int expectedIndexSize = getExpectedIndexSize();
 
         Map<String, List<Map<?, ?>>> indexSizesByNode = groupBySourceNodeName(latestIXIndexSizes);
         var sourceNode = indexSizesByNode.keySet().iterator().next();
         assertThat(indexSizesByNode.size(), equalTo(1));
         assertThat(indexSizesByNode.get(sourceNode), contains(transformedMatch(m -> usageQuantity(m), equalTo(expectedIndexSize))));
-
-        Map<String, List<Map<?, ?>>> shardSizesByNode = groupBySourceNodeName(latestIXShardSizes);
-        assertThat(shardSizesByNode.keySet(), equalTo(indexSizesByNode.keySet()));
-        assertThat(shardSizesByNode.get(sourceNode), hasSize(3));
-        assertThat(
-            shardSizesByNode + " vs " + expectedShardSizes,
-            shardNumberToSize(shardSizesByNode.get(sourceNode)),
-            equalTo(expectedShardSizes)
-        );
     }
 
     private void forceMerge() throws IOException {
@@ -162,16 +142,6 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
         request.addParameter("max_num_segments", "1");
         request.addParameter("flush", "true");
         client().performRequest(request);
-    }
-
-    private Map<Integer, Integer> shardNumberToSize(List<Map<?, ?>> usageRecords) {
-        Map<Integer, Integer> shardNumberToSize = new HashMap<>();
-        usageRecords.forEach(record -> {
-            var shardNumber = Integer.parseInt((String) XContentMapValues.extractValue("source.metadata.shard", record));
-            var shardSize = (int) XContentMapValues.extractValue("usage.quantity", record);
-            shardNumberToSize.put(shardNumber, shardSize);
-        });
-        return shardNumberToSize;
     }
 
     private Map<String, List<Map<?, ?>>> groupBySourceNodeName(List<Map<?, ?>> latestRecords) {
@@ -185,46 +155,9 @@ public class Metering1kDocsRestTestIT extends AbstractMeteringRestTestIT {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<Integer, Integer> getExpectedReplicaShardSizes() throws IOException {
-
-        Map<String, Object> indices = entityAsMap(client().performRequest(new Request("GET", INDEX_NAME + "/_segments")));
-
-        Map<String, List<Map<String, ?>>> shards = (Map<String, List<Map<String, ?>>>) XContentMapValues.extractValue(
-            "indices." + INDEX_NAME + ".shards",
-            indices
-        );
-
-        Map<Integer, Integer> shardNumberToSize = new HashMap<>();
-        shards.forEach((shardNumber, shardCopies) -> {
-            shardCopies.forEach(shardCopyInfo -> {
-                // skipping primaries info
-                if (((boolean) XContentMapValues.extractValue("routing.primary", shardCopyInfo)) == false) {
-                    var segments = (Map<String, ?>) XContentMapValues.extractValue("segments", shardCopyInfo);
-                    assert segments.size() == 1;// important, we expect segments to be merged to 1
-                    var segment = (Map<String, ?>) segments.values().iterator().next();
-                    shardNumberToSize.compute(Integer.parseInt(shardNumber), (shard, prevSize) -> {
-                        var size = (Integer) segment.get("size_in_bytes");
-                        assert prevSize == null || prevSize.equals(size)
-                            : "Inconsistent replica size for shard " + shard + ": " + prevSize + " vs " + size;
-                        return size;
-                    });
-                }
-            });
-        });
-        return shardNumberToSize;
-    }
-
-    private String debugInfoForShardSize(String indexName, List<Map<?, ?>> latestRecords, List<Map<?, ?>> shardSizeRecords)
-        throws IOException {
-        StringBuilder msgBuilder = new StringBuilder();
-        msgBuilder.append("Latest timestamp: " + latestRecords.get(0).get("usage_timestamp"));
-        msgBuilder.append(System.lineSeparator());
-        msgBuilder.append("Latest records: " + latestRecords);
-        msgBuilder.append(System.lineSeparator());
-        msgBuilder.append("All usage records for shard-size: " + shardSizeRecords);
-        msgBuilder.append(System.lineSeparator());
-        msgBuilder.append(prepareShardAllocationInformation(indexName));
-        return msgBuilder.toString();
+    private int getExpectedIndexSize() throws IOException {
+        Map<String, Object> stats = entityAsMap(client().performRequest(new Request("GET", INDEX_NAME + "/_stats")));
+        return (int) XContentMapValues.extractValue("indices." + INDEX_NAME + ".primaries.docs.total_size_in_bytes", stats);
     }
 
     private static int sumQuantity(List<Map<?, ?>> records) {

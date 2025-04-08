@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.SourceMetadata;
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
 import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
@@ -30,9 +29,7 @@ import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,7 +40,6 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
     private static final Logger logger = LogManager.getLogger(IndexSizeMetricsProvider.class);
 
     static final String IX_METRIC_TYPE = "es_indexed_data";
-    static final String IX_SHARD_METRIC_ID_PREFIX = "shard-size";
     static final String IX_INDEX_METRIC_ID_PREFIX = "index-size";
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
@@ -71,51 +67,15 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
     private MetricValues sampleToMetricValues(SampledClusterMetricsService.SampledClusterMetrics sample) {
         final var indicesLookup = clusterService.state().getMetadata().getProject().getIndicesLookup();
         boolean partial = sample.status().contains(SampledClusterMetricsService.SamplingStatus.PARTIAL);
-        List<MetricValue> metrics = new ArrayList<>();
-
-        // shard-level IX metrics only kept for transition period
-        for (final var shardEntry : sample.shardSamples().entrySet()) {
-            ShardInfoMetrics shardMetrics = shardEntry.getValue().shardInfo();
-            if (shardMetrics.totalSizeInBytes() > 0) {
-                metrics.add(ixShardMetric(shardEntry.getKey(), shardMetrics, indicesLookup, partial));
-            }
-        }
 
         var indexInfos = IndexInfoMetrics.calculateIndexSamples(sample.shardSamples());
+        List<MetricValue> metrics = new ArrayList<>(indexInfos.size());
         for (final var indexInfo : indexInfos.entrySet()) {
             if (indexInfo.getValue().getTotalSize() > 0) {
                 metrics.add(ixIndexMetric(indexInfo.getKey(), indexInfo.getValue(), indicesLookup, partial));
             }
         }
         return SampledMetricsProvider.metricValues(metrics, DefaultSampledMetricsBackfillStrategy.INSTANCE);
-    }
-
-    // shard-level IX metrics only kept for transition period
-    private MetricValue ixShardMetric(
-        ShardKey shard,
-        ShardInfoMetrics shardMetrics,
-        Map<String, IndexAbstraction> indicesLookup,
-        boolean partial
-    ) {
-        var indexCreationDate = Instant.ofEpochMilli(shardMetrics.indexCreationDateEpochMilli());
-
-        var sourceMetadata = SourceMetadata.indexSourceMetadata(shard.indexName(), indicesLookup, systemIndices, partial);
-        sourceMetadata.put(SourceMetadata.SHARD, Integer.toString(shard.shardId()));
-
-        Map<String, String> usageMetadata = new HashMap<>();
-        usageMetadata.put("segment_count", Long.toString(shardMetrics.segmentCount()));
-        usageMetadata.put("doc_count", Long.toString(shardMetrics.docCount()));
-        usageMetadata.put("deleted_doc_count", Long.toString(shardMetrics.deletedDocCount()));
-        usageMetadata.put("interactive_size", Long.toString(shardMetrics.interactiveSizeInBytes()));
-
-        return new MetricValue(
-            format("%s:%s", IX_SHARD_METRIC_ID_PREFIX, shard),
-            IX_METRIC_TYPE,
-            sourceMetadata,
-            usageMetadata,
-            shardMetrics.totalSizeInBytes(),
-            indexCreationDate
-        );
     }
 
     private MetricValue ixIndexMetric(

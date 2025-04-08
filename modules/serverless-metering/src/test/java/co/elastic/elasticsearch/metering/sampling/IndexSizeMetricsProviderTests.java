@@ -26,7 +26,6 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.S
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
 import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
-import co.elastic.elasticsearch.metrics.SampledMetricsProvider.MetricValues;
 
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
@@ -45,21 +44,16 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.StreamSupport;
 
 import static co.elastic.elasticsearch.metering.TestUtils.hasBackfillStrategy;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
 import static co.elastic.elasticsearch.metering.sampling.IndexSizeMetricsProvider.IX_INDEX_METRIC_ID_PREFIX;
-import static co.elastic.elasticsearch.metering.sampling.IndexSizeMetricsProvider.IX_METRIC_TYPE;
-import static co.elastic.elasticsearch.metering.sampling.IndexSizeMetricsProvider.IX_SHARD_METRIC_ID_PREFIX;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import static java.util.Map.entry;
@@ -68,19 +62,13 @@ import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.anyOf;
-import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasKey;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.isA;
-import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.Mockito.mock;
@@ -88,10 +76,6 @@ import static org.mockito.Mockito.when;
 
 public class IndexSizeMetricsProviderTests extends ESTestCase {
 
-    static final Predicate<MetricValue> isIxShardMetric = m -> m.type().equals(IX_METRIC_TYPE)
-        && m.id().startsWith(IX_SHARD_METRIC_ID_PREFIX);
-    static final Predicate<MetricValue> isIxIndexMetric = m -> m.type().equals(IX_METRIC_TYPE)
-        && m.id().startsWith(IX_INDEX_METRIC_ID_PREFIX);
     static final Supplier<AssertionError> elementMustBePresent = () -> new AssertionError("Element must be present");
 
     private ClusterService clusterService;
@@ -129,14 +113,6 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         );
     }
 
-    private MetricValue findFirstMatch(MetricValues metrics, Predicate<MetricValue> predicate) {
-        return StreamSupport.stream(metrics.spliterator(), false).filter(predicate).findFirst().orElseThrow(elementMustBePresent);
-    }
-
-    private List<MetricValue> findAllMetrics(MetricValues metrics, Predicate<MetricValue> predicate) {
-        return StreamSupport.stream(metrics.spliterator(), false).filter(predicate).toList();
-    }
-
     public void testGetMetrics() {
         var isActive = randomBoolean();
         var isHidden = randomBoolean();
@@ -157,24 +133,9 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
         assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
-        assertThat(metrics, transformedMatch(Iterables::size, is(2L)));
+        assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
-        var shardIX = findFirstMatch(metrics, isIxShardMetric);
-        var indexIX = findFirstMatch(metrics, isIxIndexMetric);
-
-        assertThat(shardIX.id(), equalTo(IX_SHARD_METRIC_ID_PREFIX + ":" + shard1));
-        assertThat(
-            shardIX.sourceMetadata(),
-            allOf(
-                hasEntry("index", shard1.indexName()),
-                hasEntry("system_index", "false"),
-                hasEntry("shard", "" + shard1.shardId()),
-                hasEntry("hidden_index", Boolean.toString(isHidden))
-            )
-        );
-        assertThat(shardIX.value(), is(11L));
-        assertThat(shardIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
-
+        var indexIX = metrics.iterator().next();
         assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + shard1.indexName()));
         assertThat(
             indexIX.sourceMetadata(),
@@ -208,19 +169,9 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
         assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
-        assertThat(metrics, transformedMatch(Iterables::size, is(2L)));
+        assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
-        var shardIX = findFirstMatch(metrics, isIxShardMetric);
-        var indexIX = findFirstMatch(metrics, isIxIndexMetric);
-
-        assertThat(shardIX.id(), equalTo(IX_SHARD_METRIC_ID_PREFIX + ":" + shard1));
-        assertThat(
-            shardIX.sourceMetadata(),
-            allOf(hasEntry("index", shard1.indexName()), hasEntry("system_index", "true"), hasEntry("shard", "" + shard1.shardId()))
-        );
-        assertThat(shardIX.value(), is(11L));
-        assertThat(shardIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
-
+        var indexIX = metrics.iterator().next();
         assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + shard1.indexName()));
         assertThat(indexIX.sourceMetadata(), allOf(hasEntry("index", shard1.indexName()), hasEntry("system_index", "true")));
         assertThat(indexIX.value(), is(11L));
@@ -275,28 +226,13 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
         assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
-        assertThat(metrics, transformedMatch(Iterables::size, is(11L)));
+        assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
-        var ixShardMetrics = findAllMetrics(metrics, isIxShardMetric);
-        var ixIndexMetrics = findAllMetrics(metrics, isIxIndexMetric);
-
-        assertThat(ixShardMetrics, hasSize(10));
-        assertThat(ixIndexMetrics, hasSize(1));
-
-        int shard = 0;
-        for (MetricValue metric : ixShardMetrics) {
-            assertThat(metric.id(), equalTo(IX_SHARD_METRIC_ID_PREFIX + ":" + indexName + ":" + shard));
-            assertThat(metric.sourceMetadata(), allOf(hasEntry("index", indexName), hasEntry("shard", "" + shard)));
-            assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
-            shard++;
-        }
-
-        for (MetricValue metric : ixIndexMetrics) {
-            assertThat(metric.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
-            assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
-            assertThat(metric.sourceMetadata(), not(hasKey("shard")));
-            assertThat(metric.value(), is(145L));
-        }
+        var metric = metrics.iterator().next();
+        assertThat(metric.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
+        assertThat(metric.sourceMetadata(), not(hasKey("shard")));
+        assertThat(metric.value(), is(145L));
     }
 
     public void testMultipleIndicesWithMixedSizeType() {
@@ -326,75 +262,10 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         setMetricsServiceState(Instant.now(), shardsInfo);
 
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
-        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
-
-        assertThat(metrics, transformedMatch(Iterables::size, is(55L)));
-
-        var ixShardMetrics = findAllMetrics(metrics, isIxShardMetric);
-        var ixIndexMetrics = findAllMetrics(metrics, isIxIndexMetric);
-
-        assertThat(ixShardMetrics, hasSize(50));
-        assertThat(ixIndexMetrics, hasSize(5));
-
-        for (MetricValue metric : ixShardMetrics) {
-            assertThat(metric.id(), startsWith(IX_SHARD_METRIC_ID_PREFIX + ":" + baseIndexName));
-            assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
-            assertThat(metric.sourceMetadata(), hasEntry(is("shard"), not(emptyOrNullString())));
-            assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
-        }
-
-        for (MetricValue metric : ixIndexMetrics) {
-            assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + baseIndexName));
-            assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
-            assertThat(metric.sourceMetadata(), not(hasKey("shard")));
-            assertThat(metric.value(), is(145L));
-        }
-    }
-
-    public void testMultipleIndicesWithMixedShardSizeType() {
-        String baseIndexName = "myMultiShardIndex";
-        Instant creationDate = Instant.now();
-        var shardsInfo = new LinkedHashMap<ShardKey, ShardSample>();
-        for (var indexIdx = 0; indexIdx < 5; indexIdx++) {
-            var indexName = baseIndexName + indexIdx;
-            for (var shardIdx = 0; shardIdx < 10; shardIdx++) {
-                var shardId = new ShardKey(indexName, shardIdx);
-                var size = 10L + shardIdx;
-                var hasIngestSize = shardIdx < 5;
-                shardsInfo.put(
-                    shardId,
-                    new ShardSample(
-                        indexName,
-                        ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
-                            .withData(110L, size, 0L, hasIngestSize ? size : 0)
-                            .withGeneration(1, 1, creationDate.toEpochMilli())
-                            .build()
-                    )
-                );
-            }
-        }
-
-        setMetricsServiceState(Instant.now(), shardsInfo);
-
-        var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
         assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
-        assertThat(metrics, transformedMatch(Iterables::size, is(55L)));
-
-        var ixShardMetrics = findAllMetrics(metrics, isIxShardMetric);
-        var ixIndexMetrics = findAllMetrics(metrics, isIxIndexMetric);
-
-        assertThat(ixShardMetrics, hasSize(50));
-        assertThat(ixIndexMetrics, hasSize(5));
-
-        for (MetricValue metric : ixShardMetrics) {
-            assertThat(metric.id(), startsWith(IX_SHARD_METRIC_ID_PREFIX + ":" + baseIndexName));
-            assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
-            assertThat(metric.sourceMetadata(), hasEntry(is("shard"), not(emptyOrNullString())));
-            assertThat(metric.value(), is(both(greaterThanOrEqualTo(10L)).and(lessThanOrEqualTo(20L))));
-        }
-
-        for (MetricValue metric : ixIndexMetrics) {
+        assertThat(metrics, transformedMatch(Iterables::size, is(5L)));
+        for (MetricValue metric : metrics) {
             assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + baseIndexName));
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
             assertThat(metric.sourceMetadata(), not(hasKey("shard")));
@@ -426,22 +297,12 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
         assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
 
-        assertThat(metrics, transformedMatch(Iterables::size, is(10L)));
-        for (MetricValue metric : metrics) {
-            assertThat(
-                metric.id(),
-                anyOf(startsWith(IX_SHARD_METRIC_ID_PREFIX + ":" + indexName), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName))
-            );
-            assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
-            assertThat(metric.sourceMetadata(), hasEntry("partial", "true"));
+        assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
+        var metric = metrics.iterator().next();
 
-            var isFailed = metric.id().endsWith(":" + failedShardId);
-            if (isFailed) {
-                assertThat(metric.value(), is(0L));
-            } else {
-                assertThat(metric.value(), is(greaterThanOrEqualTo(10L)));
-            }
-        }
+        assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
+        assertThat(metric.sourceMetadata(), hasEntry("partial", "true"));
     }
 
     public void testEmptyMetrics() {

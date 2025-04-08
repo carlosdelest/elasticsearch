@@ -68,10 +68,6 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         assertThat(plugins, not(empty()));
     }
 
-    private Predicate<UsageRecord> isShardSizeMetric(String indexName, int shardId) {
-        return m -> m.id().startsWith("shard-size:" + indexName + ":" + shardId);
-    }
-
     private Predicate<UsageRecord> isIndexSizeMetric(String indexName) {
         return m -> m.id().startsWith("index-size:" + indexName);
     }
@@ -101,36 +97,4 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
 
         }, 20, TimeUnit.SECONDS);
     }
-
-    public void testShardSizeMetricsAreRecorded() throws Exception {
-        startMasterAndIndexNode();
-        startSearchNode();
-        ensureStableCluster(2);
-
-        createIndex("idx1");
-        client().index(new IndexRequest("idx1").source(XContentType.JSON, "value1", "foo", "value2", "bar")).actionGet();
-        admin().indices().flush(new FlushRequest("idx1").force(true)).actionGet();
-
-        var usageRecords = new ArrayList<UsageRecord>();
-        assertBusy(() -> {
-            pollReceivedRecords(usageRecords, isShardSizeMetric("idx1", 0));
-            var lastUsageRecord = usageRecords.stream().max(Comparator.comparing(UsageRecord::usageTimestamp));
-
-            var metric = lastUsageRecord.orElseThrow(() -> new AssertionError("No IX usage records for " + "idx1"));
-
-            assertThat(metric.usage().type(), equalTo("es_indexed_data"));
-            assertThat(metric.usage().quantity(), greaterThan(0L));
-            assertThat(
-                metric.source().metadata(),
-                allOf(
-                    hasEntry("index", "idx1"),
-                    hasEntry("system_index", "false"),
-                    hasEntry("hidden_index", "false"),
-                    hasEntry("shard", "0")
-                )
-            );
-
-        }, 20, TimeUnit.SECONDS);
-    }
-
 }

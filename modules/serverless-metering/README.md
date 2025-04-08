@@ -19,7 +19,7 @@ The metrics metered can be categorized into two types:
 |----------------|---------------------------------------|-------------|----------------------|---------------------------|---------------------------------------------|
 | **RA-I**ngest  | raw ingested data in bytes            | counter     | `es_raw_data`        | per node and index        | general (unused*), O11y, Security           |
 | **RA-S**torage | raw stored data in bytes              | sample      | `es_raw_stored_data` | per cluster and index     | O11y, Security                              |
-| **IX**         | index size in bytes                   | sample      | `es_indexed_data`    | per cluster and shard     | general, O11y (unused*), Security (unused*) |
+| **IX**         | index size in bytes                   | sample      | `es_indexed_data`    | per cluster and index     | general, O11y (unused*), Security (unused*) |
 | **VCU**        | virtual compute units in bytes of RAM | sample      | `es_vcu`             | per tier (search / index) | general, O11y (unused*), Security (unused*) |
 
 (*) Important: this table highlights what is computed and reported by the metering plugin; this may be different from what is actually consumed by the [metering pipeline](https://github.com/elastic/platform-billing/blob/main/teams/billing/services/serverless_onboarding.md#stages--responsibilities) and used for billing. For detailed and up-to-date documentation from a billing perspective, see the higher level business documentation: [PRD - Serverless monitoring](https://docs.google.com/document/d/1ILQHCrMSWFB403fJHI45jarolcOC4l6zlDoZbqKK0HA/edit#heading=h.7zjfkrex9jtg).
@@ -84,7 +84,7 @@ RA-I is reported _per node_. During document parsing we compute RA-I creating a 
 Code references:
 
 * [`XContentMeteringParser`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/xcontent/XContentMeteringParser.java): Metering of RA-I while parsing a document source
-* [`RawIngestMetricReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RawIngestMetricReporter.java): Reports RA-I per doc to `IngestMetricsProvider` once indexing completed
+* [`RawIngestMetricReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/reporter/RawIngestMetricReporter.java): Reports RA-I per doc to `IngestMetricsProvider` once indexing completed
 * [`IngestMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/IngestMetricsProvider.java): Accumulates RA-I per index in memory and generates ingest usage metrics based on that
 * [`UsageReportCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/usagereports/UsageReportCollector.java): Periodically collects usage metrics from all metrics providers and publishes those
 
@@ -106,8 +106,8 @@ Once indexing of a document completes successfully, the per-document RA-I size (
 For reporting, total RA-S of a shard is read from the above-mentioned attribute in the segment infos user data (of the latest generation of that shard).
 
 Code references:
-* [`RawStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RawStorageReporter.java): Reports RA-Storage per doc to the `RawStorageAccumulator`
-* [`RawStorageAccumulator`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RawStorageAccumulator.java): Accumulates the RA-S delta of indexed documents since the last commit and provides the update commit user data.
+* [`RawStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/reporter/RawStorageReporter.java): Reports RA-Storage per doc to the `RawStorageAccumulator`
+* [`RawStorageAccumulator`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/reporter/RawStorageAccumulator.java): Accumulates the RA-S delta of indexed documents since the last commit and provides the update commit user data.
 
 #### Calculation of RA-S for regular indices
 
@@ -167,7 +167,7 @@ For reporting, total RA-S of a shard can then be calculated by summing the appro
 ```
 
 Code references:
-* [`RawStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/ingested_size/reporter/RawStorageReporter.java): Writes RA-S as additional, hidden field to each document
+* [`RawStorageReporter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/reporter/RawStorageReporter.java): Writes RA-S as additional, hidden field to each document
 * [`RawStorageDocValuesFormatFactory`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/codec/RawStorageDocValuesFormatFactory.java): Creates the `DocValuesConsumer` responsible for calculating the average RA-S per document of a segment
 
 ### Index size IX (`es_indexed_data`)
@@ -182,14 +182,13 @@ If doing so on a customer's behalf, be aware that we will stop charging the cust
 
 `source.metadata` for RA-S (`es_indexed_data`) contains:
 - `index`: the index name
-- `shard`: the shard id
 - `datastream`: the datastream name (optional, only if part of a datastream)
 
 #### IX sample record
 
 ```json
 {
-    "id": "shard-size:{index name}:{shard id}:{project id}:{sampling timestamp}",
+    "id": "index-size:{index name}:{project id}:{sampling timestamp}",
     "usage_timestamp": {sampling timestamp},
     "usage": {
         "type": "es_indexed_data",
@@ -201,7 +200,6 @@ If doing so on a customer's behalf, be aware that we will stop charging the cust
         "instance_group_id": "{project id}",
         "metadata": {
             "index": "{index name}",
-            "shard": "{shard id}",
             "datastream": "{datastream name, only if part of datastream}"
         }
     }
@@ -253,7 +251,7 @@ The cluster sampling infrastructure then builds a cluster wide consolidated per 
 
 Code references:
 * [`TaskActivityTracker`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/activitytracking/TaskActivityTracker.java): tracks activity per tier by means of an action filter ([`ActivityTrackerActionFilter`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/activitytracking/ActivityTrackerActionFilter.java).
-* [`SampledVCUMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledVCUMetricsProvider.java): provides per tier VCU samples
+* [`SampledVCUMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledVCUMetricsProvider.java): provides per tier VCU samples
 
 ### Per cluster reporting infrastructure for RA-S and IX usage sample records
 
@@ -289,8 +287,10 @@ Code references:
 
 * [`SampledClusterMetricsSchedulingTask`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledClusterMetricsSchedulingTask.java): periodically polls metering updates via SampledClusterMetricsService
 * [`SampledClusterMetricsService`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledClusterMetricsSchedulingTask.java): maintains consolidated view of latest sampled metrics, such as shard or tier samples.
-* [`SampledStorageMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledStorageMetricsProvider.java): provides per index RA-S and per shard IX usage samples using above
-* [`SampledVCUMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/d7992ec3b4a7e140f8421509f4ed46c4605f9037/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledVCUMetricsProvider.java): provides per tier VCU samples
+* [`IndexSizeMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/IndexSizeMetricsProvider.java): provides per index IX usage samples using above
+* [`RawStorageMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/RawStorageMetricsProvider.java): provides per index RA-S and IX usage samples using above
+
+* [`SampledVCUMetricsProvider`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/sampling/SampledVCUMetricsProvider.java): provides per tier VCU samples
 * [`UsageReportCollector`](https://github.com/elastic/elasticsearch-serverless/blob/main/modules/serverless-metering/src/main/java/co/elastic/elasticsearch/metering/usagereports/UsageReportCollector.java): periodically collects and publishes usage records from available sampled metrics providers, backfilling samples if necessary
 
 
