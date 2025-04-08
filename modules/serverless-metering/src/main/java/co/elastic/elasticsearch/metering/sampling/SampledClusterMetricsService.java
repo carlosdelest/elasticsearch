@@ -40,8 +40,10 @@ import org.elasticsearch.telemetry.metric.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -303,14 +305,14 @@ public class SampledClusterMetricsService {
         return Optional.empty();
     }
 
-    public SampledMetricsProvider createSampledStorageMetricsProvider(SystemIndices systemIndices) {
-        return new SampledStorageMetricsProvider(this, clusterService, systemIndices);
-    }
-
-    public SampledVCUMetricsProvider createSampledVCUMetricsProvider(NodeEnvironment nodeEnvironment, SystemIndices systemIndices) {
+    public Collection<SampledMetricsProvider> createSampledMetricsProviders(NodeEnvironment nodeEnvironment, SystemIndices systemIndices) {
         var coolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
         var spMinProvisionedMemoryCalculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, nodeEnvironment);
-        return new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryCalculator, meterRegistry);
+        return List.of(
+            new IndexSizeMetricsProvider(this, clusterService, systemIndices),
+            new RawStorageMetricsProvider(this, clusterService, systemIndices),
+            new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryCalculator, meterRegistry)
+        );
     }
 
     private static Map<ShardKey, ShardSample> mergeShardInfos(Map<ShardKey, ShardSample> current, Map<ShardId, ShardInfoMetrics> updated) {

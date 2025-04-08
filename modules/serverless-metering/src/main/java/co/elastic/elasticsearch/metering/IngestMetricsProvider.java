@@ -24,7 +24,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.ClusterStateSupplier;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
-import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.indices.SystemIndices;
@@ -144,20 +143,7 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
         Map<String, IndexAbstraction> indicesLookup,
         SystemIndices systemIndices
     ) {
-        // note: this is intentionally not resolved via IndexAbstraction, see https://elasticco.atlassian.net/browse/ES-10384
-        final var isSystemIndex = systemIndices.isSystemIndex(index);
-        final var indexAbstraction = indicesLookup.get(index);
-
-        final var datastream = indexAbstraction != null ? indexAbstraction.getParentDataStream() : null;
-        Map<String, String> sourceMetadata = Maps.newHashMapWithExpectedSize(4);
-        sourceMetadata.put(SourceMetadata.INDEX, index);
-        sourceMetadata.put(SourceMetadata.SYSTEM_INDEX, Boolean.toString(isSystemIndex));
-        if (indexAbstraction != null) {
-            sourceMetadata.put(SourceMetadata.HIDDEN_INDEX, Boolean.toString(indexAbstraction.isHidden()));
-        }
-        if (datastream != null) {
-            sourceMetadata.put(SourceMetadata.DATASTREAM, datastream.getName());
-        }
+        var sourceMetadata = SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices);
         return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, sourceMetadata, value, null);
     }
 }
