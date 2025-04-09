@@ -62,6 +62,7 @@ public record ServerlessSupportedPrivilegesRegistry() {
             ClusterPrivilegeResolver.MONITOR,
             ClusterPrivilegeResolver.MONITOR_CONNECTOR,
             ClusterPrivilegeResolver.MONITOR_ENRICH,
+            ClusterPrivilegeResolver.MONITOR_ESQL,
             ClusterPrivilegeResolver.MONITOR_INFERENCE,
             ClusterPrivilegeResolver.MONITOR_ML,
             ClusterPrivilegeResolver.MONITOR_TRANSFORM,
