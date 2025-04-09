@@ -434,6 +434,16 @@ public class ServerlessServerCli extends ServerCli {
 
     @Override
     protected void onExit(int exitCode) throws UserException {
+        // precondition: server process is already stopped
+        if (fastShutdownWatcher != null && fastShutdownWatcher.isStopping()) {
+            // If we detected the fast shutdown marker, we don't want to call post diagnostic or onExit
+            // as that would throw exception on non-zero exit code (which we expect). Instead we just return early.
+            // There is the potential for a false negative: we detected the fast shutdown marker, but the server
+            // already stopped before we sent the SIGKILL (eg oom-killer, heap dump, etc).
+            // In this case we don't care: we already intended to SIGKILL the process, and the project is being
+            // deleted, so doing additional diagnostics isn't worthwhile.
+            return;
+        }
         onExitDiagnosticsAction.accept(exitCode);
         super.onExit(exitCode);
     }

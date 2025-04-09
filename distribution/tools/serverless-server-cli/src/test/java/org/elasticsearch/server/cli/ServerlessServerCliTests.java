@@ -788,6 +788,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
         var executeBlockLatch = new CountDownLatch(1);
         var executeRunningLatch = new CountDownLatch(1);
         var stopLatch = new CountDownLatch(1);
+        mockServer.exitCode = 137;
         mockServer.waitForAction = () -> {
             executeRunningLatch.countDown();
             nonInterruptibleVoid(executeBlockLatch::await);
@@ -861,6 +862,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
 
     private class MockServerlessProcess extends ServerProcess {
         ServerArgs args;
+        volatile int exitCode = 0;
         volatile Runnable waitForAction = null;
         volatile Runnable stopAction = null;
         volatile Runnable forceStopAction = null;
@@ -882,7 +884,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
             if (waitForAction != null) {
                 waitForAction.run();
             }
-            return 0;
+            return exitCode;
         }
 
         @Override

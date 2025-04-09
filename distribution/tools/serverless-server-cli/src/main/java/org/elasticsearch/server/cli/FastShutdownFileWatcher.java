@@ -34,12 +34,18 @@ class FastShutdownFileWatcher extends AbstractFileWatchingService {
     private final Path file;
     private final Terminal terminal;
     private final Supplier<ServerProcess> server;
+    private volatile boolean shutdownStarted = false;
 
     FastShutdownFileWatcher(Terminal terminal, Path fastShutdownMarkerFile, Supplier<ServerProcess> server) {
         super(fastShutdownMarkerFile.getParent());
         this.file = fastShutdownMarkerFile;
         this.terminal = terminal;
         this.server = server;
+    }
+
+    // true if the fast shutdown file was detected and the server will be stopped
+    boolean isStopping() {
+        return shutdownStarted;
     }
 
     @Override
@@ -49,6 +55,7 @@ class FastShutdownFileWatcher extends AbstractFileWatchingService {
         ServerProcess process = server.get();
         if (process != null) {
             terminal.println("Fast shutdown marker detected. Killing Elasticsearch...");
+            shutdownStarted = true;
             process.forceStop();
         }
     }
