@@ -904,7 +904,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
     protected ServerlessServerCli newCommand() {
         return new ServerlessServerCli() {
             @Override
-            protected Command loadTool(String toolname, String libs) {
+            protected Command loadTool(Map<String, String> sysprops, String toolname, String libs) {
                 return new EnvironmentAwareCommand("NO-OP") {
                     @Override
                     public void execute(Terminal terminal, OptionSet options, Environment env, ProcessInfo processInfo) {}
