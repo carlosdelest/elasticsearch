@@ -160,6 +160,3 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
-- class: co.elastic.elasticsearch.serverless.security.privilege.ServerlessSupportedPrivilegesRegistryTests
-  method: testSupportedClusterPrivileges
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3746
