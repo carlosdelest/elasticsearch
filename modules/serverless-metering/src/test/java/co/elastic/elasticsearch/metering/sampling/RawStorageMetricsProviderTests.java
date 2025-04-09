@@ -24,7 +24,6 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.S
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingStatus;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
-import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;

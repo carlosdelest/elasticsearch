@@ -28,7 +28,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.stream.Stream;
 
 public record Activity(
@@ -40,7 +40,7 @@ public record Activity(
 
     public static Activity EMPTY = new Activity(Instant.EPOCH, Instant.EPOCH, Instant.EPOCH, Instant.EPOCH);
 
-    public static ActiveInfo DEFAULT_NOT_ACTIVE = new Activity.ActiveInfo(false, Instant.EPOCH);
+    public static Snapshot DEFAULT_NOT_ACTIVE = new Snapshot(false, Instant.EPOCH);
 
     public Activity {
         assert lastActivityRecentPeriod.isBefore(firstActivityRecentPeriod) == false;
@@ -57,8 +57,8 @@ public record Activity(
         return new Activity(now, now, lastActivityRecentPeriod, firstActivityRecentPeriod);
     }
 
-    public boolean isActive(Instant now, Duration coolDown) {
-        return lastActivityRecentPeriod.plus(coolDown).isAfter(now);
+    public boolean isBeforeLastCoolDownExpires(Instant now, Duration coolDown) {
+        return now.isAfter(lastActivityRecentPeriod.plus(coolDown)) == false;
     }
 
     public boolean isEmpty() {
@@ -73,31 +73,68 @@ public record Activity(
         return firstActivityPreviousPeriod.isAfter(Instant.EPOCH) ? firstActivityPreviousPeriod : firstActivityRecentPeriod;
     }
 
-    public record ActiveInfo(boolean active, Instant lastActivityTime) {};
+    public record Snapshot(boolean active, Instant lastActivity) {
+        public void appendToUsageMetadata(Map<String, String> usageMetadata, String activeFieldName, String lastActivityFieldName) {
+            usageMetadata.put(activeFieldName, Boolean.toString(active));
+            if (lastActivity.equals(Instant.EPOCH)) {
+                // when backfilling, any previous activity timestamp has to be removed
+                usageMetadata.remove(lastActivityFieldName);
+            } else {
+                usageMetadata.put(lastActivityFieldName, lastActivity.toString());
+            }
+        }
+    };
 
     /**
-     * Show the activity state of a time during or after this Activity.
+     * Get the activity snapshot of a time during or after this Activity.
      * If the time is before this Activity, or this Activity is empty, return empty.
      *
      * @param timestamp point in time to check for activity
      * @param coolDown cool down period
-     * @return the activity state at timestamp
+     * @return the activity snapshot at timestamp
      */
-    public Optional<ActiveInfo> wasActive(Instant timestamp, Duration coolDown) {
-        var periods = toPeriods().toList();
+    public Snapshot activitySnapshot(Instant timestamp, Duration coolDown) {
+        return activitySnapshot(timestamp, null, coolDown);
+    }
+
+    /**
+     * Get the activity snapshot of a time during or after this Activity.
+     * If the time is before this Activity, or this Activity is empty, return empty.
+     *
+     * @param timestamp point in time to check for activity
+     * @param previousActivity previous known activity timestamp (before timestamp)
+     * @param coolDown cool down period
+     * @return the activity snapshot at timestamp
+     */
+    public Snapshot activitySnapshot(Instant timestamp, @Nullable Instant previousActivity, Duration coolDown) {
+        if (isEmpty()) {
+            return DEFAULT_NOT_ACTIVE;
+        }
+        if (lastActivityRecentPeriod.isAfter(timestamp) == false) {
+            boolean active = isBeforeLastCoolDownExpires(timestamp, coolDown);
+            return new Snapshot(active, lastActivityRecentPeriod);
+        }
         // iterate over periods in reverse chronological order
-        for (var period : periods) {
+        for (var period : (Iterable<Period>) toPeriods()::iterator) {
             if (timestamp.isAfter(period.last().plus(coolDown))) {
-                return Optional.of(new ActiveInfo(false, period.last()));
+                return new Snapshot(false, period.last());
             }
             if (timestamp.isAfter(period.last())) {
-                return Optional.of(new ActiveInfo(true, period.last()));
+                return new Snapshot(true, period.last());
             }
             if (timestamp.isBefore(period.first()) == false) {
-                return Optional.of(new ActiveInfo(true, timestamp));
+                return new Snapshot(true, timestamp);
             }
         }
-        return Optional.empty();
+
+        if (previousActivity != null
+            && timestamp.isBefore(previousActivity) == false
+            && timestamp.isAfter(previousActivity.plus(coolDown)) == false) {
+            // timestamp was not covered by activity record, but activity inferred from previous activity
+            return new Snapshot(true, previousActivity);
+        }
+
+        return DEFAULT_NOT_ACTIVE;
     }
 
     record Period(Instant last, Instant first) {

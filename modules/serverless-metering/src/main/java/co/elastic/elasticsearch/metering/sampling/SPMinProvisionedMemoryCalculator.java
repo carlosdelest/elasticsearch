@@ -17,7 +17,11 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.UsageMetadata;
+import co.elastic.elasticsearch.metrics.MetricValue;
+
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.indices.SystemIndices;
@@ -26,12 +30,43 @@ import org.elasticsearch.logging.Logger;
 import org.elasticsearch.monitor.fs.FsService;
 import org.elasticsearch.monitor.os.OsProbe;
 
+import java.util.Map;
+
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.SEARCH_POWER_MIN_SETTING;
 
 class SPMinProvisionedMemoryCalculator {
     private static final Logger logger = LogManager.getLogger(SPMinProvisionedMemoryCalculator.class);
 
-    record SPMinInfo(long provisionedMemory, long spMin, double storageRamRatio) {}
+    record SPMinInfo(long provisionedMemory, long spMin, double storageRamRatio) {
+        void appendToUsageMetadata(Map<String, String> usageMetadata) {
+            usageMetadata.put(UsageMetadata.SP_MIN_PROVISIONED_MEMORY, Long.toString(provisionedMemory));
+            usageMetadata.put(UsageMetadata.SP_MIN, Long.toString(spMin));
+            usageMetadata.put(UsageMetadata.SP_MIN_STORAGE_RAM_RATIO, Strings.format1Decimals(storageRamRatio, ""));
+        }
+
+        static SPMinInfo minOf(MetricValue sampleA, MetricValue sampleB) {
+            var memoryA = provisionedMemory(sampleA);
+            var memoryB = provisionedMemory(sampleB);
+            // Return the values associated with the smallest sp_min_provisioned_memory
+            return memoryA <= memoryB ? create(memoryA, sampleA) : create(memoryB, sampleB);
+        }
+
+        private static SPMinInfo create(long provisionedMemory, MetricValue sample) {
+            if (provisionedMemory == Long.MAX_VALUE) {
+                return null; // fallback if sp_min_provisioned_memory is not present
+            }
+            String spMin = sample.usageMetadata().get(UsageMetadata.SP_MIN);
+            String ratio = sample.usageMetadata().get(UsageMetadata.SP_MIN_STORAGE_RAM_RATIO);
+            assert spMin != null : "sp_min should be present";
+            assert ratio != null : "sp_min_storage_ram_ratio should be present";
+            return new SPMinInfo(provisionedMemory, Long.parseLong(spMin), Double.parseDouble(ratio));
+        }
+
+        private static long provisionedMemory(MetricValue sample) {
+            String memory = sample.usageMetadata().get(UsageMetadata.SP_MIN_PROVISIONED_MEMORY);
+            return memory == null ? Long.MAX_VALUE : Long.parseLong(memory);
+        }
+    }
 
     static SPMinProvisionedMemoryCalculator build(
         ClusterService clusterService,

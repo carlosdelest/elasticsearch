@@ -174,15 +174,26 @@ Code references:
 
 IX (index size) is a simpler storage metric, computed by summing the disk size occupied by segments on disk. Being based on the actual disk space occupied, this metric includes the deleted documents still present in segments on disk. The metric is sampled, so eventually when/if the deleted documents are cleaned up (e.g. after merging), the segments will occupy less space on disk, and we will report the new size at the next sample.
 
+IX usage metadata includes information about the search tier activity, as well as the per index SP min provisioned memory for the respective index in the search tier. These are relevant for inactivity billing of the search tier.
+
 **Note:**
 Closed indices are not included when metering IX. Closing an index requires Operator privileges and customers cannot do this themselves.
 If doing so on a customer's behalf, be aware that we will stop charging the customer for that index.
 
 #### Additional source metadata
 
-`source.metadata` for RA-S (`es_indexed_data`) contains:
+`source.metadata` for IX (`es_indexed_data`) contains:
 - `index`: the index name
 - `datastream`: the datastream name (optional, only if part of a datastream)
+
+#### Additional usage metadata
+
+`usage.metadata` for IX (`es_indexed_data`) contains:
+- `interactive_size`: the interactive (boosted) dataset size of this index.
+- `search_tier_active`: if the **search** tier is active during the current sampling period.
+- `search_tier_latest_activity_timestamp`: the timestamp (ISO-8601 formatted) of the last activity of the **search** tier.
+- `sp_min_provisioned_memory`: SP min provisioned RAM (bytes) of the corresponding index.
+- `sp_min`: minimum search power configured for the project.
 
 #### IX sample record
 
@@ -193,7 +204,14 @@ If doing so on a customer's behalf, be aware that we will stop charging the cust
     "usage": {
         "type": "es_indexed_data",
         "period_seconds": {reporting period, defaults to 300},
-        "quantity": {index size in bytes}
+        "quantity": {index size in bytes},
+        "metadata": {
+            "interactive_size": "{interactive size in bytes}",
+            "search_tier_active": "{true/false}",
+            "search_tier_latest_activity_timestamp": "{latest search tier activity timestamp}",
+            "sp_min_provisioned_memory": "{SP min provisioned RAM in bytes of the current index}",
+            "sp_min": "{minimum search power configured for the project}"
+        }
     },
     "source": {
         "id": "es-{node id}",

@@ -23,6 +23,9 @@ import org.elasticsearch.indices.SystemIndices;
 
 import java.util.Map;
 
+/**
+ * Source metadata keys used in usage records for metering.
+ */
 public interface SourceMetadata {
     String INDEX = "index";
     String SHARD = "shard";
@@ -60,5 +63,4 @@ public interface SourceMetadata {
         }
         return sourceMetadata;
     }
-
 }

@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.SourceMetadata;
-import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 

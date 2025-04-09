@@ -65,7 +65,7 @@ public class SampledClusterMetricsService {
     static final String NODE_INFO_TIER_SEARCH_ACTIVITY_TIME = "es.metering.node_info.tier.search.activity.time";
     static final String NODE_INFO_TIER_INDEX_ACTIVITY_TIME = "es.metering.node_info.tier.index.activity.time";
     private final ClusterService clusterService;
-    private final Duration coolDown;
+    private final Duration activityCoolDownPeriod;
     private final MeterRegistry meterRegistry;
     private final LongCounter collectionsTotalCounter;
     private final LongCounter collectionsErrorsCounter;
@@ -86,7 +86,7 @@ public class SampledClusterMetricsService {
         this.metricsState = new AtomicReference<>(new SamplingState(nodeStatus, SampledClusterMetrics.EMPTY));
 
         clusterService.addListener(this::clusterChanged);
-        this.coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
+        this.activityCoolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
 
         this.collectionsTotalCounter = meterRegistry.registerLongCounter(
             NODE_INFO_COLLECTIONS_TOTAL,
@@ -258,6 +258,14 @@ public class SampledClusterMetricsService {
         });
     }
 
+    Activity.Snapshot activitySnapshot(SampledTierMetrics tierMetrics) {
+        return tierMetrics.activity().activitySnapshot(Instant.now(), activityCoolDownPeriod);
+    }
+
+    Duration activityCoolDownPeriod() {
+        return activityCoolDownPeriod;
+    }
+
     private SampledClusterMetrics mergeSamplesWithUpdate(SampledClusterMetrics current, CollectClusterSamplesAction.Response response) {
         return new SampledClusterMetrics(
             mergeTierMetrics(current.searchTierMetrics(), response.getSearchTierMemorySize(), response.getSearchActivity()),
@@ -268,7 +276,7 @@ public class SampledClusterMetricsService {
     }
 
     private SampledTierMetrics mergeTierMetrics(SampledTierMetrics current, long newMemory, Activity newActivity) {
-        return new SampledTierMetrics(newMemory, Activity.merge(Stream.of(current.activity(), newActivity), coolDown));
+        return new SampledTierMetrics(newMemory, Activity.merge(Stream.of(current.activity(), newActivity), activityCoolDownPeriod));
     }
 
     private Map<ShardKey, ShardSample> removeStaleEntries(Map<ShardKey, ShardSample> shardInfoKeyShardInfoValueMap) {
@@ -306,12 +314,11 @@ public class SampledClusterMetricsService {
     }
 
     public Collection<SampledMetricsProvider> createSampledMetricsProviders(NodeEnvironment nodeEnvironment, SystemIndices systemIndices) {
-        var coolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
         var spMinProvisionedMemoryCalculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, nodeEnvironment);
         return List.of(
-            new IndexSizeMetricsProvider(this, clusterService, systemIndices),
+            new IndexSizeMetricsProvider(this, spMinProvisionedMemoryCalculator, clusterService, systemIndices),
             new RawStorageMetricsProvider(this, clusterService, systemIndices),
-            new SampledVCUMetricsProvider(this, coolDownPeriod, spMinProvisionedMemoryCalculator, meterRegistry)
+            new SampledVCUMetricsProvider(this, spMinProvisionedMemoryCalculator, meterRegistry)
         );
     }
 
@@ -372,17 +379,14 @@ public class SampledClusterMetricsService {
         var now = Instant.now();
         var activity = metrics.activity();
 
-        assert activity.lastActivityRecentPeriod().isBefore(now);
-        var isActive = activity.isActive(now, coolDown);
-
-        if (isActive) {
+        if (activity.isBeforeLastCoolDownExpires(now, activityCoolDownPeriod)) {
             long secondsActive = activity.firstActivityRecentPeriod().until(now, ChronoUnit.SECONDS);
             return new LongWithAttributes(secondsActive);
         } else if (activity.isEmpty()) {
             // Special case, inactive, but we don't know for how long
             return new LongWithAttributes(-1);
         } else {
-            long secondsInactive = activity.lastActivityRecentPeriod().plus(coolDown).until(now, ChronoUnit.SECONDS);
+            long secondsInactive = activity.lastActivityRecentPeriod().plus(activityCoolDownPeriod).until(now, ChronoUnit.SECONDS);
             return new LongWithAttributes(-secondsInactive);
         }
     }

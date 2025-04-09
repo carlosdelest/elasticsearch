@@ -15,7 +15,7 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-package co.elastic.elasticsearch.metering.usagereports;
+package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
@@ -25,7 +25,7 @@ import org.elasticsearch.test.ESTestCase;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy.INSTANCE;
+import static co.elastic.elasticsearch.metering.sampling.DefaultSampledMetricsBackfillStrategy.INSTANCE;
 import static java.time.temporal.ChronoUnit.DAYS;
 import static java.time.temporal.ChronoUnit.DECADES;
 import static java.time.temporal.ChronoUnit.HOURS;

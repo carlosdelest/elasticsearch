@@ -24,7 +24,6 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.S
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingStatus;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
-import co.elastic.elasticsearch.metering.usagereports.DefaultSampledMetricsBackfillStrategy;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;
@@ -66,11 +65,10 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
-import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.isA;
-import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -80,6 +78,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
 
     private ClusterService clusterService;
     private SystemIndices systemIndices;
+    private SPMinProvisionedMemoryCalculator spMinMemoryCalculator;
     private SampledClusterMetricsService metricsService;
     private IndexSizeMetricsProvider indexSizeMetricsProvider;
 
@@ -98,8 +97,19 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         when(clusterService.state()).thenReturn(clusterState);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
         systemIndices = mock(SystemIndices.class);
+        spMinMemoryCalculator = mockSPMinProvisionedMemoryCalculator();
+
         metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
-        indexSizeMetricsProvider = new IndexSizeMetricsProvider(metricsService, clusterService, systemIndices);
+        indexSizeMetricsProvider = new IndexSizeMetricsProvider(metricsService, spMinMemoryCalculator, clusterService, systemIndices);
+    }
+
+    private static SPMinProvisionedMemoryCalculator mockSPMinProvisionedMemoryCalculator() {
+        var spMinMemoryCalculator = mock(SPMinProvisionedMemoryCalculator.class);
+        // return total size as sp min provisioned storage
+        when(spMinMemoryCalculator.calculate(anyLong(), anyLong())).thenAnswer(
+            i -> new SPMinProvisionedMemoryCalculator.SPMinInfo(i.getArgument(1), 100, 10.0)
+        );
+        return spMinMemoryCalculator;
     }
 
     private void setMetricsServiceState(Instant lastSearchActivity, ShardKey shard, ShardSample sample, SamplingStatus... flags) {
@@ -132,11 +142,13 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         );
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
-        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, hasBackfillStrategy(isA(IndexSizeMetricsBackfillStrategy.class)));
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var indexIX = metrics.iterator().next();
         assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + shard1.indexName()));
+        assertThat(indexIX.value(), is(11L));
+        assertThat(indexIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
         assertThat(
             indexIX.sourceMetadata(),
             allOf(
@@ -145,8 +157,14 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
                 hasEntry("hidden_index", Boolean.toString(isHidden))
             )
         );
-        assertThat(indexIX.value(), is(11L));
-        assertThat(indexIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
+        assertThat(
+            indexIX.usageMetadata(),
+            allOf(
+                hasEntry("interactive_size", "11"),
+                hasEntry("sp_min_provisioned_memory", "11"),
+                hasEntry("search_tier_active", Boolean.toString(isActive))
+            )
+        );
     }
 
     public void testSystemMetrics() {
@@ -168,14 +186,18 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
 
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
-        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, hasBackfillStrategy(isA(IndexSizeMetricsBackfillStrategy.class)));
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var indexIX = metrics.iterator().next();
         assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + shard1.indexName()));
-        assertThat(indexIX.sourceMetadata(), allOf(hasEntry("index", shard1.indexName()), hasEntry("system_index", "true")));
         assertThat(indexIX.value(), is(11L));
         assertThat(indexIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
+        assertThat(indexIX.sourceMetadata(), allOf(hasEntry("index", shard1.indexName()), hasEntry("system_index", "true")));
+        assertThat(
+            indexIX.usageMetadata(),
+            allOf(hasEntry("interactive_size", "11"), hasEntry("sp_min_provisioned_memory", "11"), hasEntry("search_tier_active", "true"))
+        );
     }
 
     public void testGetMetricsWithNoSize() {
@@ -195,7 +217,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         );
 
         var metricValues = indexSizeMetricsProvider.getMetrics();
-        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class))));
+        assertThat(metricValues, isPresentWith(hasBackfillStrategy(isA(IndexSizeMetricsBackfillStrategy.class))));
 
         Collection<MetricValue> metrics = iterableToList(metricValues.orElseThrow(elementMustBePresent));
         assertThat(metrics, empty());
@@ -225,14 +247,17 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
 
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
-        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, hasBackfillStrategy(isA(IndexSizeMetricsBackfillStrategy.class)));
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var metric = metrics.iterator().next();
         assertThat(metric.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
-        assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
-        assertThat(metric.sourceMetadata(), not(hasKey("shard")));
         assertThat(metric.value(), is(145L));
+        assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
+        assertThat(
+            metric.usageMetadata(),
+            allOf(hasEntry("interactive_size", "145"), hasEntry("sp_min_provisioned_memory", "145"), hasEntry("search_tier_active", "true"))
+        );
     }
 
     public void testMultipleIndicesWithMixedSizeType() {
@@ -263,13 +288,20 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
 
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
 
-        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, hasBackfillStrategy(isA(IndexSizeMetricsBackfillStrategy.class)));
         assertThat(metrics, transformedMatch(Iterables::size, is(5L)));
         for (MetricValue metric : metrics) {
             assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + baseIndexName));
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
-            assertThat(metric.sourceMetadata(), not(hasKey("shard")));
             assertThat(metric.value(), is(145L));
+            assertThat(
+                metric.usageMetadata(),
+                allOf(
+                    hasEntry("interactive_size", "145"),
+                    hasEntry("sp_min_provisioned_memory", "145"),
+                    hasEntry("search_tier_active", "true")
+                )
+            );
         }
     }
 
@@ -295,7 +327,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         setMetricsServiceState(Instant.now(), Maps.ofEntries(shardsInfo), SamplingStatus.PARTIAL);
 
         var metrics = indexSizeMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
-        assertThat(metrics, hasBackfillStrategy(isA(DefaultSampledMetricsBackfillStrategy.class)));
+        assertThat(metrics, hasBackfillStrategy(isA(IndexSizeMetricsBackfillStrategy.class)));
 
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
         var metric = metrics.iterator().next();

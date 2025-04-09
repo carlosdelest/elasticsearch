@@ -33,11 +33,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.StreamSupport;
 
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
 public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
@@ -93,6 +95,14 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
             assertThat(
                 metric.source().metadata(),
                 allOf(hasEntry("index", "idx1"), hasEntry("system_index", "false"), hasEntry("hidden_index", "false"))
+            );
+            assertThat(
+                metric.usage().metadata(),
+                allOf(
+                    hasEntry("search_tier_active", "true"),
+                    hasEntry(is("interactive_size"), transformedMatch(Integer::parseInt, greaterThan(0))),
+                    hasEntry(is("sp_min_provisioned_memory"), transformedMatch(Integer::parseInt, greaterThan(0)))
+                )
             );
 
         }, 20, TimeUnit.SECONDS);

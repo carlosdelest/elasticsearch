@@ -35,16 +35,16 @@ import java.util.Set;
 
 import static co.elastic.elasticsearch.metering.TestUtils.hasBackfillStrategy;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
+import static co.elastic.elasticsearch.metering.UsageMetadata.ACTIVE;
+import static co.elastic.elasticsearch.metering.UsageMetadata.APPLICATION_TIER;
+import static co.elastic.elasticsearch.metering.UsageMetadata.LATEST_ACTIVITY_TIMESTAMP;
+import static co.elastic.elasticsearch.metering.UsageMetadata.SP_MIN;
+import static co.elastic.elasticsearch.metering.UsageMetadata.SP_MIN_PROVISIONED_MEMORY;
+import static co.elastic.elasticsearch.metering.UsageMetadata.SP_MIN_STORAGE_RAM_RATIO;
 import static co.elastic.elasticsearch.metering.sampling.SPMinProvisionedMemoryCalculator.SPMinInfo;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
-import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_ACTIVE;
-import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_APPLICATION_TIER;
-import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_LATEST_ACTIVITY_TIME;
-import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN;
-import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY;
-import static co.elastic.elasticsearch.metering.sampling.SampledVCUMetricsProvider.USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.equalTo;
@@ -101,7 +101,6 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
         var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
             metricsService,
-            Duration.ofMinutes(15),
             buildSpMinTestProvider(new SPMinInfo(spMinProvisionedMemory, DEFAULT_SP_MIN, 1.0)),
             MeterRegistry.NOOP
         );
@@ -129,15 +128,15 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
             metric1.usageMetadata(),
             equalTo(
                 Map.of(
-                    USAGE_METADATA_APPLICATION_TIER,
+                    APPLICATION_TIER,
                     "search",
-                    USAGE_METADATA_ACTIVE,
+                    ACTIVE,
                     "false",
-                    USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
+                    SP_MIN_PROVISIONED_MEMORY,
                     String.valueOf(spMinProvisionedMemory),
-                    USAGE_METADATA_SP_MIN,
+                    SP_MIN,
                     String.valueOf(DEFAULT_SP_MIN),
-                    USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO,
+                    SP_MIN_STORAGE_RAM_RATIO,
                     "1"
                 )
             )
@@ -147,7 +146,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
         assertThat(metric2.id(), equalTo(SampledVCUMetricsProvider.VCU_METRIC_ID_PREFIX + ":index"));
         assertThat(metric2.sourceMetadata(), equalTo(Map.of()));
-        assertThat(metric2.usageMetadata(), equalTo(Map.of(USAGE_METADATA_APPLICATION_TIER, "index", USAGE_METADATA_ACTIVE, "false")));
+        assertThat(metric2.usageMetadata(), equalTo(Map.of(APPLICATION_TIER, "index", ACTIVE, "false")));
         assertThat(metric2.value(), is(indexTierMemorySize));
         assertThat(metric1.meteredObjectCreationTime(), nullValue());
     }
@@ -182,7 +181,6 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
         var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
             metricsService,
-            Duration.ofMinutes(15),
             buildSpMinTestProvider(new SPMinInfo(spMinProvisionedMemory, DEFAULT_SP_MIN, 1.0)),
             MeterRegistry.NOOP
         );
@@ -210,17 +208,17 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
             metric1.usageMetadata(),
             equalTo(
                 Map.of(
-                    USAGE_METADATA_APPLICATION_TIER,
+                    APPLICATION_TIER,
                     "search",
-                    USAGE_METADATA_ACTIVE,
+                    ACTIVE,
                     "true",
-                    USAGE_METADATA_LATEST_ACTIVITY_TIME,
+                    LATEST_ACTIVITY_TIMESTAMP,
                     searchActivity.lastActivityRecentPeriod().toString(),
-                    USAGE_METADATA_SP_MIN_PROVISIONED_MEMORY,
+                    SP_MIN_PROVISIONED_MEMORY,
                     String.valueOf(spMinProvisionedMemory),
-                    USAGE_METADATA_SP_MIN,
+                    SP_MIN,
                     String.valueOf(DEFAULT_SP_MIN),
-                    USAGE_METADATA_SP_MIN_STORAGE_RAM_RATIO,
+                    SP_MIN_STORAGE_RAM_RATIO,
                     "1"
                 )
             )
@@ -234,11 +232,11 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
             metric2.usageMetadata(),
             equalTo(
                 Map.of(
-                    USAGE_METADATA_APPLICATION_TIER,
+                    APPLICATION_TIER,
                     "index",
-                    USAGE_METADATA_ACTIVE,
+                    ACTIVE,
                     "false",
-                    USAGE_METADATA_LATEST_ACTIVITY_TIME,
+                    LATEST_ACTIVITY_TIMESTAMP,
                     indexActivity.lastActivityRecentPeriod().toString()
                 )
             )
@@ -258,12 +256,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         long firstSpMin = randomIntBetween(0, 100);
         long secondSpMin = randomIntBetween(0, 100);
         var spMinProvider = buildSpMinTestProvider(new SPMinInfo(1, firstSpMin, 0.0), new SPMinInfo(2, secondSpMin, 0.0));
-        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
-            metricsService,
-            Duration.ofMinutes(15),
-            spMinProvider,
-            MeterRegistry.NOOP
-        );
+        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(metricsService, spMinProvider, MeterRegistry.NOOP);
 
         {
             var metricValues = sampledVCUMetricsProvider.getMetrics();
@@ -274,7 +267,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
                 .filter(m -> m.id().equals("vcu:search"))
                 .findFirst()
                 .orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent);
-            assertThat(metric.usageMetadata(), hasEntry(USAGE_METADATA_SP_MIN, String.valueOf(firstSpMin)));
+            assertThat(metric.usageMetadata(), hasEntry(SP_MIN, String.valueOf(firstSpMin)));
         }
 
         {
@@ -286,19 +279,14 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
                 .filter(m -> m.id().equals("vcu:search"))
                 .findFirst()
                 .orElseThrow(SampledVCUMetricsProviderTests::elementMustBePresent);
-            assertThat(metric.usageMetadata(), hasEntry(USAGE_METADATA_SP_MIN, String.valueOf(secondSpMin)));
+            assertThat(metric.usageMetadata(), hasEntry(SP_MIN, String.valueOf(secondSpMin)));
         }
     }
 
     public void testEmptyMetrics() {
         var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE); // empty initially
         var spMinProvisionedMemoryCalculator = mock(SPMinProvisionedMemoryCalculator.class);
-        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(
-            metricsService,
-            Duration.ofMinutes(15),
-            spMinProvisionedMemoryCalculator,
-            MeterRegistry.NOOP
-        );
+        var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(metricsService, spMinProvisionedMemoryCalculator, MeterRegistry.NOOP);
         var metricValues = sampledVCUMetricsProvider.getMetrics();
         assertThat(metricValues, isEmpty());
         verifyNoInteractions(spMinProvisionedMemoryCalculator);

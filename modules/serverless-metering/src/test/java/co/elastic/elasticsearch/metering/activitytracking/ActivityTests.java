@@ -24,9 +24,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
+
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 
 public class ActivityTests extends ESTestCase {
 
@@ -132,13 +134,13 @@ public class ActivityTests extends ESTestCase {
         assertEquals(new Activity(bLast2, aFirst2, bLast1, aFirst1), merged);
     }
 
-    public void testWasActiveEmpty() {
+    public void testActivitySnapshotEmpty() {
         var activity = Activity.EMPTY;
         // Currently we return unknown on EMPTY to allow a default of active=true, but perhaps this should change.
-        assertEquals(activity.wasActive(randomInstantBetween(Instant.EPOCH, Instant.now()), COOL_DOWN), Optional.empty());
+        assertEquals(activity.activitySnapshot(randomInstantBetween(Instant.EPOCH, Instant.now()), COOL_DOWN), Activity.DEFAULT_NOT_ACTIVE);
     }
 
-    public void testWasActiveSinglePeriod() {
+    public void testActivitySnapshotSinglePeriod() {
 
         var times = new TimeSequenceHelper(Instant.now());
         var last = times.current;
@@ -157,10 +159,10 @@ public class ActivityTests extends ESTestCase {
         assertActiveInfo(activity, first, true, first);
 
         // before first is unknown
-        assertEquals(activity.wasActive(first.minusMillis(1), COOL_DOWN), Optional.empty());
+        assertEquals(activity.activitySnapshot(first.minusMillis(1), COOL_DOWN), Activity.DEFAULT_NOT_ACTIVE);
     }
 
-    public void testWasActiveTwoPeriods() {
+    public void testActivitySnapshotTwoPeriods() {
         var times = new TimeSequenceHelper(Instant.now());
         var last2 = times.current;
         var duration2 = randomDuration(Duration.ofMinutes(1), Duration.ofDays(10));
@@ -194,14 +196,51 @@ public class ActivityTests extends ESTestCase {
         assertActiveInfo(activity, first1, true, first1);
 
         // before first1 is unknown
-        assertEquals(activity.wasActive(first1.minusMillis(1), COOL_DOWN), Optional.empty());
+        assertEquals(activity.activitySnapshot(first1.minusMillis(1), COOL_DOWN), Activity.DEFAULT_NOT_ACTIVE);
+    }
+
+    public void testWasActivityWithPreviousActivity() {
+        {
+            // Default (not active): timestamp not covered by activity, but after coolDown period of previous activity
+            var activity = ActivityTests.randomActivityNotEmpty();
+            var timestamp = activity.firstActivity().minus(ActivityTests.randomDuration(Duration.ofMillis(1), COOL_DOWN.multipliedBy(2)));
+            var previousActivity = timestamp.minus(ActivityTests.randomDuration(COOL_DOWN.plusMillis(1), COOL_DOWN.multipliedBy(2)));
+
+            assertThat(activity.activitySnapshot(timestamp, previousActivity, COOL_DOWN), is(Activity.DEFAULT_NOT_ACTIVE));
+        }
+        {
+            // Default (not active): timestamp not covered by activity, activity not empty, but no previous activity
+            var activity = ActivityTests.randomActivityNotEmpty();
+            var timestamp = activity.firstActivity().minus(ActivityTests.randomDuration(Duration.ofMillis(1), COOL_DOWN.multipliedBy(2)));
+
+            assertThat(activity.activitySnapshot(timestamp, null, COOL_DOWN), is(Activity.DEFAULT_NOT_ACTIVE));
+        }
+        {
+            // timestamp not covered by activity, but within coolDown period of previous activity
+            var activity = ActivityTests.randomActivityNotEmpty();
+            var timestamp = activity.firstActivity().minus(ActivityTests.randomDuration(Duration.ofMillis(1), COOL_DOWN.multipliedBy(2)));
+            var previousActivity = timestamp.minus(ActivityTests.randomDuration(Duration.ZERO, COOL_DOWN));
+
+            assertThat(
+                activity.activitySnapshot(timestamp, previousActivity, COOL_DOWN),
+                is(new Activity.Snapshot(true, previousActivity))
+            );
+        }
+        {
+            // backfill time covered by activity or after activity, expect same results as `wasActive` function
+            var activity = ActivityTests.randomActivityNotEmpty();
+            Instant firstActivity = activity.firstActivity();
+            Instant lastActivity = activity.lastActivityRecentPeriod();
+            var timestamp = randomInstantBetween(firstActivity, lastActivity.plus(COOL_DOWN.multipliedBy(2)));
+            assertThat(
+                activity.activitySnapshot(timestamp, Instant.EPOCH, COOL_DOWN),
+                equalTo(activity.activitySnapshot(timestamp, COOL_DOWN))
+            );
+        }
     }
 
     private void assertActiveInfo(Activity activity, Instant time, boolean expectedActivity, Instant expectedLastActivity) {
-        var activeInfo = activity.wasActive(time, COOL_DOWN);
-        assertTrue(activeInfo.isPresent());
-        assertEquals(activeInfo.get().active(), expectedActivity);
-        assertEquals(activeInfo.get().lastActivityTime(), expectedLastActivity);
+        assertThat(activity.activitySnapshot(time, COOL_DOWN), is(new Activity.Snapshot(expectedActivity, expectedLastActivity)));
     }
 
     public static <U> List<U> shuffle(List<U> input) {
