@@ -63,8 +63,26 @@ steps:
 
       - label: ":git: Merge patch/serverless-fix branches to main"
         if: build.env("ENVIRONMENT") == "production-noncanary" && build.env("DISABLE_PATCH_MERGE") != "true"
+        key: merge-patch-branches
         depends_on: production-noncanary-quality-gates
         command: ".buildkite/scripts/merge-patch-branches.sh"
+        soft_fail: true
         env:
           PROMOTED_COMMIT: ${SERVICE_VERSION}
           USE_GITHUB_CREDENTIALS: "true"
+      - label: ":slack: Prepare Slack notification if patch branch merge has failed"
+        depends_on: "merge-patch-branches"
+        command: |
+          if [ $(buildkite-agent step get "outcome" --step "merge-patch-branches") == "soft_failed" ]; then
+             cat <<- YAML | buildkite-agent pipeline upload
+             steps:
+               - label: "Notify about merging patch branch to main"
+                 soft_fail: true
+                 command: exit 1
+                 notify:
+                   - slack:
+                       channels: ["${TEAM_CHANNEL?}"]
+                       message: "Merging branch 'patch/serverless-fix' to 'main' has failed. Please check the build logs for more details."
+
+          YAML
+          fi
