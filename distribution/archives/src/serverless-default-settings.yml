@@ -8,6 +8,9 @@ logger.org.elasticsearch.repositories.blobstore.BlobStoreRepository.ShutdownLogg
 logger.org.elasticsearch.snapshots.SnapshotShardsService: DEBUG
 logger.org.elasticsearch.snapshots.SnapshotShardsService.ShardStatusConsistencyChecker: DEBUG
 
+# Enable LogsDB by default (original PR #3112)
+cluster.logsdb.enabled: true
+
 # allow more concurrent recoveries in serverless, since we wait for object store during recovery.
 cluster.routing.allocation.node_concurrent_recoveries: 6
 # also raise this for same reason, though we accept that translog replay may take a short while, requiring mainly
