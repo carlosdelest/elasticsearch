@@ -80,8 +80,7 @@ public class ServerlessRestControllerTests extends ESTestCase {
             client,
             mock(CircuitBreakerService.class),
             mock(UsageService.class),
-            TelemetryProvider.NOOP,
-            false
+            TelemetryProvider.NOOP
         );
         this.restHandler = new DummyRestHandler(randomAlphaOfLength(3) + "_" + randomAlphaOfLength(5));
     }

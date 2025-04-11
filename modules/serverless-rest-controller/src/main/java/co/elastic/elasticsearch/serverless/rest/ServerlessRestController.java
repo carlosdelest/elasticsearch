@@ -51,9 +51,6 @@ public class ServerlessRestController extends RestController {
     private static final String PROJECT_ID_REST_HEADER = "X-Elastic-Project-Id";
     private static final String PROJECT_ID_THREADCONTEXT_HEADER = "project.id";
 
-    // TODO: Remove this flag (and all the "log but don't fail" behaviour)
-    private final boolean logValidationErrorsAsWarnings;
-
     public ServerlessRestController(
         RestInterceptor restInterceptor,
         NodeClient client,
@@ -62,19 +59,7 @@ public class ServerlessRestController extends RestController {
         TelemetryProvider telemetryProvider
 
     ) {
-        this(restInterceptor, client, circuitBreakerService, usageService, telemetryProvider, false);
-    }
-
-    protected ServerlessRestController(
-        RestInterceptor restInterceptor,
-        NodeClient client,
-        CircuitBreakerService circuitBreakerService,
-        UsageService usageService,
-        TelemetryProvider telemetryProvider,
-        boolean logValidationErrorsAsWarnings
-    ) {
         super(restInterceptor, client, circuitBreakerService, usageService, telemetryProvider);
-        this.logValidationErrorsAsWarnings = logValidationErrorsAsWarnings;
     }
 
     @Override
@@ -112,12 +97,7 @@ public class ServerlessRestController extends RestController {
 
         if (errorSet != null) {
             final String message = "Parameter validation failed for [" + path + "]: " + Strings.collectionToDelimitedString(errorSet, "; ");
-            if (logValidationErrorsAsWarnings) {
-                // Temporary behaviour to soft-launch this validation
-                logger.warn(message);
-            } else {
-                throw new ElasticsearchStatusException(message, RestStatus.BAD_REQUEST);
-            }
+            throw new ElasticsearchStatusException(message, RestStatus.BAD_REQUEST);
         }
     }
 
