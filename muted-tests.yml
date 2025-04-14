@@ -164,8 +164,5 @@ tests:
   method: test {range.Invalid Boundaries, date nanos implicit casting SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3695
 - class: co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT
-  method: testUnpromotableRegisterCommitForRecoveryTracksAllBlobsPessimistically
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3756
-- class: co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT
   method: testDeleteIndexAfterFlush
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3768
