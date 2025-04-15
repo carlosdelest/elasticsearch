@@ -52,6 +52,7 @@ import org.elasticsearch.index.fielddata.FieldDataContext;
 import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.mapper.ArraySourceValueFetcher;
 import org.elasticsearch.index.mapper.BlockDocValuesReader;
+import org.elasticsearch.index.mapper.BlockDocValuesReader.DocValuesBlockLoader;
 import org.elasticsearch.index.mapper.BlockLoader;
 import org.elasticsearch.index.mapper.BlockSourceReader;
 import org.elasticsearch.index.mapper.DocumentParserContext;
@@ -431,6 +432,21 @@ public class DenseVectorFieldMapper extends FieldMapper {
                 return VectorUtil.dotProduct(vectorData.asByteVector(), vectorData.asByteVector());
             }
 
+            @Override
+            public DocValuesBlockLoader indexedBlockLoader(String fieldName) {
+                return null;
+            }
+
+            @Override
+            public DocValuesBlockLoader docValuesBlockLoader(String fieldName, int dimensions, IndexVersion indexVersionCreated) {
+                return null;
+            }
+
+            @Override
+            public BlockLoader sourceBlockLoader(String fieldName, MappedFieldType.BlockLoaderContext blContext) {
+                return null;
+            }
+
             private VectorData parseVectorArray(
                 DocumentParserContext context,
                 int dims,
@@ -673,6 +689,34 @@ public class DenseVectorFieldMapper extends FieldMapper {
             }
 
             @Override
+            public DocValuesBlockLoader indexedBlockLoader(String fieldName) {
+                return new BlockDocValuesReader.DenseVectorBlockLoader(fieldName);
+            }
+
+            @Override
+            public DocValuesBlockLoader docValuesBlockLoader(String fieldName, int dimensions, IndexVersion indexVersionCreated) {
+                return new BlockDocValuesReader.DenseVectorFromBinaryBlockLoader(fieldName, dimensions, indexVersionCreated);
+            }
+
+            @Override
+            public BlockLoader sourceBlockLoader(String fieldName, MappedFieldType.BlockLoaderContext blContext) {
+                BlockSourceReader.LeafIteratorLookup lookup = BlockSourceReader.lookupMatchingAll();
+                return new BlockSourceReader.FloatsBlockLoader(sourceValueFetcher(blContext.sourcePaths(fieldName)), lookup);
+            }
+
+            private SourceValueFetcher sourceValueFetcher(Set<String> sourcePaths) {
+                return new SourceValueFetcher(sourcePaths, null) {
+                    @Override
+                    protected Object parseSourceValue(Object value) {
+                        if (value.equals("")) {
+                            return null;
+                        }
+                        return NumberFieldMapper.NumberType.FLOAT.parse(value, false);
+                    }
+                };
+            }
+
+            @Override
             public void parseKnnVectorAndIndex(DocumentParserContext context, DenseVectorFieldMapper fieldMapper) throws IOException {
                 int index = 0;
                 float[] vector = new float[fieldMapper.fieldType().dims];
@@ -849,6 +893,21 @@ public class DenseVectorFieldMapper extends FieldMapper {
                     ++i;
                 }
                 return count;
+            }
+
+            @Override
+            public DocValuesBlockLoader indexedBlockLoader(String fieldName) {
+                return null;
+            }
+
+            @Override
+            public DocValuesBlockLoader docValuesBlockLoader(String fieldName, int dimensions, IndexVersion indexVersionCreated) {
+                return null;
+            }
+
+            @Override
+            public BlockLoader sourceBlockLoader(String fieldName, MappedFieldType.BlockLoaderContext blContext) {
+                return null;
             }
 
             private VectorData parseVectorArray(
@@ -1145,6 +1204,12 @@ public class DenseVectorFieldMapper extends FieldMapper {
         public static ElementType fromString(String name) {
             return valueOf(name.trim().toUpperCase(Locale.ROOT));
         }
+
+        public abstract DocValuesBlockLoader indexedBlockLoader(String fieldName);
+
+        public abstract DocValuesBlockLoader docValuesBlockLoader(String fieldName, int dimensions, IndexVersion indexVersionCreated);
+
+        public abstract BlockLoader sourceBlockLoader(String fieldName, MappedFieldType.BlockLoaderContext blContext);
     }
 
     public static final Map<String, ElementType> namesToElementType = Map.of(
@@ -2324,33 +2389,15 @@ public class DenseVectorFieldMapper extends FieldMapper {
 
         @Override
         public BlockLoader blockLoader(MappedFieldType.BlockLoaderContext blContext) {
-            if (elementType != ElementType.FLOAT) {
-                // Just float dense vector support for now
-                return null;
-            }
-
             if (indexed) {
-                return new BlockDocValuesReader.DenseVectorBlockLoader(name());
+                return getElementType().indexedBlockLoader(name());
             }
 
             if (hasDocValues() && (blContext.fieldExtractPreference() != FieldExtractPreference.STORED || isSyntheticSource)) {
-                return new BlockDocValuesReader.DenseVectorFromBinaryBlockLoader(name(), dims, indexVersionCreated);
+                return getElementType().docValuesBlockLoader(name(), dims, indexVersionCreated);
             }
 
-            BlockSourceReader.LeafIteratorLookup lookup = BlockSourceReader.lookupMatchingAll();
-            return new BlockSourceReader.FloatsBlockLoader(sourceValueFetcher(blContext.sourcePaths(name())), lookup);
-        }
-
-        private SourceValueFetcher sourceValueFetcher(Set<String> sourcePaths) {
-            return new SourceValueFetcher(sourcePaths, null) {
-                @Override
-                protected Object parseSourceValue(Object value) {
-                    if (value.equals("")) {
-                        return null;
-                    }
-                    return NumberFieldMapper.NumberType.FLOAT.parse(value, false);
-                }
-            };
+            return getElementType().sourceBlockLoader(name(), blContext);
         }
     }
 
