@@ -13,7 +13,7 @@ anything about it: it just works. Things like provisioning decisions, autoscalin
 all done without the user's involvement. Users are also charged based on shared resource usage, rather
 than for each server provisioned specially for a single user that has a price regardless of usage.
 
-[This paper](https://github.com/elastic/papers/blob/2025-serverless-elasticsearch/2025-serverless-elasticsearch/vldb2025-serverless-elasticsearch-submitted-paper.pdf) and [this video](https://docs.google.com/document/d/1U62Zdy6GgbRUBe6n9SSLlbHFH_qX9XkHgSahO3Mlzg8/edit?tab=t.0#heading=h.pv1cweplp2uq) introduce a high-level view of how Serverless Elasticsearch transitions data to a cloud object store.
+[This paper](https://github.com/elastic/papers/blob/2025-serverless-elasticsearch/2025-serverless-elasticsearch/vldb2025-serverless-elasticsearch-submitted-paper.pdf) and [this presentation](https://docs.google.com/document/d/1U62Zdy6GgbRUBe6n9SSLlbHFH_qX9XkHgSahO3Mlzg8/edit?tab=t.0#heading=h.pv1cweplp2uq) introduce a high-level view of how Serverless Elasticsearch transitions data to a cloud object store.
 
 ### Stateless Plugin
 
