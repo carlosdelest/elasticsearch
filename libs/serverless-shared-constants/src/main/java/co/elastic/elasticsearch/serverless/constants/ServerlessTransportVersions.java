@@ -33,6 +33,7 @@ public class ServerlessTransportVersions {
     static Set<Integer> IDS = new HashSet<>();
 
     // public static final TransportVersion EXAMPLE_SERVERLESS_VERSION = def(9_000_1_00);
+    public static final TransportVersion INDEXING_OPERATIONS_MEMORY_REQUIREMENTS = def(9_050_1_00);
 
     /*
      * STOP! READ THIS FIRST! No, really,
