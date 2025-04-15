@@ -66,7 +66,6 @@ import java.util.function.Function;
 
 import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_BEAM_WIDTH;
 import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat.DEFAULT_MAX_CONN;
-import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
@@ -2239,7 +2238,7 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
 
     @Override
     protected SyntheticSourceSupport syntheticSourceSupport(boolean ignoreMalformed) {
-        return new DenseVectorSyntheticSourceSupport();
+        return new DenseVectorSyntheticSourceSupport(elementType, dims);
     }
 
     @Override
@@ -2255,7 +2254,7 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
     @Override
     protected Function<Object, Object> loadBlockExpected(BlockReaderSupport blockReaderSupport, boolean columnReader) {
         DenseVectorFieldType ft = (DenseVectorFieldType) blockReaderSupport.mapper().fieldType(blockReaderSupport.loaderFieldName());
-        if (ft.getElementType() != ElementType.FLOAT) {
+        if (ft.getElementType() == ElementType.BIT) {
             return null;
         }
 
@@ -2264,14 +2263,27 @@ public class DenseVectorFieldMapperTests extends MapperTestCase {
 
     @Override
     protected Matcher<?> blockItemMatcher(Object expected) {
-        return equalTo(((Double) expected).floatValue());
+        Number expectedNumber = (Number) expected;
+        switch (elementType) {
+            case ElementType.FLOAT:
+                return equalTo(expectedNumber.floatValue());
+            case ElementType.BYTE, ElementType.BIT:
+                return equalTo(new BytesRef(new byte[] { expectedNumber.byteValue() }));
+        }
+        fail("Unexpected element type: " + elementType);
+        return null;
     }
 
     private static class DenseVectorSyntheticSourceSupport implements SyntheticSourceSupport {
-        private final int dims = between(5, 1000);
-        private final ElementType elementType = randomFrom(ElementType.BYTE, ElementType.FLOAT, ElementType.BIT);
+        private final int dims;
+        private final ElementType elementType;
         private final boolean indexed = randomBoolean();
         private final boolean indexOptionsSet = indexed && randomBoolean();
+
+        DenseVectorSyntheticSourceSupport(ElementType elementType, int dims) {
+            this.elementType = elementType;
+            this.dims = dims;
+        }
 
         @Override
         public SyntheticSourceExample example(int maxValues) throws IOException {

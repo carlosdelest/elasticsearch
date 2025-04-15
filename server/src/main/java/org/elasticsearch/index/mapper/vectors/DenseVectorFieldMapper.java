@@ -434,17 +434,30 @@ public class DenseVectorFieldMapper extends FieldMapper {
 
             @Override
             public DocValuesBlockLoader indexedBlockLoader(String fieldName) {
-                return null;
+                return new BlockDocValuesReader.DenseVectorByteBlockLoader(fieldName);
             }
 
             @Override
             public DocValuesBlockLoader docValuesBlockLoader(String fieldName, int dimensions, IndexVersion indexVersionCreated) {
-                return null;
+                return new BlockDocValuesReader.DenseVectorFromFBytesBinaryBlockLoader(fieldName, dimensions);
             }
 
             @Override
             public BlockLoader sourceBlockLoader(String fieldName, MappedFieldType.BlockLoaderContext blContext) {
-                return null;
+                BlockSourceReader.LeafIteratorLookup lookup = BlockSourceReader.lookupMatchingAll();
+                return new BlockSourceReader.FloatsBlockLoader(sourceValueFetcher(blContext.sourcePaths(fieldName)), lookup);
+            }
+
+            private SourceValueFetcher sourceValueFetcher(Set<String> sourcePaths) {
+                return new SourceValueFetcher(sourcePaths, null) {
+                    @Override
+                    protected Object parseSourceValue(Object value) {
+                        if (value.equals("")) {
+                            return null;
+                        }
+                        return NumberFieldMapper.NumberType.BYTE.parse(value, false);
+                    }
+                };
             }
 
             private VectorData parseVectorArray(
@@ -690,12 +703,12 @@ public class DenseVectorFieldMapper extends FieldMapper {
 
             @Override
             public DocValuesBlockLoader indexedBlockLoader(String fieldName) {
-                return new BlockDocValuesReader.DenseVectorBlockLoader(fieldName);
+                return new BlockDocValuesReader.DenseVectorFloatBlockLoader(fieldName);
             }
 
             @Override
             public DocValuesBlockLoader docValuesBlockLoader(String fieldName, int dimensions, IndexVersion indexVersionCreated) {
-                return new BlockDocValuesReader.DenseVectorFromBinaryBlockLoader(fieldName, dimensions, indexVersionCreated);
+                return new BlockDocValuesReader.DenseVectorFromFloatsBinaryBlockLoader(fieldName, dimensions, indexVersionCreated);
             }
 
             @Override

@@ -10,6 +10,7 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.lucene.index.BinaryDocValues;
+import org.apache.lucene.index.ByteVectorValues;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.FloatVectorValues;
 import org.apache.lucene.index.KnnVectorValues;
@@ -508,10 +509,10 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
         }
     }
 
-    public static class DenseVectorBlockLoader extends DocValuesBlockLoader {
+    public static class DenseVectorFloatBlockLoader extends DocValuesBlockLoader {
         private final String fieldName;
 
-        public DenseVectorBlockLoader(String fieldName) {
+        public DenseVectorFloatBlockLoader(String fieldName) {
             this.fieldName = fieldName;
         }
 
@@ -565,6 +566,83 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
                 float[] floats = floatVectorValues.vectorValue(iterator.index());
                 for (float aFloat : floats) {
                     builder.appendFloat(aFloat);
+                }
+                builder.endPositionEntry();
+            } else {
+                builder.appendNull();
+            }
+        }
+
+        @Override
+        public int docId() {
+            return iterator.docID();
+        }
+
+        @Override
+        public String toString() {
+            return "BlockDocValuesReader.FloatVectorValuesBlockReader";
+        }
+    }
+
+    public static class DenseVectorByteBlockLoader extends DocValuesBlockLoader {
+        private final String fieldName;
+
+        public DenseVectorByteBlockLoader(String fieldName) {
+            this.fieldName = fieldName;
+        }
+
+        @Override
+        public Builder builder(BlockFactory factory, int expectedCount) {
+            return factory.bytesRefs(expectedCount);
+        }
+
+        @Override
+        public AllReader reader(LeafReaderContext context) throws IOException {
+            ByteVectorValues byteVectorValues = context.reader().getByteVectorValues(fieldName);
+            if (byteVectorValues != null) {
+                return new ByteVectorValuesBlockReader(byteVectorValues);
+            }
+            return new ConstantNullsReader();
+        }
+    }
+
+    private static class ByteVectorValuesBlockReader extends BlockDocValuesReader {
+        private final ByteVectorValues byteVectorValues;
+        private final KnnVectorValues.DocIndexIterator iterator;
+
+        ByteVectorValuesBlockReader(ByteVectorValues byteVectorValues) {
+            this.byteVectorValues = byteVectorValues;
+            iterator = byteVectorValues.iterator();
+        }
+
+        @Override
+        public BlockLoader.Block read(BlockFactory factory, Docs docs) throws IOException {
+            // Doubles from doc values ensures that the values are in order
+            try (BlockLoader.BytesRefBuilder builder = factory.bytesRefsFromDocValues(docs.count())) {
+                for (int i = 0; i < docs.count(); i++) {
+                    int doc = docs.get(i);
+                    if (doc < iterator.docID()) {
+                        throw new IllegalStateException("docs within same block must be in order");
+                    }
+                    read(doc, builder);
+                }
+                return builder.build();
+            }
+        }
+
+        @Override
+        public void read(int docId, BlockLoader.StoredFields storedFields, Builder builder) throws IOException {
+            read(docId, (BlockLoader.BytesRefBuilder) builder);
+        }
+
+        private void read(int doc, BlockLoader.BytesRefBuilder builder) throws IOException {
+            if (iterator.advance(doc) == doc) {
+                builder.beginPositionEntry();
+                byte[] bytes = byteVectorValues.vectorValue(iterator.index());
+                BytesRef scratch = new BytesRef(bytes, 0, 1);
+                for (int i = 0; i < bytes.length; i++) {
+                    scratch.offset = i;
+                    builder.appendBytesRef(scratch);
                 }
                 builder.endPositionEntry();
             } else {
@@ -831,12 +909,12 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
         }
     }
 
-    public static class DenseVectorFromBinaryBlockLoader extends DocValuesBlockLoader {
+    public static class DenseVectorFromFloatsBinaryBlockLoader extends DocValuesBlockLoader {
         private final String fieldName;
         private final int dims;
         private final IndexVersion indexVersion;
 
-        public DenseVectorFromBinaryBlockLoader(String fieldName, int dims, IndexVersion indexVersion) {
+        public DenseVectorFromFloatsBinaryBlockLoader(String fieldName, int dims, IndexVersion indexVersion) {
             this.fieldName = fieldName;
             this.dims = dims;
             this.indexVersion = indexVersion;
@@ -853,18 +931,18 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
             if (docValues == null) {
                 return new ConstantNullsReader();
             }
-            return new DenseVectorFromBinary(docValues, dims, indexVersion);
+            return new DenseVectorFromFloatsBinary(docValues, dims, indexVersion);
         }
     }
 
-    private static class DenseVectorFromBinary extends BlockDocValuesReader {
+    private static class DenseVectorFromFloatsBinary extends BlockDocValuesReader {
         private final BinaryDocValues docValues;
         private final IndexVersion indexVersion;
         private final float[] scratch;
 
         private int docID = -1;
 
-        DenseVectorFromBinary(BinaryDocValues docValues, int dims, IndexVersion indexVersion) {
+        DenseVectorFromFloatsBinary(BinaryDocValues docValues, int dims, IndexVersion indexVersion) {
             this.docValues = docValues;
             this.scratch = new float[dims];
             this.indexVersion = indexVersion;
@@ -913,7 +991,90 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
 
         @Override
         public String toString() {
-            return "DenseVectorFromBinary.Bytes";
+            return "DenseVectorFromFloatsBinary.Bytes";
+        }
+    }
+
+    public static class DenseVectorFromFBytesBinaryBlockLoader extends DocValuesBlockLoader {
+        private final String fieldName;
+        private final int dims;
+
+        public DenseVectorFromFBytesBinaryBlockLoader(String fieldName, int dims) {
+            this.fieldName = fieldName;
+            this.dims = dims;
+        }
+
+        @Override
+        public Builder builder(BlockFactory factory, int expectedCount) {
+            return factory.bytesRefs(expectedCount);
+        }
+
+        @Override
+        public AllReader reader(LeafReaderContext context) throws IOException {
+            BinaryDocValues docValues = context.reader().getBinaryDocValues(fieldName);
+            if (docValues == null) {
+                return new ConstantNullsReader();
+            }
+            return new DenseVectorFromBytesBinary(docValues, dims);
+        }
+    }
+
+    private static class DenseVectorFromBytesBinary extends BlockDocValuesReader {
+        private final BinaryDocValues docValues;
+        private final int dims;
+
+        private int docID = -1;
+
+        DenseVectorFromBytesBinary(BinaryDocValues docValues, int dims) {
+            this.docValues = docValues;
+            this.dims = dims;
+        }
+
+        @Override
+        public BlockLoader.Block read(BlockFactory factory, Docs docs) throws IOException {
+            try (BlockLoader.BytesRefBuilder builder = factory.bytesRefs(docs.count())) {
+                for (int i = 0; i < docs.count(); i++) {
+                    int doc = docs.get(i);
+                    if (doc < docID) {
+                        throw new IllegalStateException("docs within same block must be in order");
+                    }
+                    read(doc, builder);
+                }
+                return builder.build();
+            }
+        }
+
+        @Override
+        public void read(int docId, BlockLoader.StoredFields storedFields, Builder builder) throws IOException {
+            read(docId, (BlockLoader.BytesRefBuilder) builder);
+        }
+
+        private void read(int doc, BlockLoader.BytesRefBuilder builder) throws IOException {
+            this.docID = doc;
+            if (false == docValues.advanceExact(doc)) {
+                builder.appendNull();
+                return;
+            }
+            BytesRef bytesRef = docValues.binaryValue();
+            assert bytesRef.length > 0;
+
+            builder.beginPositionEntry();
+            BytesRef scratch = new BytesRef(bytesRef.bytes, 0, 1);
+            for (int i = 0; i < dims; i++) {
+                scratch.offset = i;
+                builder.appendBytesRef(scratch);
+            }
+            builder.endPositionEntry();
+        }
+
+        @Override
+        public int docId() {
+            return docID;
+        }
+
+        @Override
+        public String toString() {
+            return "DenseVectorFromBytesBinary.Bytes";
         }
     }
 

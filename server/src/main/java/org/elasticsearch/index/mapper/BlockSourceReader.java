@@ -341,6 +341,45 @@ public abstract class BlockSourceReader implements BlockLoader.RowStrideReader {
         }
     }
 
+    public static class BytesBlockLoader extends SourceBlockLoader {
+        public BytesBlockLoader(ValueFetcher fetcher, LeafIteratorLookup lookup) {
+            super(fetcher, lookup);
+        }
+
+        @Override
+        public Builder builder(BlockFactory factory, int expectedCount) {
+            return factory.bytesRefs(expectedCount);
+        }
+
+        @Override
+        public RowStrideReader rowStrideReader(LeafReaderContext context, DocIdSetIterator iter) {
+            return new Bytes(fetcher, iter);
+        }
+
+        @Override
+        protected String name() {
+            return "Bytes";
+        }
+    }
+
+    private static class Bytes extends BlockSourceReader {
+        private BytesRef scratch = new BytesRef(1);
+
+        Bytes(ValueFetcher fetcher, DocIdSetIterator iter) {
+            super(fetcher, iter);
+        }
+
+        @Override
+        protected void append(BlockLoader.Builder builder, Object v) {
+            ((BlockLoader.BytesRefBuilder) builder).appendBytesRef(new BytesRef(((Number) v).byteValue()));
+        }
+
+        @Override
+        public String toString() {
+            return "BlockSourceReader.Bytes";
+        }
+    }
+
     /**
      * Load {@code int}s from {@code _source}.
      */
