@@ -330,7 +330,6 @@ public class ServerlessServerCli extends ServerCli {
             .withProcessInfo(processInfo)
             .withServerArgs(args)
             .withTempDir(tempDir)
-            .withWorkingDir(args.logsDir())
             .withJvmOptions(jvmOptions);
         return serverProcessBuilder.start();
     }
