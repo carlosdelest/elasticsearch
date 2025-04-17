@@ -163,4 +163,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {range.Invalid Boundaries, date nanos implicit casting SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3695
-
+- class: co.elastic.elasticsearch.serverless.ml.ClassificationIT
+  method: testClassification
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3783
