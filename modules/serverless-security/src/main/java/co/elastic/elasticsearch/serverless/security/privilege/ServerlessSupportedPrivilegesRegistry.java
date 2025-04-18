@@ -17,7 +17,6 @@
 
 package co.elastic.elasticsearch.serverless.security.privilege;
 
-import org.elasticsearch.cluster.metadata.DataStream;
 import org.elasticsearch.transport.TransportRequest;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authz.privilege.ClusterPrivilegeResolver;
@@ -75,10 +74,7 @@ public record ServerlessSupportedPrivilegesRegistry() {
 
     private static final Map<String, IndexPrivilege> SUPPORTED_INDEX_PRIVILEGES = combineSortedInOrder(
         Privilege.sortByAccessLevel(
-            Stream.of(
-                DataStream.isFailureStoreFeatureFlagEnabled() ? IndexPrivilege.READ_FAILURE_STORE : null,
-                DataStream.isFailureStoreFeatureFlagEnabled() ? IndexPrivilege.MANAGE_FAILURE_STORE : null
-            )
+            Stream.of(IndexPrivilege.READ_FAILURE_STORE, IndexPrivilege.MANAGE_FAILURE_STORE)
                 .filter(Objects::nonNull)
                 .map(ServerlessSupportedPrivilegesRegistry::nameWithPrivilegeEntry)
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue))
