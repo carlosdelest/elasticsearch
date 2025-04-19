@@ -169,3 +169,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3786
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlIT
+  method: test {p0=esql/10_basic/basic with documents_found}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3790
