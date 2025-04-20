@@ -172,3 +172,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlClientYamlIT
   method: test {p0=esql/10_basic/basic with documents_found}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3790
+- class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
+  method: testOnlyMasterNodePublishesIngestLoadMetrics
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3794
