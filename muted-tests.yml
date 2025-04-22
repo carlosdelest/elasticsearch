@@ -181,3 +181,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests
   method: testRegisterCommitForUnpromotableRecoveryAcquiresARefForAllBlobs
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3804
+- class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
+  method: testPushEqualityOnDefaultsTooBigToPush
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3805
