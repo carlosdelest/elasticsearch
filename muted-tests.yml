@@ -190,3 +190,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
   method: testPushCaseInsensitiveEqualityOnDefaults
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3808
+- class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
+  method: testRemoveIngestionLoadWhenNodeRemoved
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3810
