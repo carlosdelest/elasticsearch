@@ -178,3 +178,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3786
+- class: co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests
+  method: testRegisterCommitForUnpromotableRecoveryAcquiresARefForAllBlobs
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3804
