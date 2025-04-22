@@ -22,14 +22,12 @@ import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESTestCase;
-import org.elasticsearch.test.ESTestCase.WithoutSecurityManager;
 
 import java.util.Collections;
 import java.util.List;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 
-@WithoutSecurityManager
 public class ServerlessMachineDependentHeapTests extends ESTestCase {
     private static SystemMemoryInfo systemMemoryInGigabytes(double gigabytes) {
         return () -> (long) (gigabytes * 1024 * 1024 * 1024);
