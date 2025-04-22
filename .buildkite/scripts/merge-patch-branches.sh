@@ -74,6 +74,10 @@ Instructions can be found <a href='https://docs.elastic.dev/elasticsearch-team/s
   cd "$original_path" || exit
 }
 
+current_commit=$(git rev-parse HEAD)
+echo "[elasticsearch-serverless] Switch to main branch from detached HEAD: $current_commit"
+git checkout main
+
 echo "--- [elasticsearch] Merging $PATCH_BRANCH branch into main"
 ELASTICSEARCH_PROMOTED_COMMIT=$(git rev-parse $PROMOTED_COMMIT:elasticsearch)
 merge_patch_branch elasticsearch $ELASTICSEARCH_PROMOTED_COMMIT
