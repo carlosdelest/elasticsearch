@@ -6,12 +6,15 @@ source $scripts_dir/utils/misc.sh
 echo "--- Determining last succesful kibana e2e tests"
 KIBANA_BRANCH='main'
 INTAKE_PIPELINE_SLUG="kibana-elasticsearch-serverless-verify-and-promote"
-BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
-BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${KIBANA_BRANCH}&state=passed&per_page=100" | jq '. | map(. | select(.env.PUBLISH_DOCKER_TAG? == "true")) | .[0] | {id: .id, commit: .commit, url: .web_url}')
-KIBANA_BUILD_ID=$(echo ${BUILD_JSON} | jq -r '.id')
-KIBANA_COMMIT=$(echo ${BUILD_JSON} | jq -r '.commit')
 
-PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
+# Don't merge this back to main
+# BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
+# BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${KIBANA_BRANCH}&state=passed&per_page=100" | jq '. | map(. | select(.env.PUBLISH_DOCKER_TAG? == "true")) | .[0] | {id: .id, commit: .commit, url: .web_url}')
+
+KIBANA_BUILD_ID="01965ef5-4ae2-4c7b-9150-a9a3da8e8aab"
+KIBANA_COMMIT="c84380fe0137da7b83e83c92c1d6895a03026bcb"
+
+PROMOTED_BUILD_URL="https://buildkite.com/elastic/kibana-elasticsearch-serverless-verify-and-promote/builds/3401"
 
 echo "Last succesful kibana e2e test build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --style "info" --context "e2e-test-base"
 echo "Kibana: $KIBANA_COMMIT / $KIBANA_BRANCH" | buildkite-agent annotate --style "info" --context "kibana-version"
