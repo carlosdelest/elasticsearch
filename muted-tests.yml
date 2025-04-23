@@ -193,3 +193,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testRemoveIngestionLoadWhenNodeRemoved
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3810
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {string.MvStringNotEquals SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3815
