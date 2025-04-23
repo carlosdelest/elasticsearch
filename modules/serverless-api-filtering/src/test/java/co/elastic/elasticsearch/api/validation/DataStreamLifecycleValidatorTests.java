@@ -74,7 +74,7 @@ public class DataStreamLifecycleValidatorTests extends ESTestCase {
     }
 
     private DataStreamLifecycle randomLifecycle(boolean enabled) {
-        DataStreamLifecycle.Builder builder = DataStreamLifecycle.builder().enabled(enabled);
+        DataStreamLifecycle.Builder builder = DataStreamLifecycle.dataLifecycleBuilder().enabled(enabled);
         if (randomBoolean()) {
             builder.dataRetention(TimeValue.timeValueDays(randomIntBetween(10, 100)));
         }
