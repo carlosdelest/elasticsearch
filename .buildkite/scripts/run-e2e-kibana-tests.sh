@@ -8,7 +8,7 @@ KIBANA_BRANCH='main'
 INTAKE_PIPELINE_SLUG="kibana-elasticsearch-serverless-verify-and-promote"
 BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
 BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${KIBANA_BRANCH}&state=passed&per_page=100" | jq '. | map(. | select(.env.PUBLISH_DOCKER_TAG? == "true")) | .[0] | {id: .id, commit: .commit, url: .web_url}')
-KIBANA_BUILD_ID=$(echo ${BUILD_JSON} | jq -r '.id') # Introducing a temporary merge conflict here, just to ensure the patch release changes don't get merged here
+KIBANA_BUILD_ID=$(echo ${BUILD_JSON} | jq -r '.id')
 KIBANA_COMMIT=$(echo ${BUILD_JSON} | jq -r '.commit')
 
 PROMOTED_BUILD_URL=$(echo ${BUILD_JSON} | jq -r '.url')
