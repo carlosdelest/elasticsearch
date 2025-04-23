@@ -97,18 +97,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.upgrade.ServerlessCompletionsPostingExtensionRollingUpgradeIT
   method: testClusterUpgrade {upgradedNodes=3}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3396
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {date_nanos.Date nanos date extract SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3411
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {date_nanos.Date nanos date extract ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3412
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {date_nanos.Date nanos date extract ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3412
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {date_nanos.Date nanos date extract SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3411
 - class: co.elastic.elasticsearch.metering.codec.RAStorageDocValuesConsumerTests
   method: testAttributeWrittenWithAverageValue
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3446
@@ -151,18 +139,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=synonyms/110_synonyms_invalid/Load index with non existent synonyms set}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3687
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {range.Invalid Boundaries, date nanos ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3692
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {range.Invalid Boundaries, date nanos SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3693
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {range.Invalid Boundaries, date nanos implicit casting ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3694
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {range.Invalid Boundaries, date nanos implicit casting SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3695
 - class: co.elastic.elasticsearch.serverless.ml.ClassificationIT
   method: testClassification
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3783
