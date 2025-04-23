@@ -187,3 +187,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessReshardIT
   method: testReshardTargetWillEqualToPrimaryTermOfSource
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3821
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {string.MvStringNotEquals SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3823
