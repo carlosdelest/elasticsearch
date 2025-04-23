@@ -199,3 +199,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {string.MvStringNotEquals ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3816
+- class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
+  method: testPushInequalityOnDefaults
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3817
