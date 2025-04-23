@@ -190,3 +190,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {string.MvStringNotEquals SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3823
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {string.MvStringNotEquals ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3824
