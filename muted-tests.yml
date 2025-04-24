@@ -151,48 +151,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessCommitServiceTests
   method: testRegisterCommitForUnpromotableRecoveryAcquiresARefForAllBlobs
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3804
-- class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
-  method: testPushEqualityOnDefaultsTooBigToPush
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3805
-- class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
-  method: testPushEqualityOnDefaults
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3806
-- class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
-  method: testPushCaseInsensitiveEqualityOnDefaults
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3808
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testRemoveIngestionLoadWhenNodeRemoved
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3810
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {string.MvStringNotEquals SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3815
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {string.MvStringNotEquals ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3816
-- class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
-  method: testPushInequalityOnDefaults
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3817
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {string.MvStringNotEqualsFound ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3818
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {string.MvStringNotEqualsFound SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3819
-- class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
-  method: testPushInequalityOnDefaultsTooBigToPush
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3820
-- class: co.elastic.elasticsearch.stateless.StatelessReshardIT
-  method: testReshardTargetWillEqualToPrimaryTermOfSource
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3821
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {string.MvStringNotEquals SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3823
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {string.MvStringNotEquals ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3824
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {string.MvStringNotEquals ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3824
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {string.MvStringNotEquals SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3823
