@@ -82,6 +82,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
 
     @Before
     public void init() {
+        internalCluster().startNode();
         createNewFieldPipeline();
     }
 
