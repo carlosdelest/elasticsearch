@@ -154,3 +154,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testRemoveIngestionLoadWhenNodeRemoved
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3810
+- class: co.elastic.elasticsearch.stateless.StatelessPersistedStateIT
+  method: testTransportVersions
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3836
