@@ -78,18 +78,7 @@ public class GetTrainedModelsStatsResponseFilter extends ApiFilteringActionFilte
             return stats;
         } else {
             AssignmentStats.NodeStats rolledUpNodeStats = rollupNodeStats(nodeStatsList);
-            return new AssignmentStats(
-                stats.getDeploymentId(),
-                stats.getModelId(),
-                stats.getThreadsPerAllocation(),
-                stats.getNumberOfAllocations(),
-                stats.getAdaptiveAllocationsSettings(),
-                stats.getQueueCapacity(),
-                stats.getCacheSize(),
-                stats.getStartTime(),
-                List.of(rolledUpNodeStats),
-                stats.getPriority()
-            );
+            return new AssignmentStats(stats).setNodeStats(List.of(rolledUpNodeStats));
         }
     }
 
