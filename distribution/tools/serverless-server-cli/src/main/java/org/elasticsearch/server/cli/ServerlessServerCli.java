@@ -338,8 +338,8 @@ public class ServerlessServerCli extends ServerCli {
         return jvmOptions.stream().filter(x -> x.startsWith(optionPrefix)).findFirst().map(x -> x.substring(optionPrefix.length()));
     }
 
-    private static boolean isPathInLogs(String fileOrDirectoryName, Path logsDir) throws IOException {
-        var path = Paths.get(fileOrDirectoryName);
+    static boolean isPathInLogs(String fileOrDirectoryName, Path logsDir) throws IOException {
+        var path = Paths.get(fileOrDirectoryName).toAbsolutePath();
         var dir = Files.isDirectory(path) ? path : path.getParent();
         return Files.isSameFile(dir, logsDir);
     }

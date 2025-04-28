@@ -21,6 +21,7 @@ import co.elastic.elasticsearch.serverless.buildinfo.ServerlessBuildExtension;
 import joptsimple.OptionSet;
 import junit.framework.AssertionFailedError;
 
+import org.apache.lucene.tests.util.LuceneTestCase;
 import org.elasticsearch.Build;
 import org.elasticsearch.bootstrap.ServerArgs;
 import org.elasticsearch.cli.Command;
@@ -79,6 +80,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.startsWith;
 
+@LuceneTestCase.SuppressFileSystems("*")
 public class ServerlessServerCliTests extends CommandTestCase {
 
     private Path defaultSettingsFile;
@@ -548,6 +550,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
         Path targetPath = createEmptyTempDir();
         Path heapDumpDataPath = createEmptyTempDir();
         Path logsDir = createEmptyTempDir();
+        Path replayDir = createEmptyTempDir();
 
         var validTargetDir = createTempDir();
         var validLogsDir = createTempDir();
@@ -555,10 +558,7 @@ public class ServerlessServerCliTests extends CommandTestCase {
             serverlessCli.initializeOnExitDiagnosticsAction(
                 Map.of(ServerlessServerCli.DIAGNOSTICS_TARGET_PATH_SYSPROP, validTargetDir.toString()),
                 createMockServerArgs(validLogsDir),
-                List.of(
-                    ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo",
-                    ServerlessServerCli.FATAL_ERROR_LOG_FILE_JVM_OPT + "/not/existing/replays"
-                ),
+                List.of(ServerlessServerCli.HEAP_DUMP_PATH_JVM_OPT + "foo", ServerlessServerCli.FATAL_ERROR_LOG_FILE_JVM_OPT + replayDir),
                 terminal
             );
             assertThat(serverlessCli.onExitDiagnosticsAction, is(not(ServerlessServerCli.NO_OP_EXIT_ACTION)));
@@ -566,8 +566,9 @@ public class ServerlessServerCliTests extends CommandTestCase {
                 terminal.getErrorOutput(),
                 containsString(
                     Strings.format(
-                        "The fatal error log path [/not/existing/replays] is not set to the logs path [%s]; "
+                        "The fatal error log path [%s] is not set to the logs path [%s]; "
                             + "fatal error logs will not be added to the diagnostic bundle.",
+                        replayDir,
                         validLogsDir
                     )
                 )
@@ -823,6 +824,12 @@ public class ServerlessServerCliTests extends CommandTestCase {
         execute();
         String loggingConfig = Files.readString(loggingConfigFile);
         assertThat(loggingConfig, equalTo("file-log-config"));
+    }
+
+    public void testPathIsInLogs() throws IOException {
+        var tempDir = createTempDir();
+        assertFalse("File name without a directory", ServerlessServerCli.isPathInLogs("just.a.file.name", tempDir));
+        assertTrue("Directory with itself", ServerlessServerCli.isPathInLogs(tempDir.toString(), tempDir));
     }
 
     private static Settings emptySettings() {
