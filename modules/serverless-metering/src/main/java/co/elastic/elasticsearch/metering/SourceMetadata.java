@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering;
 
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.common.util.Maps;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.SystemIndices;
 
 import java.util.Map;
@@ -34,23 +35,23 @@ public interface SourceMetadata {
     String HIDDEN_INDEX = "hidden_index";
     String PARTIAL = "partial";
 
-    static Map<String, String> indexSourceMetadata(String index, Map<String, IndexAbstraction> indicesLookup, SystemIndices systemIndices) {
+    static Map<String, String> indexSourceMetadata(Index index, Map<String, IndexAbstraction> indicesLookup, SystemIndices systemIndices) {
         return indexSourceMetadata(index, indicesLookup, systemIndices, false);
     }
 
     static Map<String, String> indexSourceMetadata(
-        String index,
+        Index index,
         Map<String, IndexAbstraction> indicesLookup,
         SystemIndices systemIndices,
         boolean isPartial
     ) {
         // note: this is intentionally not resolved via IndexAbstraction, see https://elasticco.atlassian.net/browse/ES-10384
-        final var isSystemIndex = systemIndices.isSystemIndex(index);
-        final var indexAbstraction = indicesLookup.get(index);
+        final var isSystemIndex = systemIndices.isSystemIndex(index.getName());
+        final var indexAbstraction = indicesLookup.get(index.getName());
         final var datastream = indexAbstraction != null ? indexAbstraction.getParentDataStream() : null;
 
         Map<String, String> sourceMetadata = Maps.newHashMapWithExpectedSize(5);
-        sourceMetadata.put(SourceMetadata.INDEX, index);
+        sourceMetadata.put(SourceMetadata.INDEX, index.getName());
         sourceMetadata.put(SourceMetadata.SYSTEM_INDEX, Boolean.toString(isSystemIndex));
         if (indexAbstraction != null) {
             sourceMetadata.put(SourceMetadata.HIDDEN_INDEX, Boolean.toString(indexAbstraction.isHidden()));

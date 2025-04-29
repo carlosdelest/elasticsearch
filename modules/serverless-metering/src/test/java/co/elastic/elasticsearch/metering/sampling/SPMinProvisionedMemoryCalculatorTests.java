@@ -26,6 +26,8 @@ import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.index.Index;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
@@ -129,10 +131,10 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
         when(systemIndices.isSystemIndex("my_system_index")).thenReturn(true);
 
         var shardSamples = Map.of(
-            new SampledClusterMetricsService.ShardKey("regular_index", 0),
-            randomShardSample(500, 1000),
-            new SampledClusterMetricsService.ShardKey("my_system_index", 0),
-            randomShardSample(200, 200)
+            new ShardId(new Index("regular_index", "uuid1"), 0),
+            shardInfoMetrics(500, 1000),
+            new ShardId(new Index("my_system_index", "uuid2"), 0),
+            shardInfoMetrics(200, 200)
 
         );
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
@@ -156,13 +158,13 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
         long totalInteractive = 0;
         long totalSize = 0;
         int numShards = between(1, 100);
-        Map<SampledClusterMetricsService.ShardKey, SampledClusterMetricsService.ShardSample> shardSamples = new HashMap<>();
+        Map<ShardId, ShardInfoMetrics> shardSamples = new HashMap<>();
         for (int i = 0; i < numShards; ++i) {
             long interactiveSize = between(1, 10_000);
             long nonInteractiveSize = between(1, 10_000);
             totalInteractive += interactiveSize;
             totalSize += interactiveSize + nonInteractiveSize;
-            shardSamples.put(randomShardKey(), randomShardSample(interactiveSize, interactiveSize + nonInteractiveSize));
+            shardSamples.put(randomShardId(), shardInfoMetrics(interactiveSize, interactiveSize + nonInteractiveSize));
         }
 
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
@@ -190,7 +192,7 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
         long provisionedRam
     ) {
         var clusterService = mockClusterService(true, spMin);
-        var shardSamples = Map.of(randomShardKey(), randomShardSample(interactiveSize, totalSize));
+        var shardSamples = Map.of(randomShardId(), shardInfoMetrics(interactiveSize, totalSize));
         var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
         var calculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, provisionedStorage, provisionedRam);
         long provisionedMemory = calculator.calculate(interactiveSize, totalSize).provisionedMemory();
@@ -238,15 +240,14 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
         return clusterService;
     }
 
-    private SampledClusterMetricsService.ShardKey randomShardKey() {
-        return new SampledClusterMetricsService.ShardKey(randomUUID(), randomInt());
+    private ShardId randomShardId() {
+        return new ShardId(new Index(randomAlphaOfLength(8), randomUUID()), randomInt());
     }
 
-    private static SampledClusterMetricsService.ShardSample randomShardSample(long interactiveSizeInBytes, long totalSizeInBytes) {
+    private static ShardInfoMetrics shardInfoMetrics(long interactiveSizeInBytes, long totalSizeInBytes) {
         var nonInteractiveSizeInBytes = totalSizeInBytes - interactiveSizeInBytes;
-        return new SampledClusterMetricsService.ShardSample(
-            randomUUID(),
-            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(0, interactiveSizeInBytes, nonInteractiveSizeInBytes, 0).build()
-        );
+        return ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+            .withData(0, interactiveSizeInBytes, nonInteractiveSizeInBytes, 0)
+            .build();
     }
 }

@@ -17,8 +17,8 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
+import org.elasticsearch.index.Index;
+import org.elasticsearch.index.shard.ShardId;
 
 import java.time.Instant;
 import java.util.Map;
@@ -27,10 +27,11 @@ import java.util.stream.Collector;
 import static java.util.stream.Collectors.groupingBy;
 
 final class IndexInfoMetrics {
-    private static final Collector<Map.Entry<ShardKey, ShardSample>, ?, Map<String, IndexInfoMetrics>> INDEX_SAMPLES_COLLECTOR = groupingBy(
-        e -> e.getKey().indexName(),
-        Collector.of(IndexInfoMetrics::new, IndexInfoMetrics::accumulate, IndexInfoMetrics::combine)
-    );
+    private static final Collector<Map.Entry<ShardId, ShardInfoMetrics>, ?, Map<Index, IndexInfoMetrics>> INDEX_SAMPLES_COLLECTOR =
+        groupingBy(
+            e -> e.getKey().getIndex(),
+            Collector.of(IndexInfoMetrics::new, IndexInfoMetrics::accumulate, IndexInfoMetrics::combine)
+        );
 
     private Instant indexCreationDate;
     private long totalSize;
@@ -53,12 +54,12 @@ final class IndexInfoMetrics {
 
     private boolean hasRawStats = false;
 
-    public static Map<String, IndexInfoMetrics> calculateIndexSamples(Map<ShardKey, ShardSample> shardSamples) {
+    public static Map<Index, IndexInfoMetrics> calculateIndexSamples(Map<ShardId, ShardInfoMetrics> shardSamples) {
         return shardSamples.entrySet().stream().collect(INDEX_SAMPLES_COLLECTOR);
     }
 
-    private void accumulate(Map.Entry<ShardKey, ShardSample> t) {
-        var shardInfo = t.getValue().shardInfo();
+    private void accumulate(Map.Entry<ShardId, ShardInfoMetrics> t) {
+        var shardInfo = t.getValue();
 
         totalSize += shardInfo.totalSizeInBytes();
         interactiveSize += shardInfo.interactiveSizeInBytes();

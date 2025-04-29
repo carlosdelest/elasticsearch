@@ -24,6 +24,7 @@ import co.elastic.elasticsearch.metering.reporter.RawStorageAccumulator;
 import co.elastic.elasticsearch.metering.reporter.RawStorageReporter;
 
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.plugins.internal.DocumentParsingProvider;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
@@ -51,16 +52,16 @@ public class MeteringDocumentParsingProvider implements DocumentParsingProvider 
 
     @Override
     public DocumentSizeReporter newDocumentSizeReporter(
-        String indexName,
+        Index index,
         MapperService mapperService,
         DocumentSizeAccumulator documentSizeAccumulator
     ) {
         if (meterRawStorage) {
             DocumentSizeReporter rawStorageReporter = new RawStorageReporter(documentSizeAccumulator, mapperService);
-            DocumentSizeReporter rawIngestReporter = new RawIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
+            DocumentSizeReporter rawIngestReporter = new RawIngestMetricReporter(index, ingestMetricsCollectorSupplier.get());
             return new CompositeDocumentSizeReporter(List.of(rawStorageReporter, rawIngestReporter));
         }
-        return new RawIngestMetricReporter(indexName, ingestMetricsCollectorSupplier.get());
+        return new RawIngestMetricReporter(index, ingestMetricsCollectorSupplier.get());
     }
 
     @Override

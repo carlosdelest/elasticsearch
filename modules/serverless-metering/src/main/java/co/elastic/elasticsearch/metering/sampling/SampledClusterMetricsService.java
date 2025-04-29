@@ -26,6 +26,7 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.env.NodeEnvironment;
@@ -128,25 +129,10 @@ public class SampledClusterMetricsService {
         STALE
     }
 
-    record ShardKey(String indexName, int shardId) {
-        @Override
-        public String toString() {
-            return indexName + ":" + shardId;
-        }
-
-        static ShardKey fromShardId(ShardId shardId) {
-            return new ShardKey(shardId.getIndexName(), shardId.id());
-        }
-    }
-
-    record ShardSample(String indexUUID, ShardInfoMetrics shardInfo) {
-        static final ShardSample EMPTY = new ShardSample(null, ShardInfoMetrics.EMPTY);
-    }
-
     record SampledClusterMetrics(
         SampledTierMetrics searchTierMetrics,
         SampledTierMetrics indexTierMetrics,
-        Map<ShardKey, ShardSample> shardSamples,
+        Map<ShardId, ShardInfoMetrics> shardSamples,
         Set<SamplingStatus> status
     ) implements SampledShardInfos {
 
@@ -158,8 +144,8 @@ public class SampledClusterMetricsService {
         );
 
         public ShardInfoMetrics get(ShardId shardId) {
-            var shardInfo = shardSamples.get(ShardKey.fromShardId(shardId));
-            return Objects.requireNonNullElse(shardInfo, ShardSample.EMPTY).shardInfo;
+            var shardInfo = shardSamples.get(shardId);
+            return Objects.requireNonNullElse(shardInfo, ShardInfoMetrics.EMPTY);
         }
 
         SampledClusterMetrics withAdditionalStatus(SamplingStatus newStatus) {
@@ -270,7 +256,7 @@ public class SampledClusterMetricsService {
         return new SampledClusterMetrics(
             mergeTierMetrics(current.searchTierMetrics(), response.getSearchTierMemorySize(), response.getSearchActivity()),
             mergeTierMetrics(current.indexTierMetrics(), response.getIndexTierMemorySize(), response.getIndexActivity()),
-            mergeShardInfos(removeStaleEntries(current.shardSamples()), response.getShardInfos()),
+            mergeShardInfos(current.shardSamples(), response.getShardInfos(), activeShardIds()),
             response.isComplete() ? EnumSet.noneOf(SamplingStatus.class) : EnumSet.of(SamplingStatus.PARTIAL)
         );
     }
@@ -279,20 +265,15 @@ public class SampledClusterMetricsService {
         return new SampledTierMetrics(newMemory, Activity.merge(Stream.of(current.activity(), newActivity), activityCoolDownPeriod));
     }
 
-    private Map<ShardKey, ShardSample> removeStaleEntries(Map<ShardKey, ShardSample> shardInfoKeyShardInfoValueMap) {
-        Set<ShardKey> activeShards = clusterService.state()
+    private Set<ShardId> activeShardIds() {
+        return clusterService.state()
             .globalRoutingTable()
             .routingTables()
             .values()
             .stream()
             .flatMap(RoutingTable::allShards)
-            .map(x -> ShardKey.fromShardId(x.shardId()))
-            .collect(Collectors.toUnmodifiableSet());
-
-        return shardInfoKeyShardInfoValueMap.entrySet()
-            .stream()
-            .filter(e -> activeShards.contains(e.getKey()))
-            .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+            .map(ShardRouting::shardId)
+            .collect(Collectors.toSet());
     }
 
     public <T> Optional<T> withSamplesIfReady(
@@ -322,37 +303,26 @@ public class SampledClusterMetricsService {
         );
     }
 
-    private static Map<ShardKey, ShardSample> mergeShardInfos(Map<ShardKey, ShardSample> current, Map<ShardId, ShardInfoMetrics> updated) {
-        HashMap<ShardKey, ShardSample> map = new HashMap<>(current);
+    // TODO Use index uuid for index related usage reporting and only remove unknown shards after successfully reporting
+    // all recently seen shards ES-10144
+    private static Map<ShardId, ShardInfoMetrics> mergeShardInfos(
+        Map<ShardId, ShardInfoMetrics> current,
+        Map<ShardId, ShardInfoMetrics> updated,
+        Set<ShardId> activeShardIds
+    ) {
+        HashMap<ShardId, ShardInfoMetrics> map = new HashMap<>(current);
+        map.keySet().retainAll(activeShardIds); // drop unknown / inactive shards
         for (var newEntry : updated.entrySet()) {
-            var shardKey = ShardKey.fromShardId(newEntry.getKey());
-            var shardValue = new ShardSample(newEntry.getKey().getIndex().getUUID(), newEntry.getValue());
+            // Note, previously we considered all updates to be active and only evicted them on the next iteration if still not active.
+            // This needs to be done using a more reliable lifecycle taking usage reporting success into account, see above.
 
-            map.merge(shardKey, shardValue, (oldValue, newValue) -> {
-                // In case there is a conflict, we need the index UUID from the original map value to decide what to do
-                var originalMapValue = current.get(shardKey);
-                if (originalMapValue == null) {
-                    // We have no entry from the current map; entries in the "updated" map cannot have the same UUID (this has been already
-                    // taken care of at Transport level), so we'll choose one "at random" (and eventually we'll get this correct at the
-                    // next round)
-                    return newValue;
-                } else {
-                    // oldValue is either the original value, or a value from the "updated" map we used to replace the original value
-
-                    // Same UUID -> compare mostRecent
-                    if (oldValue.indexUUID().equals(newValue.indexUUID())) {
-                        return oldValue.shardInfo.isMoreRecentThan(newValue.shardInfo) ? oldValue : newValue;
-                    }
-
-                    // oldValue and newValue have different UUIDs
-                    // "Do not go back" if newValue has the same UUID as the original
-                    if (newValue.indexUUID().equals(originalMapValue.indexUUID())) {
-                        return oldValue;
-                    }
-                    // We assume that a change in UUID means that the value is more recent than the one we already have.
-                    return newValue;
-                }
-            });
+            // For a transition period until tackling ES-10144 this ensures a consistent view on indices that doesn't contain any duplicate
+            // shards (if indices are equal by name, but different by uuid):
+            // `activeShardIds` retrieved from the routing tables won't ever include such duplicates.
+            if (activeShardIds.contains(newEntry.getKey())) {
+                // merge active shards into map
+                map.merge(newEntry.getKey(), newEntry.getValue(), (oldVal, newVal) -> newVal.mostRecent(oldVal));
+            }
         }
         return map;
     }

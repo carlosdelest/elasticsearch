@@ -129,10 +129,10 @@ class SPMinProvisionedMemoryCalculator {
         long boostedDataSetSize = 0;
         long totalDataSetSize = 0;
         for (var entry : currentInfo.shardSamples().entrySet()) {
-            if (systemIndices.isSystemIndex(entry.getKey().indexName())) {
+            if (systemIndices.isSystemIndex(entry.getKey().getIndexName())) {
                 continue; // temporarily skip system indices until VCU for inactivity is reported by index
             }
-            var shardInfo = entry.getValue().shardInfo();
+            var shardInfo = entry.getValue();
             boostedDataSetSize += shardInfo.interactiveSizeInBytes();
             totalDataSetSize += shardInfo.totalSizeInBytes();
         }

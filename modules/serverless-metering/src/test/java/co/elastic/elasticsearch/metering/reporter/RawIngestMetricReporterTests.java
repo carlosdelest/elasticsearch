@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.reporter;
 
 import co.elastic.elasticsearch.metering.IngestMetricsProvider;
 
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.plugins.internal.XContentMeteringParserDecorator;
 import org.elasticsearch.plugins.internal.XContentParserDecorator;
@@ -33,8 +34,8 @@ import static org.mockito.Mockito.when;
 
 public class RawIngestMetricReporterTests extends ESTestCase {
     IngestMetricsProvider ingestMetricsProvider = mock(IngestMetricsProvider.class);
-    String indexName = "indexName";
-    RawIngestMetricReporter rawIngestMetricReporter = new RawIngestMetricReporter(indexName, ingestMetricsProvider);
+    Index index = new Index("indexName", "uuid");
+    RawIngestMetricReporter rawIngestMetricReporter = new RawIngestMetricReporter(index, ingestMetricsProvider);
     ParsedDocument parsedDocument = mock(ParsedDocument.class);
     XContentParserDecorator parserDecorator = mock(XContentParserDecorator.class);
 
@@ -43,14 +44,14 @@ public class RawIngestMetricReporterTests extends ESTestCase {
         when(parsedDocument.getNormalizedSize()).thenReturn(XContentMeteringParserDecorator.UNKNOWN_SIZE);
         rawIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
-        verify(ingestMetricsProvider, times(0)).addIngestedDocValue(any(String.class), any(Long.class));
+        verify(ingestMetricsProvider, times(0)).addIngestedDocValue(any(Index.class), any(Long.class));
     }
 
     public void testMeteredValueIsReported() {
         when(parsedDocument.getNormalizedSize()).thenReturn(123L);
         rawIngestMetricReporter.onIndexingCompleted(parsedDocument);
 
-        verify(ingestMetricsProvider).addIngestedDocValue(eq(indexName), eq(123L));
+        verify(ingestMetricsProvider).addIngestedDocValue(eq(index), eq(123L));
     }
 
 }

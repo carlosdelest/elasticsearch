@@ -19,15 +19,16 @@ package co.elastic.elasticsearch.metering.reporter;
 
 import co.elastic.elasticsearch.metering.IngestMetricsProvider;
 
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
 
 public class RawIngestMetricReporter implements DocumentSizeReporter {
     private final IngestMetricsProvider ingestMetricsCollector;
-    private final String indexName;
+    private final Index index;
 
-    public RawIngestMetricReporter(String indexName, IngestMetricsProvider ingestMetricsCollector) {
-        this.indexName = indexName;
+    public RawIngestMetricReporter(Index index, IngestMetricsProvider ingestMetricsCollector) {
+        this.index = index;
         this.ingestMetricsCollector = ingestMetricsCollector;
     }
 
@@ -40,7 +41,7 @@ public class RawIngestMetricReporter implements DocumentSizeReporter {
     public void onIndexingCompleted(ParsedDocument parsedDocument) {
         var normalizedBytesParsed = parsedDocument.getNormalizedSize();
         if (normalizedBytesParsed > 0) {
-            this.ingestMetricsCollector.addIngestedDocValue(indexName, normalizedBytesParsed);
+            this.ingestMetricsCollector.addIngestedDocValue(index, normalizedBytesParsed);
         }
     }
 

@@ -116,6 +116,6 @@ public record ShardInfoMetrics(
     }
 
     public ShardInfoMetrics mostRecent(ShardInfoMetrics other) {
-        return isMoreRecentThan(other) ? this : other;
+        return other == null || isMoreRecentThan(other) ? this : other;
     }
 }

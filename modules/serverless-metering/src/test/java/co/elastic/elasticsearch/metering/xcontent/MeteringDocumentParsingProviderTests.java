@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering.xcontent;
 import co.elastic.elasticsearch.metering.IngestMetricsProvider;
 import co.elastic.elasticsearch.metering.reporter.RawIngestMetricReporter;
 
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.plugins.internal.DocumentSizeAccumulator;
 import org.elasticsearch.plugins.internal.DocumentSizeReporter;
@@ -33,7 +34,7 @@ public class MeteringDocumentParsingProviderTests extends ESTestCase {
     IngestMetricsProvider ingestMetricsProvider = Mockito.mock();
 
     public void testIndexIsReported() {
-        String testUserIndex = "testIndex";
+        var testUserIndex = new Index("testIndex", "uuid");
         MapperService mapperService = Mockito.mock(MapperService.class);
 
         MeteringDocumentParsingProvider meteringDocumentParsingProvider = new MeteringDocumentParsingProvider(

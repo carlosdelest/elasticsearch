@@ -26,6 +26,7 @@ import org.elasticsearch.cluster.ClusterStateSupplier;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.SystemIndices;
 
 import java.util.Iterator;
@@ -62,7 +63,7 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
     public static final String METRIC_TYPE = "es_raw_data";
 
     private final Logger logger = LogManager.getLogger(IngestMetricsProvider.class);
-    private final Map<String, AtomicLong> metrics = new ConcurrentHashMap<>();
+    private final Map<Index, AtomicLong> metrics = new ConcurrentHashMap<>();
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
     private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
@@ -76,7 +77,7 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
         this.systemIndices = systemIndices;
     }
 
-    private record SnapshotEntry(String key, long value) {}
+    private record SnapshotEntry(Index key, long value) {}
 
     @Override
     public MetricValues getMetrics() {
@@ -107,7 +108,7 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
         }, CounterMetricsProvider.NO_VALUES);
     }
 
-    void adjustMap(Map<String, AtomicLong> metrics, List<SnapshotEntry> metricsSnapshot) {
+    void adjustMap(Map<Index, AtomicLong> metrics, List<SnapshotEntry> metricsSnapshot) {
         for (var snapshotEntry : metricsSnapshot) {
             AtomicLong value = metrics.get(snapshotEntry.key);
             assert (value != null);
@@ -127,23 +128,23 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
         }
     }
 
-    public void addIngestedDocValue(String index, long size) {
+    public void addIngestedDocValue(Index index, long size) {
         try (ReleasableLock ignored = nonExclusiveLock.acquire()) {
             AtomicLong currentValue = metrics.computeIfAbsent(index, (ind) -> new AtomicLong());
             long newSize = currentValue.addAndGet(size);
 
-            logger.trace(() -> Strings.format("New ingested doc value %s for index %s, newValue %s", size, index, newSize));
+            logger.trace(() -> Strings.format("New ingested doc value %s for index %s, newValue %s", size, index.getName(), newSize));
         }
     }
 
     private static MetricValue metricValue(
         String nodeId,
-        String index,
+        Index index,
         long value,
         Map<String, IndexAbstraction> indicesLookup,
         SystemIndices systemIndices
     ) {
         var sourceMetadata = SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices);
-        return new MetricValue("ingested-doc:" + index + ":" + nodeId, METRIC_TYPE, sourceMetadata, value, null);
+        return new MetricValue("ingested-doc:" + index.getName() + ":" + nodeId, METRIC_TYPE, sourceMetadata, value, null);
     }
 }

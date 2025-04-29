@@ -24,6 +24,7 @@ import org.elasticsearch.cluster.ClusterStateSupplier;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.Matcher;
@@ -54,12 +55,13 @@ public class IngestMetricsProviderTests extends ESTestCase {
     private final SystemIndices systemIndices = mock();
 
     public void testMetricIdUniqueness() {
+        var index = new Index("index", "uuid");
         var ingestMetricsProvider1 = new IngestMetricsProvider("node1", clusterStateSupplier, systemIndices);
         var ingestMetricsProvider2 = new IngestMetricsProvider("node2", clusterStateSupplier, systemIndices);
 
-        ingestMetricsProvider1.addIngestedDocValue("index", 10);
+        ingestMetricsProvider1.addIngestedDocValue(index, 10);
 
-        ingestMetricsProvider2.addIngestedDocValue("index", 20);
+        ingestMetricsProvider2.addIngestedDocValue(index, 20);
 
         var first = ingestMetricsProvider1.getMetrics().iterator().next();
         var second = ingestMetricsProvider2.getMetrics().iterator().next();
@@ -71,9 +73,9 @@ public class IngestMetricsProviderTests extends ESTestCase {
     public void testGetMetrics() {
         final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterStateSupplier, systemIndices);
 
-        ingestMetricsProvider.addIngestedDocValue("index1", 10);
-        ingestMetricsProvider.addIngestedDocValue("index2", 20);
-        ingestMetricsProvider.addIngestedDocValue("system", 5);
+        ingestMetricsProvider.addIngestedDocValue(new Index("index1", "uuid1"), 10);
+        ingestMetricsProvider.addIngestedDocValue(new Index("index2", "uuid2"), 20);
+        ingestMetricsProvider.addIngestedDocValue(new Index("system", "uuid3"), 5);
 
         when(systemIndices.isSystemIndex("system")).thenReturn(true);
         mockedMetadata(
@@ -114,16 +116,20 @@ public class IngestMetricsProviderTests extends ESTestCase {
         final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterStateSupplier, systemIndices);
         final int docSize = randomIntBetween(1, 10);
 
-        ingestMetricsProvider.addIngestedDocValue("index1", docSize);
-        ingestMetricsProvider.addIngestedDocValue("index2", docSize);
-        ingestMetricsProvider.addIngestedDocValue("index3", docSize);
+        Index index1 = new Index("index1", "uuid1");
+        Index index2 = new Index("index2", "uuid2");
+        Index index3 = new Index("index3", "uuid3");
+
+        ingestMetricsProvider.addIngestedDocValue(index1, docSize);
+        ingestMetricsProvider.addIngestedDocValue(index2, docSize);
+        ingestMetricsProvider.addIngestedDocValue(index3, docSize);
 
         var metrics = ingestMetricsProvider.getMetrics();
         long valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(3L * docSize));
 
-        ingestMetricsProvider.addIngestedDocValue("index3", docSize);
+        ingestMetricsProvider.addIngestedDocValue(index3, docSize);
 
         metrics = ingestMetricsProvider.getMetrics();
         valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
@@ -142,9 +148,13 @@ public class IngestMetricsProviderTests extends ESTestCase {
         final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterStateSupplier, systemIndices);
         final long docSize = randomIntBetween(1, 10);
 
-        ingestMetricsProvider.addIngestedDocValue("index1", docSize);
-        ingestMetricsProvider.addIngestedDocValue("index2", docSize);
-        ingestMetricsProvider.addIngestedDocValue("index3", docSize);
+        Index index1 = new Index("index1", "uuid1");
+        Index index2 = new Index("index2", "uuid2");
+        Index index3 = new Index("index3", "uuid3");
+
+        ingestMetricsProvider.addIngestedDocValue(index1, docSize);
+        ingestMetricsProvider.addIngestedDocValue(index2, docSize);
+        ingestMetricsProvider.addIngestedDocValue(index3, docSize);
 
         var metrics = ingestMetricsProvider.getMetrics();
         long valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
@@ -153,15 +163,15 @@ public class IngestMetricsProviderTests extends ESTestCase {
         metrics.commit();
 
         final long docSize2 = randomIntBetween(1, 10);
-        ingestMetricsProvider.addIngestedDocValue("index3", docSize2);
+        ingestMetricsProvider.addIngestedDocValue(index3, docSize2);
 
         metrics = ingestMetricsProvider.getMetrics();
         valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
 
         assertThat(valueSum, equalTo(docSize2));
 
-        ingestMetricsProvider.addIngestedDocValue("index1", docSize2);
-        ingestMetricsProvider.addIngestedDocValue("index3", docSize2);
+        ingestMetricsProvider.addIngestedDocValue(index1, docSize2);
+        ingestMetricsProvider.addIngestedDocValue(index3, docSize2);
 
         metrics = ingestMetricsProvider.getMetrics();
         valueSum = iterableToList(metrics).stream().mapToLong(MetricValue::value).sum();
@@ -184,7 +194,7 @@ public class IngestMetricsProviderTests extends ESTestCase {
             writerThreadsCount,
             writeOpsPerThread,
             () -> 0,
-            t -> ingestMetricsProvider.addIngestedDocValue("index" + t, docSize),
+            t -> ingestMetricsProvider.addIngestedDocValue(new Index("index" + t, "uuid" + t), docSize),
             collectThreadsCount,
             () -> 0,
             () -> {
@@ -216,7 +226,7 @@ public class IngestMetricsProviderTests extends ESTestCase {
             writerThreadsCount,
             writeOpsPerThread,
             () -> randomIntBetween(10, 50),
-            t -> ingestMetricsProvider.addIngestedDocValue("index" + t, docSize),
+            t -> ingestMetricsProvider.addIngestedDocValue(new Index("index" + t, "uuid" + t), docSize),
             collectThreadsCount,
             () -> randomIntBetween(100, 200),
             () -> {

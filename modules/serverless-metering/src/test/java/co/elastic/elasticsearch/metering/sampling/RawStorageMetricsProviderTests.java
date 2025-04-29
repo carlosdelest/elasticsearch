@@ -22,8 +22,6 @@ import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingStatus;
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;
@@ -34,6 +32,8 @@ import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.common.util.iterable.Iterables;
+import org.elasticsearch.index.Index;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
@@ -105,11 +105,11 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         sampledStorageMetricsProvider = new RawStorageMetricsProvider(metricsService, clusterService, systemIndices);
     }
 
-    private void setMetricsServiceState(Instant lastSearchActivity, ShardKey shard, ShardSample sample, SamplingStatus... flags) {
+    private void setMetricsServiceState(Instant lastSearchActivity, ShardId shard, ShardInfoMetrics sample, SamplingStatus... flags) {
         setMetricsServiceState(lastSearchActivity, Map.of(shard, sample), flags);
     }
 
-    private void setMetricsServiceState(Instant lastSearchActivity, Map<ShardKey, ShardSample> data, SamplingStatus... flags) {
+    private void setMetricsServiceState(Instant lastSearchActivity, Map<ShardId, ShardInfoMetrics> data, SamplingStatus... flags) {
         var searchTier = new SampledTierMetrics(0L, new Activity(lastSearchActivity, lastSearchActivity, Instant.EPOCH, Instant.EPOCH));
         metricsService.metricsState.set(
             new SamplingState(THIS_NODE, new SampledClusterMetrics(searchTier, SampledTierMetrics.EMPTY, data, Set.of(flags)))
@@ -119,19 +119,16 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
     public void testGetMetrics() {
         var isActive = randomBoolean();
         var isHidden = randomBoolean();
-        var shard1 = new ShardKey("myIndex", 0);
+        var shard1 = new ShardId(new Index("myIndex", "uuid"), 0);
 
-        setMetadataIndicesLookup(mockedIndex(shard1.indexName(), false, isHidden));
+        setMetadataIndicesLookup(mockedIndex(shard1.getIndexName(), false, isHidden));
         setMetricsServiceState(
             isActive ? Instant.now() : Instant.EPOCH,
             shard1,
-            new ShardSample(
-                "myIndexUUID",
-                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
-                    .withData(110L, 11L, 0L, 11L)
-                    .withGeneration(1, 1, Instant.now().toEpochMilli())
-                    .build()
-            )
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                .withData(110L, 11L, 0L, 11L)
+                .withGeneration(1, 1, Instant.now().toEpochMilli())
+                .build()
         );
 
         var metrics = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
@@ -140,11 +137,11 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var indexRAS = metrics.iterator().next();
-        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + shard1.indexName()));
+        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + shard1.getIndexName()));
         assertThat(
             indexRAS.sourceMetadata(),
             allOf(
-                hasEntry("index", shard1.indexName()),
+                hasEntry("index", shard1.getIndexName()),
                 hasEntry("system_index", "false"),
                 hasEntry("hidden_index", Boolean.toString(isHidden))
             )
@@ -153,19 +150,16 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
     }
 
     public void testSystemMetrics() {
-        var shard1 = new ShardKey("mySystemIndex", 0);
+        var shard1 = new ShardId(new Index("mySystemIndex", "uuid"), 0);
 
-        when(systemIndices.isSystemIndex(shard1.indexName())).thenReturn(true);
+        when(systemIndices.isSystemIndex(shard1.getIndexName())).thenReturn(true);
         setMetricsServiceState(
             Instant.now(),
             shard1,
-            new ShardSample(
-                "myIndexUUID",
-                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
-                    .withData(110L, 11L, 0L, 11L)
-                    .withGeneration(1, 1, Instant.now().toEpochMilli())
-                    .build()
-            )
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                .withData(110L, 11L, 0L, 11L)
+                .withGeneration(1, 1, Instant.now().toEpochMilli())
+                .build()
         );
 
         var metrics = sampledStorageMetricsProvider.getMetrics().orElseThrow(elementMustBePresent);
@@ -174,25 +168,22 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var indexRAS = metrics.iterator().next();
-        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + shard1.indexName()));
-        assertThat(indexRAS.sourceMetadata(), allOf(hasEntry("index", shard1.indexName()), hasEntry("system_index", "true")));
+        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + shard1.getIndexName()));
+        assertThat(indexRAS.sourceMetadata(), allOf(hasEntry("index", shard1.getIndexName()), hasEntry("system_index", "true")));
         assertThat(indexRAS.value(), is(11L));
     }
 
     public void testGetMetricsWithNoSize() {
-        var shard1Id = new ShardKey("myIndex", 0);
+        var shard1Id = new ShardId(new Index("myIndex", "uuid"), 0);
         Instant creationDate = Instant.now();
 
         setMetricsServiceState(
             Instant.now(),
             shard1Id,
-            new ShardSample(
-                "myIndexUUID",
-                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
-                    .withData(110L, 0, 0L, 0)
-                    .withGeneration(1, 1, creationDate.toEpochMilli())
-                    .build()
-            )
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                .withData(110L, 0, 0L, 0)
+                .withGeneration(1, 1, creationDate.toEpochMilli())
+                .build()
         );
 
         var metricValues = sampledStorageMetricsProvider.getMetrics();
@@ -206,19 +197,16 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         String indexName = "myMultiShardIndex";
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardId = new ShardKey(indexName, id);
+            var shardId = new ShardId(new Index(indexName, "uuid"), id);
             var size = 10L + id;
             var hasIngestSize = id < 5;
             return entry(
                 shardId,
-                new ShardSample(
-                    indexName,
-                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
-                        .withData(110L, size, 0L, hasIngestSize ? size : 0L)
-                        .withGeneration(1, 1, creationDate.toEpochMilli())
-                        .withRawStats(id, 10L, id, 100L, 20L, 11L, 3, 3, 3 * id, 9 * id)
-                        .build()
-                )
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                    .withData(110L, size, 0L, hasIngestSize ? size : 0L)
+                    .withGeneration(1, 1, creationDate.toEpochMilli())
+                    .withRawStats(id, 10L, id, 100L, 20L, 11L, 3, 3, 3 * id, 9 * id)
+                    .build()
             );
         }).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (v1, v2) -> v1, LinkedHashMap::new));
 
@@ -251,23 +239,20 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
     public void testMultipleIndicesWithMixedSizeType() {
         String baseIndexName = "myMultiShardIndex";
         Instant creationDate = Instant.now();
-        var shardsInfo = new LinkedHashMap<ShardKey, ShardSample>();
+        var shardsInfo = new LinkedHashMap<ShardId, ShardInfoMetrics>();
         for (var indexIdx = 0; indexIdx < 5; indexIdx++) {
             var indexName = baseIndexName + indexIdx;
             for (var shardIdx = 0; shardIdx < 10; shardIdx++) {
-                var shardId = new ShardKey(indexName, shardIdx);
+                var shardId = new ShardId(new Index(indexName, "uuid"), shardIdx);
                 var size = 10L + shardIdx;
                 var hasIngestSize = indexIdx < 2;
                 shardsInfo.put(
                     shardId,
-                    new ShardSample(
-                        indexName,
-                        ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
-                            .withData(110L, size, 0L, hasIngestSize ? size : 0L)
-                            .withGeneration(1, 1, creationDate.toEpochMilli())
-                            .withRawStats(10, 10L, 8, 100L, 20L, 11L, 3, 10, 31, 163)
-                            .build()
-                    )
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                        .withData(110L, size, 0L, hasIngestSize ? size : 0L)
+                        .withGeneration(1, 1, creationDate.toEpochMilli())
+                        .withRawStats(10, 10L, 8, 100L, 20L, 11L, 3, 10, 31, 163)
+                        .build()
                 );
             }
         }
@@ -309,22 +294,19 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
     public void testMultipleIndicesWithMixedShardSizeType() {
         String baseIndexName = "myMultiShardIndex";
         Instant creationDate = Instant.now();
-        var shardsInfo = new LinkedHashMap<ShardKey, ShardSample>();
+        var shardsInfo = new LinkedHashMap<ShardId, ShardInfoMetrics>();
         for (var indexIdx = 0; indexIdx < 5; indexIdx++) {
             var indexName = baseIndexName + indexIdx;
             for (var shardIdx = 0; shardIdx < 10; shardIdx++) {
-                var shardId = new ShardKey(indexName, shardIdx);
+                var shardId = new ShardId(new Index(indexName, "uuid" + indexIdx), shardIdx);
                 var size = 10L + shardIdx;
                 var hasIngestSize = shardIdx < 5;
                 shardsInfo.put(
                     shardId,
-                    new ShardSample(
-                        indexName,
-                        ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
-                            .withData(110L, size, 0L, hasIngestSize ? size : 0)
-                            .withGeneration(1, 1, creationDate.toEpochMilli())
-                            .build()
-                    )
+                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                        .withData(110L, size, 0L, hasIngestSize ? size : 0)
+                        .withGeneration(1, 1, creationDate.toEpochMilli())
+                        .build()
                 );
             }
         }
@@ -349,17 +331,14 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         int failedShardId = 7;
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardKey = new ShardKey(indexName, id);
+            var shardKey = new ShardId(new Index(indexName, "uuid"), id);
             var size = failedShardId == id ? 0 : 10L + id;
             return entry(
                 shardKey,
-                new ShardSample(
-                    indexName,
-                    ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
-                        .withData(110L, size, 0L, size)
-                        .withGeneration(1, 1, creationDate.toEpochMilli())
-                        .build()
-                )
+                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder()
+                    .withData(110L, size, 0L, size)
+                    .withGeneration(1, 1, creationDate.toEpochMilli())
+                    .build()
             );
         }).toList();
 

@@ -25,6 +25,7 @@ import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -91,14 +92,14 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
     }
 
     private MetricValue ixIndexMetric(
-        String index,
+        Index index,
         IndexInfoMetrics indexInfo,
         Activity.Snapshot searchActivity,
         Map<String, IndexAbstraction> indicesLookup,
         boolean partial
     ) {
         return new MetricValue(
-            format("%s:%s", IX_INDEX_METRIC_ID_PREFIX, index),
+            format("%s:%s", IX_INDEX_METRIC_ID_PREFIX, index.getName()),
             IX_METRIC_TYPE,
             SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices, partial),
             ixUsageMetadata(indexInfo, searchActivity),

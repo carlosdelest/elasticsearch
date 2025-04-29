@@ -28,8 +28,6 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.S
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingStatus;
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardKey;
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.ShardSample;
 import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
 
 import org.elasticsearch.action.ActionListener;
@@ -74,7 +72,6 @@ import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.either;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
@@ -531,7 +528,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             )
         );
 
-        var clusterService = createMockClusterService(shardsInfo::keySet);
+        var clusterService = createMockClusterService(shardsInfo::keySet); // index of newShard3Id unknown to this node
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
         var initialShardInfo = service.getMeteringShardInfo();
@@ -563,8 +560,8 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             secondRoundShardInfo,
             containsShardInfos(
                 entry(shard1Id, withSizeInBytes(11L)),
-                entry(shard2Id, withSizeInBytes(12L)),
-                entry(shard3Id, withSizeInBytes(23L))
+                entry(shard2Id, withSizeInBytes(12L)), // shardsInfo2 contains older generation
+                entry(shard3Id, withSizeInBytes(13L))
             )
         );
 
@@ -573,58 +570,6 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
                 .getMeasurements(InstrumentType.LONG_COUNTER, SampledClusterMetricsService.NODE_INFO_COLLECTIONS_TOTAL)
         );
         assertThat(collections, contains(transformedMatch(Measurement::getLong, equalTo(2L))));
-    }
-
-    public void testShardInfoDiffUpdateWithTwoUnknownUUIDs() {
-        var shard1Id = new ShardId("index1", "index1UUID", 0);
-        var shard2Id = new ShardId("index1", "index1UUID", 1);
-
-        var shard3Id1 = new ShardId("index1", "index1UUID-1", 2);
-        var shard3Id2 = new ShardId("index1", "index1UUID-2", 2);
-
-        var shardsInfo = Map.ofEntries(
-            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
-            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build())
-        );
-
-        var shardsInfo2 = Map.ofEntries(
-            entry(
-                shard3Id1,
-                ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 1, 0).build()
-            ),
-            entry(shard3Id2, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 23L, 0L, 0).withGeneration(1, 1, 0).build())
-        );
-
-        var clusterService = createMockClusterService(shardsInfo::keySet);
-        var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
-        var initialShardInfo = service.getMeteringShardInfo();
-
-        var client = mock(Client.class);
-
-        doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
-            .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
-        service.updateSamples(client);
-        var firstRoundShardInfo = service.getMeteringShardInfo();
-
-        service.updateSamples(client);
-        var secondRoundShardInfo = service.getMeteringShardInfo();
-
-        assertThat(initialShardInfo, not(nullValue()));
-        assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
-
-        assertThat(firstRoundShardInfo, not(nullValue()));
-        assertThat(firstRoundShardInfo, containsShardInfos(entry(shard1Id, withSizeInBytes(11L)), entry(shard2Id, withSizeInBytes(12L))));
-
-        assertThat(
-            secondRoundShardInfo,
-            containsShardInfos(
-                entry(shard1Id, withSizeInBytes(11L)),
-                entry(shard2Id, withSizeInBytes(12L)),
-                entry(shard3Id2, either(withSizeInBytes(22L)).or(withSizeInBytes(23L)))
-            )
-        );
     }
 
     private ClusterService createMockClusterService(Supplier<Set<ShardId>> shardsInfo) {
@@ -639,63 +584,6 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         when(clusterService.state()).thenReturn(clusterState);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
         return clusterService;
-    }
-
-    public void testShardInfoDiffUpdateWithOneOldOneNewUUIDs() {
-        var shard1Id = new ShardId("index1", "index1UUID", 1);
-        var shard2Id = new ShardId("index1", "index1UUID", 2);
-
-        var shard3Id = new ShardId("index1", "index1UUID", 3);
-        var shard3Id1 = new ShardId("index1", "index1UUID-1", 3);
-
-        var shardsInfo = Map.ofEntries(
-            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
-            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build()),
-            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 13L, 0L, 0).withGeneration(1, 1, 0).build())
-        );
-
-        var shardsInfo2 = Map.ofEntries(
-            entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 2, 0).build()),
-            entry(shard3Id1, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 23L, 0L, 0).withGeneration(1, 1, 0).build())
-        );
-
-        var clusterService = createMockClusterService(shardsInfo::keySet);
-        var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
-        var initialShardInfo = service.getMeteringShardInfo();
-
-        var client = mock(Client.class);
-
-        doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
-            .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
-        service.updateSamples(client);
-        var firstRoundShardInfo = service.getMeteringShardInfo();
-
-        service.updateSamples(client);
-        var secondRoundShardInfo = service.getMeteringShardInfo();
-
-        assertThat(initialShardInfo, not(nullValue()));
-        assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
-
-        assertThat(firstRoundShardInfo, not(nullValue()));
-        assertThat(
-            firstRoundShardInfo,
-            containsShardInfos(
-                entry(shard1Id, withSizeInBytes(11L)),
-                entry(shard2Id, withSizeInBytes(12L)),
-                entry(shard3Id, withSizeInBytes(13L))
-            )
-        );
-
-        assertThat(
-            secondRoundShardInfo,
-            containsShardInfos(
-                entry(shard1Id, withSizeInBytes(11L)),
-                entry(shard2Id, withSizeInBytes(12L)),
-                entry(shard3Id, withSizeInBytes(23L))
-            )
-        );
     }
 
     public void testShardInfoUpdateWithLatest() {
@@ -933,38 +821,38 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
     }
 
     @SafeVarargs
-    private Matcher<SampledShardInfos> containsShardInfos(Map.Entry<ShardId, Matcher<ShardSample>>... entryMatchers) {
-        List<Matcher<Map<? extends ShardKey, ? extends ShardSample>>> matchers = new ArrayList<>(entryMatchers.length + 1);
+    private Matcher<SampledShardInfos> containsShardInfos(Map.Entry<ShardId, Matcher<ShardInfoMetrics>>... entryMatchers) {
+        List<Matcher<Map<? extends ShardId, ? extends ShardInfoMetrics>>> matchers = new ArrayList<>(entryMatchers.length + 1);
         matchers.add(aMapWithSize(entryMatchers.length));
         for (var entryMatcher : entryMatchers) {
-            matchers.add(hasEntry(is(ShardKey.fromShardId(entryMatcher.getKey())), entryMatcher.getValue()));
+            matchers.add(hasEntry(is(entryMatcher.getKey()), entryMatcher.getValue()));
         }
         return containsShardInfos(matchers);
     }
 
-    private Matcher<SampledShardInfos> containsShardInfos(Matcher<Map<? extends ShardKey, ? extends ShardSample>> matcher) {
+    private Matcher<SampledShardInfos> containsShardInfos(Matcher<Map<? extends ShardId, ? extends ShardInfoMetrics>> matcher) {
         return containsShardInfos(List.of(matcher));
     }
 
     @SuppressWarnings("unchecked") // required for allOf(matchers), safe to do here
-    private Matcher<SampledShardInfos> containsShardInfos(List<Matcher<Map<? extends ShardKey, ? extends ShardSample>>> matchers) {
-        return new FeatureMatcher<SampledShardInfos, Map<ShardKey, ShardSample>>(allOf((List) matchers), "shard infos", "shardInfos") {
+    private Matcher<SampledShardInfos> containsShardInfos(List<Matcher<Map<? extends ShardId, ? extends ShardInfoMetrics>>> matchers) {
+        return new FeatureMatcher<SampledShardInfos, Map<ShardId, ShardInfoMetrics>>(allOf((List) matchers), "shard infos", "shardInfos") {
             @Override
-            protected Map<ShardKey, ShardSample> featureValueOf(SampledShardInfos actual) {
+            protected Map<ShardId, ShardInfoMetrics> featureValueOf(SampledShardInfos actual) {
                 if (actual instanceof SampledClusterMetrics infos) {
                     return infos.shardSamples();
                 } else {
-                    throw new AssertionError("Expected CollectedMeteringShardInfos, but got " + actual.getClass());
+                    throw new AssertionError("Expected SampledClusterMetrics, but got " + actual.getClass());
                 }
             }
         };
     }
 
-    private Matcher<ShardSample> withSizeInBytes(final long expected) {
+    private Matcher<ShardInfoMetrics> withSizeInBytes(final long expected) {
         return new FeatureMatcher<>(equalTo(expected), "shard info with size", "size") {
             @Override
-            protected Long featureValueOf(ShardSample actual) {
-                return actual.shardInfo().totalSizeInBytes();
+            protected Long featureValueOf(ShardInfoMetrics actual) {
+                return actual.totalSizeInBytes();
             }
         };
     }

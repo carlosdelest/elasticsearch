@@ -24,6 +24,7 @@ import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.Maps;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -78,13 +79,13 @@ class RawStorageMetricsProvider implements SampledMetricsProvider {
     }
 
     private MetricValue rawStorageIndexMetric(
-        String index,
+        Index index,
         IndexInfoMetrics indexInfo,
         Map<String, IndexAbstraction> indicesLookup,
         boolean partial
     ) {
         return new MetricValue(
-            format("%s:%s", RA_S_METRIC_ID_PREFIX, index),
+            format("%s:%s", RA_S_METRIC_ID_PREFIX, index.getName()),
             RA_S_METRIC_TYPE,
             SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices, partial),
             rasUsageMetadata(indexInfo),
