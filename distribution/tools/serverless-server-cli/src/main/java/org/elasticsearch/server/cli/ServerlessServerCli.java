@@ -334,8 +334,11 @@ public class ServerlessServerCli extends ServerCli {
         return serverProcessBuilder.start();
     }
 
-    private static Optional<String> extractJvmOptionValue(String optionPrefix, List<String> jvmOptions) {
-        return jvmOptions.stream().filter(x -> x.startsWith(optionPrefix)).findFirst().map(x -> x.substring(optionPrefix.length()));
+    static Optional<String> extractJvmOptionValue(String optionPrefix, List<String> jvmOptions) {
+        return jvmOptions.stream()
+            .filter(x -> x.startsWith(optionPrefix))
+            .reduce((first, second) -> second)
+            .map(x -> x.substring(optionPrefix.length()));
     }
 
     static boolean isPathInLogs(String fileOrDirectoryName, Path logsDir) throws IOException {
@@ -358,6 +361,7 @@ public class ServerlessServerCli extends ServerCli {
             terminal.errorPrintln("The heap dump path is not correctly set; error diagnostic will not be saved.");
             return;
         }
+        terminal.println(Strings.format("Trying to use [%s] as heap dump data dir", heapDumpDataDir.get()));
         if (args.logsDir() == null || Files.isDirectory(args.logsDir()) == false) {
             terminal.errorPrintln(
                 Strings.format(
@@ -372,6 +376,7 @@ public class ServerlessServerCli extends ServerCli {
         var fatalErrorLogFile = extractJvmOptionValue(FATAL_ERROR_LOG_FILE_JVM_OPT, jvmOptions);
 
         if (replayFile.isPresent()) {
+            terminal.println(Strings.format("Trying to use [%s] as replay file", replayFile.get()));
             try {
                 if (isPathInLogs(replayFile.get(), args.logsDir()) == false) {
                     terminal.errorPrintln(
@@ -394,6 +399,7 @@ public class ServerlessServerCli extends ServerCli {
             }
         }
         if (fatalErrorLogFile.isPresent()) {
+            terminal.println(Strings.format("Trying to use [%s] as error file", fatalErrorLogFile.get()));
             try {
                 if (isPathInLogs(fatalErrorLogFile.get(), args.logsDir()) == false) {
                     terminal.errorPrintln(

@@ -65,7 +65,9 @@ import static org.elasticsearch.server.cli.ProcessUtil.nonInterruptibleVoid;
 import static org.elasticsearch.server.cli.ServerlessServerCli.DIAGNOSTICS_ACTION_TIMEOUT_SECONDS_SYSPROP;
 import static org.elasticsearch.server.cli.ServerlessServerCli.ONE_VCPU_SHARES;
 import static org.elasticsearch.server.cli.ServerlessServerCli.ONE_VCPU_WEIGHT;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresent;
+import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -830,6 +832,33 @@ public class ServerlessServerCliTests extends CommandTestCase {
         var tempDir = createTempDir();
         assertFalse("File name without a directory", ServerlessServerCli.isPathInLogs("just.a.file.name", tempDir));
         assertTrue("Directory with itself", ServerlessServerCli.isPathInLogs(tempDir.toString(), tempDir));
+    }
+
+    public void testExtractJvmOptionValueNoValue() {
+        var options = List.of("-other-option=foo", "another=bar");
+        assertThat(
+            "Empty when no matching option",
+            ServerlessServerCli.extractJvmOptionValue(ServerlessServerCli.FATAL_ERROR_LOG_FILE_JVM_OPT, options),
+            isEmpty()
+        );
+    }
+
+    public void testExtractJvmOptionValueSingleValue() {
+        var options = List.of("-other-option=baz", "-XX:ErrorFile=foo", "another=bar");
+        assertThat(
+            "The (only) defined option is extracted",
+            ServerlessServerCli.extractJvmOptionValue(ServerlessServerCli.FATAL_ERROR_LOG_FILE_JVM_OPT, options),
+            isPresentWith("foo")
+        );
+    }
+
+    public void testExtractJvmOptionValueMultipleValues() {
+        var options = List.of("-XX:ErrorFile=foo", "-other-option=foo", "-XX:ErrorFile=bar", "another=baz");
+        assertThat(
+            "The last defined option is extracted",
+            ServerlessServerCli.extractJvmOptionValue(ServerlessServerCli.FATAL_ERROR_LOG_FILE_JVM_OPT, options),
+            isPresentWith("bar")
+        );
     }
 
     private static Settings emptySettings() {
