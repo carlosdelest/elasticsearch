@@ -62,6 +62,7 @@ public class ServerlessMultiProjectPlugin extends Plugin implements ActionPlugin
 
     private final boolean multiProjectEnabled;
     public final SetOnce<SecurityContext> threadContext = new SetOnce<>();
+    private final SetOnce<ReservedProjectSettingsAction> reservedProjectSettingsAction = new SetOnce<>();
 
     public ServerlessMultiProjectPlugin(Settings settings) {
         /*
@@ -94,6 +95,7 @@ public class ServerlessMultiProjectPlugin extends Plugin implements ActionPlugin
     @Override
     public Collection<?> createComponents(PluginServices services) {
         this.threadContext.set(new SecurityContext(services.environment().settings(), services.threadPool().getThreadContext()));
+        this.reservedProjectSettingsAction.set(new ReservedProjectSettingsAction(services.clusterService().getProjectScopedSettings()));
         return List.of();
     }
 
@@ -134,4 +136,7 @@ public class ServerlessMultiProjectPlugin extends Plugin implements ActionPlugin
         }
     }
 
+    public ReservedProjectSettingsAction getReservedProjectSettingsAction() {
+        return reservedProjectSettingsAction.get();
+    }
 }

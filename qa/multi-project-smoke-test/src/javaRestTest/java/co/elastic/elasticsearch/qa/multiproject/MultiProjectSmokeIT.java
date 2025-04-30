@@ -54,6 +54,7 @@ import java.util.stream.Stream;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.oneOf;
@@ -131,7 +132,30 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         );
 
         // The test client can only see the project it targets
-        assertProjectIds(client(), List.of(activeProject));
+        assertProjects(client(), List.of(activeProject));
+    }
+
+    private void assertProjects(RestClient client, List<String> projectIds) throws IOException {
+        assertProjectIds(client, projectIds);
+        assertProjectSettings(client, projectIds);
+    }
+
+    private static void assertProjectSettings(RestClient client, List<String> projectIds) throws IOException {
+        Request request = new Request("GET", "/_cluster/state/metadata?multi_project=true");
+        ObjectPath response = ObjectPath.createFromResponse(client.performRequest(request));
+        List<Map<String, Object>> projectsMetadata = response.evaluate("metadata.projects");
+
+        Map<String, Map<String, Object>> projectsSettings = new HashMap<>();
+        for (Map<String, Object> projectMetadata : projectsMetadata) {
+            String id = (String) projectMetadata.get("id");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> settings = (Map<String, Object>) projectMetadata.get("settings");
+            projectsSettings.put(id, settings);
+        }
+        for (String projectId : projectIds) {
+            assertThat(projectsSettings.get(projectId), is(notNullValue()));
+            assertThat(projectsSettings.get(projectId).get("ingest.geoip.downloader.enabled"), equalTo("false"));
+        }
     }
 
     @After
@@ -159,7 +183,11 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
                      "version": "%s",
                      "compatibility": "8.4.0"
                  },
-                 "state": {}
+                 "state": {
+                     "project_settings": {
+                         "ingest.geoip.downloader.enabled": false
+                     }
+                 }
             }""", version));
         writeConfigFile(configPath.resolve("operator/project-" + project + ".secrets.json"), Strings.format("""
             {

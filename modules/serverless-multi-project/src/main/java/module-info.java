@@ -38,4 +38,8 @@ module org.elasticsearch.serverless.multiproject {
     provides org.elasticsearch.features.FeatureSpecification
         with
             co.elastic.elasticsearch.serverless.multiproject.ServerlessMultiProjectFeatureSpecification;
+
+    provides org.elasticsearch.reservedstate.ReservedClusterStateHandlerProvider
+        with
+            co.elastic.elasticsearch.serverless.multiproject.ReservedProjectSettingsHandlerProvider;
 }
