@@ -160,3 +160,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT
   method: testMetricsAreRepublishedAfterMasterFailover
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3850
+- class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT
+  method: testMasterFailoverWithOnGoingMetricPublication
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3854
