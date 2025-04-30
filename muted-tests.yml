@@ -157,3 +157,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessReshardIT
   method: testReshardTargetWillEqualToPrimaryTermOfSource
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3821
+- class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchLoadMetricsIT
+  method: testMetricsAreRepublishedAfterMasterFailover
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3850
