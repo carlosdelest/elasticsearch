@@ -17,7 +17,6 @@
 
 package co.elastic.elasticsearch.metering.usagereports;
 
-import co.elastic.elasticsearch.metering.MeteringFeatures;
 import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 
 import org.elasticsearch.ElasticsearchException;
@@ -46,7 +45,6 @@ import static org.elasticsearch.test.hamcrest.OptionalMatchers.isEmpty;
 import static org.elasticsearch.test.hamcrest.OptionalMatchers.isPresentWith;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.is;
-import static org.mockito.Mockito.when;
 
 public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
 
@@ -75,7 +73,7 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        timeCursor = new ClusterStateSampledMetricsTimeCursor(clusterStateProvider, Settings.EMPTY, featureService, client);
+        timeCursor = new ClusterStateSampledMetricsTimeCursor(clusterStateProvider, Settings.EMPTY, client);
     }
 
     public void testGetLatestCommittedTimestampIfUninitialized() {
@@ -86,7 +84,7 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
         clusterStateProvider.setClusterStateProvider(() -> Optional.of(EMPTY_STATE));
         assertThat(timeCursor.getLatestCommittedTimestamp(), isEmpty());
 
-        SampledMetricsMetadata metadata = new SampledMetricsMetadata(Instant.now());
+        SampledMetricsMetadata metadata = new SampledMetricsMetadata(Instant.now(), true);
         ClusterState state = EMPTY_STATE.copyAndUpdate(b -> b.putCustom(SampledMetricsMetadata.TYPE, metadata));
         clusterStateProvider.setClusterStateProvider(() -> Optional.of(state));
 
@@ -104,7 +102,7 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
         assertThat(Iterators.toList(timeCursor.generateSampleTimestamps(now, TimeValue.ONE_MINUTE)), contains(now));
 
         Instant committedTimestamp = now.minus(3, MINUTES);
-        SampledMetricsMetadata metadata = new SampledMetricsMetadata(committedTimestamp);
+        SampledMetricsMetadata metadata = new SampledMetricsMetadata(committedTimestamp, true);
         clusterStateProvider.setClusterStateProvider(
             () -> Optional.of(ClusterState.builder(new ClusterName("test")).putCustom(SampledMetricsMetadata.TYPE, metadata).build())
         );
@@ -117,17 +115,9 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
         );
     }
 
-    public void testCommitUpToIfUnavailable() {
-        clusterStateProvider.setClusterStateProvider(() -> Optional.of(EMPTY_STATE));
-        when(featureService.clusterHasFeature(Mockito.any(), Mockito.eq(MeteringFeatures.SAMPLED_METRICS_METADATA))).thenReturn(false);
-
-        assertThat(timeCursor.commitUpTo(Instant.now()), is(true));
-    }
-
     @SuppressWarnings("unchecked")
     public void testCommitUpTo() {
         clusterStateProvider.setClusterStateProvider(() -> Optional.of(EMPTY_STATE));
-        when(featureService.clusterHasFeature(Mockito.any(), Mockito.eq(MeteringFeatures.SAMPLED_METRICS_METADATA))).thenReturn(true);
         Instant timestamp = Instant.now();
 
         Mockito.doAnswer(invocation -> {
@@ -141,7 +131,6 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
 
     @SuppressWarnings("unchecked")
     public void testCommitUpToFails() {
-        when(featureService.clusterHasFeature(Mockito.any(), Mockito.eq(MeteringFeatures.SAMPLED_METRICS_METADATA))).thenReturn(true);
         Instant timestamp = Instant.now();
 
         Mockito.doAnswer(invocation -> {

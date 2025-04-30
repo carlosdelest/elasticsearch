@@ -768,44 +768,45 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
     }
 
     private static void assertUsageRecord(
-        String indexName,
+        String indexPrefix,
         UsageRecord metric,
-        String expectedid,
+        String expectedIdPrefix,
         String expectedType,
         Matcher<? super Long> matcher
     ) {
-        assertThat(metric.id(), startsWith(expectedid));
+        assertThat(metric.id(), startsWith(expectedIdPrefix));
         assertThat(metric.usage().type(), equalTo(expectedType));
-        assertThat(metric.source().metadata().get("index"), startsWith(indexName));
+        assertThat(metric.source().metadata().get("index"), startsWith(indexPrefix));
         assertThat(metric.usage().quantity(), matcher);
     }
 
-    private void waitAndAssertRawIngestRecords(List<UsageRecord> usageRecords, String indexName, long rawIngestedSize) throws Exception {
+    private void waitAndAssertRawIngestRecords(List<UsageRecord> usageRecords, String indexPrefix, long rawIngestedSize) throws Exception {
+        var isRawIngestRecord = idStartsWith("ingested-doc:").and(sourceIndexStartsWith(indexPrefix));
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var ingestRecords = usageRecords.stream().filter(isRawIngestRecord(indexName)).toList();
+            var ingestRecords = usageRecords.stream().filter(isRawIngestRecord).toList();
             assertFalse(ingestRecords.isEmpty());
 
             assertThat(ingestRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_raw_data")));
-            assertThat(ingestRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexName)));
+            assertThat(ingestRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexPrefix)));
 
             var totalQuantity = ingestRecords.stream().mapToLong(x -> x.usage().quantity()).sum();
             assertThat(totalQuantity, equalTo(rawIngestedSize));
         }, 20, TimeUnit.SECONDS);
     }
 
-    private void waitAndAssertRawStorageRecords(List<UsageRecord> usageRecords, String indexName, long rawStorageSize, long delta)
+    private void waitAndAssertRawStorageRecords(List<UsageRecord> usageRecords, String indexPrefix, long rawStorageSize, long delta)
         throws Exception {
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
             var lastUsageRecord = usageRecords.stream()
-                .filter(isRawStorageRecord(indexName))
+                .filter(isRawStorageRecord(indexPrefix))
                 .max(Comparator.comparing(UsageRecord::usageTimestamp));
             assertFalse(lastUsageRecord.isEmpty());
             assertUsageRecord(
-                indexName,
+                indexPrefix,
                 lastUsageRecord.get(),
-                "raw-stored-index-size:" + indexName,
+                "raw-stored-index-size:",
                 "es_raw_stored_data",
                 // +/-delta to account for approximation on averages
                 both(greaterThanOrEqualTo(rawStorageSize - delta)).and(lessThanOrEqualTo(rawStorageSize + delta))
@@ -813,11 +814,7 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
         }, 20, TimeUnit.SECONDS);
     }
 
-    private Predicate<UsageRecord> isRawIngestRecord(String indexPrefix) {
-        return m -> m.id().startsWith("ingested-doc:" + indexPrefix);
-    }
-
     private Predicate<UsageRecord> isRawStorageRecord(String indexPrefix) {
-        return m -> m.id().startsWith("raw-stored-index-size:" + indexPrefix);
+        return idStartsWith("raw-stored-index-size:").and(sourceIndexStartsWith(indexPrefix));
     }
 }

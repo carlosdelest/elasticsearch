@@ -39,6 +39,7 @@ import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
@@ -70,8 +71,8 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
         assertThat(plugins, not(empty()));
     }
 
-    private Predicate<UsageRecord> isIndexSizeMetric(String indexName) {
-        return m -> m.id().startsWith("index-size:" + indexName);
+    private Predicate<UsageRecord> isIndexSizeMetric(String indexPrefix) {
+        return idStartsWith("index-size:").and(sourceIndexStartsWith(indexPrefix));
     }
 
     public void testIndexSizeMetricsAreRecorded() throws Exception {
@@ -94,7 +95,7 @@ public class IndexSizeMeteringIT extends AbstractMeteringIntegTestCase {
             assertThat(metric.usage().quantity(), greaterThan(0L));
             assertThat(
                 metric.source().metadata(),
-                allOf(hasEntry("index", "idx1"), hasEntry("system_index", "false"), hasEntry("hidden_index", "false"))
+                allOf(hasEntry("index", "idx1"), hasKey("index_uuid"), hasEntry("system_index", "false"), hasEntry("hidden_index", "false"))
             );
             assertThat(
                 metric.usage().metadata(),

@@ -20,9 +20,11 @@ package co.elastic.elasticsearch.metering.sampling;
 import co.elastic.elasticsearch.metering.SourceMetadata;
 import co.elastic.elasticsearch.metering.UsageMetadata;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.index.Index;
@@ -70,7 +72,10 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
     }
 
     private MetricValues sampleToMetricValues(SampledClusterMetricsService.SampledClusterMetrics sample) {
-        final var indicesLookup = clusterService.state().getMetadata().getProject().getIndicesLookup();
+        ClusterState state = clusterService.state();
+        final var indicesLookup = state.getMetadata().getProject().getIndicesLookup();
+        final var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(state);
+        final var useIndexUUID = sampledMetricsMetadata == null || sampledMetricsMetadata.useDeduplicationIdWithIndexUUID();
         final var searchActivity = sampledClusterMetricsService.activitySnapshot(sample.searchTierMetrics());
 
         boolean partial = sample.status().contains(SampledClusterMetricsService.SamplingStatus.PARTIAL);
@@ -79,7 +84,7 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
         List<MetricValue> metrics = new ArrayList<>(indexInfos.size());
         for (final var indexInfo : indexInfos.entrySet()) {
             if (indexInfo.getValue().getTotalSize() > 0) {
-                metrics.add(ixIndexMetric(indexInfo.getKey(), indexInfo.getValue(), searchActivity, indicesLookup, partial));
+                metrics.add(ixIndexMetric(useIndexUUID, indexInfo.getKey(), indexInfo.getValue(), searchActivity, indicesLookup, partial));
             }
         }
         return SampledMetricsProvider.metricValues(
@@ -92,6 +97,7 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
     }
 
     private MetricValue ixIndexMetric(
+        boolean useIndexUUID,
         Index index,
         IndexInfoMetrics indexInfo,
         Activity.Snapshot searchActivity,
@@ -99,7 +105,7 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
         boolean partial
     ) {
         return new MetricValue(
-            format("%s:%s", IX_INDEX_METRIC_ID_PREFIX, index.getName()),
+            format("%s:%s", IX_INDEX_METRIC_ID_PREFIX, useIndexUUID ? index.getUUID() : index.getName()),
             IX_METRIC_TYPE,
             SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices, partial),
             ixUsageMetadata(indexInfo, searchActivity),

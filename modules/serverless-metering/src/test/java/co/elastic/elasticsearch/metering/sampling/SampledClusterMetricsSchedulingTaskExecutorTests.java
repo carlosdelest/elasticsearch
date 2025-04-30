@@ -17,8 +17,6 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.MeteringFeatures;
-
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
@@ -46,7 +44,6 @@ import org.junit.BeforeClass;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -265,7 +262,7 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
         verify(persistentTasksService, never()).sendRemoveRequest(eq(SampledClusterMetricsSchedulingTask.TASK_NAME), any(), any());
     }
 
-    private ClusterState initialStateWithoutFeature() {
+    private ClusterState initialState() {
         Metadata.Builder metadata = Metadata.builder();
 
         DiscoveryNodes.Builder nodes = DiscoveryNodes.builder();
@@ -274,12 +271,6 @@ public class SampledClusterMetricsSchedulingTaskExecutorTests extends ESTestCase
         nodes.masterNodeId(localNodeId);
 
         return ClusterState.builder(ClusterName.DEFAULT).nodes(nodes).metadata(metadata).build();
-    }
-
-    private ClusterState initialState() {
-        return ClusterState.builder(initialStateWithoutFeature())
-            .nodeFeatures(Map.of(localNodeId, Set.of(MeteringFeatures.INDEX_INFO_SUPPORTED.id())))
-            .build();
     }
 
     private ClusterState stateWithNodeShuttingDown(ClusterState clusterState, SingleNodeShutdownMetadata.Type type) {

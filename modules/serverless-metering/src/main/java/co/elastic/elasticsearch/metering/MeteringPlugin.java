@@ -221,7 +221,6 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
                 List.copyOf(sampledMetrics),
                 clusterStateSupplier,
                 clusterService.getSettings(),
-                services.featureService(),
                 services.client(),
                 reportPeriod,
                 usageRecordPublisher,

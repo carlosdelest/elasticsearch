@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingStatus;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;
@@ -93,6 +94,8 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
             when(metadata.projects()).thenReturn(Map.of(Metadata.DEFAULT_PROJECT_ID, projectMetadata));
             when(metadata.getProject()).thenReturn(projectMetadata);
             b.metadata(metadata);
+            // TODO remove once record id change is fully rolled out
+            b.putCustom(SampledMetricsMetadata.TYPE, new SampledMetricsMetadata(Instant.now(), true));
         });
         when(clusterService.state()).thenReturn(clusterState);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
@@ -143,7 +146,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var indexIX = metrics.iterator().next();
-        assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + shard1.getIndexName()));
+        assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + shard1.getIndex().getUUID()));
         assertThat(indexIX.value(), is(11L));
         assertThat(indexIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
         assertThat(
@@ -184,7 +187,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var indexIX = metrics.iterator().next();
-        assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + shard1.getIndexName()));
+        assertThat(indexIX.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + shard1.getIndex().getUUID()));
         assertThat(indexIX.value(), is(11L));
         assertThat(indexIX.meteredObjectCreationTime(), greaterThan(Instant.EPOCH));
         assertThat(indexIX.sourceMetadata(), allOf(hasEntry("index", shard1.getIndexName()), hasEntry("system_index", "true")));
@@ -216,9 +219,11 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
 
     public void testMultipleShardsWithMixedSizeType() {
         String indexName = "myMultiShardIndex";
+        String indexUuid = "myMultiShardIndexUuid";
+
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardId = new ShardId(new Index(indexName, "uuid"), id);
+            var shardId = new ShardId(new Index(indexName, indexUuid), id);
             var size = 10L + id;
             var hasIngestSize = id < 5;
             return entry(
@@ -239,7 +244,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var metric = metrics.iterator().next();
-        assertThat(metric.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(metric.id(), equalTo(IX_INDEX_METRIC_ID_PREFIX + ":" + indexUuid));
         assertThat(metric.value(), is(145L));
         assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
         assertThat(
@@ -255,7 +260,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         for (var indexIdx = 0; indexIdx < 5; indexIdx++) {
             var indexName = baseIndexName + indexIdx;
             for (var shardIdx = 0; shardIdx < 10; shardIdx++) {
-                var shardId = new ShardId(new Index(indexName, "uuid"), shardIdx);
+                var shardId = new ShardId(new Index(indexName, "uuid" + indexName), shardIdx);
                 var size = 10L + shardIdx;
                 var hasIngestSize = indexIdx < 2;
                 shardsInfo.put(
@@ -276,7 +281,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         assertThat(metrics, hasBackfillStrategy(isA(IndexSizeMetricsBackfillStrategy.class)));
         assertThat(metrics, transformedMatch(Iterables::size, is(5L)));
         for (MetricValue metric : metrics) {
-            assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + baseIndexName));
+            assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":uuid" + baseIndexName));
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
             assertThat(metric.value(), is(145L));
             assertThat(
@@ -292,10 +297,11 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
 
     public void testFailedShards() {
         String indexName = "myMultiShardIndex";
+        String indexUuid = "myMultiShardIndexUuid";
         int failedShardId = 7;
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardId = new ShardId(new Index(indexName, "uuid"), id);
+            var shardId = new ShardId(new Index(indexName, indexUuid), id);
             var size = failedShardId == id ? 0 : 10L + id;
             return entry(
                 shardId,
@@ -314,7 +320,7 @@ public class IndexSizeMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
         var metric = metrics.iterator().next();
 
-        assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(metric.id(), startsWith(IX_INDEX_METRIC_ID_PREFIX + ":" + indexUuid));
         assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
         assertThat(metric.sourceMetadata(), hasEntry("partial", "true"));
     }

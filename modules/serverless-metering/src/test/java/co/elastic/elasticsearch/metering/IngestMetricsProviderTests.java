@@ -66,8 +66,8 @@ public class IngestMetricsProviderTests extends ESTestCase {
         var first = ingestMetricsProvider1.getMetrics().iterator().next();
         var second = ingestMetricsProvider2.getMetrics().iterator().next();
 
-        assertThat(first.id(), equalTo("ingested-doc:index:node1"));
-        assertThat(second.id(), equalTo("ingested-doc:index:node2"));
+        assertThat(first.id(), equalTo("ingested-doc:uuid:node1"));
+        assertThat(second.id(), equalTo("ingested-doc:uuid:node2"));
     }
 
     public void testGetMetrics() {
@@ -92,14 +92,18 @@ public class IngestMetricsProviderTests extends ESTestCase {
                 metricValue(
                     is("es_raw_data"),
                     is((long) 10),
-                    is(Map.of("index", "index1", "system_index", "false", "hidden_index", "false"))
+                    is(Map.of("index", "index1", "index_uuid", "uuid1", "system_index", "false", "hidden_index", "false"))
                 ),
                 metricValue(
                     is("es_raw_data"),
                     is((long) 20),
-                    is(Map.of("index", "index2", "system_index", "false", "hidden_index", "false"))
+                    is(Map.of("index", "index2", "index_uuid", "uuid2", "system_index", "false", "hidden_index", "false"))
                 ),
-                metricValue(is("es_raw_data"), is((long) 5), is(Map.of("index", "system", "system_index", "true", "hidden_index", "true")))
+                metricValue(
+                    is("es_raw_data"),
+                    is((long) 5),
+                    is(Map.of("index", "system", "index_uuid", "uuid3", "system_index", "true", "hidden_index", "true"))
+                )
             )
         );
     }

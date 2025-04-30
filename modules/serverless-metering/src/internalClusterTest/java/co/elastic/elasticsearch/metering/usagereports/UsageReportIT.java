@@ -214,10 +214,10 @@ public class UsageReportIT extends AbstractMeteringIntegTestCase {
         // Wait for new sampled metrics records
         var timestamps = new TreeSet<>(Instant::compareTo);
         assertBusy(() -> {
-            assertTrue(hasReceivedRecords("index-size"));
+            assertTrue(hasReceivedRecords(idStartsWith("index-size:")));
             waitAndAssertIXRecords(newMetrics, indexName);
             var newTimestamps = newMetrics.stream()
-                .filter(m -> m.id().startsWith("index-size"))
+                .filter(idStartsWith("index-size:"))
                 .map(UsageRecord::usageTimestamp)
                 .collect(Collectors.toSet());
             timestamps.addAll(newTimestamps);
@@ -260,32 +260,32 @@ public class UsageReportIT extends AbstractMeteringIntegTestCase {
         });
     }
 
-    private void waitAndAssertIXRecords(List<UsageRecord> usageRecords, String indexName) throws Exception {
+    private void waitAndAssertIXRecords(List<UsageRecord> usageRecords, String indexPrefix) throws Exception {
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var ixRecords = usageRecords.stream().filter(m -> m.id().startsWith("index-size")).toList();
+            var ixRecords = usageRecords.stream().filter(idStartsWith("index-size:")).toList();
             assertFalse(ixRecords.isEmpty());
 
-            assertThat(ixRecords.stream().map(UsageRecord::id).toList(), everyItem(startsWith("index-size:" + indexName)));
-            assertThat(ixRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_indexed_data")));
-            assertThat(ixRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexName)));
+            assertThat(ixRecords.stream().map(UsageRecord::id).toList(), everyItem(startsWith("index-size:")));
+            assertThat(ixRecords.stream().map(x -> x.usage().type()).toList(), everyItem(is("es_indexed_data")));
+            assertThat(ixRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexPrefix)));
         });
     }
 
-    private void waitAndAssertRawIngestRecords(List<UsageRecord> usageRecords, String indexName) throws Exception {
+    private void waitAndAssertRawIngestRecords(List<UsageRecord> usageRecords, String indexPrefix) throws Exception {
         assertBusy(() -> {
             pollReceivedRecords(usageRecords);
-            var ingestRecords = usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).toList();
+            var ingestRecords = usageRecords.stream().filter(idStartsWith("ingested-doc:")).toList();
             assertFalse(ingestRecords.isEmpty());
 
-            assertThat(ingestRecords.stream().map(x -> x.usage().type()).toList(), everyItem(startsWith("es_raw_data")));
-            assertThat(ingestRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexName)));
+            assertThat(ingestRecords.stream().map(x -> x.usage().type()).toList(), everyItem(is("es_raw_data")));
+            assertThat(ingestRecords.stream().map(x -> x.source().metadata().get("index")).toList(), everyItem(startsWith(indexPrefix)));
         });
     }
 
     private static Instant getLastIXUsageTimestamp(List<UsageRecord> usageRecords) {
         return usageRecords.stream()
-            .filter(m -> m.id().startsWith("index-size"))
+            .filter(idStartsWith("index-size:"))
             .map(UsageRecord::usageTimestamp)
             .max(Instant::compareTo)
             .orElseThrow(() -> new AssertionError("No IX usage records found"));

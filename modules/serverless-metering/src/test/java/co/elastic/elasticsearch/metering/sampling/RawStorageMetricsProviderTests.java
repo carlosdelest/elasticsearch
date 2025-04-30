@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingStatus;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;
@@ -97,6 +98,8 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
             when(metadata.projects()).thenReturn(Map.of(Metadata.DEFAULT_PROJECT_ID, projectMetadata));
             when(metadata.getProject()).thenReturn(projectMetadata);
             b.metadata(metadata);
+            // TODO remove once record id change is fully rolled out
+            b.putCustom(SampledMetricsMetadata.TYPE, new SampledMetricsMetadata(Instant.now(), true));
         });
         when(clusterService.state()).thenReturn(clusterState);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
@@ -137,7 +140,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var indexRAS = metrics.iterator().next();
-        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + shard1.getIndexName()));
+        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + shard1.getIndex().getUUID()));
         assertThat(
             indexRAS.sourceMetadata(),
             allOf(
@@ -168,7 +171,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var indexRAS = metrics.iterator().next();
-        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + shard1.getIndexName()));
+        assertThat(indexRAS.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + shard1.getIndex().getUUID()));
         assertThat(indexRAS.sourceMetadata(), allOf(hasEntry("index", shard1.getIndexName()), hasEntry("system_index", "true")));
         assertThat(indexRAS.value(), is(11L));
     }
@@ -195,9 +198,10 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
 
     public void testMultipleShardsWithMixedSizeType() {
         String indexName = "myMultiShardIndex";
+        String indexUuid = "myMultiShardIndexUuid";
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardId = new ShardId(new Index(indexName, "uuid"), id);
+            var shardId = new ShardId(new Index(indexName, indexUuid), id);
             var size = 10L + id;
             var hasIngestSize = id < 5;
             return entry(
@@ -218,7 +222,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
 
         var rasMetrics = metrics.iterator().next();
-        assertThat(rasMetrics.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexName));
+        assertThat(rasMetrics.id(), equalTo(RA_S_METRIC_ID_PREFIX + ":" + indexUuid));
         assertThat(rasMetrics.sourceMetadata(), hasEntry("index", indexName));
         assertThat(
             rasMetrics.usageMetadata(),
@@ -243,7 +247,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         for (var indexIdx = 0; indexIdx < 5; indexIdx++) {
             var indexName = baseIndexName + indexIdx;
             for (var shardIdx = 0; shardIdx < 10; shardIdx++) {
-                var shardId = new ShardId(new Index(indexName, "uuid"), shardIdx);
+                var shardId = new ShardId(new Index(indexName, "uuid" + indexName), shardIdx);
                 var size = 10L + shardIdx;
                 var hasIngestSize = indexIdx < 2;
                 shardsInfo.put(
@@ -267,7 +271,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         for (MetricValue metric : metrics) {
             assertThat(
                 metric.id(),
-                oneOf(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 0, RA_S_METRIC_ID_PREFIX + ":" + baseIndexName + 1)
+                oneOf(RA_S_METRIC_ID_PREFIX + ":uuid" + baseIndexName + 0, RA_S_METRIC_ID_PREFIX + ":uuid" + baseIndexName + 1)
             );
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), oneOf(baseIndexName + 0, baseIndexName + 1)));
             assertThat(
@@ -298,7 +302,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         for (var indexIdx = 0; indexIdx < 5; indexIdx++) {
             var indexName = baseIndexName + indexIdx;
             for (var shardIdx = 0; shardIdx < 10; shardIdx++) {
-                var shardId = new ShardId(new Index(indexName, "uuid" + indexIdx), shardIdx);
+                var shardId = new ShardId(new Index(indexName, "uuid" + indexName), shardIdx);
                 var size = 10L + shardIdx;
                 var hasIngestSize = shardIdx < 5;
                 shardsInfo.put(
@@ -319,7 +323,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
         assertThat(metrics, transformedMatch(Iterables::size, is(5L)));
 
         for (MetricValue metric : metrics) {
-            assertThat(metric.id(), startsWith(RA_S_METRIC_ID_PREFIX + ":" + baseIndexName));
+            assertThat(metric.id(), startsWith(RA_S_METRIC_ID_PREFIX + ":uuid" + baseIndexName));
             assertThat(metric.sourceMetadata(), aMapWithSize(greaterThanOrEqualTo(1)));
             assertThat(metric.sourceMetadata(), hasEntry(is("index"), startsWith(baseIndexName)));
             assertThat(metric.value(), is(60L));
@@ -328,10 +332,11 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
 
     public void testFailedShards() {
         String indexName = "myMultiShardIndex";
+        String indexUuid = "myMultiShardIndexUuid";
         int failedShardId = 7;
         Instant creationDate = Instant.now();
         var shardsInfo = IntStream.range(0, 10).mapToObj(id -> {
-            var shardKey = new ShardId(new Index(indexName, "uuid"), id);
+            var shardKey = new ShardId(new Index(indexName, indexUuid), id);
             var size = failedShardId == id ? 0 : 10L + id;
             return entry(
                 shardKey,
@@ -349,7 +354,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
 
         assertThat(metrics, transformedMatch(Iterables::size, is(1L)));
         for (MetricValue metric : metrics) {
-            assertThat(metric.id(), startsWith(RA_S_METRIC_ID_PREFIX + ":" + indexName));
+            assertThat(metric.id(), startsWith(RA_S_METRIC_ID_PREFIX + ":" + indexUuid));
             assertThat(metric.type(), is(RA_S_METRIC_TYPE));
             assertThat(metric.sourceMetadata(), hasEntry("index", indexName));
             assertThat(metric.sourceMetadata(), hasEntry("partial", "true"));

@@ -157,8 +157,19 @@ public abstract class AbstractMeteringIntegTestCase extends AbstractStatelessInt
         server.stop(1);
     }
 
-    protected boolean hasReceivedRecords(String prefix) {
-        return receivedMetrics().stream().flatMap(List::stream).anyMatch(m -> m.id().startsWith(prefix));
+    protected static Predicate<UsageRecord> idStartsWith(String prefix) {
+        return m -> m.id().startsWith(prefix);
+    }
+
+    protected static Predicate<UsageRecord> sourceIndexStartsWith(String prefix) {
+        return m -> {
+            var index = m.source().metadata().get("index");
+            return index != null && index.startsWith(prefix);
+        };
+    }
+
+    protected boolean hasReceivedRecords(Predicate<UsageRecord> predicate) {
+        return receivedMetrics().stream().flatMap(List::stream).anyMatch(predicate);
     }
 
     protected void pollReceivedRecords(List<UsageRecord> usageRecords) {

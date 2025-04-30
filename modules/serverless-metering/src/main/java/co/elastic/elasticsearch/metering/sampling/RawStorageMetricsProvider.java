@@ -18,9 +18,11 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.SourceMetadata;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.Maps;
@@ -65,27 +67,31 @@ class RawStorageMetricsProvider implements SampledMetricsProvider {
     }
 
     private MetricValues sampleToMetricValues(SampledClusterMetricsService.SampledClusterMetrics sample) {
-        final var indicesLookup = clusterService.state().getMetadata().getProject().getIndicesLookup();
+        ClusterState state = clusterService.state();
+        final var indicesLookup = state.getMetadata().getProject().getIndicesLookup();
+        final var sampledMetricsMetadata = SampledMetricsMetadata.getFromClusterState(state);
+        final var useIndexUUID = sampledMetricsMetadata == null || sampledMetricsMetadata.useDeduplicationIdWithIndexUUID();
         boolean partial = sample.status().contains(SampledClusterMetricsService.SamplingStatus.PARTIAL);
         List<MetricValue> metrics = new ArrayList<>();
 
         var indexInfos = IndexInfoMetrics.calculateIndexSamples(sample.shardSamples());
         for (final var indexInfo : indexInfos.entrySet()) {
             if (indexInfo.getValue().getRawStorageSize() > 0) {
-                metrics.add(rawStorageIndexMetric(indexInfo.getKey(), indexInfo.getValue(), indicesLookup, partial));
+                metrics.add(rawStorageIndexMetric(useIndexUUID, indexInfo.getKey(), indexInfo.getValue(), indicesLookup, partial));
             }
         }
         return SampledMetricsProvider.metricValues(metrics, DefaultSampledMetricsBackfillStrategy.INSTANCE);
     }
 
     private MetricValue rawStorageIndexMetric(
+        boolean useIndexUUID,
         Index index,
         IndexInfoMetrics indexInfo,
         Map<String, IndexAbstraction> indicesLookup,
         boolean partial
     ) {
         return new MetricValue(
-            format("%s:%s", RA_S_METRIC_ID_PREFIX, index.getName()),
+            format("%s:%s", RA_S_METRIC_ID_PREFIX, useIndexUUID ? index.getUUID() : index.getName()),
             RA_S_METRIC_TYPE,
             SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices, partial),
             rasUsageMetadata(indexInfo),

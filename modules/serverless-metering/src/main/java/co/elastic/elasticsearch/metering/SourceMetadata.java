@@ -29,7 +29,7 @@ import java.util.Map;
  */
 public interface SourceMetadata {
     String INDEX = "index";
-    String SHARD = "shard";
+    String INDEX_UUID = "index_uuid";
     String DATASTREAM = "datastream";
     String SYSTEM_INDEX = "system_index";
     String HIDDEN_INDEX = "hidden_index";
@@ -52,6 +52,7 @@ public interface SourceMetadata {
 
         Map<String, String> sourceMetadata = Maps.newHashMapWithExpectedSize(5);
         sourceMetadata.put(SourceMetadata.INDEX, index.getName());
+        sourceMetadata.put(SourceMetadata.INDEX_UUID, index.getUUID());
         sourceMetadata.put(SourceMetadata.SYSTEM_INDEX, Boolean.toString(isSystemIndex));
         if (indexAbstraction != null) {
             sourceMetadata.put(SourceMetadata.HIDDEN_INDEX, Boolean.toString(indexAbstraction.isHidden()));

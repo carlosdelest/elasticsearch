@@ -229,7 +229,7 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
     }
 
     private static void assertUsageRecord(String indexName, UsageRecord metric, int expectedQuantity) {
-        String id = "ingested-doc:" + indexName;
+        String id = "ingested-doc:";
         assertThat(metric.id(), startsWith(id));
         assertThat(metric.usage().type(), equalTo("es_raw_data"));
         assertThat(metric.usage().quantity(), equalTo((long) expectedQuantity));
@@ -271,10 +271,11 @@ public class IngestMeteringIT extends AbstractMeteringIntegTestCase {
             """);
     }
 
-    private UsageRecord pollReceivedRAIRecordsAndGetFirst(String indexName) {
-        waitUntil(() -> hasReceivedRecords("ingested-doc:" + indexName));
+    private UsageRecord pollReceivedRAIRecordsAndGetFirst(String indexPrefix) {
+        var usageRecordPredicate = idStartsWith("ingested-doc:").and(sourceIndexStartsWith(indexPrefix));
+        waitUntil(() -> hasReceivedRecords(usageRecordPredicate));
         List<UsageRecord> usageRecords = new ArrayList<>();
         pollReceivedRecords(usageRecords);
-        return usageRecords.stream().filter(m -> m.id().startsWith("ingested-doc:" + indexName)).findFirst().get();
+        return usageRecords.stream().filter(usageRecordPredicate).findFirst().get();
     }
 }

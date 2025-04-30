@@ -145,6 +145,6 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
         SystemIndices systemIndices
     ) {
         var sourceMetadata = SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices);
-        return new MetricValue("ingested-doc:" + index.getName() + ":" + nodeId, METRIC_TYPE, sourceMetadata, value, null);
+        return new MetricValue("ingested-doc:" + index.getUUID() + ":" + nodeId, METRIC_TYPE, sourceMetadata, value, null);
     }
 }

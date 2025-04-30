@@ -53,9 +53,9 @@ public class SampledMetricsMetadataServiceTests extends ESTestCase {
 
         Instant now = Instant.now().truncatedTo(MINUTES);
 
-        service.update(new SampledMetricsMetadata(now.minus(1, MINUTES)), TimeValue.ZERO, listener);
-        service.update(new SampledMetricsMetadata(now.minus(1, MINUTES)), TimeValue.ZERO, listener);
-        service.update(new SampledMetricsMetadata(now), TimeValue.ZERO, listener);
+        service.update(new SampledMetricsMetadata(now.minus(1, MINUTES), true), TimeValue.ZERO, listener);
+        service.update(new SampledMetricsMetadata(now.minus(1, MINUTES), true), TimeValue.ZERO, listener);
+        service.update(new SampledMetricsMetadata(now, true), TimeValue.ZERO, listener);
 
         Mockito.verifyNoInteractions(listener);
 
@@ -68,7 +68,7 @@ public class SampledMetricsMetadataServiceTests extends ESTestCase {
             captor.getAllValues()
         );
 
-        assertThat(SampledMetricsMetadata.getFromClusterState(finalState), equalTo(new SampledMetricsMetadata(now)));
+        assertThat(SampledMetricsMetadata.getFromClusterState(finalState), equalTo(new SampledMetricsMetadata(now, true)));
         verify(listener, times(3)).onResponse(null);
     }
 }
