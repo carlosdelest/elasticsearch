@@ -21,6 +21,8 @@ import org.elasticsearch.action.datastreams.lifecycle.PutDataStreamLifecycleActi
 import org.elasticsearch.cluster.metadata.DataStreamLifecycle;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 
+import java.util.List;
+
 public class PutDataStreamLifecycleValidator extends DataStreamLifecycleValidator<PutDataStreamLifecycleAction.Request> {
 
     public PutDataStreamLifecycleValidator(ThreadContext threadContext) {
@@ -28,8 +30,8 @@ public class PutDataStreamLifecycleValidator extends DataStreamLifecycleValidato
     }
 
     @Override
-    protected DataStreamLifecycle getLifecycleFromRequest(PutDataStreamLifecycleAction.Request request) {
-        return request.getLifecycle();
+    protected List<DataStreamLifecycle> getLifecyclesFromRequest(PutDataStreamLifecycleAction.Request request) {
+        return List.of(request.getLifecycle());
     }
 
     @Override

@@ -17,28 +17,28 @@
 
 package co.elastic.elasticsearch.api.validation;
 
-import org.elasticsearch.action.admin.indices.template.post.SimulateIndexTemplateAction;
-import org.elasticsearch.action.admin.indices.template.post.SimulateIndexTemplateRequest;
+import org.elasticsearch.action.datastreams.PutDataStreamOptionsAction;
 import org.elasticsearch.cluster.metadata.DataStreamLifecycle;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 
 import java.util.List;
 
-public class SimulateIndexTemplateDataStreamLifecycleValidator extends DataStreamLifecycleValidator<SimulateIndexTemplateRequest> {
-    public SimulateIndexTemplateDataStreamLifecycleValidator(ThreadContext threadContext) {
+public class PutDataStreamOptionsValidator extends DataStreamLifecycleValidator<PutDataStreamOptionsAction.Request> {
+
+    public PutDataStreamOptionsValidator(ThreadContext threadContext) {
         super(threadContext);
     }
 
     @Override
-    protected List<DataStreamLifecycle> getLifecyclesFromRequest(SimulateIndexTemplateRequest request) {
-        if (request.getIndexTemplateRequest() == null) {
+    protected List<DataStreamLifecycle> getLifecyclesFromRequest(PutDataStreamOptionsAction.Request request) {
+        if (request.getOptions().failureStore() == null || request.getOptions().failureStore().lifecycle() == null) {
             return List.of();
         }
-        return getLifecyclesFromTemplate(request.getIndexTemplateRequest().indexTemplate().template());
+        return List.of(request.getOptions().failureStore().lifecycle());
     }
 
     @Override
     public String actionName() {
-        return SimulateIndexTemplateAction.NAME;
+        return PutDataStreamOptionsAction.INSTANCE.name();
     }
 }

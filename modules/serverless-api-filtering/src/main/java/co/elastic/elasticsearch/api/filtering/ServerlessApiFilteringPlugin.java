@@ -28,6 +28,7 @@ import co.elastic.elasticsearch.api.validation.PutComponentTemplateSettingsValid
 import co.elastic.elasticsearch.api.validation.PutComposableIndexTemplateDataStreamLifecycleValidator;
 import co.elastic.elasticsearch.api.validation.PutComposableTemplateSettingsValidator;
 import co.elastic.elasticsearch.api.validation.PutDataStreamLifecycleValidator;
+import co.elastic.elasticsearch.api.validation.PutDataStreamOptionsValidator;
 import co.elastic.elasticsearch.api.validation.ReindexRequestValidator;
 import co.elastic.elasticsearch.api.validation.RolloverRequestValidator;
 import co.elastic.elasticsearch.api.validation.SimulateIndexTemplateDataStreamLifecycleValidator;
@@ -73,11 +74,13 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 new PutComposableTemplateSettingsValidator(context, indexScopedSettings),
                 new ReindexRequestValidator(),
                 new RolloverRequestValidator(context),
+                // Validation for disabling lifecycle
                 new PutComponentTemplateDataStreamLifecycleValidator(context),
                 new PutComposableIndexTemplateDataStreamLifecycleValidator(context),
                 new PutDataStreamLifecycleValidator(context),
                 new SimulateIndexTemplateDataStreamLifecycleValidator(context),
                 new SimulateTemplateDataStreamLifecycleValidator(context),
+                new PutDataStreamOptionsValidator(context),
                 new IndicesAliasRequestValidator(),
                 // Validation for dot-prefixed index creation
                 new CreateIndexDotValidator(context, clusterService),

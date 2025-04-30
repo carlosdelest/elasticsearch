@@ -21,6 +21,8 @@ import org.elasticsearch.action.admin.indices.template.put.TransportPutComposabl
 import org.elasticsearch.cluster.metadata.DataStreamLifecycle;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 
+import java.util.List;
+
 public class PutComposableIndexTemplateDataStreamLifecycleValidator extends DataStreamLifecycleValidator<
     TransportPutComposableIndexTemplateAction.Request> {
     public PutComposableIndexTemplateDataStreamLifecycleValidator(ThreadContext threadContext) {
@@ -28,8 +30,8 @@ public class PutComposableIndexTemplateDataStreamLifecycleValidator extends Data
     }
 
     @Override
-    protected DataStreamLifecycle getLifecycleFromRequest(TransportPutComposableIndexTemplateAction.Request request) {
-        return fromIndexTemplateRequest(request);
+    protected List<DataStreamLifecycle> getLifecyclesFromRequest(TransportPutComposableIndexTemplateAction.Request request) {
+        return getLifecyclesFromTemplate(request.indexTemplate().template());
     }
 
     @Override

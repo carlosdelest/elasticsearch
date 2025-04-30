@@ -20,7 +20,6 @@ package co.elastic.elasticsearch.api.validation;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
-import org.elasticsearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
 import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.cluster.metadata.DataStreamLifecycle;
@@ -29,6 +28,10 @@ import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * An action filter that performs a validation of incoming requests with a data stream lifecycle object.
@@ -41,23 +44,26 @@ public abstract class DataStreamLifecycleValidator<RequestType> implements Mappe
         this.threadContext = threadContext;
     }
 
-    protected abstract DataStreamLifecycle getLifecycleFromRequest(RequestType request);
+    protected abstract List<DataStreamLifecycle> getLifecyclesFromRequest(RequestType request);
 
-    @Nullable
-    protected static DataStreamLifecycle fromTemplate(@Nullable Template template) {
-        if (template == null || template.lifecycle() == null) {
-            return null;
+    protected static List<DataStreamLifecycle> getLifecyclesFromTemplate(@Nullable Template template) {
+        if (template == null) {
+            return List.of();
         }
-        return template.lifecycle().toDataStreamLifecycle();
-    }
-
-    @Nullable
-    protected static DataStreamLifecycle fromIndexTemplateRequest(@Nullable TransportPutComposableIndexTemplateAction.Request request) {
-        return request == null ? null : fromTemplate(request.indexTemplate().template());
-    }
-
-    public int order() {
-        return 0;
+        List<DataStreamLifecycle> lifecycles = new ArrayList<>(2);
+        DataStreamLifecycle dataStreamLifecycle = template.lifecycle() == null ? null : template.lifecycle().toDataStreamLifecycle();
+        if (dataStreamLifecycle != null) {
+            lifecycles.add(dataStreamLifecycle);
+        }
+        DataStreamLifecycle failuresLifecycle = template.dataStreamOptions() == null
+            ? null
+            : template.dataStreamOptions()
+                .failureStore()
+                .mapAndGet(failureStore -> failureStore.lifecycle().mapAndGet(DataStreamLifecycle.Template::toDataStreamLifecycle));
+        if (failuresLifecycle != null) {
+            lifecycles.add(failuresLifecycle);
+        }
+        return lifecycles;
     }
 
     @SuppressWarnings("unchecked")
@@ -69,8 +75,8 @@ public abstract class DataStreamLifecycleValidator<RequestType> implements Mappe
         ActionListener<Response> listener,
         ActionFilterChain<Request, Response> chain
     ) {
-        DataStreamLifecycle lifecycle = getLifecycleFromRequest((RequestType) request);
-        validateLifecycle(lifecycle);
+        List<DataStreamLifecycle> lifecycles = getLifecyclesFromRequest((RequestType) request);
+        validateLifecycle(lifecycles);
         chain.proceed(task, action, request, listener);
     }
 
@@ -78,13 +84,22 @@ public abstract class DataStreamLifecycleValidator<RequestType> implements Mappe
      * Validates if a public user (no operator privileges) is trying to disable the lifecycle of a data stream or a template.
      * It does not perform this validation if operator privileges are set.
      *
-     * @param lifecycle - lifecycle from the request
+     * @param lifecycles - data or failures lifecycle retrieved from the request
      * @throws IllegalArgumentException with a message indicating that the `enabled=false` needs to be removed.
      */
-    void validateLifecycle(@Nullable DataStreamLifecycle lifecycle) {
+    void validateLifecycle(List<DataStreamLifecycle> lifecycles) {
         if (isOperator() == false) {
-            if (lifecycle != null && lifecycle.enabled() == false) {
-                throw new IllegalArgumentException("Data stream lifecycle cannot be disabled in serverless, please remove 'enabled=false'");
+            if (lifecycles.isEmpty()) {
+                return;
+            }
+            String invalidLifecycles = lifecycles.stream()
+                .filter(lifecycle -> lifecycle.enabled() == false)
+                .map(DataStreamLifecycle::getLifecycleType)
+                .collect(Collectors.joining(" and "));
+            if (invalidLifecycles.isEmpty() == false) {
+                throw new IllegalArgumentException(
+                    invalidLifecycles + " lifecycle cannot be disabled in serverless, please remove 'enabled=false'"
+                );
             }
         }
     }

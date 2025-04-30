@@ -48,8 +48,8 @@ public class DataStreamLifecycleValidatorTests extends ESTestCase {
             }
 
             @Override
-            protected DataStreamLifecycle getLifecycleFromRequest(Object request) {
-                return null;
+            protected List<DataStreamLifecycle> getLifecyclesFromRequest(Object request) {
+                return List.of();
             }
         };
     }
@@ -61,19 +61,33 @@ public class DataStreamLifecycleValidatorTests extends ESTestCase {
 
     public void testDisablingLifecycleAllowedForOperator() {
         THREAD_CONTEXT.putHeader(AuthenticationField.PRIVILEGE_CATEGORY_KEY, AuthenticationField.PRIVILEGE_CATEGORY_VALUE_OPERATOR);
-        validator.validateLifecycle(null);
-        validator.validateLifecycle(randomLifecycle(true));
-        validator.validateLifecycle(randomLifecycle(false));
+        validator.validateLifecycle(List.of());
+        validator.validateLifecycle(List.of(randomDataLifecycle(randomBoolean())));
+        validator.validateLifecycle(List.of(randomFailuresLifecycle(randomBoolean())));
+        validator.validateLifecycle(List.of(randomDataLifecycle(randomBoolean()), randomFailuresLifecycle(randomBoolean())));
     }
 
     public void testLifecycleValidation() {
-        validator.validateLifecycle(null);
-        validator.validateLifecycle(randomLifecycle(true));
-        var e = expectThrows(IllegalArgumentException.class, () -> validator.validateLifecycle(randomLifecycle(false)));
-        assertThat(e.getMessage(), equalTo("Data stream lifecycle cannot be disabled in serverless, please remove 'enabled=false'"));
+        validator.validateLifecycle(List.of());
+        validator.validateLifecycle(List.of(randomDataLifecycle(true), randomFailuresLifecycle(true)));
+        var e = expectThrows(
+            IllegalArgumentException.class,
+            () -> validator.validateLifecycle(List.of(randomDataLifecycle(false), randomFailuresLifecycle(false)))
+        );
+        assertThat(e.getMessage(), equalTo("data and failures lifecycle cannot be disabled in serverless, please remove 'enabled=false'"));
+        e = expectThrows(
+            IllegalArgumentException.class,
+            () -> validator.validateLifecycle(List.of(randomDataLifecycle(false), randomFailuresLifecycle(true)))
+        );
+        assertThat(e.getMessage(), equalTo("data lifecycle cannot be disabled in serverless, please remove 'enabled=false'"));
+        e = expectThrows(
+            IllegalArgumentException.class,
+            () -> validator.validateLifecycle(List.of(randomDataLifecycle(true), randomFailuresLifecycle(false)))
+        );
+        assertThat(e.getMessage(), equalTo("failures lifecycle cannot be disabled in serverless, please remove 'enabled=false'"));
     }
 
-    private DataStreamLifecycle randomLifecycle(boolean enabled) {
+    private DataStreamLifecycle randomDataLifecycle(boolean enabled) {
         DataStreamLifecycle.Builder builder = DataStreamLifecycle.dataLifecycleBuilder().enabled(enabled);
         if (randomBoolean()) {
             builder.dataRetention(TimeValue.timeValueDays(randomIntBetween(10, 100)));
@@ -87,6 +101,14 @@ public class DataStreamLifecycleValidatorTests extends ESTestCase {
                     )
                 )
             );
+        }
+        return builder.build();
+    }
+
+    private DataStreamLifecycle randomFailuresLifecycle(boolean enabled) {
+        DataStreamLifecycle.Builder builder = DataStreamLifecycle.failuresLifecycleBuilder().enabled(enabled);
+        if (randomBoolean()) {
+            builder.dataRetention(TimeValue.timeValueDays(randomIntBetween(10, 100)));
         }
         return builder.build();
     }

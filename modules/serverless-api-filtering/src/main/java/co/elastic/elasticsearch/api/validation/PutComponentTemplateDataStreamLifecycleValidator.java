@@ -21,14 +21,16 @@ import org.elasticsearch.action.admin.indices.template.put.PutComponentTemplateA
 import org.elasticsearch.cluster.metadata.DataStreamLifecycle;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 
+import java.util.List;
+
 public class PutComponentTemplateDataStreamLifecycleValidator extends DataStreamLifecycleValidator<PutComponentTemplateAction.Request> {
     public PutComponentTemplateDataStreamLifecycleValidator(ThreadContext threadContext) {
         super(threadContext);
     }
 
     @Override
-    protected DataStreamLifecycle getLifecycleFromRequest(PutComponentTemplateAction.Request request) {
-        return fromTemplate(request.componentTemplate().template());
+    protected List<DataStreamLifecycle> getLifecyclesFromRequest(PutComponentTemplateAction.Request request) {
+        return getLifecyclesFromTemplate(request.componentTemplate().template());
     }
 
     @Override

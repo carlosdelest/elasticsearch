@@ -21,14 +21,19 @@ import org.elasticsearch.action.admin.indices.template.post.SimulateTemplateActi
 import org.elasticsearch.cluster.metadata.DataStreamLifecycle;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 
+import java.util.List;
+
 public class SimulateTemplateDataStreamLifecycleValidator extends DataStreamLifecycleValidator<SimulateTemplateAction.Request> {
     public SimulateTemplateDataStreamLifecycleValidator(ThreadContext threadContext) {
         super(threadContext);
     }
 
     @Override
-    protected DataStreamLifecycle getLifecycleFromRequest(SimulateTemplateAction.Request request) {
-        return fromIndexTemplateRequest(request.getIndexTemplateRequest());
+    protected List<DataStreamLifecycle> getLifecyclesFromRequest(SimulateTemplateAction.Request request) {
+        if (request.getIndexTemplateRequest() == null) {
+            return List.of();
+        }
+        return getLifecyclesFromTemplate(request.getIndexTemplateRequest().indexTemplate().template());
     }
 
     @Override
