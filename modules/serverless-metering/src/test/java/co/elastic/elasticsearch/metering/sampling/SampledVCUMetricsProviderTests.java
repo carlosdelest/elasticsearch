@@ -76,7 +76,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         SampledTierMetrics indexTierMetrics
     ) {
         metricsService.metricsState.set(
-            new SamplingState(THIS_NODE, new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, Map.of(), Set.of()))
+            new SamplingState(THIS_NODE, new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, Map.of(), Set.of()), Instant.EPOCH)
         );
     }
 

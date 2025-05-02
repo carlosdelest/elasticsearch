@@ -29,6 +29,7 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.S
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingStatus;
 import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
@@ -128,31 +129,31 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(createMockClusterService(Set::of), MeterRegistry.NOOP);
         var initialNodeStatus = randomFrom(PersistentTaskNodeStatus.values());
         var metrics = SampledClusterMetrics.EMPTY.withAdditionalStatus(SamplingStatus.STALE);
-        service.metricsState.set(new SamplingState(initialNodeStatus, metrics));
+        service.metricsState.set(new SamplingState(initialNodeStatus, metrics, Instant.EPOCH));
 
         var clusterState = MockedClusterStateTestUtils.createMockClusterState(); // unchanged
         service.clusterChanged(new ClusterChangedEvent("TEST", clusterState, clusterState));
         // cluster state is unchanged, so no update to node status
-        assertThat(service.metricsState.get(), is(new SamplingState(initialNodeStatus, metrics)));
+        assertThat(service.metricsState.get(), is(new SamplingState(initialNodeStatus, metrics, Instant.EPOCH)));
     }
 
     public void testClusterChangedUnchangedAssignment() {
         var service = new SampledClusterMetricsService(createMockClusterService(Set::of), MeterRegistry.NOOP);
         var metrics = SampledClusterMetrics.EMPTY.withAdditionalStatus(SamplingStatus.STALE);
-        service.metricsState.set(new SamplingState(THIS_NODE, metrics));
+        service.metricsState.set(new SamplingState(THIS_NODE, metrics, Instant.EPOCH));
 
         var newState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(MockedClusterStateTestUtils.LOCAL_NODE_ID);
         var oldState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(MockedClusterStateTestUtils.LOCAL_NODE_ID);
         service.clusterChanged(new ClusterChangedEvent("TEST", newState, oldState));
         // cluster state is unchanged, so no update to node status
-        assertThat(service.metricsState.get(), is(new SamplingState(THIS_NODE, metrics)));
+        assertThat(service.metricsState.get(), is(new SamplingState(THIS_NODE, metrics, Instant.EPOCH)));
     }
 
     public void testClusterChangedToThisTaskNode() {
         var service = new SampledClusterMetricsService(createMockClusterService(Set::of), MeterRegistry.NOOP);
         var initialNodeStatus = randomFrom(PersistentTaskNodeStatus.values());
         var metrics = SampledClusterMetrics.EMPTY.withAdditionalStatus(SamplingStatus.STALE);
-        service.metricsState.set(new SamplingState(initialNodeStatus, metrics));
+        service.metricsState.set(new SamplingState(initialNodeStatus, metrics, Instant.EPOCH));
 
         var clusterState = MockedClusterStateTestUtils.createMockClusterState();
         var previousState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(
@@ -166,14 +167,14 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         service.clusterChanged(new ClusterChangedEvent("TEST", currentState, previousState));
         // cluster state is unchanged, so no update to node status
-        assertThat(service.metricsState.get(), is(new SamplingState(THIS_NODE, SampledClusterMetrics.EMPTY)));
+        assertThat(service.metricsState.get(), is(new SamplingState(THIS_NODE, SampledClusterMetrics.EMPTY, Instant.EPOCH)));
     }
 
     public void testClusterChangedToOtherTaskNode() {
         var service = new SampledClusterMetricsService(createMockClusterService(Set::of), MeterRegistry.NOOP);
         var initialNodeStatus = randomFrom(PersistentTaskNodeStatus.values());
         var metrics = SampledClusterMetrics.EMPTY.withAdditionalStatus(SamplingStatus.STALE);
-        service.metricsState.set(new SamplingState(initialNodeStatus, metrics));
+        service.metricsState.set(new SamplingState(initialNodeStatus, metrics, Instant.EPOCH));
 
         var clusterState = MockedClusterStateTestUtils.createMockClusterState();
         var previousState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(
@@ -187,7 +188,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         service.clusterChanged(new ClusterChangedEvent("TEST", currentState, previousState));
         // cluster state is unchanged, so no update to node status
-        assertThat(service.metricsState.get(), is(new SamplingState(ANOTHER_NODE, SampledClusterMetrics.EMPTY)));
+        assertThat(service.metricsState.get(), is(new SamplingState(ANOTHER_NODE, SampledClusterMetrics.EMPTY, Instant.EPOCH)));
     }
 
     public void testInitialShardInfoUpdate() {
@@ -510,69 +511,73 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
     public void testShardInfoDiffUpdateWithNewUUID() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
-        var shard2Id = new ShardId("index1", "index1UUID", 2);
         var shard3Id = new ShardId("index1", "index1UUID", 3);
         var newShard3Id = new ShardId("index1", "index1UUID-2", 3);
 
         var shardsInfo = Map.ofEntries(
             entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
-            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build()),
             entry(shard3Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 13L, 0L, 0).withGeneration(1, 2, 0).build())
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 1, 0).build()),
             entry(
                 newShard3Id,
                 ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(130L, 23L, 0L, 0).withGeneration(1, 1, 0).build()
             )
         );
 
-        var clusterService = createMockClusterService(shardsInfo::keySet); // index of newShard3Id unknown to this node
+        var activeShards = new AtomicReference<>(shardsInfo.keySet());
+        var samplingMetadata = new AtomicReference<>(new SampledMetricsMetadata(Instant.now(), true));
+
+        var clusterService = createMockClusterService(activeShards::get, samplingMetadata::get); // index of newShard3Id unknown
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
-        var initialShardInfo = service.getMeteringShardInfo();
+        assertThat(service.getMeteringShardInfo(), containsShardInfos(anEmptyMap()));
 
         var client = mock(Client.class);
         doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
             .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
         service.updateSamples(client);
-        var firstRoundShardInfo = service.getMeteringShardInfo();
+        assertThat(
+            service.getMeteringShardInfo(),
+            containsShardInfos(entry(shard1Id, withSizeInBytes(11L)), entry(shard3Id, withSizeInBytes(13L)))
+        );
+
+        // update routing table to reflect the change from shard3Id to newShard3Id
+        activeShards.set(Set.of(shard1Id, newShard3Id));
 
         service.updateSamples(client);
-        var secondRoundShardInfo = service.getMeteringShardInfo();
-
-        assertThat(initialShardInfo, not(nullValue()));
-        assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
-
-        assertThat(firstRoundShardInfo, not(nullValue()));
         assertThat(
-            firstRoundShardInfo,
+            service.getMeteringShardInfo(),
             containsShardInfos(
                 entry(shard1Id, withSizeInBytes(11L)),
-                entry(shard2Id, withSizeInBytes(12L)),
-                entry(shard3Id, withSizeInBytes(13L))
+                entry(shard3Id, withSizeInBytes(13L)),
+                entry(newShard3Id, withSizeInBytes(23L))
             )
         );
 
+        // update sampling metadata so old obsolete shards are removed on the next update
+        samplingMetadata.set(new SampledMetricsMetadata(Instant.now(), true));
+
+        service.updateSamples(client);
         assertThat(
-            secondRoundShardInfo,
-            containsShardInfos(
-                entry(shard1Id, withSizeInBytes(11L)),
-                entry(shard2Id, withSizeInBytes(12L)), // shardsInfo2 contains older generation
-                entry(shard3Id, withSizeInBytes(13L))
-            )
+            service.getMeteringShardInfo(),
+            containsShardInfos(entry(shard1Id, withSizeInBytes(11L)), entry(newShard3Id, withSizeInBytes(23L)))
         );
 
         final List<Measurement> collections = Measurement.combine(
             meterRegistry.getRecorder()
                 .getMeasurements(InstrumentType.LONG_COUNTER, SampledClusterMetricsService.NODE_INFO_COLLECTIONS_TOTAL)
         );
-        assertThat(collections, contains(transformedMatch(Measurement::getLong, equalTo(2L))));
+        assertThat(collections, contains(transformedMatch(Measurement::getLong, equalTo(3L))));
     }
 
     private ClusterService createMockClusterService(Supplier<Set<ShardId>> shardsInfo) {
+        return createMockClusterService(shardsInfo, () -> null);
+    }
+
+    private ClusterService createMockClusterService(Supplier<Set<ShardId>> shardsInfo, Supplier<SampledMetricsMetadata> samplingMetadata) {
         var clusterService = mock(ClusterService.class);
         var clusterState = mock(ClusterState.class);
         var routingTable = mock(RoutingTable.class);
@@ -581,6 +586,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
         final var globalRoutingTable = GlobalRoutingTable.builder().put(Metadata.DEFAULT_PROJECT_ID, routingTable).build();
         when(clusterState.globalRoutingTable()).thenReturn(globalRoutingTable);
+        when(clusterState.custom(SampledMetricsMetadata.TYPE)).thenAnswer(i -> samplingMetadata.get());
         when(clusterService.state()).thenReturn(clusterState);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);
         return clusterService;
@@ -640,44 +646,90 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
     }
 
-    public void testShardInfoUpdateWhenIndexRemoved() {
+    // TODO: ES-11670 Remove once reporting usage ids including the index uuid
+    public void testShardInfoUpdateWhenIndexRemovedButUsingOldUsageIds() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
-        var shard2Id = new ShardId("index2", "index1UUID", 2);
+        var shard2Id = new ShardId("index2", "index2UUID", 2);
 
         var shardsInfo = Map.ofEntries(
             entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
-            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 2, 0).build())
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 1, 0).build())
         );
 
         var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 1, 0).build())
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 2, 0).build())
         );
 
         AtomicReference<Set<ShardId>> activeShards = new AtomicReference<>(shardsInfo.keySet());
+        AtomicReference<SampledMetricsMetadata> samplingMetadata = new AtomicReference<>(new SampledMetricsMetadata(Instant.now(), false));
 
-        var clusterService = createMockClusterService(activeShards::get);
+        var clusterService = createMockClusterService(activeShards::get, samplingMetadata::get);
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
-        var initialShardInfo = service.getMeteringShardInfo();
+        assertThat(service.getMeteringShardInfo(), containsShardInfos(anEmptyMap()));
 
         var client = mock(Client.class);
         doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
             .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
 
         service.updateSamples(client);
-        var firstRoundShardInfo = service.getMeteringShardInfo();
+        assertThat(
+            service.getMeteringShardInfo(),
+            containsShardInfos(entry(shard1Id, withSizeInBytes(11L)), entry(shard2Id, withSizeInBytes(12L)))
+        );
+
+        // Update routing table to remove shard1. Corresponding metrics are evicted immediately.
         activeShards.set(shardsInfo2.keySet());
 
         service.updateSamples(client);
-        var secondRoundShardInfo = service.getMeteringShardInfo();
+        assertThat(service.getMeteringShardInfo(), containsShardInfos(entry(shard2Id, withSizeInBytes(22L))));
+    }
 
-        assertThat(initialShardInfo, not(nullValue()));
-        assertThat(initialShardInfo, containsShardInfos(anEmptyMap()));
+    public void testShardInfoUpdateWhenIndexRemoved() {
+        var shard1Id = new ShardId("index1", "index1UUID", 1);
+        var shard2Id = new ShardId("index2", "index2UUID", 2);
 
-        assertThat(firstRoundShardInfo, not(nullValue()));
-        assertThat(firstRoundShardInfo, containsShardInfos(entry(shard1Id, withSizeInBytes(11L)), entry(shard2Id, withSizeInBytes(12L))));
+        var shardsInfo = Map.ofEntries(
+            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 1, 0).build())
+        );
 
-        assertThat(secondRoundShardInfo, containsShardInfos(entry(shard2Id, withSizeInBytes(12L))));
+        var shardsInfo2 = Map.ofEntries(
+            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 2, 0).build())
+        );
+
+        var activeShards = new AtomicReference<>(shardsInfo.keySet());
+        var samplingMetadata = new AtomicReference<>(new SampledMetricsMetadata(Instant.now(), true));
+
+        var clusterService = createMockClusterService(activeShards::get, samplingMetadata::get);
+        var meterRegistry = new RecordingMeterRegistry();
+        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
+        assertThat(service.getMeteringShardInfo(), containsShardInfos(anEmptyMap()));
+
+        var client = mock(Client.class);
+        doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
+            .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
+
+        service.updateSamples(client);
+        assertThat(
+            service.getMeteringShardInfo(),
+            containsShardInfos(entry(shard1Id, withSizeInBytes(11L)), entry(shard2Id, withSizeInBytes(12L)))
+        );
+
+        // Update routing table to remove shard1. Though, it will be kept until the committed timestamp proceeded.
+        activeShards.set(shardsInfo2.keySet());
+
+        service.updateSamples(client);
+        assertThat(
+            service.getMeteringShardInfo(),
+            containsShardInfos(entry(shard1Id, withSizeInBytes(11L)), entry(shard2Id, withSizeInBytes(22L)))
+        );
+
+        // Shard1 is finally removed after the committed timestamp proceeded.
+        samplingMetadata.set(new SampledMetricsMetadata(Instant.now(), true));
+
+        service.updateSamples(client);
+        assertThat(service.getMeteringShardInfo(), containsShardInfos(entry(shard2Id, withSizeInBytes(22L))));
     }
 
     public void testPersistentTaskNodeChangeResetShardInfo() {

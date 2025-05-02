@@ -20,11 +20,13 @@ package co.elastic.elasticsearch.metering.sampling;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
+import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -84,7 +86,7 @@ public class SampledClusterMetricsService {
     ) {
         this.clusterService = clusterService;
         this.meterRegistry = meterRegistry;
-        this.metricsState = new AtomicReference<>(new SamplingState(nodeStatus, SampledClusterMetrics.EMPTY));
+        this.metricsState = new AtomicReference<>(new SamplingState(nodeStatus, SampledClusterMetrics.EMPTY, Instant.EPOCH));
 
         clusterService.addListener(this::clusterChanged);
         this.activityCoolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
@@ -166,7 +168,7 @@ public class SampledClusterMetricsService {
         ANOTHER_NODE
     }
 
-    record SamplingState(PersistentTaskNodeStatus nodeStatus, SampledClusterMetrics metrics) {}
+    record SamplingState(PersistentTaskNodeStatus nodeStatus, SampledClusterMetrics metrics, Instant committedTimestamp) {}
 
     final AtomicReference<SamplingState> metricsState;
 
@@ -189,13 +191,15 @@ public class SampledClusterMetricsService {
 
         if (isPersistentTask && wasPersistentTask == false) {
             // this node has become the persistent task node
-            metricsState.set(new SamplingState(PersistentTaskNodeStatus.THIS_NODE, SampledClusterMetrics.EMPTY));
+            var samplingMetadata = SampledMetricsMetadata.getFromClusterState(event.state());
+            var committedTimestamp = samplingMetadata != null ? samplingMetadata.getCommittedTimestamp() : Instant.EPOCH;
+            metricsState.set(new SamplingState(PersistentTaskNodeStatus.THIS_NODE, SampledClusterMetrics.EMPTY, committedTimestamp));
         } else if (currentTaskNodeId == null && previousTaskNodeId != null) {
             // the persistent task node was unassigned (e.g. node shutdown) or the task was disabled
-            metricsState.set(new SamplingState(PersistentTaskNodeStatus.NO_NODE, SampledClusterMetrics.EMPTY));
+            metricsState.set(new SamplingState(PersistentTaskNodeStatus.NO_NODE, SampledClusterMetrics.EMPTY, Instant.EPOCH));
         } else if (currentTaskNodeId != null && currentTaskNodeId.equals(previousTaskNodeId) == false) {
             // another node has become the persistent task node
-            metricsState.set(new SamplingState(PersistentTaskNodeStatus.ANOTHER_NODE, SampledClusterMetrics.EMPTY));
+            metricsState.set(new SamplingState(PersistentTaskNodeStatus.ANOTHER_NODE, SampledClusterMetrics.EMPTY, Instant.EPOCH));
         }
     }
 
@@ -206,7 +210,7 @@ public class SampledClusterMetricsService {
         logger.debug("Calling SampledClusterMetricsService#updateSamples");
         collectionsTotalCounter.increment();
 
-        var state = this.metricsState.get();
+        var state = metricsState.get();
         var collectSamplesRequest = new CollectClusterSamplesAction.Request(
             state.metrics().searchTierMetrics().activity(),
             state.metrics().indexTierMetrics().activity()
@@ -217,12 +221,10 @@ public class SampledClusterMetricsService {
                 if (response.isComplete() == false) {
                     collectionsPartialsCounter.increment();
                 }
+
+                var clusterState = clusterService.state();
                 // Update sample metrics, replacing memory, merging activity, and building new MeteringShardInfo from diffs
-                SampledClusterMetricsService.this.metricsState.getAndUpdate(
-                    current -> current.nodeStatus() == PersistentTaskNodeStatus.THIS_NODE
-                        ? new SamplingState(current.nodeStatus(), mergeSamplesWithUpdate(current.metrics(), response))
-                        : current
-                );
+                metricsState.getAndUpdate(current -> nextSamplingState(current, clusterState, response));
                 logger.debug(
                     () -> format(
                         "collected new metering shard info for shards [%s]",
@@ -235,13 +237,39 @@ public class SampledClusterMetricsService {
             public void onFailure(Exception e) {
                 logger.error("Failed to collect samples in cluster", e);
                 collectionsErrorsCounter.increment();
-                SampledClusterMetricsService.this.metricsState.getAndUpdate(
+                metricsState.getAndUpdate(
                     current -> current.nodeStatus() == PersistentTaskNodeStatus.THIS_NODE
-                        ? new SamplingState(current.nodeStatus(), current.metrics().withAdditionalStatus(SamplingStatus.STALE))
+                        ? new SamplingState(
+                            current.nodeStatus(),
+                            current.metrics().withAdditionalStatus(SamplingStatus.STALE),
+                            Instant.EPOCH
+                        )
                         : current
                 );
             }
         });
+    }
+
+    private SamplingState nextSamplingState(SamplingState current, ClusterState clusterState, CollectClusterSamplesAction.Response update) {
+        if (current.nodeStatus() != PersistentTaskNodeStatus.THIS_NODE) {
+            return current;
+        }
+        // if the committed timestamp proceeded, only retain active, known shards and evict shards that have been removed
+        var samplingMetadata = SampledMetricsMetadata.getFromClusterState(clusterState);
+        var committedTimestamp = samplingMetadata != null ? samplingMetadata.getCommittedTimestamp() : Instant.EPOCH;
+
+        // check if to evict old shards (once the committed timestamp changed)
+        // until reporting using uuid based records ids, always evict old shards
+        // TODO: ES-11670 simplify once reporting usage ids including the index uuid
+        var evictOldShards = samplingMetadata == null
+            || samplingMetadata.useDeduplicationIdWithIndexUUID() == false
+            || current.committedTimestamp.equals(committedTimestamp) == false;
+
+        return new SamplingState(
+            current.nodeStatus(),
+            mergeSamplesWithUpdate(current.metrics(), update, evictOldShards),
+            committedTimestamp
+        );
     }
 
     Activity.Snapshot activitySnapshot(SampledTierMetrics tierMetrics) {
@@ -252,28 +280,21 @@ public class SampledClusterMetricsService {
         return activityCoolDownPeriod;
     }
 
-    private SampledClusterMetrics mergeSamplesWithUpdate(SampledClusterMetrics current, CollectClusterSamplesAction.Response response) {
+    private SampledClusterMetrics mergeSamplesWithUpdate(
+        SampledClusterMetrics current,
+        CollectClusterSamplesAction.Response response,
+        boolean evictOldShards
+    ) {
         return new SampledClusterMetrics(
             mergeTierMetrics(current.searchTierMetrics(), response.getSearchTierMemorySize(), response.getSearchActivity()),
             mergeTierMetrics(current.indexTierMetrics(), response.getIndexTierMemorySize(), response.getIndexActivity()),
-            mergeShardInfos(current.shardSamples(), response.getShardInfos(), activeShardIds()),
+            mergeShardInfos(current.shardSamples(), response.getShardInfos(), evictOldShards),
             response.isComplete() ? EnumSet.noneOf(SamplingStatus.class) : EnumSet.of(SamplingStatus.PARTIAL)
         );
     }
 
     private SampledTierMetrics mergeTierMetrics(SampledTierMetrics current, long newMemory, Activity newActivity) {
         return new SampledTierMetrics(newMemory, Activity.merge(Stream.of(current.activity(), newActivity), activityCoolDownPeriod));
-    }
-
-    private Set<ShardId> activeShardIds() {
-        return clusterService.state()
-            .globalRoutingTable()
-            .routingTables()
-            .values()
-            .stream()
-            .flatMap(RoutingTable::allShards)
-            .map(ShardRouting::shardId)
-            .collect(Collectors.toSet());
     }
 
     public <T> Optional<T> withSamplesIfReady(
@@ -303,26 +324,30 @@ public class SampledClusterMetricsService {
         );
     }
 
-    // TODO Use index uuid for index related usage reporting and only remove unknown shards after successfully reporting
-    // all recently seen shards ES-10144
-    private static Map<ShardId, ShardInfoMetrics> mergeShardInfos(
+    private Set<ShardId> activeShardIds() {
+        return clusterService.state()
+            .globalRoutingTable()
+            .routingTables()
+            .values()
+            .stream()
+            .flatMap(RoutingTable::allShards)
+            .map(ShardRouting::shardId)
+            .collect(Collectors.toSet());
+    }
+
+    private Map<ShardId, ShardInfoMetrics> mergeShardInfos(
         Map<ShardId, ShardInfoMetrics> current,
         Map<ShardId, ShardInfoMetrics> updated,
-        Set<ShardId> activeShardIds
+        boolean evictOldShards
     ) {
         HashMap<ShardId, ShardInfoMetrics> map = new HashMap<>(current);
-        map.keySet().retainAll(activeShardIds); // drop unknown / inactive shards
         for (var newEntry : updated.entrySet()) {
-            // Note, previously we considered all updates to be active and only evicted them on the next iteration if still not active.
-            // This needs to be done using a more reliable lifecycle taking usage reporting success into account, see above.
-
-            // For a transition period until tackling ES-10144 this ensures a consistent view on indices that doesn't contain any duplicate
-            // shards (if indices are equal by name, but different by uuid):
-            // `activeShardIds` retrieved from the routing tables won't ever include such duplicates.
-            if (activeShardIds.contains(newEntry.getKey())) {
-                // merge active shards into map
-                map.merge(newEntry.getKey(), newEntry.getValue(), (oldVal, newVal) -> newVal.mostRecent(oldVal));
-            }
+            // merge shard updates into map
+            map.merge(newEntry.getKey(), newEntry.getValue(), (oldVal, newVal) -> newVal.mostRecent(oldVal));
+        }
+        if (evictOldShards) {
+            // periodically we need to evict obsolete old shards
+            map.keySet().retainAll(activeShardIds());
         }
         return map;
     }

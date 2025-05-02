@@ -115,7 +115,11 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
     private void setMetricsServiceState(Instant lastSearchActivity, Map<ShardId, ShardInfoMetrics> data, SamplingStatus... flags) {
         var searchTier = new SampledTierMetrics(0L, new Activity(lastSearchActivity, lastSearchActivity, Instant.EPOCH, Instant.EPOCH));
         metricsService.metricsState.set(
-            new SamplingState(THIS_NODE, new SampledClusterMetrics(searchTier, SampledTierMetrics.EMPTY, data, Set.of(flags)))
+            new SamplingState(
+                THIS_NODE,
+                new SampledClusterMetrics(searchTier, SampledTierMetrics.EMPTY, data, Set.of(flags)),
+                Instant.EPOCH
+            )
         );
     }
 
