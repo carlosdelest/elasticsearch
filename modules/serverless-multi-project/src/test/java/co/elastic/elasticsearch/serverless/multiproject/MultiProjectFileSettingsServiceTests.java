@@ -35,8 +35,10 @@ import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.env.BuildVersion;
 import org.elasticsearch.env.Environment;
+import org.elasticsearch.health.HealthIndicatorResult;
 import org.elasticsearch.reservedstate.action.ReservedClusterSettingsAction;
-import org.elasticsearch.reservedstate.service.FileSettingsService.FileSettingsHealthIndicatorService;
+import org.elasticsearch.reservedstate.service.FileSettingsService;
+import org.elasticsearch.reservedstate.service.FileSettingsService.FileSettingsHealthTracker;
 import org.elasticsearch.reservedstate.service.ReservedClusterStateService;
 import org.elasticsearch.reservedstate.service.ReservedStateChunk;
 import org.elasticsearch.reservedstate.service.ReservedStateVersion;
@@ -96,7 +98,7 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
     private ReservedClusterStateService controller;
     private ThreadPool threadpool;
     private MultiProjectFileSettingsService fileSettingsService;
-    private FileSettingsHealthIndicatorService healthIndicatorService;
+    private FileSettingsHealthTracker healthTracker;
     private Path settingsFile;
 
     @Before
@@ -142,8 +144,8 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
                 List.of()
             )
         );
-        healthIndicatorService = spy(new FileSettingsHealthIndicatorService(Settings.EMPTY));
-        fileSettingsService = spy(new MultiProjectFileSettingsService(clusterService, controller, env, healthIndicatorService));
+        healthTracker = spy(new FileSettingsHealthTracker(Settings.EMPTY, (i, a) -> {}));
+        fileSettingsService = spy(new MultiProjectFileSettingsService(clusterService, controller, env, healthTracker));
         settingsFile = fileSettingsService.watchedFile();
     }
 
@@ -175,8 +177,8 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         assertTrue(fileSettingsService.watching());
         fileSettingsService.stop();
         assertFalse(fileSettingsService.watching());
-        verify(healthIndicatorService, times(1)).startOccurred();
-        verify(healthIndicatorService, times(1)).stopOccurred();
+        verify(healthTracker, times(1)).startOccurred();
+        verify(healthTracker, times(1)).stopOccurred();
     }
 
     public void testOperatorDirName() {
@@ -220,9 +222,9 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         verify(fileSettingsService, times(1)).processFile(eq(settingsFile), eq(true));
         verify(controller, times(1)).process(any(), any(XContentParser.class), eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION), any());
 
-        assertEquals(YELLOW, healthIndicatorService.calculate(false, null).status());
-        verify(healthIndicatorService, times(1)).changeOccurred();
-        verify(healthIndicatorService, times(1)).failureOccurred(argThat(s -> s.startsWith(IllegalStateException.class.getName())));
+        assertEquals(YELLOW, currentHealthIndicatorResult().status());
+        verify(healthTracker, times(1)).changeOccurred();
+        verify(healthTracker, times(1)).failureOccurred(argThat(s -> s.startsWith(IllegalStateException.class.getName())));
     }
 
     @SuppressWarnings("unchecked")
@@ -261,9 +263,9 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         verify(controller, times(1)).process(any(), any(XContentParser.class), eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION), any());
         verify(controller, times(projectNum)).process(any(), any(), anyList(), eq(ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION), any());
 
-        assertEquals(GREEN, healthIndicatorService.calculate(false, null).status());
-        verify(healthIndicatorService, times(1)).changeOccurred();
-        verify(healthIndicatorService, times(projectNum + 1)).successOccurred();
+        assertEquals(GREEN, currentHealthIndicatorResult().status());
+        verify(healthTracker, times(1)).changeOccurred();
+        verify(healthTracker, times(projectNum + 1)).successOccurred();
     }
 
     @SuppressWarnings("unchecked")
@@ -300,9 +302,9 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         verify(fileSettingsService, times(1)).processFile(eq(settingsFile), eq(false));
         verify(controller, times(1)).process(any(), any(XContentParser.class), eq(ReservedStateVersionCheck.HIGHER_VERSION_ONLY), any());
 
-        assertEquals(GREEN, healthIndicatorService.calculate(false, null).status());
-        verify(healthIndicatorService, times(2)).changeOccurred();
-        verify(healthIndicatorService, times(2)).successOccurred();
+        assertEquals(GREEN, currentHealthIndicatorResult().status());
+        verify(healthTracker, times(2)).changeOccurred();
+        verify(healthTracker, times(2)).successOccurred();
     }
 
     @SuppressWarnings("unchecked")
@@ -482,4 +484,9 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
             throw new AssertionError("longPoll: interrupted waiting for BlockingQueue poll", e);
         }
     }
+
+    private HealthIndicatorResult currentHealthIndicatorResult() {
+        return new FileSettingsService.FileSettingsHealthIndicatorService().calculate(healthTracker.getCurrentInfo());
+    }
+
 }

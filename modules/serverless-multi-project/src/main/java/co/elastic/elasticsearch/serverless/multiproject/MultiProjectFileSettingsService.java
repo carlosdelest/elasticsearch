@@ -75,9 +75,9 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
         ClusterService clusterService,
         ReservedClusterStateService stateService,
         Environment environment,
-        FileSettingsHealthIndicatorService healthIndicatorService
+        FileSettingsHealthTracker healthTracker
     ) {
-        super(clusterService, stateService, environment, healthIndicatorService);
+        super(clusterService, stateService, environment, healthTracker);
         this.stateService = stateService;
     }
 

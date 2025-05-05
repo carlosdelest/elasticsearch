@@ -29,8 +29,8 @@ public class MultiProjectFileSettingsServiceProvider implements FileSettingsServ
         ClusterService clusterService,
         ReservedClusterStateService stateService,
         Environment environment,
-        FileSettingsService.FileSettingsHealthIndicatorService healthIndicatorService
+        FileSettingsService.FileSettingsHealthTracker fileSettingsHealthTracker
     ) {
-        return new MultiProjectFileSettingsService(clusterService, stateService, environment, healthIndicatorService);
+        return new MultiProjectFileSettingsService(clusterService, stateService, environment, fileSettingsHealthTracker);
     }
 }
