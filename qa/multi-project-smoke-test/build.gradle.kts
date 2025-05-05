@@ -23,3 +23,7 @@ dependencies {
     javaRestTestImplementation(testArtifact(xpackModule("plugin")))
     javaRestTestImplementation(testArtifact(xpackModule("core")))
 }
+
+tasks.withType<Test>().configureEach {
+    systemProperty("tests.multi_project.enabled", true)
+}

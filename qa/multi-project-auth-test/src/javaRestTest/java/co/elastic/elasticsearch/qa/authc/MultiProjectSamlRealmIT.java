@@ -162,6 +162,11 @@ public class MultiProjectSamlRealmIT extends ESRestTestCase {
         return Settings.builder().put(ThreadContext.PREFIX + ".Authorization", token).put(CERTIFICATE_AUTHORITIES, caPath).build();
     }
 
+    @Override
+    protected boolean shouldConfigureProjects() {
+        return false;
+    }
+
     public void testAuthenticationSuccessful() throws Exception {
         final String username = randomAlphaOfLengthBetween(4, 12);
         for (String projectId : shuffledList(PROJECT_IDS)) {

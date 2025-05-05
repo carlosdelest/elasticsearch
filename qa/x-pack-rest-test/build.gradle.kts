@@ -282,7 +282,7 @@ tasks {
 
         blacklistMultiProject.addAll(blacklist)
         systemProperty("tests.rest.blacklist", blacklistMultiProject.joinToString(","))
-        systemProperty("es.test.multi_project.enabled", "true")
+        systemProperty("tests.multi_project.enabled", "true")
     }
 
     check {

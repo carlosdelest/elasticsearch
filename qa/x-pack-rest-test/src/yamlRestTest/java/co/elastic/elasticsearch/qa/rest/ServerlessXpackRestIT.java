@@ -29,6 +29,8 @@ import java.util.function.Predicate;
 
 public class ServerlessXpackRestIT extends AbstractServerlessXpackMultiProjectClientYamlSuiteTestCase {
 
+    public static final boolean MULTI_PROJECT_ENABLED = Boolean.parseBoolean(System.getProperty("tests.multi_project.enabled", "false"));
+
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .name("yamlRestTest")

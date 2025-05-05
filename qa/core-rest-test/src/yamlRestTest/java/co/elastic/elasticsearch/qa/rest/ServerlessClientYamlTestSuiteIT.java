@@ -21,6 +21,8 @@ import org.junit.ClassRule;
 @TimeoutSuite(millis = 40 * TimeUnits.MINUTE)
 public class ServerlessClientYamlTestSuiteIT extends AbstractServerlessMultiProjectClientYamlSuiteTestCase {
 
+    public static final boolean MULTI_PROJECT_ENABLED = Boolean.parseBoolean(System.getProperty("tests.multi_project.enabled", "false"));
+
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("serverless.multi_project.enabled", String.valueOf(MULTI_PROJECT_ENABLED))

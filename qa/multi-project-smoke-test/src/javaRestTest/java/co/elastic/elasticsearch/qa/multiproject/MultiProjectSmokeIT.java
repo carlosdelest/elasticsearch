@@ -256,6 +256,11 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         return clientSettings(false);
     }
 
+    @Override
+    protected boolean shouldConfigureProjects() {
+        return false;
+    }
+
     private Settings clientSettings(boolean projectScoped) {
         return clientSettings(projectScoped, activeProject);
     }

@@ -177,6 +177,11 @@ public class ProjectFileSettingsRealmIT extends ESRestTestCase {
         return clientSettings();
     }
 
+    @Override
+    protected boolean shouldConfigureProjects() {
+        return false;
+    }
+
     private Settings clientSettings() {
         String token = basicAuthHeaderValue(ADMIN_USERNAME, new SecureString(ADMIN_PASSWORD.toCharArray()));
         final Settings.Builder builder = Settings.builder()

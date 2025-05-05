@@ -24,3 +24,7 @@ dependencies {
     javaRestTestImplementation(xpackModule("security"))
     javaRestTestImplementation(testArtifact("org.elasticsearch.plugin.security.qa:saml-rest-tests", "javaRestTest"))
 }
+
+tasks.withType<Test>().configureEach {
+    systemProperty("tests.multi_project.enabled", true)
+}
