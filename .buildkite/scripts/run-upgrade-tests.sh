@@ -7,7 +7,7 @@ if [ "${GITOPS_ENV}" == "dev" ]; then
   RELEASE_COMMITS=()
 
   # If this is a patch release branch we don't want to do upgrade tests against dev
-  if [[ "${BUILDKITE_BRANCH}" == patch/* ]]; then
+  if [[ "${BUILDKITE_BRANCH}" == patch/* || "${BUILDKITE_BRANCH}" == elastic:patch/* ]]; then
     RELEASE_TAGS=(current_qa current_staging current_production-canary current_production-noncanary)
   fi
 
