@@ -8,6 +8,10 @@ logger.org.elasticsearch.repositories.blobstore.BlobStoreRepository.ShutdownLogg
 logger.org.elasticsearch.snapshots.SnapshotShardsService: DEBUG
 logger.org.elasticsearch.snapshots.SnapshotShardsService.ShardStatusConsistencyChecker: DEBUG
 
+# TODO remove the following lines once we are confident there are no egregiously slow cluster state appliers
+logger.org.elasticsearch.cluster.service.ClusterApplierRecordingService: DEBUG
+cluster.service.slow_task_thread_dump_timeout: 10s
+
 # Enable LogsDB by default (original PR #3112)
 cluster.logsdb.enabled: true
 
