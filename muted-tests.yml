@@ -163,3 +163,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchMetricsIT
   method: testShardSizesForHollowShards
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3861
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {sample.Adjust stats for sampling SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3864
