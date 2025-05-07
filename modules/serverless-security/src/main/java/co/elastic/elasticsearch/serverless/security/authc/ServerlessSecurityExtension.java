@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 import org.elasticsearch.xpack.core.XPackPlugin;
 import org.elasticsearch.xpack.core.security.SecurityExtension;
 import org.elasticsearch.xpack.core.security.authc.Realm;
+import org.elasticsearch.xpack.core.security.authc.service.ServiceAccountTokenStore;
 import org.elasticsearch.xpack.security.authc.saml.SamlRealm;
 
 import java.util.Map;
@@ -33,6 +34,14 @@ public class ServerlessSecurityExtension implements SecurityExtension {
 
     public ServerlessSecurityExtension(ServerlessSecurityPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    @Override
+    public ServiceAccountTokenStore getServiceAccountTokenStore(SecurityComponents components) {
+        if (components.projectResolver().supportsMultipleProjects()) {
+            return new ProjectServiceAccountTokenStore(components.clusterService(), components.projectResolver());
+        }
+        return null;
     }
 
     @Override

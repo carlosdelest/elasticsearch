@@ -33,4 +33,3 @@ dependencies {
     compileOnly(xpackModule("core"))
     compileOnly(xpackModule("security"))
 }
-

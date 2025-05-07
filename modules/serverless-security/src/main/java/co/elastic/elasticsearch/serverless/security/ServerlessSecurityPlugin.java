@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.serverless.security;
 
 import co.elastic.elasticsearch.serverless.security.authc.MultiProjectSpSamlRealmSettings;
 import co.elastic.elasticsearch.serverless.security.authc.ProjectFileSettingsRealmSettings;
+import co.elastic.elasticsearch.serverless.security.authc.ProjectServiceAccountTokenStoreSettings;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,13 +40,13 @@ import org.elasticsearch.xpack.core.security.SecurityContext;
 import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
 import org.elasticsearch.xpack.core.security.authc.saml.SingleSpSamlRealmSettings;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import static org.elasticsearch.xpack.core.security.authc.saml.SamlRealmSettings.EXCLUDE_ROLES;
 import static org.elasticsearch.xpack.core.security.authz.store.ReservedRolesStore.INCLUDED_RESERVED_ROLES_SETTING;
@@ -136,9 +137,8 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
     @Override
     public List<Setting<?>> getSettings() {
-        return Stream.concat(
-            Stream.concat(MultiProjectSpSamlRealmSettings.getSettings().stream(), ProjectFileSettingsRealmSettings.getSettings().stream()),
-            Stream.of(
+        List<Setting<?>> settings = new ArrayList<>(
+            List.of(
                 INCLUDED_RESERVED_ROLES_SETTING,
                 NATIVE_USERS_SETTING,
                 NATIVE_ROLES_SETTING,
@@ -146,7 +146,11 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
                 NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
                 EXCLUDE_ROLES.apply(SingleSpSamlRealmSettings.TYPE)
             )
-        ).toList();
+        );
+        settings.addAll(ProjectFileSettingsRealmSettings.getSettings());
+        settings.addAll(MultiProjectSpSamlRealmSettings.getSettings());
+        settings.addAll(ProjectServiceAccountTokenStoreSettings.getSettings());
+        return settings;
     }
 
     @Override
