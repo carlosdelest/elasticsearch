@@ -157,9 +157,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessReshardIT
   method: testReshardTargetWillEqualToPrimaryTermOfSource
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3821
-- class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
-  method: testSearchSizeAffectsReplicasSPBetween100And250
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3859
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingSearchMetricsIT
   method: testShardSizesForHollowShards
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3861
