@@ -667,6 +667,9 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var dataStreamIndex = new Index(".ds-foo2", INDEX_UUID_NA_VALUE);
         var dsShardId = new ShardId(dataStreamIndex, 0);
 
+        var dataStreamFailureIndex = new Index(".fs-foo2", INDEX_UUID_NA_VALUE);
+        var dsShardFailureId = new ShardId(dataStreamFailureIndex, 0);
+
         SampledShardInfos mockShardsInfo = mock();
         when(mockShardsInfo.get(shardId1)).thenReturn(
             ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(100L, 10L, 0L, 10L).build()
@@ -680,13 +683,19 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         when(mockShardsInfo.get(dsShardId)).thenReturn(
             ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(400L, 40L, 0L, 40L).build()
         );
+        when(mockShardsInfo.get(dsShardFailureId)).thenReturn(
+            ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(500L, 50L, 0L, 50L).build()
+        );
 
         var query = new String[] { "foo*" };
 
         when(clusterMetricsService.getMeteringShardInfo()).thenReturn(mockShardsInfo);
         when(indexNameExpressionResolver.concreteIndexNames(any(ClusterState.class), any())).thenReturn(new String[] { "foo1", "foo2" });
         when(indexNameExpressionResolver.dataStreams(any(ProjectMetadata.class), any(), eq(query))).thenReturn(
-            List.of(new IndexNameExpressionResolver.ResolvedExpression("fooDs", IndexComponentSelector.DATA))
+            List.of(
+                new IndexNameExpressionResolver.ResolvedExpression("fooDs", IndexComponentSelector.DATA),
+                new IndexNameExpressionResolver.ResolvedExpression("fooDs", IndexComponentSelector.FAILURES)
+            )
         );
 
         PersistentTasksCustomMetadata.PersistentTask<?> task = mock(PersistentTasksCustomMetadata.PersistentTask.class);
@@ -703,6 +712,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                     .add(addLocalOnlyIndexRouting(index2, shardId2))
                     .add(addLocalOnlyIndexRouting(index3, shardId3))
                     .add(addLocalOnlyIndexRouting(dataStreamIndex, dsShardId))
+                    .add(addLocalOnlyIndexRouting(dataStreamFailureIndex, dsShardFailureId))
                     .build()
             );
             b.metadata(
@@ -712,15 +722,15 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
                         DataStreamMetadata.TYPE,
                         new DataStreamMetadata(
                             ImmutableOpenMap.<String, DataStream>builder()
-                                .fPut("fooDs", DataStreamTestHelper.newInstance("fooDs", List.of(dataStreamIndex)))
+                                .fPut(
+                                    "fooDs",
+                                    DataStreamTestHelper.newInstance("fooDs", List.of(dataStreamIndex), List.of(dataStreamFailureIndex))
+                                )
                                 .build(),
                             ImmutableOpenMap.of()
                         )
                     )
-                    .indices(
-                        createLocalOnlyIndicesMetadata(index1, index2, index3, dataStreamIndex)
-
-                    )
+                    .indices(createLocalOnlyIndicesMetadata(index1, index2, index3, dataStreamIndex, dataStreamFailureIndex))
                     .build()
             );
         });
@@ -735,14 +745,14 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         assertThat(response, notNullValue());
 
-        assertThat(response.totalDocCount, is(700L));
-        assertThat(response.totalSizeInBytes, is(70L));
-        assertThat(response.indexToStatsMap, aMapWithSize(3));
+        assertThat(response.totalDocCount, is(1200L));
+        assertThat(response.totalSizeInBytes, is(120L));
+        assertThat(response.indexToStatsMap, aMapWithSize(4));
         assertThat(response.datastreamToStatsMap, aMapWithSize(1));
         assertThat(response.indexToStatsMap.get(index1.getName()).docCount(), is(100L));
-        assertThat(response.datastreamToStatsMap.get("fooDs").docCount(), is(400L));
+        assertThat(response.datastreamToStatsMap.get("fooDs").docCount(), is(900L));
         assertThat(response.indexToStatsMap.get(index1.getName()).sizeInBytes(), is(10L));
-        assertThat(response.datastreamToStatsMap.get("fooDs").sizeInBytes(), is(40L));
+        assertThat(response.datastreamToStatsMap.get("fooDs").sizeInBytes(), is(90L));
     }
 
     public void testCreateResponseMultipleShards() {
