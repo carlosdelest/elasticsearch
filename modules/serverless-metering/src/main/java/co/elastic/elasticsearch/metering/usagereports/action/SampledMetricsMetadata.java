@@ -43,20 +43,15 @@ public final class SampledMetricsMetadata extends AbstractNamedDiffable<ClusterS
 
     private final Instant committedTimestamp;
 
-    // Temporary flag to coordinate transition to record ids that include index uuid.
-    // No need to consider the temporary flag in toXContentChunked which is just for diagnostics.
-    private final boolean useDeduplicationIdWithIndexUUID;
-
-    public SampledMetricsMetadata(Instant committedTimestamp, boolean useDeduplicationIdWithIndexUUID) {
+    public SampledMetricsMetadata(Instant committedTimestamp) {
         this.committedTimestamp = committedTimestamp;
-        this.useDeduplicationIdWithIndexUUID = useDeduplicationIdWithIndexUUID;
     }
 
     public SampledMetricsMetadata(StreamInput in) throws IOException {
         this.committedTimestamp = in.readInstant();
-        this.useDeduplicationIdWithIndexUUID = in.getTransportVersion()
-            .onOrAfter(ServerlessTransportVersions.METERING_CLUSTER_STATE_METADATA_INDEX_UUID_FLAG)
-            && in.readBoolean();
+        if (in.getTransportVersion().before(ServerlessTransportVersions.METERING_CLUSTER_STATE_METADATA_INDEX_UUID_FLAG_CLEANUP)) {
+            in.readBoolean();
+        }
     }
 
     @Override
@@ -72,8 +67,8 @@ public final class SampledMetricsMetadata extends AbstractNamedDiffable<ClusterS
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeInstant(committedTimestamp);
-        if (out.getTransportVersion().onOrAfter(ServerlessTransportVersions.METERING_CLUSTER_STATE_METADATA_INDEX_UUID_FLAG)) {
-            out.writeBoolean(useDeduplicationIdWithIndexUUID);
+        if (out.getTransportVersion().before(ServerlessTransportVersions.METERING_CLUSTER_STATE_METADATA_INDEX_UUID_FLAG_CLEANUP)) {
+            out.writeBoolean(true);
         }
     }
 
@@ -90,10 +85,6 @@ public final class SampledMetricsMetadata extends AbstractNamedDiffable<ClusterS
         return committedTimestamp;
     }
 
-    public boolean useDeduplicationIdWithIndexUUID() {
-        return useDeduplicationIdWithIndexUUID;
-    }
-
     public static SampledMetricsMetadata getFromClusterState(ClusterState clusterState) {
         return clusterState.custom(SampledMetricsMetadata.TYPE);
     }
@@ -103,8 +94,7 @@ public final class SampledMetricsMetadata extends AbstractNamedDiffable<ClusterS
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         SampledMetricsMetadata that = (SampledMetricsMetadata) o;
-        return Objects.equals(committedTimestamp, that.committedTimestamp)
-            && (useDeduplicationIdWithIndexUUID == that.useDeduplicationIdWithIndexUUID);
+        return Objects.equals(committedTimestamp, that.committedTimestamp);
     }
 
     @Override
@@ -114,6 +104,6 @@ public final class SampledMetricsMetadata extends AbstractNamedDiffable<ClusterS
 
     @Override
     public int hashCode() {
-        return Objects.hash(committedTimestamp, useDeduplicationIdWithIndexUUID);
+        return Objects.hash(committedTimestamp);
     }
 }

@@ -19,7 +19,6 @@ package co.elastic.elasticsearch.metering.usagereports;
 
 import co.elastic.elasticsearch.metering.usagereports.action.SampledMetricsMetadata;
 import co.elastic.elasticsearch.metering.usagereports.action.UpdateSampledMetricsMetadataAction;
-import co.elastic.elasticsearch.serverless.constants.ServerlessTransportVersions;
 
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.PlainActionFuture;
@@ -80,17 +79,9 @@ public class ClusterStateSampledMetricsTimeCursor implements SampledMetricsTimeC
             logger.debug("Updating committed timestamp to [{}]", timestamp);
             PlainActionFuture<ActionResponse.Empty> listener = new PlainActionFuture<>();
 
-            // After the cluster is on the new version, and we've successfully reported one more usage period using old ids,
-            // we're safe to switch over to using the new record id format that includes the index uuid.
-            var useDeduplicationIdWithIndexUUID = state.getMinTransportVersion()
-                .onOrAfter(ServerlessTransportVersions.METERING_CLUSTER_STATE_METADATA_INDEX_UUID_FLAG);
-
             client.execute(
                 UpdateSampledMetricsMetadataAction.INSTANCE,
-                new UpdateSampledMetricsMetadataAction.Request(
-                    transportActionTimeout,
-                    new SampledMetricsMetadata(timestamp, useDeduplicationIdWithIndexUUID)
-                ),
+                new UpdateSampledMetricsMetadataAction.Request(transportActionTimeout, new SampledMetricsMetadata(timestamp)),
                 listener
             );
             try {

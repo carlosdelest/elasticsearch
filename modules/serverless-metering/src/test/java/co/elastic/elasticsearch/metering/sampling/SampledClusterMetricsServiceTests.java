@@ -527,7 +527,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
 
         var activeShards = new AtomicReference<>(shardsInfo.keySet());
-        var samplingMetadata = new AtomicReference<>(new SampledMetricsMetadata(Instant.now(), true));
+        var samplingMetadata = new AtomicReference<>(new SampledMetricsMetadata(Instant.now()));
 
         var clusterService = createMockClusterService(activeShards::get, samplingMetadata::get); // index of newShard3Id unknown
         var meterRegistry = new RecordingMeterRegistry();
@@ -558,7 +558,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
 
         // update sampling metadata so old obsolete shards are removed on the next update
-        samplingMetadata.set(new SampledMetricsMetadata(Instant.now(), true));
+        samplingMetadata.set(new SampledMetricsMetadata(Instant.now()));
 
         service.updateSamples(client);
         assertThat(
@@ -646,45 +646,6 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
     }
 
-    // TODO: ES-11670 Remove once reporting usage ids including the index uuid
-    public void testShardInfoUpdateWhenIndexRemovedButUsingOldUsageIds() {
-        var shard1Id = new ShardId("index1", "index1UUID", 1);
-        var shard2Id = new ShardId("index2", "index2UUID", 2);
-
-        var shardsInfo = Map.ofEntries(
-            entry(shard1Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(110L, 11L, 0L, 0).withGeneration(1, 1, 0).build()),
-            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 12L, 0L, 0).withGeneration(1, 1, 0).build())
-        );
-
-        var shardsInfo2 = Map.ofEntries(
-            entry(shard2Id, ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(120L, 22L, 0L, 0).withGeneration(1, 2, 0).build())
-        );
-
-        AtomicReference<Set<ShardId>> activeShards = new AtomicReference<>(shardsInfo.keySet());
-        AtomicReference<SampledMetricsMetadata> samplingMetadata = new AtomicReference<>(new SampledMetricsMetadata(Instant.now(), false));
-
-        var clusterService = createMockClusterService(activeShards::get, samplingMetadata::get);
-        var meterRegistry = new RecordingMeterRegistry();
-        var service = new SampledClusterMetricsService(clusterService, meterRegistry, THIS_NODE);
-        assertThat(service.getMeteringShardInfo(), containsShardInfos(anEmptyMap()));
-
-        var client = mock(Client.class);
-        doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
-            .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
-        service.updateSamples(client);
-        assertThat(
-            service.getMeteringShardInfo(),
-            containsShardInfos(entry(shard1Id, withSizeInBytes(11L)), entry(shard2Id, withSizeInBytes(12L)))
-        );
-
-        // Update routing table to remove shard1. Corresponding metrics are evicted immediately.
-        activeShards.set(shardsInfo2.keySet());
-
-        service.updateSamples(client);
-        assertThat(service.getMeteringShardInfo(), containsShardInfos(entry(shard2Id, withSizeInBytes(22L))));
-    }
-
     public void testShardInfoUpdateWhenIndexRemoved() {
         var shard1Id = new ShardId("index1", "index1UUID", 1);
         var shard2Id = new ShardId("index2", "index2UUID", 2);
@@ -699,7 +660,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
 
         var activeShards = new AtomicReference<>(shardsInfo.keySet());
-        var samplingMetadata = new AtomicReference<>(new SampledMetricsMetadata(Instant.now(), true));
+        var samplingMetadata = new AtomicReference<>(new SampledMetricsMetadata(Instant.now()));
 
         var clusterService = createMockClusterService(activeShards::get, samplingMetadata::get);
         var meterRegistry = new RecordingMeterRegistry();
@@ -726,7 +687,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
 
         // Shard1 is finally removed after the committed timestamp proceeded.
-        samplingMetadata.set(new SampledMetricsMetadata(Instant.now(), true));
+        samplingMetadata.set(new SampledMetricsMetadata(Instant.now()));
 
         service.updateSamples(client);
         assertThat(service.getMeteringShardInfo(), containsShardInfos(entry(shard2Id, withSizeInBytes(22L))));

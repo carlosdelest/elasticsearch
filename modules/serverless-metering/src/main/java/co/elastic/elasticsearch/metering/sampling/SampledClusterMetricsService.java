@@ -259,11 +259,7 @@ public class SampledClusterMetricsService {
         var committedTimestamp = samplingMetadata != null ? samplingMetadata.getCommittedTimestamp() : Instant.EPOCH;
 
         // check if to evict old shards (once the committed timestamp changed)
-        // until reporting using uuid based records ids, always evict old shards
-        // TODO: ES-11670 simplify once reporting usage ids including the index uuid
-        var evictOldShards = samplingMetadata == null
-            || samplingMetadata.useDeduplicationIdWithIndexUUID() == false
-            || current.committedTimestamp.equals(committedTimestamp) == false;
+        var evictOldShards = samplingMetadata == null || current.committedTimestamp.equals(committedTimestamp) == false;
 
         return new SamplingState(
             current.nodeStatus(),

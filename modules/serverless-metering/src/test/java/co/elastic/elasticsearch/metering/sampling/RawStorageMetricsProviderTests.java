@@ -99,7 +99,7 @@ public class RawStorageMetricsProviderTests extends ESTestCase {
             when(metadata.getProject()).thenReturn(projectMetadata);
             b.metadata(metadata);
             // TODO remove once record id change is fully rolled out
-            b.putCustom(SampledMetricsMetadata.TYPE, new SampledMetricsMetadata(Instant.now(), true));
+            b.putCustom(SampledMetricsMetadata.TYPE, new SampledMetricsMetadata(Instant.now()));
         });
         when(clusterService.state()).thenReturn(clusterState);
         when(clusterService.getSettings()).thenReturn(Settings.EMPTY);

@@ -84,7 +84,7 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
         clusterStateProvider.setClusterStateProvider(() -> Optional.of(EMPTY_STATE));
         assertThat(timeCursor.getLatestCommittedTimestamp(), isEmpty());
 
-        SampledMetricsMetadata metadata = new SampledMetricsMetadata(Instant.now(), true);
+        SampledMetricsMetadata metadata = new SampledMetricsMetadata(Instant.now());
         ClusterState state = EMPTY_STATE.copyAndUpdate(b -> b.putCustom(SampledMetricsMetadata.TYPE, metadata));
         clusterStateProvider.setClusterStateProvider(() -> Optional.of(state));
 
@@ -102,7 +102,7 @@ public class ClusterStateSampledMetricsTimeCursorTests extends ESTestCase {
         assertThat(Iterators.toList(timeCursor.generateSampleTimestamps(now, TimeValue.ONE_MINUTE)), contains(now));
 
         Instant committedTimestamp = now.minus(3, MINUTES);
-        SampledMetricsMetadata metadata = new SampledMetricsMetadata(committedTimestamp, true);
+        SampledMetricsMetadata metadata = new SampledMetricsMetadata(committedTimestamp);
         clusterStateProvider.setClusterStateProvider(
             () -> Optional.of(ClusterState.builder(new ClusterName("test")).putCustom(SampledMetricsMetadata.TYPE, metadata).build())
         );

@@ -15,7 +15,6 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-import co.elastic.elasticsearch.metering.MeteringFeatures;
 import co.elastic.elasticsearch.metering.codec.RawStorageDocValuesFormatFactory;
 
 module org.elasticsearch.metering {
@@ -33,7 +32,6 @@ module org.elasticsearch.metering {
     requires org.elasticsearch.xcore;
     requires org.elasticsearch.sslconfig;
 
-    provides org.elasticsearch.features.FeatureSpecification with MeteringFeatures;
     provides co.elastic.elasticsearch.stateless.api.DocValuesFormatFactory with RawStorageDocValuesFormatFactory;
 
     exports co.elastic.elasticsearch.metering.action to org.elasticsearch.server;
