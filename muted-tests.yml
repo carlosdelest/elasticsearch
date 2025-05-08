@@ -165,3 +165,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testRemoveIngestionLoadWhenNodeRemoved
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3867
+- class: co.elastic.elasticsearch.stateless.commits.StatelessFileDeletionIT
+  method: testCommitsNotDeletedWhileAnUnpromotableIsRecovering
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3874
