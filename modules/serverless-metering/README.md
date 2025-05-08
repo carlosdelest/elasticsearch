@@ -63,7 +63,7 @@ RA-I is reported _per node_. During document parsing we compute RA-I creating a 
 
 ```json
 {
-    "id": "ingested-doc:{index name}:{node id}:{project id}:{current timestamp}",
+    "id": "{deduplication id}",
     "usage_timestamp": {current timestamp},
     "usage": {
         "type": "es_raw_data",
@@ -148,7 +148,7 @@ For reporting, total RA-S of a shard can then be calculated by summing the appro
 
 ```json
 {
-    "id": "raw-stored-index-size:{index name}:{project id}:{sampling timestamp}",
+    "id": "{deduplication id}",
     "usage_timestamp": {sampling timestamp},
     "usage": {
         "type": "es_raw_stored_data",
@@ -199,7 +199,7 @@ If doing so on a customer's behalf, be aware that we will stop charging the cust
 
 ```json
 {
-    "id": "index-size:{index name}:{project id}:{sampling timestamp}",
+    "id": "{deduplication id}",
     "usage_timestamp": {sampling timestamp},
     "usage": {
         "type": "es_indexed_data",
@@ -246,7 +246,7 @@ The cluster sampling infrastructure then builds a cluster wide consolidated per 
 
 ```json
 {
-    "id": "vcu:{tier}:{project id}:{sampling timestamp}",
+    "id": "{deduplication id}",
     "usage_timestamp": {sampling timestamp},
     "usage": {
         "type": "es_vcu",
