@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.metering.sampling.action;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.elasticsearch.action.ActionListener;
@@ -28,7 +29,6 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
-import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.logging.LogManager;
@@ -37,6 +37,7 @@ import org.elasticsearch.persistent.NotPersistentTaskNodeException;
 import org.elasticsearch.persistent.PersistentTaskNodeNotAssignedException;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
+import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
 
 import java.time.Duration;
@@ -126,7 +127,10 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     ) {
         logger.debug("Executing TransportCollectClusterSamplesAction");
         var clusterState = clusterService.state();
-        DiscoveryNodes nodes = clusterState.nodes();
+        var nodes = clusterState.nodes()
+            .stream()
+            .filter(n -> n.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName()) || n.hasRole(DiscoveryNodeRole.INDEX_ROLE.roleName()))
+            .toList();
 
         var persistentTask = SampledClusterMetricsSchedulingTask.findTask(clusterState);
         if (persistentTask == null || persistentTask.isAssigned() == false) {
@@ -234,10 +238,14 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
         GetNodeSamplesAction.Request request,
         ActionListener<GetNodeSamplesAction.Response> listener
     ) {
+        // updates are scheduled on a fixed interval, set the request timeout to the poll interval to not risk
+        // accumulating multiple pending updates in memory.
+        var timeout = clusterService.getClusterSettings().get(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING);
         transportService.sendRequest(
             node,
             GetNodeSamplesAction.INSTANCE.name(),
             request,
+            TransportRequestOptions.timeout(timeout),
             new ActionListenerResponseHandler<>(listener, GetNodeSamplesAction.Response::new, executor)
         );
     }

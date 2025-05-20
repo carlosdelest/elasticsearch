@@ -209,7 +209,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(
             clusterService,
-            3,
+            2,
             2,
             b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
         );
@@ -310,7 +310,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(
             clusterService,
-            3,
+            2,
             2,
             b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
         );
@@ -355,7 +355,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(
             clusterService,
-            3,
+            2,
             2,
             b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
         );
@@ -401,7 +401,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(
             clusterService,
-            3,
+            2,
             2,
             b -> b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build())
         );
@@ -430,7 +430,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         var transport = new CapturingTransport();
         var action = createActionAndInitTransport(transport, TimeValue.timeValueSeconds(5), true);
 
-        createMockClusterState(clusterService, 3, 2, b -> {});
+        createMockClusterState(clusterService, 2, 2, b -> {});
 
         var response = action.createResponse(mockShardsInfo, clusterService.state(), new String[0]);
 
@@ -458,7 +458,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(
             clusterService,
-            3,
+            2,
             2,
             b -> b.routingTable(
                 RoutingTable.builder()
@@ -499,7 +499,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(
             clusterService,
-            3,
+            2,
             2,
             b -> b.routingTable(
                 RoutingTable.builder()
@@ -538,7 +538,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
             ShardInfoMetricsTestUtils.shardInfoMetricsBuilder().withData(200L, 20L, 0L, 22L).build()
         );
 
-        createMockClusterState(clusterService, 3, 2, b -> {
+        createMockClusterState(clusterService, 2, 2, b -> {
             b.routingTable(
                 RoutingTable.builder()
                     .add(addLocalOnlyIndexRouting(index1, shardId1))
@@ -617,7 +617,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
         when(task.isAssigned()).thenReturn(true);
         when(task.getExecutorNode()).thenReturn(MockedClusterStateTestUtils.LOCAL_NODE_ID);
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
-        createMockClusterState(clusterService, 3, 2, b -> {
+        createMockClusterState(clusterService, 2, 2, b -> {
             b.routingTable(
                 RoutingTable.builder()
                     .add(addLocalOnlyIndexRouting(index1, shardId1))
@@ -705,7 +705,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
+        createMockClusterState(clusterService, 2, 2, b -> {
             b.routingTable(
                 RoutingTable.builder()
                     .add(addLocalOnlyIndexRouting(index1, shardId1))
@@ -775,7 +775,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(
             clusterService,
-            3,
+            2,
             2,
             b -> b.routingTable(
                 RoutingTable.builder()
@@ -862,7 +862,7 @@ public class TransportGetMeteringStatsActionTests extends ESTestCase {
 
         createMockClusterState(
             clusterService,
-            3,
+            2,
             2,
             b -> b.routingTable(
                 RoutingTable.builder()

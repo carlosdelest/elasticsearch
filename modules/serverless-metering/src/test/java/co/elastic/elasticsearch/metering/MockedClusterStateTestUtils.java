@@ -34,7 +34,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
-import static java.util.Collections.emptySet;
 import static org.elasticsearch.test.ClusterServiceUtils.setState;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -47,9 +46,9 @@ public class MockedClusterStateTestUtils {
     public static final long TASK_ALLOCATION_ID = 1L;
 
     public static ClusterState createMockClusterState() {
-        int numberOfNodes = ESTestCase.randomIntBetween(3, 5);
-        int numberOfSearchNodes = ESTestCase.randomIntBetween(1, numberOfNodes);
-        return createMockClusterState(numberOfNodes, numberOfSearchNodes, b -> {});
+        int numberOfIndexNodes = ESTestCase.randomIntBetween(1, 3);
+        int numberOfSearchNodes = ESTestCase.randomIntBetween(1, 3);
+        return createMockClusterState(numberOfIndexNodes, numberOfSearchNodes, b -> {});
     }
 
     public static void createMockClusterState(ClusterService clusterService) {
@@ -57,7 +56,7 @@ public class MockedClusterStateTestUtils {
     }
 
     public static ClusterState createMockClusterState(
-        int numberOfNodes,
+        int numberOfIndexNodes,
         int numberOfSearchNodes,
         Consumer<ClusterState.Builder> clusterStateBuilderConsumer
     ) {
@@ -68,13 +67,13 @@ public class MockedClusterStateTestUtils {
             discoBuilder = discoBuilder.add(node);
         }
 
-        for (int i = numberOfSearchNodes; i < numberOfNodes; i++) {
-            final DiscoveryNode node = DiscoveryNodeUtils.builder("node_" + i).roles(emptySet()).build();
+        for (int i = numberOfSearchNodes; i < numberOfIndexNodes + numberOfSearchNodes; i++) {
+            final DiscoveryNode node = DiscoveryNodeUtils.builder("node_" + i).roles(Set.of(DiscoveryNodeRole.INDEX_ROLE)).build();
             discoBuilder = discoBuilder.add(node);
         }
 
         discoBuilder.localNodeId(LOCAL_NODE_ID);
-        discoBuilder.masterNodeId("node_" + (numberOfNodes - 1));
+        discoBuilder.masterNodeId("node_" + (numberOfIndexNodes + numberOfSearchNodes - 1));
         ClusterState.Builder stateBuilder = ClusterState.builder(new ClusterName(TEST_CLUSTER));
         stateBuilder.nodes(discoBuilder);
 
@@ -85,15 +84,15 @@ public class MockedClusterStateTestUtils {
 
     public static void createMockClusterState(
         ClusterService clusterService,
-        int numberOfNodes,
+        int numberOfIndexNodes,
         int numberOfSearchNodes,
         Consumer<ClusterState.Builder> clusterStateBuilderConsumer
     ) {
-        setState(clusterService, createMockClusterState(numberOfNodes, numberOfSearchNodes, clusterStateBuilderConsumer));
+        setState(clusterService, createMockClusterState(numberOfIndexNodes, numberOfSearchNodes, clusterStateBuilderConsumer));
     }
 
     public static ClusterState createMockClusterStateWithPersistentTask(String nodeId) {
-        ClusterState clusterState = createMockClusterState(3, 2, b -> {});
+        ClusterState clusterState = createMockClusterState(2, 2, b -> {});
         return createMockClusterStateWithPersistentTask(clusterState, nodeId);
     }
 

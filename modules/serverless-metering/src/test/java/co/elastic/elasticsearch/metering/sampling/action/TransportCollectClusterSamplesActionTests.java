@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.activitytracking.ActivityTests;
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.elasticsearch.action.support.ActionFilters;
@@ -31,6 +32,9 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.ClusterSettings;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.core.IOUtils;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.shard.ShardId;
@@ -106,7 +110,13 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
     public void setUp() throws Exception {
         super.setUp();
         transport = new CapturingTransport();
-        clusterService = createClusterService(THREAD_POOL);
+        clusterService = createClusterService(
+            THREAD_POOL,
+            new ClusterSettings(
+                Settings.EMPTY,
+                Sets.addToCopy(ClusterSettings.BUILT_IN_CLUSTER_SETTINGS, SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING)
+            )
+        );
         transportService = transport.createTransportService(
             clusterService.getSettings(),
             THREAD_POOL,
@@ -354,7 +364,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
 
         var taskMetadata = new PersistentTasksCustomMetadata(0L, Map.of(SampledClusterMetricsSchedulingTask.TASK_NAME, task));
 
-        createMockClusterState(clusterService, 3, 2, b -> {
+        createMockClusterState(clusterService, 2, 2, b -> {
             b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
         });
 

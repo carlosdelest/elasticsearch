@@ -208,7 +208,6 @@ public class SampledClusterMetricsService {
      */
     void updateSamples(Client client) {
         logger.debug("Calling SampledClusterMetricsService#updateSamples");
-        collectionsTotalCounter.increment();
 
         var state = metricsState.get();
         var collectSamplesRequest = new CollectClusterSamplesAction.Request(
@@ -218,6 +217,7 @@ public class SampledClusterMetricsService {
         client.execute(CollectClusterSamplesAction.INSTANCE, collectSamplesRequest, new ActionListener<>() {
             @Override
             public void onResponse(CollectClusterSamplesAction.Response response) {
+                collectionsTotalCounter.increment();
                 if (response.isComplete() == false) {
                     collectionsPartialsCounter.increment();
                 }
@@ -236,6 +236,7 @@ public class SampledClusterMetricsService {
             @Override
             public void onFailure(Exception e) {
                 logger.error("Failed to collect samples in cluster", e);
+                collectionsTotalCounter.increment();
                 collectionsErrorsCounter.increment();
                 metricsState.getAndUpdate(
                     current -> current.nodeStatus() == PersistentTaskNodeStatus.THIS_NODE
