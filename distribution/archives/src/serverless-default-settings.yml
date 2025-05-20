@@ -83,6 +83,10 @@ s3.client.default.max_connections: 150
 # sooner. See ES-9719.
 s3.client.default.read_timeout: 10s
 
+# We want to include the `x-purpose` custom query parameter on all requests to S3.
+s3.client.default.add_purpose_custom_query_parameter: true
+s3.client.backup.add_purpose_custom_query_parameter: true
+
 # In serverless we want to set this higher than the coordinating limit (10%) to
 # attempt to move forward with indexing data if the we have received it.
 # Autoscaling should kick in and increase resources if nodes are overloaded
