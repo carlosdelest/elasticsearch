@@ -93,16 +93,42 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
         assertNull("updater only does a dryRun", valueB.get());
     }
 
-    public void testUnableToUpdateStaticSetting() {
+    public void testUpdateStaticSettingWorksOnlyForEmptySettings() {
         Setting<Integer> staticSetting = Setting.intSetting("project.static_setting", 0, Property.NodeScope, Property.ProjectScope);
-        ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(Settings.EMPTY, Set.of(staticSetting));
+        ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(
+            Settings.EMPTY,
+            Set.of(staticSetting, SETTING_A, SETTING_B)
+        );
         ProjectSettingsUpdater updater = new ProjectSettingsUpdater(projectScopedSettings);
-        ProjectMetadata projectMetadata = projectWithSettings(Settings.builder().put(staticSetting.getKey(), 43).build());
+        // A project is created first with empty settings
+        final ProjectMetadata projectMetadata = projectWithSettings(Settings.EMPTY);
 
-        Settings settingsToApply = Settings.builder().put(staticSetting.getKey(), 42).build();
+        // Update the static setting for works for empty settings
+        final ProjectMetadata updatedProjectMetadata1 = updater.updateProjectSettings(
+            projectMetadata,
+            Settings.builder().put(staticSetting.getKey(), 42).put(SETTING_A.getKey(), 0.9).build(),
+            logger
+        );
+        assertNotSame(updatedProjectMetadata1, projectMetadata);
+        assertEquals(42, (int) staticSetting.get(updatedProjectMetadata1.settings()));
+        assertEquals(SETTING_A.get(updatedProjectMetadata1.settings()), 0.9, 0.1);
+        assertEquals(SETTING_B.get(updatedProjectMetadata1.settings()), 0.1, 0.1);
+
+        // Update dynamic settings works as long as the static setting is not changed
+        final ProjectMetadata updatedProjectMetadata2 = updater.updateProjectSettings(
+            updatedProjectMetadata1,
+            Settings.builder().put(staticSetting.getKey(), 42).putNull(SETTING_A.getKey()).put(SETTING_B.getKey(), 0.5).build(),
+            logger
+        );
+        assertEquals(42, (int) staticSetting.get(updatedProjectMetadata2.settings()));
+        assertEquals(SETTING_A.get(updatedProjectMetadata2.settings()), 0.55, 0.1);
+        assertEquals(SETTING_B.get(updatedProjectMetadata2.settings()), 0.5, 0.1);
+
+        // Update the static setting errors out when the project already has settings
+        Settings settingsToApply = Settings.builder().put(staticSetting.getKey(), 43).put(SETTING_A.getKey(), 0.9).build();
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> updater.updateProjectSettings(projectMetadata, settingsToApply, logger)
+            () -> updater.updateProjectSettings(updatedProjectMetadata2, settingsToApply, logger)
         );
         assertThat(
             exception.getMessage(),

@@ -15,6 +15,7 @@ import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
+import org.elasticsearch.common.io.Streams;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
@@ -24,6 +25,7 @@ import org.elasticsearch.core.Strings;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.cluster.LogType;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.MutableResource;
 import org.elasticsearch.test.cluster.util.resource.Resource;
@@ -51,6 +53,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
@@ -119,28 +122,60 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         provisionedProjects = new HashSet<>();
         projectClients = new HashMap<>();
         projectClients.put(activeProject, createProjectAndClient(activeProject));
+        assertProjectObjectStoreStarted(activeProject);
         for (var project : extraProjects) {
             projectClients.put(project, createProjectAndClient(project));
+            assertProjectObjectStoreStarted(project);
         }
 
         // The admin client does not set a project id, and can see all projects
         assertBusy(
-            () -> assertProjectIds(
-                adminClient(),
-                CollectionUtils.concatLists(List.of(ProjectId.DEFAULT.id(), activeProject), extraProjects)
-            )
+            () -> assertProjects(adminClient(), CollectionUtils.concatLists(List.of(ProjectId.DEFAULT.id(), activeProject), extraProjects))
         );
 
         // The test client can only see the project it targets
         assertProjects(client(), List.of(activeProject));
     }
 
+    @FixForMultiProject(description = "consider removing it once the project object store is fully integrated and tested more directly")
+    private void assertProjectObjectStoreStarted(String projectId) throws Exception {
+        assertBusy(() -> {
+            try (var serverLog = cluster.getNodeLog(between(0, 1), LogType.SERVER)) {
+                final List<String> allLines = Streams.readAllLines(serverLog);
+                assertThat(
+                    allLines,
+                    hasItem(
+                        containsString(
+                            "object store started for project [" + projectId + "], type [fs], bucket [project_" + projectId + "]"
+                        )
+                    )
+                );
+            }
+        });
+    }
+
+    @FixForMultiProject(description = "consider removing it once the project object store is fully integrated and tested more directly")
+    private void assertProjectObjectStoreClosed(String projectId) throws Exception {
+        assertBusy(() -> {
+            try (var serverLog = cluster.getNodeLog(between(0, 1), LogType.SERVER)) {
+                final List<String> allLines = Streams.readAllLines(serverLog);
+                assertThat(allLines, hasItem(containsString("object store closed for project [" + projectId + "]")));
+            }
+        });
+    }
+
     private void assertProjects(RestClient client, List<String> projectIds) throws IOException {
         assertProjectIds(client, projectIds);
-        assertProjectSettings(client, projectIds);
+        // The default project does not have any project settings since it does not have any file settings
+        assertProjectSettings(client, projectIds.stream().filter(id -> ProjectId.DEFAULT.id().equals(id) == false).toList());
     }
 
     private static void assertProjectSettings(RestClient client, List<String> projectIds) throws IOException {
+        assertProjectSettings(client, projectIds, false);
+    }
+
+    private static void assertProjectSettings(RestClient client, List<String> projectIds, boolean geoipDownloaderEnabledForActiveProject)
+        throws IOException {
         Request request = new Request("GET", "/_cluster/state/metadata?multi_project=true");
         ObjectPath response = ObjectPath.createFromResponse(client.performRequest(request));
         List<Map<String, Object>> projectsMetadata = response.evaluate("metadata.projects");
@@ -154,7 +189,14 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         }
         for (String projectId : projectIds) {
             assertThat(projectsSettings.get(projectId), is(notNullValue()));
-            assertThat(projectsSettings.get(projectId).get("ingest.geoip.downloader.enabled"), equalTo("false"));
+            assertThat(
+                projectsSettings.get(projectId).get("ingest.geoip.downloader.enabled"),
+                equalTo(projectId.equals(activeProject) ? String.valueOf(geoipDownloaderEnabledForActiveProject) : "false")
+            );
+            assertThat(projectsSettings.get(projectId).get("stateless.object_store.type"), equalTo("fs"));
+            assertThat(projectsSettings.get(projectId).get("stateless.object_store.bucket"), equalTo("project_" + projectId));
+            assertThat(projectsSettings.get(projectId).get("stateless.object_store.base_path"), equalTo("base_path"));
+            assertThat(projectsSettings.get(projectId).get("stateless.object_store.client"), equalTo("default"));
         }
     }
 
@@ -163,8 +205,10 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         assertEmptyProject(Metadata.DEFAULT_PROJECT_ID.id());
         for (var project : extraProjects) {
             deleteProject(project);
+            assertProjectObjectStoreClosed(project);
         }
         deleteProject(activeProject);
+        assertProjectObjectStoreClosed(activeProject);
 
         @FixForMultiProject(
             description = "Delete projects via file settings does NOT work currently. This test class does NOT depend on it either."
@@ -175,6 +219,10 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
     }
 
     private ProjectClient createProjectAndClient(String project) throws IOException {
+        return createProjectAndClient(project, false);
+    }
+
+    private ProjectClient createProjectAndClient(String project, boolean geoipDownloaderEnabled) throws IOException {
         final int version = RESERVED_STATE_VERSION_COUNTER.incrementAndGet();
         final Path configPath = CONFIG_DIR.getRoot().toPath();
         writeConfigFile(configPath.resolve("operator/project-" + project + ".json"), Strings.format("""
@@ -185,10 +233,14 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
                  },
                  "state": {
                      "project_settings": {
-                         "ingest.geoip.downloader.enabled": false
+                         "ingest.geoip.downloader.enabled": %s,
+                         "stateless.object_store.type": "fs",
+                         "stateless.object_store.bucket": "project_%s",
+                         "stateless.object_store.base_path": "base_path",
+                         "stateless.object_store.client": "default"
                      }
                  }
-            }""", version));
+            }""", version, geoipDownloaderEnabled, project));
         writeConfigFile(configPath.resolve("operator/project-" + project + ".secrets.json"), Strings.format("""
             {
                  "metadata": {
@@ -319,11 +371,17 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
             String newProjectId = randomValueOtherThanMany(existingProjects::contains, ESTestCase::randomIdentifier);
             var responseException = expectThrows(ResponseException.class, () -> getProjectStatus(newProjectId));
             assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.NOT_FOUND.getStatus()));
-            createProject(newProjectId);
-            var resp = getProjectStatus(newProjectId);
-            assertOK(resp);
-            var projectStatusResponse = ObjectPath.createFromResponse(resp);
-            assertThat(projectStatusResponse.evaluate("project_id"), equalTo(newProjectId));
+            createProjectAndClient(newProjectId);
+            assertBusy(() -> {
+                try {
+                    var resp = getProjectStatus(newProjectId);
+                    assertOK(resp);
+                    var projectStatusResponse = ObjectPath.createFromResponse(resp);
+                    assertThat(projectStatusResponse.evaluate("project_id"), equalTo(newProjectId));
+                } catch (ResponseException e) {
+                    throw new AssertionError(e);
+                }
+            });
             deleteProject(newProjectId);
             responseException = expectThrows(ResponseException.class, () -> getProjectStatus(newProjectId));
             assertThat(responseException.getResponse().getStatusLine().getStatusCode(), equalTo(RestStatus.NOT_FOUND.getStatus()));
@@ -359,6 +417,12 @@ public class MultiProjectSmokeIT extends ESRestTestCase {
         assertThat(objectPath.evaluate("index.failure"), nullValue());
         assertThat(objectPath.evaluate("search.failure"), nullValue());
         assertThat(objectPath.evaluate("ml"), nullValue());
+    }
+
+    public void testUpdateProjectSettings() throws Exception {
+        // Update the active project's project setting
+        createProjectAndClient(activeProject, true);
+        assertBusy(() -> assertProjectSettings(adminClient(), CollectionUtils.concatLists(List.of(activeProject), extraProjects), true));
     }
 
     private void doTestForOneProjectClient(ProjectClient projectClient) throws IOException {
