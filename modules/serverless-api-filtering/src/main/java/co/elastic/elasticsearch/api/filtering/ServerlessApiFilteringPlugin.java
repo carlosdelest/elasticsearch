@@ -33,6 +33,7 @@ import co.elastic.elasticsearch.api.validation.ReindexRequestValidator;
 import co.elastic.elasticsearch.api.validation.RolloverRequestValidator;
 import co.elastic.elasticsearch.api.validation.SimulateIndexTemplateDataStreamLifecycleValidator;
 import co.elastic.elasticsearch.api.validation.SimulateTemplateDataStreamLifecycleValidator;
+import co.elastic.elasticsearch.api.validation.UpdateDataStreamSettingsValidator;
 import co.elastic.elasticsearch.api.validation.UpdateSettingsValidator;
 
 import org.elasticsearch.action.support.MappedActionFilter;
@@ -69,6 +70,8 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 new GetIndexActionSettingsFilter(context, indexScopedSettings),
                 new GetSettingsActionSettingsFilter(context, indexScopedSettings),
                 new UpdateSettingsValidator(context, indexScopedSettings),
+                new GetDataStreamSettingsActionSettingsFilter(context, indexScopedSettings),
+                new UpdateDataStreamSettingsValidator(context, indexScopedSettings),
                 new CreateIndexSettingsValidator(context, indexScopedSettings),
                 new PutComponentTemplateSettingsValidator(context, indexScopedSettings),
                 new PutComposableTemplateSettingsValidator(context, indexScopedSettings),

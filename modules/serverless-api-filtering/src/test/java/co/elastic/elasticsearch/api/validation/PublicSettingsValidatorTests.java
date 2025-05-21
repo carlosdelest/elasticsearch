@@ -25,6 +25,7 @@ import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.settings.put.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.template.put.PutComponentTemplateAction;
 import org.elasticsearch.action.admin.indices.template.put.TransportPutComposableIndexTemplateAction;
+import org.elasticsearch.action.datastreams.UpdateDataStreamSettingsAction;
 import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.cluster.metadata.ComponentTemplate;
 import org.elasticsearch.cluster.metadata.ComposableIndexTemplate;
@@ -32,6 +33,7 @@ import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.metadata.Template;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
@@ -242,6 +244,24 @@ public class PublicSettingsValidatorTests extends ESTestCase {
             () -> new UpdateSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS),
             request,
             IndexMetadata.INDEX_NUMBER_OF_REPLICAS_SETTING.getKey()
+        );
+    }
+
+    public void testDataStreamSettingsUpdateValidation() throws IOException {
+        Settings mixPublicAndNonPublicSettings = Settings.builder()
+            .put(PUBLIC_SETTING.getKey(), 0)
+            .put(NON_PUBLIC_SETTING.getKey(), 0)
+            .build();
+
+        UpdateDataStreamSettingsAction.Request request = new UpdateDataStreamSettingsAction.Request(
+            mixPublicAndNonPublicSettings,
+            TimeValue.THIRTY_SECONDS,
+            TimeValue.THIRTY_SECONDS
+        );
+        assertValidatorFails(
+            () -> new UpdateDataStreamSettingsValidator(threadContext, MIXED_PUBLIC_NON_PUBLIC_INDEX_SCOPED_SETTINGS),
+            request,
+            "index.internal_setting"
         );
     }
 
