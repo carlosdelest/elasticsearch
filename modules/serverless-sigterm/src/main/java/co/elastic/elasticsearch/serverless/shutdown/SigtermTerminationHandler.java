@@ -32,6 +32,7 @@ import org.elasticsearch.common.logging.ESLogMessage;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.monitor.jvm.HotThreads;
+import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.node.internal.TerminationHandler;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.ClientHelper;
@@ -199,7 +200,12 @@ public class SigtermTerminationHandler implements TerminationHandler {
                 threadPool.schedule(() -> pollStatusAndLoop(poll + 1, latch, lastStatus), pollInterval, threadPool.generic());
             }
         }, ex -> {
-            logger.warn("failed to get shutdown status for this node while waiting for shutdown, stopping immediately", ex);
+            // if the node times out while waiting for a graceful shutdown, it's likely that the last GetShutdownStatusAction
+            // invocation will fail with a NodeClosedException. Logging in this case is not necessary (we already timed out and started
+            // the immediate shutdown process) and could lead to a spurious entry in our dashboards, so let's skip it.
+            if (ex instanceof NodeClosedException == false) {
+                logger.warn("failed to get shutdown status for this node while waiting for shutdown, stopping immediately", ex);
+            }
             latch.countDown();
         }));
     }
