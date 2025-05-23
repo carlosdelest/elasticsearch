@@ -132,3 +132,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceIT
   method: testSettingsChange
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3902
+- class: co.elastic.elasticsearch.stateless.recovery.SearchShardRelocationIT
+  method: testUnpromotableRelocationHandoffWaitsUntilClusterStateConverges
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3903
