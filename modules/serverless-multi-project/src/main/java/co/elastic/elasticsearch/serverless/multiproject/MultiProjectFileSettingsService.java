@@ -41,6 +41,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -50,6 +52,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.elasticsearch.reservedstate.service.ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION;
 import static org.elasticsearch.reservedstate.service.ReservedStateVersionCheck.HIGHER_VERSION_ONLY;
@@ -201,7 +204,7 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
         List<ReservedStateChunk> chunks = new ArrayList<>(files.length);
         for (var file : files) {
             try (
-                var stream = new BufferedInputStream(Files.newInputStream(file));
+                var stream = new BufferedInputStream(filesNewInputStream(file));
                 var parser = JSON.xContent().createParser(XContentParserConfiguration.EMPTY, stream)
             ) {
                 chunks.add(stateService.parse(projectId, NAMESPACE, parser));
@@ -221,5 +224,40 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
         assert clusterState.metadata().projects().size() == 1
             : "Cluster snapshot restore not supported for multiple projects " + clusterState.metadata().projects().keySet();
         super.handleSnapshotRestore(clusterState, mdBuilder);
+    }
+
+    @Override
+    protected boolean filesExists(Path path) {
+        return Files.exists(path);
+    }
+
+    @Override
+    protected boolean filesIsDirectory(Path path) {
+        return Files.isDirectory(path);
+    }
+
+    @Override
+    protected boolean filesIsSymbolicLink(Path path) {
+        return Files.isSymbolicLink(path);
+    }
+
+    @Override
+    protected <A extends BasicFileAttributes> A filesReadAttributes(Path path, Class<A> clazz) throws IOException {
+        return Files.readAttributes(path, clazz);
+    }
+
+    @Override
+    protected Stream<Path> filesList(Path dir) throws IOException {
+        return Files.list(dir);
+    }
+
+    @Override
+    protected Path filesSetLastModifiedTime(Path path, FileTime time) throws IOException {
+        return Files.setLastModifiedTime(path, time);
+    }
+
+    @Override
+    protected InputStream filesNewInputStream(Path path) throws IOException {
+        return Files.newInputStream(path);
     }
 }

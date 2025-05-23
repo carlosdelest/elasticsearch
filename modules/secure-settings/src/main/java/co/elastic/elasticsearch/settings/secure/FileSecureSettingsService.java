@@ -261,6 +261,11 @@ public class FileSecureSettingsService extends MasterNodeFileWatchingService {
     }
 
     @Override
+    protected boolean filesIsSymbolicLink(Path path) {
+        return Files.isSymbolicLink(path);
+    }
+
+    @Override
     protected <A extends BasicFileAttributes> A filesReadAttributes(Path path, Class<A> clazz) throws IOException {
         return Files.readAttributes(path, clazz);
     }
