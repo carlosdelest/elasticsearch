@@ -19,9 +19,12 @@ package co.elastic.elasticsearch.serverless.security.authc;
 
 import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
 
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.xpack.core.XPackPlugin;
 import org.elasticsearch.xpack.core.security.SecurityExtension;
 import org.elasticsearch.xpack.core.security.authc.Realm;
+import org.elasticsearch.xpack.core.security.authc.RealmConfig;
+import org.elasticsearch.xpack.core.security.authc.RealmSettings;
 import org.elasticsearch.xpack.core.security.authc.service.ServiceAccountTokenStore;
 import org.elasticsearch.xpack.security.authc.saml.SamlRealm;
 
@@ -46,6 +49,8 @@ public class ServerlessSecurityExtension implements SecurityExtension {
 
     @Override
     public Map<String, Realm.Factory> getRealms(SecurityComponents components) {
+        ensureSinglePerProjectFileRealmConfigured(components.settings());
+
         return Map.of(
             MultiProjectSpSamlRealmSettings.TYPE,
             config -> SamlRealm.create(
@@ -62,5 +67,24 @@ public class ServerlessSecurityExtension implements SecurityExtension {
             ProjectFileSettingsRealmSettings.TYPE,
             config -> new ProjectFileSettingsRealm(config, components.projectResolver(), components.clusterService())
         );
+    }
+
+    private void ensureSinglePerProjectFileRealmConfigured(Settings settings) {
+        final Map<RealmConfig.RealmIdentifier, Settings> realmsSettings = RealmSettings.getRealmSettings(settings);
+
+        var projectFileRealms = realmsSettings.keySet()
+            .stream()
+            .filter(identifier -> identifier.getType().equals(ProjectFileSettingsRealmSettings.TYPE))
+            .toList();
+
+        if (projectFileRealms.size() > 1) {
+            throw new IllegalArgumentException(
+                "Multiple ["
+                    + ProjectFileSettingsRealmSettings.TYPE
+                    + "] realms are configured: "
+                    + projectFileRealms.stream().sorted().toList()
+                    + ". Only one such realm can be configured."
+            );
+        }
     }
 }
