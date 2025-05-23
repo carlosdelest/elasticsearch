@@ -46,7 +46,7 @@ spec:
       name: elasticsearch-serverless / intake
     spec:
       repository: elastic/elasticsearch-serverless
-      pipeline_file: .buildkite/pipeline.intake.yml
+      pipeline_file: .buildkite/scripts/pipeline.intake.sh
       teams:
         elasticsearch-team: {}
         ml-core: {}
@@ -119,7 +119,7 @@ spec:
       name: elasticsearch-serverless / pull-request
     spec:
       repository: elastic/elasticsearch-serverless
-      pipeline_file: .buildkite/pipeline.intake.yml
+      pipeline_file: .buildkite/pipeline.pr.yml.sh
       teams:
         elasticsearch-team: {}
         ml-core: {}
