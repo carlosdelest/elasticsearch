@@ -59,7 +59,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -309,13 +308,13 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
     }
 
     private Tuple<CountDownLatch, AtomicLong> setupCleanupClusterStateListener(List<String> nodes) {
-        return setupClusterStateListener(nodes, Map.of(), Set.of());
+        return setupClusterStateListener(nodes, Map.of(), 0);
     }
 
     private Tuple<CountDownLatch, AtomicLong> setupClusterStateListener(
         List<String> nodes,
         Map<ProjectId, Long> expectedVersionById,
-        Set<String> expectedHandlerKeys
+        long settingsVersion
     ) {
         List<ClusterService> clusterServices = nodes.stream().map(node -> internalCluster().clusterService(node)).toList();
         CountDownLatch savedClusterState = new CountDownLatch(nodes.size());
@@ -324,10 +323,8 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
             @Override
             public void clusterChanged(ClusterChangedEvent event) {
                 Metadata metadata = event.state().metadata();
-                if (reservedClusterStateHasHandlerKeys(
-                    metadata.reservedStateMetadata().get(FileSettingsService.NAMESPACE),
-                    expectedHandlerKeys
-                ) && allProjectsOnExpectedVersion(metadata.projects(), expectedVersionById)) {
+                if (metadata.reservedStateMetadata().get(MultiProjectFileSettingsService.NAMESPACE).version() >= settingsVersion
+                    && allProjectsOnExpectedVersion(metadata.projects(), expectedVersionById)) {
                     clusterService.removeListener(this);
                     metadataVersion.set(event.state().metadata().version());
                     savedClusterState.countDown();
@@ -351,14 +348,6 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
                     .version()
                     .equals(entry.getValue())
             );
-    }
-
-    private boolean reservedClusterStateHasHandlerKeys(ReservedStateMetadata reservedState, Set<String> expectedHandlerKeys) {
-        if (reservedState != null) {
-            ReservedStateHandlerMetadata handlerMetadata = reservedState.handlers().get(ReservedClusterSettingsAction.NAME);
-            return handlerMetadata != null && handlerMetadata.keys().equals(expectedHandlerKeys);
-        }
-        return expectedHandlerKeys.isEmpty();
     }
 
     private void assertClusterStateSaveOK(
@@ -436,20 +425,17 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
         assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
-        var savedClusterState = setupClusterStateListener(
-            List.of(masterNode, dataNode),
-            Map.of(projectId, 2L),
-            Set.of(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey())
-        );
+        long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(List.of(masterNode, dataNode), Map.of(projectId, version), version);
 
         FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
 
         assertTrue(waitUntil(masterFileSettingsService::watching));
         assertFalse(dataFileSettingsService.watching());
 
-        writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, versionCounter.incrementAndGet());
-        writeProjectFile(masterNode, projectSettings, projectId.id(), logger, versionCounter.get());
-        writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, versionCounter.get());
+        writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, version);
+        writeProjectFile(masterNode, projectSettings, projectId.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, version);
         assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), projectId, "50mb", 43);
     }
 
@@ -466,29 +452,21 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
         assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
-        var savedClusterState = setupClusterStateListener(
-            List.of(masterNode, dataNode),
-            Map.of(projectId, 2L),
-            Set.of(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey())
-        );
+        long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(List.of(masterNode, dataNode), Map.of(projectId, version), version);
 
         FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
 
         assertTrue(waitUntil(masterFileSettingsService::watching));
         assertFalse(dataFileSettingsService.watching());
 
-        long version = versionCounter.incrementAndGet();
         writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, version);
         writeProjectFile(masterNode, projectSettings, projectId.id(), logger, version);
         writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, version);
         assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), projectId, "50mb", 43);
 
         version = versionCounter.incrementAndGet();
-        var savedClusterState2 = setupClusterStateListener(
-            List.of(masterNode, dataNode),
-            Map.of(projectId, version),
-            Set.of(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey())
-        );
+        var savedClusterState2 = setupClusterStateListener(List.of(masterNode, dataNode), Map.of(projectId, version), version);
         writeSettingsFile(masterNode, testJSON43mb, List.of(projectId.id()), logger, version);
         writeProjectFile(masterNode, projectSettings2, projectId.id(), logger, version);
         writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, version);
@@ -502,20 +480,16 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         FileSettingsService dataFileSettingsService = internalCluster().getInstance(FileSettingsService.class, dataNode);
 
         ProjectId projectId = randomUniqueProjectId();
-
         assertFalse(dataFileSettingsService.watching());
 
-        var savedClusterState = setupClusterStateListener(
-            List.of(dataNode),
-            Map.of(projectId, 2L),
-            Set.of(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey())
-        );
+        long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(List.of(dataNode), Map.of(projectId, version), version);
 
         // In internal cluster tests, the nodes share the config directory, so when we write with the data node path
         // the master will pick it up on start
-        writeSettingsFile(dataNode, testJSON, List.of(projectId.id()), logger, versionCounter.incrementAndGet());
-        writeProjectFile(dataNode, projectSettings, projectId.id(), logger, versionCounter.get());
-        writeSecretsFile(dataNode, emptyProjectSecrets, projectId.id(), logger, versionCounter.get());
+        writeSettingsFile(dataNode, testJSON, List.of(projectId.id()), logger, version);
+        writeProjectFile(dataNode, projectSettings, projectId.id(), logger, version);
+        writeSecretsFile(dataNode, emptyProjectSecrets, projectId.id(), logger, version);
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
@@ -536,22 +510,19 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
             Settings.builder().put(INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()
         );
         assertMasterNode(wrap(internalCluster().masterClient()), masterNode);
-
         ProjectId projectId = randomUniqueProjectId();
-        var savedClusterState = setupClusterStateListener(
-            List.of(masterNode),
-            Map.of(projectId, 2L),
-            Set.of(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey())
-        );
+
+        long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(List.of(masterNode), Map.of(projectId, version), version);
 
         FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
 
         assertTrue(waitUntil(masterFileSettingsService::watching));
 
         logger.info("--> write some settings");
-        writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, versionCounter.incrementAndGet());
-        writeProjectFile(masterNode, projectSettings, projectId.id(), logger, versionCounter.get());
-        writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, versionCounter.get());
+        writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, version);
+        writeProjectFile(masterNode, projectSettings, projectId.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, version);
         assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), projectId, "50mb", 43);
 
         logger.info("--> restart master");
@@ -780,17 +751,17 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
 
         ProjectId projectId = randomUniqueProjectId();
 
+        long version = versionCounter.incrementAndGet();
         // Make sure cluster state is applied on all nodes
         var savedClusterState = setupClusterStateListener(
             List.of(masterNode, masterNode1, masterNode2),
-            Map.of(projectId, 2L),
-            Set.of("indices.recovery.max_bytes_per_sec")
+            Map.of(projectId, version),
+            version
         );
         FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
 
         assertTrue(masterFileSettingsService.watching());
 
-        long version = versionCounter.incrementAndGet();
         writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, version);
         writeProjectFile(masterNode, projectSettings, projectId.id(), logger, version);
         writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, version);
@@ -815,12 +786,9 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         boolean awaitSuccessful = savedClusterState.v1().await(20, TimeUnit.SECONDS);
         assertTrue(awaitSuccessful);
 
-        savedClusterState = setupClusterStateListener(
-            List.of(masterNode1, masterNode2, masterNode3),
-            Map.of(projectId, 2L),
-            Set.of("indices.recovery.max_bytes_per_sec")
-        );
-        writeSettingsFile(internalCluster().getMasterName(), testJSON43mb, List.of(), logger, versionCounter.incrementAndGet());
+        version = versionCounter.incrementAndGet();
+        savedClusterState = setupClusterStateListener(List.of(masterNode1, masterNode2, masterNode3), Map.of(), version);
+        writeSettingsFile(internalCluster().getMasterName(), testJSON43mb, List.of(), logger, version);
         assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), null, "43mb", 43);
     }
 
@@ -834,13 +802,9 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
 
         assertFalse(dataFileSettingsService.watching());
 
-        var savedClusterState = setupClusterStateListener(
-            List.of(dataNode),
-            Map.of(projectId, 2L),
-            Set.of(INDICES_RECOVERY_MAX_BYTES_PER_SEC_SETTING.getKey())
-        );
-
         long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(List.of(dataNode), Map.of(projectId, version), version);
+
         writeSettingsFile(dataNode, testJSON, List.of(projectId.id()), logger, version);
         writeProjectFile(dataNode, projectSettings, projectId.id(), logger, version);
         writeSecretsFile(dataNode, emptyProjectSecrets, projectId.id(), logger, version);
