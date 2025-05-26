@@ -23,8 +23,6 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.ClusterStateSupplier;
-import org.elasticsearch.cluster.metadata.IndexAbstraction;
-import org.elasticsearch.common.util.concurrent.ReleasableLock;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.SystemIndices;
@@ -33,9 +31,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Responsible for the ingest document size collection.
@@ -47,26 +42,18 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * getMetrics by default should be triggered once every 5min
  * <p>
  * It is expected to have a lot (really a lot) of concurrent addIngestedDocValue calls, but most likely
- * on different index value.
+ * on different indices.
  * <p>
- * ConcurrentHashMap - metrics - allows for safe concurrent updates on different indexNames
- * AtomicLong - a value of ConcurrentHashMap - allows for safe concurrent updates on the same indexName
- * <p>
- * We want to pause adding elements to a map when getMetrics is called. Otherwise, we risk a live lock when
- * getMetrics would be iterating over elements from ConcurrentHashMap and at the same time addIngestedDocValue would
- * be keep on adding more. Hence, getMetrics might never finish.
- * By using exclusiveLock (writeLock) we prevent any addIngestedDocValue when getMetrics is called.
- * By using nonExclusiveLock (readLock) we prevent getMetrics to be called at the same time as addIngestedDocValue
- * and we allow for concurrent addIngestedDocValue calls.
+ * ConcurrentHashMap - ingestMeters - allows for safe concurrent updates on different indices.
+ * Modifications to ingest meters (both for increments and decrements - when committing) are done via compute which is atomic.
+ * Reading of snapshots requires volatile reads of IngestMeter#bytes.
  */
 public class IngestMetricsProvider implements CounterMetricsProvider {
     public static final String METRIC_TYPE = "es_raw_data";
 
-    private final Logger logger = LogManager.getLogger(IngestMetricsProvider.class);
-    private final Map<Index, AtomicLong> metrics = new ConcurrentHashMap<>();
-    private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    private final ReleasableLock exclusiveLock = new ReleasableLock(lock.writeLock());
-    private final ReleasableLock nonExclusiveLock = new ReleasableLock(lock.readLock());
+    private static final Logger logger = LogManager.getLogger(IngestMetricsProvider.class);
+
+    private final Map<Index, IngestMeter> ingestMeters = new ConcurrentHashMap<>();
     private final String nodeId;
     private final ClusterStateSupplier clusterStateSupplier;
     private final SystemIndices systemIndices;
@@ -77,74 +64,87 @@ public class IngestMetricsProvider implements CounterMetricsProvider {
         this.systemIndices = systemIndices;
     }
 
-    private record SnapshotEntry(Index key, long value) {}
+    private record IngestSnapshot(Index key, long bytes, Map<String, String> sourceMetadata) {
+        IngestSnapshot(Map.Entry<Index, IngestMeter> entry) {
+            this(entry.getKey(), entry.getValue().bytes, entry.getValue().sourceMetadata);
+        }
+    }
+
+    private class IngestMeter {
+        private final Map<String, String> sourceMetadata;
+        private volatile long bytes; // volatile read necessary to create snapshots
+
+        IngestMeter(long bytes, Map<String, String> sourceMetadata) {
+            this.sourceMetadata = sourceMetadata;
+            this.bytes = bytes;
+        }
+    }
 
     @Override
     public MetricValues getMetrics() {
-        return clusterStateSupplier.withCurrentClusterState(clusterState -> {
-            if (metrics.isEmpty()) {
-                return CounterMetricsProvider.NO_VALUES;
+        if (ingestMeters.isEmpty()) {
+            return CounterMetricsProvider.NO_VALUES;
+        }
+
+        final var metricSnapshots = ingestMeters.entrySet().stream().map(IngestSnapshot::new).toList();
+        final var metricValues = metricSnapshots.stream().filter(s -> s.bytes > 0).map(this::metricValue).toList();
+        logger.trace(() -> Strings.format("Metric values to be reported %s", metricValues));
+
+        return new MetricValues() {
+            @Override
+            public Iterator<MetricValue> iterator() {
+                return metricValues.iterator();
             }
 
-            final var metricsSnapshot = metrics.entrySet().stream().map(e -> new SnapshotEntry(e.getKey(), e.getValue().get())).toList();
-            final var indicesLookup = clusterState.metadata().getProject().getIndicesLookup();
-
-            final var toReturn = metricsSnapshot.stream()
-                .map(e -> metricValue(nodeId, e.key(), e.value(), indicesLookup, systemIndices))
-                .toList();
-            logger.trace(() -> Strings.format("Metric values to be reported %s", toReturn));
-
-            return new MetricValues() {
-                @Override
-                public Iterator<MetricValue> iterator() {
-                    return toReturn.iterator();
-                }
-
-                @Override
-                public void commit() {
-                    adjustMap(metrics, metricsSnapshot);
-                }
-            };
-        }, CounterMetricsProvider.NO_VALUES);
+            @Override
+            public void commit() {
+                adjustMeters(metricSnapshots);
+            }
+        };
     }
 
-    void adjustMap(Map<Index, AtomicLong> metrics, List<SnapshotEntry> metricsSnapshot) {
+    private void adjustMeters(List<IngestSnapshot> metricsSnapshot) {
         for (var snapshotEntry : metricsSnapshot) {
-            AtomicLong value = metrics.get(snapshotEntry.key);
-            assert (value != null);
-            long newSize = value.addAndGet(-snapshotEntry.value());
-            assert newSize >= 0;
-            if (newSize == 0) {
-                try (ReleasableLock ignored = exclusiveLock.acquire()) {
-                    metrics.compute(snapshotEntry.key, (k, v) -> {
-                        if (v != null && v.get() == 0) {
-                            return null;
-                        }
-                        return v;
-                    });
+            ingestMeters.compute(snapshotEntry.key, (index, meter) -> {
+                if (snapshotEntry.bytes == 0) {
+                    // consider index to be stale (and evict) if still 0
+                    return meter == null || meter.bytes == 0 ? null : meter;
+                } else {
+                    assert meter != null;
+                    var newSize = meter.bytes - snapshotEntry.bytes;
+                    assert newSize >= 0;
+                    meter.bytes = newSize;
+                    return meter;
                 }
-            }
-            logger.trace(() -> Strings.format("Adjusted counter for index [%s], newValue [%d]", snapshotEntry.key, newSize));
+            });
+
         }
     }
 
     public void addIngestedDocValue(Index index, long size) {
-        try (ReleasableLock ignored = nonExclusiveLock.acquire()) {
-            AtomicLong currentValue = metrics.computeIfAbsent(index, (ind) -> new AtomicLong());
-            long newSize = currentValue.addAndGet(size);
-
-            logger.trace(() -> Strings.format("New ingested doc value %s for index %s, newValue %s", size, index.getName(), newSize));
-        }
+        ingestMeters.compute(index, (idx, meter) -> {
+            if (meter == null) {
+                return initIngestMeter(idx, size);
+            }
+            meter.bytes += size;
+            return meter;
+        });
     }
 
-    private static MetricValue metricValue(
-        String nodeId,
-        Index index,
-        long value,
-        Map<String, IndexAbstraction> indicesLookup,
-        SystemIndices systemIndices
-    ) {
-        var sourceMetadata = SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices);
-        return new MetricValue("ingested-doc:" + index.getUUID() + ":" + nodeId, METRIC_TYPE, sourceMetadata, value, null);
+    private IngestMeter initIngestMeter(Index index, long size) {
+        var lookup = clusterStateSupplier.withCurrentClusterState(s -> s.getMetadata().getDefaultProject().getIndicesLookup(), null);
+        assert lookup != null;
+        var indexAbstraction = lookup != null ? lookup.get(index.getName()) : null;
+        return new IngestMeter(size, SourceMetadata.indexSourceMetadata(index, indexAbstraction, systemIndices));
+    }
+
+    private MetricValue metricValue(IngestSnapshot snapshot) {
+        return new MetricValue(
+            "ingested-doc:" + snapshot.key.getUUID() + ":" + nodeId,
+            METRIC_TYPE,
+            snapshot.sourceMetadata,
+            snapshot.bytes,
+            null
+        );
     }
 }

@@ -21,25 +21,28 @@ import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateSupplier;
-import org.elasticsearch.cluster.metadata.IndexAbstraction;
 import org.elasticsearch.cluster.metadata.Metadata;
-import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.Matcher;
+import org.junit.Before;
 
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.stream.Collectors;
 
+import static co.elastic.elasticsearch.metering.MockedClusterStateMetadataTestUtils.mockedClusterStateMetadata;
+import static co.elastic.elasticsearch.metering.MockedClusterStateMetadataTestUtils.mockedIndex;
+import static co.elastic.elasticsearch.metering.SourceMetadata.DATASTREAM;
+import static co.elastic.elasticsearch.metering.SourceMetadata.HIDDEN_INDEX;
+import static co.elastic.elasticsearch.metering.SourceMetadata.INDEX;
+import static co.elastic.elasticsearch.metering.SourceMetadata.INDEX_UUID;
+import static co.elastic.elasticsearch.metering.SourceMetadata.SYSTEM_INDEX;
 import static co.elastic.elasticsearch.metering.TestUtils.iterableToList;
-import static java.util.function.Function.identity;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
@@ -48,14 +51,19 @@ import static org.mockito.Mockito.when;
 
 public class IngestMetricsProviderTests extends ESTestCase {
 
-    private final Metadata metadata = mockedMetadata(mock());
+    private Metadata metadata;
     private final ClusterStateSupplier clusterStateSupplier = () -> Optional.of(
         ClusterState.EMPTY_STATE.copyAndUpdate(b -> b.metadata(metadata))
     );
     private final SystemIndices systemIndices = mock();
 
+    @Before
+    public void createMocks() {
+        metadata = mockedClusterStateMetadata(mock());
+    }
+
     public void testMetricIdUniqueness() {
-        var index = new Index("index", "uuid");
+        var index = new Index(INDEX, "uuid");
         var ingestMetricsProvider1 = new IngestMetricsProvider("node1", clusterStateSupplier, systemIndices);
         var ingestMetricsProvider2 = new IngestMetricsProvider("node2", clusterStateSupplier, systemIndices);
 
@@ -73,39 +81,50 @@ public class IngestMetricsProviderTests extends ESTestCase {
     public void testGetMetrics() {
         final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterStateSupplier, systemIndices);
 
-        ingestMetricsProvider.addIngestedDocValue(new Index("index1", "uuid1"), 10);
-        ingestMetricsProvider.addIngestedDocValue(new Index("index2", "uuid2"), 20);
-        ingestMetricsProvider.addIngestedDocValue(new Index("system", "uuid3"), 5);
+        Index index1 = new Index("index1", "uuid1");
+        Index index2 = new Index("index2", "uuid2");
+        Index system = new Index("system", "uuid3");
 
         when(systemIndices.isSystemIndex("system")).thenReturn(true);
-        mockedMetadata(
+        mockedClusterStateMetadata(
             metadata,
-            mockedIndex("system", true, true),
-            mockedIndex("index1", false, false),
-            mockedIndex("index2", false, false)
+            mockedIndex(system, true, true),
+            mockedIndex(index1, false, false, "ds1"),
+            mockedIndex(index2, false, false)
         );
 
-        var metrics = iterableToList(ingestMetricsProvider.getMetrics());
+        ingestMetricsProvider.addIngestedDocValue(index1, 10);
+        ingestMetricsProvider.addIngestedDocValue(index2, 20);
+        ingestMetricsProvider.addIngestedDocValue(system, 5);
+
+        var metadIdx1 = Map.of(INDEX, "index1", INDEX_UUID, "uuid1", SYSTEM_INDEX, "false", HIDDEN_INDEX, "false", DATASTREAM, "ds1");
+        var metaIdx2 = Map.of(INDEX, "index2", INDEX_UUID, "uuid2", SYSTEM_INDEX, "false", HIDDEN_INDEX, "false");
+        var metaSystem = Map.of(INDEX, "system", INDEX_UUID, "uuid3", SYSTEM_INDEX, "true", HIDDEN_INDEX, "true");
+
         assertThat(
-            metrics,
+            ingestMetricsProvider.getMetrics(),
             containsInAnyOrder(
-                metricValue(
-                    is("es_raw_data"),
-                    is((long) 10),
-                    is(Map.of("index", "index1", "index_uuid", "uuid1", "system_index", "false", "hidden_index", "false"))
-                ),
-                metricValue(
-                    is("es_raw_data"),
-                    is((long) 20),
-                    is(Map.of("index", "index2", "index_uuid", "uuid2", "system_index", "false", "hidden_index", "false"))
-                ),
-                metricValue(
-                    is("es_raw_data"),
-                    is((long) 5),
-                    is(Map.of("index", "system", "index_uuid", "uuid3", "system_index", "true", "hidden_index", "true"))
-                )
+                metricValue(is("es_raw_data"), is((long) 10), is(metadIdx1)),
+                metricValue(is("es_raw_data"), is((long) 20), is(metaIdx2)),
+                metricValue(is("es_raw_data"), is((long) 5), is(metaSystem))
             )
         );
+    }
+
+    public void testGetMetricsAfterDeletingIndex() {
+        final var ingestMetricsProvider = new IngestMetricsProvider("node", clusterStateSupplier, systemIndices);
+
+        Index index1 = new Index("index1", "uuid1");
+
+        mockedClusterStateMetadata(metadata, mockedIndex(index1, false, false, "ds1"));
+
+        ingestMetricsProvider.addIngestedDocValue(index1, 10);
+
+        // index metadata is collected at ingest time and will be available even if index is removed from the metadata
+        mockedClusterStateMetadata(metadata);
+
+        var metadIdx1 = Map.of(INDEX, "index1", INDEX_UUID, "uuid1", SYSTEM_INDEX, "false", HIDDEN_INDEX, "false", DATASTREAM, "ds1");
+        assertThat(ingestMetricsProvider.getMetrics(), contains(metricValue(is("es_raw_data"), is((long) 10), is(metadIdx1))));
     }
 
     private Matcher<MetricValue> metricValue(Matcher<String> type, Matcher<Long> value, Matcher<Map<String, String>> sourceMetadata) {
@@ -194,20 +213,14 @@ public class IngestMetricsProviderTests extends ESTestCase {
 
         final long totalOps = (long) writeOpsPerThread * writerThreadsCount;
 
-        ConcurrencyTestUtils.runConcurrentWithCollectors(
-            writerThreadsCount,
-            writeOpsPerThread,
-            () -> 0,
-            t -> ingestMetricsProvider.addIngestedDocValue(new Index("index" + t, "uuid" + t), docSize),
-            collectThreadsCount,
-            () -> 0,
-            () -> {
-                var metrics = ingestMetricsProvider.getMetrics();
-                metrics.forEach(results::add);
-                metrics.commit();
-            },
-            logger::info
-        );
+        ConcurrencyTestUtils.runConcurrentWithCollectors(writerThreadsCount, writeOpsPerThread, () -> 0, t -> {
+            var index = new Index(INDEX + t, "uuid" + t);
+            ingestMetricsProvider.addIngestedDocValue(index, docSize);
+        }, collectThreadsCount, () -> 0, () -> {
+            var metrics = ingestMetricsProvider.getMetrics();
+            metrics.forEach(results::add);
+            metrics.commit();
+        }, logger::info);
 
         long valueSum = results.stream().mapToLong(MetricValue::value).sum();
         var itemsLeft = iterableToList(ingestMetricsProvider.getMetrics()).size();
@@ -230,7 +243,7 @@ public class IngestMetricsProviderTests extends ESTestCase {
             writerThreadsCount,
             writeOpsPerThread,
             () -> randomIntBetween(10, 50),
-            t -> ingestMetricsProvider.addIngestedDocValue(new Index("index" + t, "uuid" + t), docSize),
+            t -> ingestMetricsProvider.addIngestedDocValue(new Index(INDEX + t, "uuid" + t), docSize),
             collectThreadsCount,
             () -> randomIntBetween(100, 200),
             () -> {
@@ -245,25 +258,5 @@ public class IngestMetricsProviderTests extends ESTestCase {
         var itemsLeft = iterableToList(ingestMetricsProvider.getMetrics()).size();
         assertThat(valueSum, equalTo(totalOps * docSize));
         assertThat(itemsLeft, is(0));
-    }
-
-    private static Metadata mockedMetadata(Metadata mock, IndexAbstraction... indices) {
-        TreeMap<String, IndexAbstraction> lookup = new TreeMap<>(
-            Arrays.stream(indices).collect(Collectors.toMap(IndexAbstraction::getName, identity()))
-        );
-        final ProjectMetadata projectMetadata = mock(ProjectMetadata.class);
-        when(projectMetadata.id()).thenReturn(Metadata.DEFAULT_PROJECT_ID);
-        when(mock.projects()).thenReturn(Map.of(Metadata.DEFAULT_PROJECT_ID, projectMetadata));
-        when(mock.getProject()).thenReturn(projectMetadata);
-        when(projectMetadata.getIndicesLookup()).thenReturn(lookup);
-        return mock;
-    }
-
-    private static IndexAbstraction mockedIndex(String name, boolean isSystem, boolean isHidden) {
-        IndexAbstraction index = mock();
-        when(index.getName()).thenReturn(name);
-        when(index.isHidden()).thenReturn(isHidden);
-        when(index.isSystem()).thenReturn(isSystem);
-        return index;
     }
 }

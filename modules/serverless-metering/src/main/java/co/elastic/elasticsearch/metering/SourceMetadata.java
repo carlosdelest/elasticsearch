@@ -35,34 +35,41 @@ public interface SourceMetadata {
     String HIDDEN_INDEX = "hidden_index";
     String PARTIAL = "partial";
 
-    static Map<String, String> indexSourceMetadata(Index index, Map<String, IndexAbstraction> indicesLookup, SystemIndices systemIndices) {
-        return indexSourceMetadata(index, indicesLookup, systemIndices, false);
-    }
-
     static Map<String, String> indexSourceMetadata(
         Index index,
         Map<String, IndexAbstraction> indicesLookup,
         SystemIndices systemIndices,
         boolean isPartial
     ) {
-        // note: this is intentionally not resolved via IndexAbstraction, see https://elasticco.atlassian.net/browse/ES-10384
-        final var isSystemIndex = systemIndices.isSystemIndex(index.getName());
-        final var indexAbstraction = indicesLookup.get(index.getName());
-        final var datastream = indexAbstraction != null ? indexAbstraction.getParentDataStream() : null;
+        return indexSourceMetadata(index, indicesLookup.get(index.getName()), systemIndices, isPartial);
+    }
 
+    static Map<String, String> indexSourceMetadata(Index index, IndexAbstraction indexAbstraction, SystemIndices systemIndices) {
+        return indexSourceMetadata(index, indexAbstraction, systemIndices, false);
+    }
+
+    private static Map<String, String> indexSourceMetadata(
+        Index index,
+        IndexAbstraction indexAbstraction,
+        SystemIndices systemIndices,
+        boolean isPartial
+    ) {
         Map<String, String> sourceMetadata = Maps.newHashMapWithExpectedSize(5);
         sourceMetadata.put(SourceMetadata.INDEX, index.getName());
         sourceMetadata.put(SourceMetadata.INDEX_UUID, index.getUUID());
-        sourceMetadata.put(SourceMetadata.SYSTEM_INDEX, Boolean.toString(isSystemIndex));
+        // note: SYSTEM_INDEX is intentionally not resolved via IndexAbstraction, see https://elasticco.atlassian.net/browse/ES-10384
+        // once validated that ES-10384 is fixed, switch to using IndexAbstraction
+        sourceMetadata.put(SourceMetadata.SYSTEM_INDEX, Boolean.toString(systemIndices.isSystemIndex(index.getName())));
         if (indexAbstraction != null) {
             sourceMetadata.put(SourceMetadata.HIDDEN_INDEX, Boolean.toString(indexAbstraction.isHidden()));
-        }
-        if (datastream != null) {
-            sourceMetadata.put(SourceMetadata.DATASTREAM, datastream.getName());
+            var datastream = indexAbstraction.getParentDataStream();
+            if (datastream != null) {
+                sourceMetadata.put(SourceMetadata.DATASTREAM, datastream.getName());
+            }
         }
         if (isPartial) {
             sourceMetadata.put(SourceMetadata.PARTIAL, Boolean.TRUE.toString());
         }
-        return sourceMetadata;
+        return Map.copyOf(sourceMetadata);
     }
 }
