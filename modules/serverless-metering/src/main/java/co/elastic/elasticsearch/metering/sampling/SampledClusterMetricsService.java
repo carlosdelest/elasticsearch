@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import co.elastic.elasticsearch.metering.SourceMetadata;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.action.CollectClusterSamplesAction;
@@ -27,11 +28,12 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.routing.RoutingTable;
-import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.metadata.IndexAbstraction;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.env.NodeEnvironment;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
@@ -44,8 +46,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -68,23 +72,26 @@ public class SampledClusterMetricsService {
     static final String NODE_INFO_TIER_SEARCH_ACTIVITY_TIME = "es.metering.node_info.tier.search.activity.time";
     static final String NODE_INFO_TIER_INDEX_ACTIVITY_TIME = "es.metering.node_info.tier.index.activity.time";
     private final ClusterService clusterService;
+    private final SystemIndices systemIndices;
     private final Duration activityCoolDownPeriod;
     private final MeterRegistry meterRegistry;
     private final LongCounter collectionsTotalCounter;
     private final LongCounter collectionsErrorsCounter;
     private final LongCounter collectionsPartialsCounter;
 
-    public SampledClusterMetricsService(ClusterService clusterService, MeterRegistry meterRegistry) {
-        this(clusterService, meterRegistry, PersistentTaskNodeStatus.NO_NODE);
+    public SampledClusterMetricsService(ClusterService clusterService, SystemIndices systemIndices, MeterRegistry meterRegistry) {
+        this(clusterService, systemIndices, meterRegistry, PersistentTaskNodeStatus.NO_NODE);
     }
 
     @SuppressWarnings("this-escape")
     protected SampledClusterMetricsService(
         ClusterService clusterService,
+        SystemIndices systemIndices,
         MeterRegistry meterRegistry,
         PersistentTaskNodeStatus nodeStatus
     ) {
         this.clusterService = clusterService;
+        this.systemIndices = systemIndices;
         this.meterRegistry = meterRegistry;
         this.metricsState = new AtomicReference<>(new SamplingState(nodeStatus, SampledClusterMetrics.EMPTY, Instant.EPOCH));
 
@@ -134,32 +141,78 @@ public class SampledClusterMetricsService {
     record SampledClusterMetrics(
         SampledTierMetrics searchTierMetrics,
         SampledTierMetrics indexTierMetrics,
-        Map<ShardId, ShardInfoMetrics> shardSamples,
+        SampledStorageMetrics storageMetrics,
         Set<SamplingStatus> status
     ) implements SampledShardInfos {
 
         static final SampledClusterMetrics EMPTY = new SampledClusterMetrics(
             SampledTierMetrics.EMPTY,
             SampledTierMetrics.EMPTY,
-            Map.of(),
+            SampledStorageMetrics.EMPTY,
             Set.of(SamplingStatus.STALE)
         );
 
         public ShardInfoMetrics get(ShardId shardId) {
-            var shardInfo = shardSamples.get(shardId);
+            var shardInfo = storageMetrics.shardInfos.get(shardId);
             return Objects.requireNonNullElse(shardInfo, ShardInfoMetrics.EMPTY);
         }
 
         SampledClusterMetrics withAdditionalStatus(SamplingStatus newStatus) {
             var newSet = EnumSet.copyOf(status);
             newSet.add(newStatus);
-            return new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, shardSamples, newSet);
+            return new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, storageMetrics, newSet);
+        }
+    }
+
+    static class SampledStorageMetrics {
+        static final SampledStorageMetrics EMPTY = new SampledStorageMetrics(Collections.emptyMap(), Collections.emptyMap());
+
+        private final Map<Index, Map<String, String>> indexMetadata;
+        private final Map<ShardId, ShardInfoMetrics> shardInfos;
+
+        // Index infos are accessed only sporadically when publishing usage reports (every 5 mins), but updated much more frequently
+        // every time samples are collected (every 30 secs) and lazily initialized for that reason.
+        // This is only ever accessed by the usage report collector thread, there's no concurrent access.
+        private Map<Index, IndexInfoMetrics> indexInfos;
+
+        SampledStorageMetrics(Map<ShardId, ShardInfoMetrics> shardInfos, Map<Index, Map<String, String>> indexMetadata) {
+            this.shardInfos = shardInfos;
+            this.indexMetadata = indexMetadata;
         }
 
+        public Map<ShardId, ShardInfoMetrics> getShardInfos() {
+            return shardInfos;
+        }
+
+        public Map<Index, IndexInfoMetrics> getIndexInfos() {
+            var metrics = indexInfos;
+            if (metrics == null) {
+                indexInfos = metrics = IndexInfoMetrics.calculateIndexSamples(shardInfos, indexMetadata);
+            }
+            return metrics;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            SampledStorageMetrics that = (SampledStorageMetrics) o;
+            return Objects.equals(shardInfos, that.shardInfos) && Objects.equals(indexMetadata, that.indexMetadata);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(shardInfos, indexMetadata);
+        }
     }
 
     record SampledTierMetrics(long memorySize, Activity activity) {
         static final SampledTierMetrics EMPTY = new SampledTierMetrics(0, Activity.EMPTY);
+
+        SampledTierMetrics merge(long newMemory, Activity newActivity, Duration coolDown) {
+            return new SampledTierMetrics(newMemory, Activity.merge(Stream.of(activity(), newActivity), coolDown));
+        }
     }
 
     enum PersistentTaskNodeStatus {
@@ -255,16 +308,14 @@ public class SampledClusterMetricsService {
         if (current.nodeStatus() != PersistentTaskNodeStatus.THIS_NODE) {
             return current;
         }
-        // if the committed timestamp proceeded, only retain active, known shards and evict shards that have been removed
+        // if the committed timestamp proceeded, only retain active, known shards / index metadata and evict entries that have been removed
         var samplingMetadata = SampledMetricsMetadata.getFromClusterState(clusterState);
         var committedTimestamp = samplingMetadata != null ? samplingMetadata.getCommittedTimestamp() : Instant.EPOCH;
-
-        // check if to evict old shards (once the committed timestamp changed)
-        var evictOldShards = samplingMetadata == null || current.committedTimestamp.equals(committedTimestamp) == false;
+        var evictOldEntries = samplingMetadata == null || current.committedTimestamp.equals(committedTimestamp) == false;
 
         return new SamplingState(
             current.nodeStatus(),
-            mergeSamplesWithUpdate(current.metrics(), update, evictOldShards),
+            mergeSamplesWithUpdate(current.metrics(), update, evictOldEntries),
             committedTimestamp
         );
     }
@@ -280,18 +331,14 @@ public class SampledClusterMetricsService {
     private SampledClusterMetrics mergeSamplesWithUpdate(
         SampledClusterMetrics current,
         CollectClusterSamplesAction.Response response,
-        boolean evictOldShards
+        boolean evictOldEntries
     ) {
         return new SampledClusterMetrics(
-            mergeTierMetrics(current.searchTierMetrics(), response.getSearchTierMemorySize(), response.getSearchActivity()),
-            mergeTierMetrics(current.indexTierMetrics(), response.getIndexTierMemorySize(), response.getIndexActivity()),
-            mergeShardInfos(current.shardSamples(), response.getShardInfos(), evictOldShards),
+            current.searchTierMetrics().merge(response.getSearchTierMemorySize(), response.getSearchActivity(), activityCoolDownPeriod),
+            current.indexTierMetrics().merge(response.getIndexTierMemorySize(), response.getIndexActivity(), activityCoolDownPeriod),
+            mergeStorageMetrics(current.storageMetrics(), response.getShardInfos(), evictOldEntries),
             response.isComplete() ? EnumSet.noneOf(SamplingStatus.class) : EnumSet.of(SamplingStatus.PARTIAL)
         );
-    }
-
-    private SampledTierMetrics mergeTierMetrics(SampledTierMetrics current, long newMemory, Activity newActivity) {
-        return new SampledTierMetrics(newMemory, Activity.merge(Stream.of(current.activity(), newActivity), activityCoolDownPeriod));
     }
 
     public <T> Optional<T> withSamplesIfReady(
@@ -315,38 +362,47 @@ public class SampledClusterMetricsService {
     public Collection<SampledMetricsProvider> createSampledMetricsProviders(NodeEnvironment nodeEnvironment, SystemIndices systemIndices) {
         var spMinProvisionedMemoryCalculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, nodeEnvironment);
         return List.of(
-            new IndexSizeMetricsProvider(this, spMinProvisionedMemoryCalculator, clusterService, systemIndices),
-            new RawStorageMetricsProvider(this, clusterService, systemIndices),
+            new IndexSizeMetricsProvider(this, spMinProvisionedMemoryCalculator),
+            new RawStorageMetricsProvider(this),
             new SampledVCUMetricsProvider(this, spMinProvisionedMemoryCalculator, meterRegistry)
         );
     }
 
-    private Set<ShardId> activeShardIds() {
-        return clusterService.state()
-            .globalRoutingTable()
-            .routingTables()
-            .values()
-            .stream()
-            .flatMap(RoutingTable::allShards)
-            .map(ShardRouting::shardId)
-            .collect(Collectors.toSet());
+    private SampledStorageMetrics mergeStorageMetrics(
+        SampledStorageMetrics current,
+        Map<ShardId, ShardInfoMetrics> updated,
+        boolean evictOldEntries
+    ) {
+        final var state = clusterService.state();
+
+        final var shardMetrics = new HashMap<>(current.shardInfos);
+        final var indexMetadata = new HashMap<>(current.indexMetadata);
+
+        // merge updates into shardInfos and initialize index metadata if missing
+        final var indicesLookup = state.metadata().getDefaultProject().getIndicesLookup();
+        for (var newEntry : updated.entrySet()) {
+            indexMetadata.computeIfAbsent(newEntry.getKey().getIndex(), index -> initIndexMetadata(index, indicesLookup));
+            shardMetrics.merge(newEntry.getKey(), newEntry.getValue(), (oldVal, newVal) -> newVal.mostRecent(oldVal));
+        }
+
+        if (evictOldEntries) {
+            // check the routing table for known shards and evict outdated shard infos / index metadata
+            var knownShardIds = new HashSet<ShardId>();
+            var knownIndices = new HashSet<Index>();
+            // TODO for multi-project sampled metrics must be maintained per project id
+            for (var routing : state.globalRoutingTable().routingTable(Metadata.DEFAULT_PROJECT_ID)) {
+                knownIndices.add(routing.getIndex());
+                routing.allShards().forEach(shard -> knownShardIds.add(shard.shardId()));
+            }
+            shardMetrics.keySet().retainAll(knownShardIds);
+            indexMetadata.keySet().retainAll(knownIndices);
+        }
+        return new SampledStorageMetrics(shardMetrics, indexMetadata);
     }
 
-    private Map<ShardId, ShardInfoMetrics> mergeShardInfos(
-        Map<ShardId, ShardInfoMetrics> current,
-        Map<ShardId, ShardInfoMetrics> updated,
-        boolean evictOldShards
-    ) {
-        HashMap<ShardId, ShardInfoMetrics> map = new HashMap<>(current);
-        for (var newEntry : updated.entrySet()) {
-            // merge shard updates into map
-            map.merge(newEntry.getKey(), newEntry.getValue(), (oldVal, newVal) -> newVal.mostRecent(oldVal));
-        }
-        if (evictOldShards) {
-            // periodically we need to evict obsolete old shards
-            map.keySet().retainAll(activeShardIds());
-        }
-        return map;
+    private Map<String, String> initIndexMetadata(Index index, Map<String, IndexAbstraction> indicesLookup) {
+        var indexAbstraction = indicesLookup.get(index.getName());
+        return SourceMetadata.indexSourceMetadata(index, indexAbstraction, systemIndices);
     }
 
     public SampledShardInfos getMeteringShardInfo() {
@@ -357,14 +413,6 @@ public class SampledClusterMetricsService {
         var metricsState = this.metricsState.get();
         assert metricsState != null && metricsState.metrics() != null;
         return metricsState.metrics();
-    }
-
-    SampledTierMetrics getSearchTierMetrics() {
-        return getSampledClusterMetrics().searchTierMetrics();
-    }
-
-    SampledTierMetrics getIndexTierMetrics() {
-        return getSampledClusterMetrics().indexTierMetrics();
     }
 
     private LongWithAttributes makeActivityMeter(SampledTierMetrics metrics) {

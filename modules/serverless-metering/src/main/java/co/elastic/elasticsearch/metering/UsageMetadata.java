@@ -32,4 +32,6 @@ public interface UsageMetadata {
     String SP_MIN = "sp_min";
     String SP_MIN_PROVISIONED_MEMORY = "sp_min_provisioned_memory";
     String SP_MIN_STORAGE_RAM_RATIO = "sp_min_storage_ram_ratio";
+
+    String PARTIAL = "partial";
 }

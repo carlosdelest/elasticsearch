@@ -17,20 +17,16 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.SourceMetadata;
+import co.elastic.elasticsearch.metering.UsageMetadata;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.metadata.IndexAbstraction;
-import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.index.Index;
-import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,17 +40,9 @@ class RawStorageMetricsProvider implements SampledMetricsProvider {
     static final String RA_S_METRIC_ID_PREFIX = "raw-stored-index-size";
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
-    private final ClusterService clusterService;
-    private final SystemIndices systemIndices;
 
-    RawStorageMetricsProvider(
-        SampledClusterMetricsService sampledClusterMetricsService,
-        ClusterService clusterService,
-        SystemIndices systemIndices
-    ) {
+    RawStorageMetricsProvider(SampledClusterMetricsService sampledClusterMetricsService) {
         this.sampledClusterMetricsService = sampledClusterMetricsService;
-        this.clusterService = clusterService;
-        this.systemIndices = systemIndices;
     }
 
     @Override
@@ -66,38 +54,34 @@ class RawStorageMetricsProvider implements SampledMetricsProvider {
     }
 
     private MetricValues sampleToMetricValues(SampledClusterMetricsService.SampledClusterMetrics sample) {
-        ClusterState state = clusterService.state();
-        final var indicesLookup = state.getMetadata().getProject().getIndicesLookup();
         boolean partial = sample.status().contains(SampledClusterMetricsService.SamplingStatus.PARTIAL);
-        List<MetricValue> metrics = new ArrayList<>();
 
-        var indexInfos = IndexInfoMetrics.calculateIndexSamples(sample.shardSamples());
+        var indexInfos = sample.storageMetrics().getIndexInfos();
+        List<MetricValue> metrics = new ArrayList<>(indexInfos.size());
         for (final var indexInfo : indexInfos.entrySet()) {
             if (indexInfo.getValue().getRawStorageSize() > 0) {
-                metrics.add(rawStorageIndexMetric(indexInfo.getKey(), indexInfo.getValue(), indicesLookup, partial));
+                metrics.add(rawStorageIndexMetric(indexInfo.getKey(), indexInfo.getValue(), partial));
             }
         }
         return SampledMetricsProvider.metricValues(metrics, DefaultSampledMetricsBackfillStrategy.INSTANCE);
     }
 
-    private MetricValue rawStorageIndexMetric(
-        Index index,
-        IndexInfoMetrics indexInfo,
-        Map<String, IndexAbstraction> indicesLookup,
-        boolean partial
-    ) {
+    private MetricValue rawStorageIndexMetric(Index index, IndexInfoMetrics indexInfo, boolean partial) {
         return new MetricValue(
             format("%s:%s", RA_S_METRIC_ID_PREFIX, index.getUUID()),
             RA_S_METRIC_TYPE,
-            SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices, partial),
-            rasUsageMetadata(indexInfo),
+            indexInfo.getSourceMetadata(),
+            rasUsageMetadata(indexInfo, partial),
             indexInfo.getRawStorageSize(),
             indexInfo.getIndexCreationDate()
         );
     }
 
-    private Map<String, String> rasUsageMetadata(IndexInfoMetrics info) {
-        Map<String, String> usageMetadata = Maps.newHashMapWithExpectedSize(info.hasRawStats() ? 3 + 8 : 3);
+    private Map<String, String> rasUsageMetadata(IndexInfoMetrics info, boolean partial) {
+        Map<String, String> usageMetadata = new HashMap<>();
+        if (partial) {
+            usageMetadata.put(UsageMetadata.PARTIAL, Boolean.TRUE.toString());
+        }
         usageMetadata.put("segment_count", Long.toString(info.getSegmentCount()));
         usageMetadata.put("doc_count", Long.toString(info.getLiveDocCount()));
         usageMetadata.put("deleted_doc_count", Long.toString(info.getDeletedDocCount()));

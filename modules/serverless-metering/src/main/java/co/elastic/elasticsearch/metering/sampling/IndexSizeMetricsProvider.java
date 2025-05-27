@@ -17,17 +17,12 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.SourceMetadata;
 import co.elastic.elasticsearch.metering.UsageMetadata;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metrics.MetricValue;
 import co.elastic.elasticsearch.metrics.SampledMetricsProvider;
 
-import org.elasticsearch.cluster.ClusterState;
-import org.elasticsearch.cluster.metadata.IndexAbstraction;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.index.Index;
-import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 
@@ -47,19 +42,13 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
 
     private final SampledClusterMetricsService sampledClusterMetricsService;
     private final SPMinProvisionedMemoryCalculator spMinMemoryCalculator;
-    private final ClusterService clusterService;
-    private final SystemIndices systemIndices;
 
     IndexSizeMetricsProvider(
         SampledClusterMetricsService sampledClusterMetricsService,
-        SPMinProvisionedMemoryCalculator spMinMemoryCalculator,
-        ClusterService clusterService,
-        SystemIndices systemIndices
+        SPMinProvisionedMemoryCalculator spMinMemoryCalculator
     ) {
         this.sampledClusterMetricsService = sampledClusterMetricsService;
         this.spMinMemoryCalculator = spMinMemoryCalculator;
-        this.clusterService = clusterService;
-        this.systemIndices = systemIndices;
     }
 
     @Override
@@ -71,17 +60,15 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
     }
 
     private MetricValues sampleToMetricValues(SampledClusterMetricsService.SampledClusterMetrics sample) {
-        ClusterState state = clusterService.state();
-        final var indicesLookup = state.getMetadata().getProject().getIndicesLookup();
         final var searchActivity = sampledClusterMetricsService.activitySnapshot(sample.searchTierMetrics());
 
         boolean partial = sample.status().contains(SampledClusterMetricsService.SamplingStatus.PARTIAL);
 
-        var indexInfos = IndexInfoMetrics.calculateIndexSamples(sample.shardSamples());
+        var indexInfos = sample.storageMetrics().getIndexInfos();
         List<MetricValue> metrics = new ArrayList<>(indexInfos.size());
         for (final var indexInfo : indexInfos.entrySet()) {
             if (indexInfo.getValue().getTotalSize() > 0) {
-                metrics.add(ixIndexMetric(indexInfo.getKey(), indexInfo.getValue(), searchActivity, indicesLookup, partial));
+                metrics.add(ixIndexMetric(indexInfo.getKey(), indexInfo.getValue(), searchActivity, partial));
             }
         }
         return SampledMetricsProvider.metricValues(
@@ -93,25 +80,22 @@ class IndexSizeMetricsProvider implements SampledMetricsProvider {
         );
     }
 
-    private MetricValue ixIndexMetric(
-        Index index,
-        IndexInfoMetrics indexInfo,
-        Activity.Snapshot searchActivity,
-        Map<String, IndexAbstraction> indicesLookup,
-        boolean partial
-    ) {
+    private MetricValue ixIndexMetric(Index index, IndexInfoMetrics indexInfo, Activity.Snapshot searchActivity, boolean partial) {
         return new MetricValue(
             format("%s:%s", IX_INDEX_METRIC_ID_PREFIX, index.getUUID()),
             IX_METRIC_TYPE,
-            SourceMetadata.indexSourceMetadata(index, indicesLookup, systemIndices, partial),
-            ixUsageMetadata(indexInfo, searchActivity),
+            indexInfo.getSourceMetadata(),
+            ixUsageMetadata(indexInfo, searchActivity, partial),
             indexInfo.getTotalSize(),
             indexInfo.getIndexCreationDate()
         );
     }
 
-    private Map<String, String> ixUsageMetadata(IndexInfoMetrics info, Activity.Snapshot searchActivity) {
+    private Map<String, String> ixUsageMetadata(IndexInfoMetrics info, Activity.Snapshot searchActivity, boolean partial) {
         Map<String, String> usageMetadata = new HashMap<>();
+        if (partial) {
+            usageMetadata.put(UsageMetadata.PARTIAL, Boolean.TRUE.toString());
+        }
         usageMetadata.put("segment_count", Long.toString(info.getSegmentCount()));
         usageMetadata.put("doc_count", Long.toString(info.getLiveDocCount()));
         usageMetadata.put("deleted_doc_count", Long.toString(info.getDeletedDocCount()));

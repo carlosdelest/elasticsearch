@@ -18,11 +18,13 @@
 package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SamplingState;
 import co.elastic.elasticsearch.metrics.MetricValue;
 
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.indices.SystemIndices;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
@@ -76,7 +78,11 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
         SampledTierMetrics indexTierMetrics
     ) {
         metricsService.metricsState.set(
-            new SamplingState(THIS_NODE, new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, Map.of(), Set.of()), Instant.EPOCH)
+            new SamplingState(
+                THIS_NODE,
+                new SampledClusterMetrics(searchTierMetrics, indexTierMetrics, SampledStorageMetrics.EMPTY, Set.of()),
+                Instant.EPOCH
+            )
         );
     }
 
@@ -86,7 +92,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
 
     public void testGetMetricsEmptyActivity() {
 
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
+        var metricsService = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), MeterRegistry.NOOP, THIS_NODE);
 
         var spMinProvisionedMemory = 789L;
         var searchTierMemorySize = 123L;
@@ -152,7 +158,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
     }
 
     public void testGetMetrics() {
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
+        var metricsService = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), MeterRegistry.NOOP, THIS_NODE);
 
         var spMinProvisionedMemory = 789L;
         var searchTierMemorySize = 123L;
@@ -246,7 +252,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
     }
 
     public void testDifferentSpMinValues() {
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE);
+        var metricsService = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), MeterRegistry.NOOP, THIS_NODE);
         setMetricsServiceData(
             metricsService,
             SampledClusterMetricsServiceTests.randomSampledTierMetrics(),
@@ -284,7 +290,7 @@ public class SampledVCUMetricsProviderTests extends ESTestCase {
     }
 
     public void testEmptyMetrics() {
-        var metricsService = new SampledClusterMetricsService(clusterService, MeterRegistry.NOOP, THIS_NODE); // empty initially
+        var metricsService = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), MeterRegistry.NOOP, THIS_NODE);
         var spMinProvisionedMemoryCalculator = mock(SPMinProvisionedMemoryCalculator.class);
         var sampledVCUMetricsProvider = new SampledVCUMetricsProvider(metricsService, spMinProvisionedMemoryCalculator, MeterRegistry.NOOP);
         var metricValues = sampledVCUMetricsProvider.getMetrics();

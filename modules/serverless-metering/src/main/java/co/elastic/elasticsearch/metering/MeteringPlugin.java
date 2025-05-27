@@ -169,7 +169,11 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
         var clusterStateSupplier = new SafeClusterStateSupplier();
         clusterService.addListener(clusterStateSupplier);
 
-        var clusterMetricsService = new SampledClusterMetricsService(clusterService, services.telemetryProvider().getMeterRegistry());
+        var clusterMetricsService = new SampledClusterMetricsService(
+            clusterService,
+            systemIndices,
+            services.telemetryProvider().getMeterRegistry()
+        );
 
         var activityTracker = TaskActivityTracker.build(
             Clock.systemUTC(),

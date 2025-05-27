@@ -128,7 +128,7 @@ class SPMinProvisionedMemoryCalculator {
     public SPMinInfo calculate(SampledClusterMetricsService.SampledClusterMetrics currentInfo) {
         long boostedDataSetSize = 0;
         long totalDataSetSize = 0;
-        for (var entry : currentInfo.shardSamples().entrySet()) {
+        for (var entry : currentInfo.storageMetrics().getShardInfos().entrySet()) {
             if (systemIndices.isSystemIndex(entry.getKey().getIndexName())) {
                 continue; // temporarily skip system indices until VCU for inactivity is reported by index
             }

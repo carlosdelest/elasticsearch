@@ -17,7 +17,6 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
-import co.elastic.elasticsearch.metering.SourceMetadata;
 import co.elastic.elasticsearch.metering.UsageMetadata;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
@@ -90,11 +89,14 @@ public class SampledVCUMetricsProvider implements SampledMetricsProvider {
     ) {
         var activitySnapshot = sampledClusterMetricsService.activitySnapshot(tierMetrics);
         var usageMetadata = new HashMap<String, String>();
+        if (partial) {
+            usageMetadata.put(UsageMetadata.PARTIAL, Boolean.TRUE.toString());
+        }
         updateUsageMetadata(usageMetadata, activitySnapshot, spMinInfo, tier);
         return new MetricValue(
             format("%s:%s", VCU_METRIC_ID_PREFIX, tier),
             VCU_METRIC_TYPE,
-            partial ? Map.of(SourceMetadata.PARTIAL, Boolean.TRUE.toString()) : Map.of(),
+            Map.of(),
             usageMetadata,
             tierMetrics.memorySize(),
             null

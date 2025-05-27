@@ -27,11 +27,7 @@ import java.util.stream.Collector;
 import static java.util.stream.Collectors.groupingBy;
 
 final class IndexInfoMetrics {
-    private static final Collector<Map.Entry<ShardId, ShardInfoMetrics>, ?, Map<Index, IndexInfoMetrics>> INDEX_SAMPLES_COLLECTOR =
-        groupingBy(
-            e -> e.getKey().getIndex(),
-            Collector.of(IndexInfoMetrics::new, IndexInfoMetrics::accumulate, IndexInfoMetrics::combine)
-        );
+    private Map<String, String> sourceMetadata;
 
     private Instant indexCreationDate;
     private long totalSize;
@@ -54,12 +50,25 @@ final class IndexInfoMetrics {
 
     private boolean hasRawStats = false;
 
-    public static Map<Index, IndexInfoMetrics> calculateIndexSamples(Map<ShardId, ShardInfoMetrics> shardSamples) {
-        return shardSamples.entrySet().stream().collect(INDEX_SAMPLES_COLLECTOR);
+    public static Map<Index, IndexInfoMetrics> calculateIndexSamples(
+        Map<ShardId, ShardInfoMetrics> shardSamples,
+        Map<Index, Map<String, String>> sourceMetadataMap
+    ) {
+        Collector<Map.Entry<ShardId, ShardInfoMetrics>, ?, Map<Index, IndexInfoMetrics>> collector = groupingBy(
+            e -> e.getKey().getIndex(),
+            Collector.of(IndexInfoMetrics::new, (e1, e2) -> e1.accumulate(e2, sourceMetadataMap), IndexInfoMetrics::combine)
+        );
+        return shardSamples.entrySet().stream().collect(collector);
     }
 
-    private void accumulate(Map.Entry<ShardId, ShardInfoMetrics> t) {
-        var shardInfo = t.getValue();
+    private void accumulate(Map.Entry<ShardId, ShardInfoMetrics> entry, Map<Index, Map<String, String>> sourceMetadataMap) {
+        if (sourceMetadata == null) {
+            sourceMetadata = sourceMetadataMap.get(entry.getKey().getIndex());
+        } else {
+            assert sourceMetadata.equals(sourceMetadataMap.get(entry.getKey().getIndex()));
+        }
+
+        var shardInfo = entry.getValue();
 
         totalSize += shardInfo.totalSizeInBytes();
         interactiveSize += shardInfo.interactiveSizeInBytes();
@@ -175,5 +184,9 @@ final class IndexInfoMetrics {
 
     public long getTotalSize() {
         return totalSize;
+    }
+
+    public Map<String, String> getSourceMetadata() {
+        return sourceMetadata;
     }
 }

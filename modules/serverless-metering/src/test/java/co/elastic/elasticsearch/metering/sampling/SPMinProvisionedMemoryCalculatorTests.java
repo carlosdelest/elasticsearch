@@ -19,6 +19,7 @@ package co.elastic.elasticsearch.metering.sampling;
 
 import co.elastic.elasticsearch.metering.ShardInfoMetricsTestUtils;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledClusterMetrics;
+import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledStorageMetrics;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.SampledTierMetrics;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
@@ -39,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+import static java.util.Collections.emptyMap;
 import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
@@ -73,7 +75,7 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
 
     public void testSpMinProvisionedMemoryNoShardsReturn0() {
         var clusterService = mockClusterService(true);
-        var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, Map.of(), Set.of());
+        var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, SampledStorageMetrics.EMPTY, Set.of());
         var calculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, 10, 10);
         assertThat(calculator.calculate(current).provisionedMemory(), equalTo(0L));
     }
@@ -137,7 +139,12 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
             shardInfoMetrics(200, 200)
 
         );
-        var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
+        var current = new SampledClusterMetrics(
+            SampledTierMetrics.EMPTY,
+            SampledTierMetrics.EMPTY,
+            new SampledStorageMetrics(shardSamples, emptyMap()),
+            Set.of()
+        );
 
         long provisionedRam = 1000;
         long storageRamRatio = 10;
@@ -167,7 +174,12 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
             shardSamples.put(randomShardId(), shardInfoMetrics(interactiveSize, interactiveSize + nonInteractiveSize));
         }
 
-        var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
+        var current = new SampledClusterMetrics(
+            SampledTierMetrics.EMPTY,
+            SampledTierMetrics.EMPTY,
+            new SampledStorageMetrics(shardSamples, emptyMap()),
+            Set.of()
+        );
 
         long provisionedRam = between(1, 1000);
         long storageRamRatio = between(1, 10);
@@ -193,7 +205,12 @@ public class SPMinProvisionedMemoryCalculatorTests extends ESTestCase {
     ) {
         var clusterService = mockClusterService(true, spMin);
         var shardSamples = Map.of(randomShardId(), shardInfoMetrics(interactiveSize, totalSize));
-        var current = new SampledClusterMetrics(SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardSamples, Set.of());
+        var current = new SampledClusterMetrics(
+            SampledTierMetrics.EMPTY,
+            SampledTierMetrics.EMPTY,
+            new SampledStorageMetrics(shardSamples, emptyMap()),
+            Set.of()
+        );
         var calculator = SPMinProvisionedMemoryCalculator.build(clusterService, systemIndices, provisionedStorage, provisionedRam);
         long provisionedMemory = calculator.calculate(interactiveSize, totalSize).provisionedMemory();
         assertThat(provisionedMemory, is(calculator.calculate(current).provisionedMemory()));
