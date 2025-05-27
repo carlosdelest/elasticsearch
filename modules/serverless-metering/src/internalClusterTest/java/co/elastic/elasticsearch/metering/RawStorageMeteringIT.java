@@ -54,7 +54,6 @@ import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.support.WriteRequest.RefreshPolicy;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.settings.Settings;
@@ -90,6 +89,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import static org.elasticsearch.action.admin.cluster.storedscripts.StoredScriptIntegTestUtils.putJsonStoredScript;
+import static org.elasticsearch.action.support.WriteRequest.RefreshPolicy.IMMEDIATE;
 import static org.elasticsearch.index.IndexSettings.INDEX_SOFT_DELETES_RETENTION_LEASE_PERIOD_SETTING;
 import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
@@ -295,16 +295,14 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
         return 1;
     }
 
-    public void testRawStorageFieldInaccessible() {
-        // https://github.com/elastic/elasticsearch-serverless/issues/3244
-        assumeTrue("Fails randomly if run multiple times", indexSettings.equals(Settings.EMPTY));
-
+    public void testRawStorageFieldInaccessible() throws Exception {
         String indexName = "idx1";
         setupIndex(indexName);
-        String id = client().index(new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar"))
-            .actionGet()
-            .getId();
-        admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
+        ensureGreen(indexName);
+
+        String id = client().index(
+            new IndexRequest(indexName).source(XContentType.JSON, "value1", "foo", "value2", "bar").setRefreshPolicy(IMMEDIATE)
+        ).actionGet().getId();
 
         List<SearchSourceBuilder> searchBuilders = List.of(
             new SearchSourceBuilder().fetchField(RAS_FIELD).query(new MatchAllQueryBuilder()),
@@ -314,10 +312,11 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
 
         // can't query for it
         for (var source : searchBuilders) {
-            Exception e = expectThrows(Exception.class, () -> {
+            var e = expectThrows(ElasticsearchException.class, () -> {
                 var req = new SearchRequest(indexName).source(source);
                 var resp = client().search(req).actionGet();
                 logger.error("Expected exception for {}, but got: {}", req.source(), resp);
+                resp.decRef();
             });
 
             assertThat(
@@ -487,7 +486,7 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
         setupIndex(indexName);
 
         // combining an index and 2 updates and expecting only the metering value for the new indexed doc & partial update
-        client().prepareIndex().setIndex(indexName).setId("1").setSource("a", 1, "b", "c").setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
+        client().prepareIndex().setIndex(indexName).setId("1").setSource("a", 1, "b", "c").setRefreshPolicy(IMMEDIATE).get();
         long initialRawSize = ASCII_SIZE + NUMBER_SIZE;
 
         updateClusterSettings(Settings.builder().put(SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING.getKey(), true));
@@ -500,11 +499,11 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
                 {"script": {"lang": "%s", "source": "ctx._source.b = '0123456789'"} }""", MockScriptEngine.NAME));
 
             Script storedScript = new Script(ScriptType.STORED, null, scriptId, Collections.emptyMap());
-            client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
+            client().prepareUpdate().setIndex(indexName).setId("1").setScript(storedScript).setRefreshPolicy(IMMEDIATE).get();
         } else {
             // update via inlined script
             Script script = new Script(ScriptType.INLINE, TestScriptPlugin.NAME, "ctx._source.b = '0123456789'", Collections.emptyMap());
-            client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
+            client().prepareUpdate().setIndex(indexName).setId("1").setScript(script).setRefreshPolicy(IMMEDIATE).get();
         }
 
         long updatedRawSize = initialRawSize + (10 - 1) * ASCII_SIZE;
@@ -651,8 +650,8 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
         var result2 = client().index(new IndexRequest(indexName).source(XContentType.JSON, "some_field", 123, "key", "abc")).actionGet();
         admin().indices().flush(new FlushRequest(indexName).force(true)).actionGet();
 
-        client().delete(new DeleteRequest(indexName, result1.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE)).actionGet();
-        client().delete(new DeleteRequest(indexName, result2.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE)).actionGet();
+        client().delete(new DeleteRequest(indexName, result1.getId()).setRefreshPolicy(IMMEDIATE)).actionGet();
+        client().delete(new DeleteRequest(indexName, result2.getId()).setRefreshPolicy(IMMEDIATE)).actionGet();
 
         admin().indices().forceMerge(new ForceMergeRequest(indexName).maxNumSegments(1)).actionGet();
 
@@ -675,8 +674,8 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
         var result1 = client().prepareIndex(indexName).setSource("some_field", 123, "key", "abc").get();
         var result2 = client().prepareIndex(indexName).setSource("some_field", 123, "key", "abc").get();
 
-        client().prepareDelete(indexName, result1.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
-        client().prepareDelete(indexName, result2.getId()).setRefreshPolicy(RefreshPolicy.IMMEDIATE).get();
+        client().prepareDelete(indexName, result1.getId()).setRefreshPolicy(IMMEDIATE).get();
+        client().prepareDelete(indexName, result2.getId()).setRefreshPolicy(IMMEDIATE).get();
 
         client().prepareIndex(indexName2).setSource("some_field", 123, "key", "abc").get();
 
