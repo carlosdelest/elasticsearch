@@ -12,9 +12,6 @@ scripts_dir=$(dirname "$0")
 source "$scripts_dir/utils/misc.sh"
 
 INTAKE_PIPELINE_SLUG="elasticsearch-serverless-intake"
-if [[ "$BUILDKITE_BRANCH" == "patch/serverless-fix-test" ]]; then
-  INTAKE_PIPELINE_SLUG="elasticsearch-serverless-patch-release"
-fi
 
 BUILDKITE_API_TOKEN=$(vault_with_retries read -field=token secret/ci/elastic-elasticsearch-serverless/buildkite-api-token)
 
