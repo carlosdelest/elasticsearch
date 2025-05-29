@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.ml.serverless;
 
+import co.elastic.elasticsearch.ml.serverless.actionfilters.AutoEnableAdaptiveAllocationsFilter;
 import co.elastic.elasticsearch.ml.serverless.actionfilters.GetDataFrameAnalyticsStatsResponseFilter;
 import co.elastic.elasticsearch.ml.serverless.actionfilters.GetDatafeedStatsResponseFilter;
 import co.elastic.elasticsearch.ml.serverless.actionfilters.GetJobModelSnapshotsUpgradeStatsResponseFilter;
@@ -70,7 +71,8 @@ public class ServerlessMachineLearningPlugin extends Plugin implements ActionPlu
                 new GetDataFrameAnalyticsStatsResponseFilter(threadContext),
                 new GetJobStatsResponseFilter(threadContext),
                 new GetJobModelSnapshotsUpgradeStatsResponseFilter(threadContext),
-                new GetTrainedModelsStatsResponseFilter(threadContext)
+                new GetTrainedModelsStatsResponseFilter(threadContext),
+                new AutoEnableAdaptiveAllocationsFilter()
             )
         );
 
