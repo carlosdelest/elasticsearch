@@ -178,7 +178,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         assertSamplesNotReady(service, THIS_NODE);
 
         var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, Map.of());
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(service, is(anEmptyMap()), is(Map.of()), is(SampledTierMetrics.EMPTY), is(SampledTierMetrics.EMPTY));
 
@@ -204,7 +204,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(clusterService, systemIndices, meterRegistry, THIS_NODE);
 
         var client = mockCollectClusterSamplesSuccess(mock(), searchMetrics, indexMetrics, shardsInfo);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -232,7 +232,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
         var client = mockCollectClusterSamplesSuccess(mock(), searchMetrics, indexMetrics, shardsInfo, new Exception("Partial failure"));
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -251,7 +251,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
         var client = mockCollectClusterSamplesFailure(mock(), new Exception("Total failure"));
-        service.updateSamples(client);
+        safeAwaitFailure((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(service, is(anEmptyMap()), is(anEmptyMap()), is(SampledTierMetrics.EMPTY), is(SampledTierMetrics.EMPTY));
 
@@ -282,7 +282,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
         var client = mockCollectClusterSamplesSuccess(mock(), searchMetrics1, indexMetrics1, shardsInfo);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -293,7 +293,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
 
         mockCollectClusterSamplesSuccess(client, searchMetrics2, indexMetrics2, shardsInfo2);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -328,7 +328,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
         var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -342,7 +342,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         // update routing table to reflect the change from idx1 to newIdx1
         activeShards.set(Set.of(idx2, newIdx1));
         mockCollectClusterSamplesSuccess(client, SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo2);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -356,7 +356,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         // update sampling metadata so old obsolete shards are removed on the next update
         samplingMetadata.set(new SampledMetricsMetadata(Instant.now()));
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -386,7 +386,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
         var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -395,7 +395,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
 
         mockCollectClusterSamplesSuccess(client, SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo2);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -423,7 +423,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
         var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -435,12 +435,12 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         );
 
         mockCollectClusterSamplesFailure(client, new Exception("intermittent failures doesn't impact future updates"));
-        service.updateSamples(client);
+        safeAwaitFailure((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         // Update routing table to remove INDEX_1. Though, it will be kept until the committed timestamp proceeded.
         activeShards.set(shardsInfo2.keySet());
         mockCollectClusterSamplesSuccess(client, SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo2);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -454,7 +454,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         // Index 1 is finally removed after the committed timestamp proceeded.
         samplingMetadata.set(new SampledMetricsMetadata(Instant.now()));
 
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
@@ -475,7 +475,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
         var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo);
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(service, is(aMapWithSize(3)), is(aMapWithSize(1)));
 
@@ -506,7 +506,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             mock(),
             new CollectClusterSamplesAction.Response(0, 0, searchActivity, indexActivity, Map.of(), List.of())
         );
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         meterRegistry.getRecorder().collect();
         var searchMetrics = meterRegistry.getRecorder().getMeasurements(InstrumentType.LONG_GAUGE, NODE_INFO_TIER_SEARCH_ACTIVITY_TIME);
@@ -543,7 +543,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
                 List.of()
             )
         );
-        service.updateSamples(client);
+        safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         // Checks metrics now show activity
         meterRegistry.getRecorder().collect();

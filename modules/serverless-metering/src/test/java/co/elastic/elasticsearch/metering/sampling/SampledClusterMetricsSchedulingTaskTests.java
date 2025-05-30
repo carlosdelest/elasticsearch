@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.tasks.TaskCancelHelper;
@@ -33,6 +34,7 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -43,9 +45,22 @@ import static org.mockito.Mockito.withSettings;
 
 public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
 
+    private void mockSampleUpdate(SampledClusterMetricsService mock, boolean success) {
+        doAnswer(answer -> {
+            @SuppressWarnings("unchecked")
+            var listener = (ActionListener<Void>) answer.getArgument(1, ActionListener.class);
+            if (success) {
+                listener.onResponse(null);
+            } else {
+                listener.onFailure(new RuntimeException("Sample update failed"));
+            }
+            return null;
+        }).when(mock).updateSamples(any(), any());
+    }
+
     public void testRunInvokesService() {
         var mockThreadPool = mock(ThreadPool.class, withSettings().strictness(Strictness.STRICT_STUBS));
-        var mockIndexSizeService = mock(SampledClusterMetricsService.class);
+        var mockSampleService = mock(SampledClusterMetricsService.class);
         var mockScheduler = mock(ScheduledExecutorService.class);
 
         var initialPollInterval = TimeValue.timeValueMinutes(12);
@@ -58,7 +73,7 @@ public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
             null,
             null,
             mockThreadPool,
-            mockIndexSizeService,
+            mockSampleService,
             mock(Client.class),
             () -> initialPollInterval,
             () -> {}
@@ -66,6 +81,7 @@ public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
 
         when(mockThreadPool.scheduler()).thenReturn(mockScheduler);
         when(mockThreadPool.schedule(any(), any(), any())).then(invocationOnMock -> createScheduled(invocationOnMock.getArgument(1)));
+        mockSampleUpdate(mockSampleService, randomBoolean());
 
         task.run();
 
@@ -73,12 +89,12 @@ public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
         assertThat(task.scheduled.isCancelled(), is(false));
         assertThat(task.scheduled.getDelay(TimeUnit.MINUTES), is(12L));
 
-        verify(mockIndexSizeService, times(1)).updateSamples(any());
+        verify(mockSampleService, times(1)).updateSamples(any(), any());
     }
 
     public void testCancellationStopsServiceInvocation() {
         var mockThreadPool = mock(ThreadPool.class, withSettings().strictness(Strictness.STRICT_STUBS));
-        var mockIndexSizeService = mock(SampledClusterMetricsService.class);
+        var mockSampleService = mock(SampledClusterMetricsService.class);
         var mockScheduler = mock(ScheduledExecutorService.class);
 
         var initialPollInterval = TimeValue.timeValueMinutes(12);
@@ -92,7 +108,7 @@ public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
                 null,
                 null,
                 mockThreadPool,
-                mockIndexSizeService,
+                mockSampleService,
                 mock(Client.class),
                 () -> initialPollInterval,
                 () -> {}
@@ -102,9 +118,10 @@ public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
         when(mockThreadPool.scheduler()).thenReturn(mockScheduler);
         when(mockThreadPool.schedule(any(), any(), any())).then(invocationOnMock -> createScheduled(invocationOnMock.getArgument(1)));
         doNothing().when(task).markAsCompleted();
+        mockSampleUpdate(mockSampleService, randomBoolean());
 
         task.run();
-        verify(mockIndexSizeService, times(1)).updateSamples(any());
+        verify(mockSampleService, times(1)).updateSamples(any(), any());
 
         assertThat(task.scheduled, notNullValue());
         assertThat(task.scheduled.isCancelled(), is(false));
@@ -115,12 +132,12 @@ public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
 
         // Run on a cancelled task no longer invokes the service
         task.run();
-        verify(mockIndexSizeService, times(1)).updateSamples(any());
+        verify(mockSampleService, times(1)).updateSamples(any(), any());
     }
 
     public void testRequestRescheduleCancelsAndRescheduleImmediately() {
         var mockThreadPool = mock(ThreadPool.class, withSettings().strictness(Strictness.STRICT_STUBS));
-        var mockIndexSizeService = mock(SampledClusterMetricsService.class, withSettings().strictness(Strictness.STRICT_STUBS));
+        var mockSampleService = mock(SampledClusterMetricsService.class, withSettings().strictness(Strictness.STRICT_STUBS));
         var mockScheduler = mock(ScheduledExecutorService.class);
 
         var initialPollInterval = TimeValue.timeValueMinutes(12);
@@ -133,7 +150,7 @@ public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
             null,
             null,
             mockThreadPool,
-            mockIndexSizeService,
+            mockSampleService,
             mock(Client.class),
             () -> initialPollInterval,
             () -> {}
@@ -141,6 +158,7 @@ public class SampledClusterMetricsSchedulingTaskTests extends ESTestCase {
 
         when(mockThreadPool.scheduler()).thenReturn(mockScheduler);
         when(mockThreadPool.schedule(any(), any(), any())).then(invocationOnMock -> createScheduled(invocationOnMock.getArgument(1)));
+        mockSampleUpdate(mockSampleService, randomBoolean());
 
         task.run();
 

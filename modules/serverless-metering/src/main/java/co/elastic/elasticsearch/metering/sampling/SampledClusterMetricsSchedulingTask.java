@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.metering.sampling;
 
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -98,12 +99,19 @@ public class SampledClusterMetricsSchedulingTask extends AllocatedPersistentTask
         if (isCancelled() || isCompleted()) {
             return;
         }
-        try {
-            clusterMetricsService.updateSamples(client);
-        } catch (Exception e) {
-            logger.error("Sampling task run failed", e);
-        }
-        scheduleNextRun(pollIntervalSupplier.get());
+
+        clusterMetricsService.updateSamples(client, new ActionListener<>() {
+            @Override
+            public void onResponse(Void unused) {
+                scheduleNextRun(pollIntervalSupplier.get());
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+                logger.error("Sampling task run failed", e);
+                scheduleNextRun(pollIntervalSupplier.get());
+            }
+        });
     }
 
     private void scheduleNextRun(TimeValue time) {

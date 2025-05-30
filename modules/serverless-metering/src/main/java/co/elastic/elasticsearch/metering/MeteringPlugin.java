@@ -129,6 +129,7 @@ public class MeteringPlugin extends Plugin implements DocumentParsingProviderPlu
             HttpMeteringUsageRecordPublisher.REQUEST_TIMEOUT,
             SampledClusterMetricsSchedulingTaskExecutor.ENABLED_SETTING,
             SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING,
+            TransportCollectClusterSamplesAction.NODE_SAMPLE_TIMEOUT,
             TaskActivityTracker.COOL_DOWN_PERIOD
         );
     }

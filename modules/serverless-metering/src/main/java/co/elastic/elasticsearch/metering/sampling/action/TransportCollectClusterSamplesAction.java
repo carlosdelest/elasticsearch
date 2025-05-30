@@ -20,7 +20,6 @@ package co.elastic.elasticsearch.metering.sampling.action;
 import co.elastic.elasticsearch.metering.activitytracking.Activity;
 import co.elastic.elasticsearch.metering.activitytracking.TaskActivityTracker;
 import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTask;
-import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulingTaskExecutor;
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.elasticsearch.action.ActionListener;
@@ -30,6 +29,8 @@ import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -66,6 +67,13 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     private final ClusterService clusterService;
     private final Executor executor;
     private Duration coolDownPeriod;
+    private TimeValue nodeSampleTimeout;
+
+    public static final Setting<TimeValue> NODE_SAMPLE_TIMEOUT = Setting.timeSetting(
+        "metering.node_sample_timeout",
+        TimeValue.timeValueMinutes(3),
+        Setting.Property.NodeScope
+    );
 
     @SuppressWarnings("this-escape")
     @Inject
@@ -90,6 +98,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
         this.clusterService = clusterService;
         this.executor = executor;
         this.coolDownPeriod = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
+        this.nodeSampleTimeout = NODE_SAMPLE_TIMEOUT.get(clusterService.getSettings());
     }
 
     private static class SingleNodeResponse {
@@ -240,12 +249,11 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     ) {
         // updates are scheduled on a fixed interval, set the request timeout to the poll interval to not risk
         // accumulating multiple pending updates in memory.
-        var timeout = clusterService.getClusterSettings().get(SampledClusterMetricsSchedulingTaskExecutor.POLL_INTERVAL_SETTING);
         transportService.sendRequest(
             node,
             GetNodeSamplesAction.INSTANCE.name(),
             request,
-            TransportRequestOptions.timeout(timeout),
+            TransportRequestOptions.timeout(nodeSampleTimeout),
             new ActionListenerResponseHandler<>(listener, GetNodeSamplesAction.Response::new, executor)
         );
     }

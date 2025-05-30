@@ -259,7 +259,7 @@ public class SampledClusterMetricsService {
     /**
      * Updates the internal storage of metering shard info, by performing a scatter-gather operation towards all (search) nodes
      */
-    void updateSamples(Client client) {
+    void updateSamples(Client client, ActionListener<Void> listener) {
         logger.debug("Calling SampledClusterMetricsService#updateSamples");
 
         var state = metricsState.get();
@@ -275,15 +275,20 @@ public class SampledClusterMetricsService {
                     collectionsPartialsCounter.increment();
                 }
 
-                var clusterState = clusterService.state();
-                // Update sample metrics, replacing memory, merging activity, and building new MeteringShardInfo from diffs
-                metricsState.getAndUpdate(current -> nextSamplingState(current, clusterState, response));
-                logger.debug(
-                    () -> format(
-                        "collected new metering shard info for shards [%s]",
-                        response.getShardInfos().keySet().stream().map(ShardId::toString).collect(Collectors.joining(","))
-                    )
-                );
+                try {
+                    var clusterState = clusterService.state();
+                    // Update sample metrics, replacing memory, merging activity, and building new MeteringShardInfo from diffs
+                    metricsState.getAndUpdate(current -> nextSamplingState(current, clusterState, response));
+                    logger.debug(
+                        () -> format(
+                            "collected new metering shard info for shards [%s]",
+                            response.getShardInfos().keySet().stream().map(ShardId::toString).collect(Collectors.joining(","))
+                        )
+                    );
+                    listener.onResponse(null);
+                } catch (Exception e) {
+                    listener.onFailure(e);
+                }
             }
 
             @Override
@@ -300,6 +305,7 @@ public class SampledClusterMetricsService {
                         )
                         : current
                 );
+                listener.onFailure(e);
             }
         });
     }
