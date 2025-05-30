@@ -296,7 +296,7 @@ public class SampledClusterMetricsService {
                         ? new SamplingState(
                             current.nodeStatus(),
                             current.metrics().withAdditionalStatus(SamplingStatus.STALE),
-                            Instant.EPOCH
+                            current.committedTimestamp()
                         )
                         : current
                 );

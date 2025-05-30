@@ -55,8 +55,6 @@ import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.FeatureMatcher;
 import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -64,8 +62,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -179,14 +177,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         assertSamplesNotReady(service, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(answer -> {
-            @SuppressWarnings("unchecked")
-            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, Map.of(), List.of()));
-            return null;
-        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, Map.of());
         service.updateSamples(client);
 
         assertSamplesReady(service, is(anEmptyMap()), is(Map.of()), is(SampledTierMetrics.EMPTY), is(SampledTierMetrics.EMPTY));
@@ -212,23 +203,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, systemIndices, meterRegistry, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(answer -> {
-            @SuppressWarnings("unchecked")
-            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(
-                new CollectClusterSamplesAction.Response(
-                    searchMetrics.memorySize(),
-                    indexMetrics.memorySize(),
-                    searchMetrics.activity(),
-                    indexMetrics.activity(),
-                    shardsInfo,
-                    List.of()
-                )
-            );
-            return null;
-        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesSuccess(mock(), searchMetrics, indexMetrics, shardsInfo);
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -256,23 +231,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(answer -> {
-            @SuppressWarnings("unchecked")
-            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(
-                new CollectClusterSamplesAction.Response(
-                    searchMetrics.memorySize(),
-                    indexMetrics.memorySize(),
-                    searchMetrics.activity(),
-                    indexMetrics.activity(),
-                    shardsInfo,
-                    List.of(new Exception("Partial failure"))
-                )
-            );
-            return null;
-        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesSuccess(mock(), searchMetrics, indexMetrics, shardsInfo, new Exception("Partial failure"));
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -291,14 +250,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(answer -> {
-            @SuppressWarnings("unchecked")
-            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onFailure(new Exception("Total failure"));
-            return null;
-        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesFailure(mock(), new Exception("Total failure"));
         service.updateSamples(client);
 
         assertSamplesReady(service, is(anEmptyMap()), is(anEmptyMap()), is(SampledTierMetrics.EMPTY), is(SampledTierMetrics.EMPTY));
@@ -329,11 +281,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(
-            new TestCollectClusterSamplesActionAnswer(searchMetrics1, indexMetrics1, searchMetrics2, indexMetrics2, shardsInfo, shardsInfo2)
-        ).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesSuccess(mock(), searchMetrics1, indexMetrics1, shardsInfo);
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -344,6 +292,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             is(indexMetrics1)
         );
 
+        mockCollectClusterSamplesSuccess(client, searchMetrics2, indexMetrics2, shardsInfo2);
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -378,10 +327,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
-            .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo);
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -395,7 +341,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         // update routing table to reflect the change from idx1 to newIdx1
         activeShards.set(Set.of(idx2, newIdx1));
-
+        mockCollectClusterSamplesSuccess(client, SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo2);
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -410,7 +356,6 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
 
         // update sampling metadata so old obsolete shards are removed on the next update
         samplingMetadata.set(new SampledMetricsMetadata(Instant.now()));
-
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -440,10 +385,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
-            .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo);
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -452,6 +394,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             mapOf(hasEntry(is(INDEX_1), both(indexSize(36)).and(indexMetadata(INDEX_1))))
         );
 
+        mockCollectClusterSamplesSuccess(client, SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo2);
         service.updateSamples(client);
 
         assertSamplesReady(
@@ -479,11 +422,9 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(new TestCollectClusterSamplesActionAnswer(shardsInfo, shardsInfo2)).when(client)
-            .execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo);
         service.updateSamples(client);
+
         assertSamplesReady(
             service,
             mapOf(hasEntry(is(idx1), shardSize(11L)), hasEntry(is(idx2), shardSize(12L))),
@@ -493,10 +434,14 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             )
         );
 
+        mockCollectClusterSamplesFailure(client, new Exception("intermittent failures doesn't impact future updates"));
+        service.updateSamples(client);
+
         // Update routing table to remove INDEX_1. Though, it will be kept until the committed timestamp proceeded.
         activeShards.set(shardsInfo2.keySet());
-
+        mockCollectClusterSamplesSuccess(client, SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo2);
         service.updateSamples(client);
+
         assertSamplesReady(
             service,
             mapOf(hasEntry(is(idx1), shardSize(11L)), hasEntry(is(idx2), shardSize(22L))),
@@ -529,15 +474,9 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
-        var client = mock(Client.class);
-        doAnswer(answer -> {
-            @SuppressWarnings("unchecked")
-            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, shardsInfo, List.of()));
-            return null;
-        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
-
+        var client = mockCollectClusterSamplesSuccess(mock(), SampledTierMetrics.EMPTY, SampledTierMetrics.EMPTY, shardsInfo);
         service.updateSamples(client);
+
         assertSamplesReady(service, is(aMapWithSize(3)), is(aMapWithSize(1)));
 
         var previousState = MockedClusterStateTestUtils.createMockClusterStateWithPersistentTask(MockedClusterStateTestUtils.LOCAL_NODE_ID);
@@ -563,13 +502,10 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
             : ActivityTests.randomActivityNotActive();
 
         // Update sample to non-empty Activity
-        var client = mock(Client.class);
-        doAnswer(answer -> {
-            @SuppressWarnings("unchecked")
-            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(new CollectClusterSamplesAction.Response(0, 0, searchActivity, indexActivity, Map.of(), List.of()));
-            return null;
-        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
+        var client = mockCollectClusterSamplesSuccess(
+            mock(),
+            new CollectClusterSamplesAction.Response(0, 0, searchActivity, indexActivity, Map.of(), List.of())
+        );
         service.updateSamples(client);
 
         meterRegistry.getRecorder().collect();
@@ -596,22 +532,17 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         assertThat(indexMetrics1, empty());
 
         // Update sample to non-empty Activity
-        var client = mock(Client.class);
-        doAnswer(answer -> {
-            @SuppressWarnings("unchecked")
-            var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            listener.onResponse(
-                new CollectClusterSamplesAction.Response(
-                    0,
-                    0,
-                    ActivityTests.randomActivityNotEmpty(),
-                    ActivityTests.randomActivityNotEmpty(),
-                    Map.of(),
-                    List.of()
-                )
-            );
-            return null;
-        }).when(client).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
+        var client = mockCollectClusterSamplesSuccess(
+            mock(),
+            new CollectClusterSamplesAction.Response(
+                0,
+                0,
+                ActivityTests.randomActivityNotEmpty(),
+                ActivityTests.randomActivityNotEmpty(),
+                Map.of(),
+                List.of()
+            )
+        );
         service.updateSamples(client);
 
         // Checks metrics now show activity
@@ -782,72 +713,44 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         }
     }
 
-    private static class TestCollectClusterSamplesActionAnswer implements Answer<Object> {
-        private final AtomicInteger requestNumber = new AtomicInteger();
-        private final SampledTierMetrics searchMetrics1;
-        private final SampledTierMetrics indexMetrics1;
-        private final SampledTierMetrics searchMetrics2;
-        private final SampledTierMetrics indexMetrics2;
-        private final Map<ShardId, ShardInfoMetrics> shardsInfo;
-        private final Map<ShardId, ShardInfoMetrics> shardsInfo2;
-
-        TestCollectClusterSamplesActionAnswer(Map<ShardId, ShardInfoMetrics> shardsInfo, Map<ShardId, ShardInfoMetrics> shardsInfo2) {
-            this(
-                SampledTierMetrics.EMPTY,
-                SampledTierMetrics.EMPTY,
-                SampledTierMetrics.EMPTY,
-                SampledTierMetrics.EMPTY,
-                shardsInfo,
-                shardsInfo2
-            );
-        }
-
-        TestCollectClusterSamplesActionAnswer(
-            SampledTierMetrics searchMetrics1,
-            SampledTierMetrics indexMetrics1,
-            SampledTierMetrics searchMetrics2,
-            SampledTierMetrics indexMetrics2,
-            Map<ShardId, ShardInfoMetrics> shardsInfo,
-            Map<ShardId, ShardInfoMetrics> shardsInfo2
-        ) {
-            this.searchMetrics1 = searchMetrics1;
-            this.indexMetrics1 = indexMetrics1;
-            this.searchMetrics2 = searchMetrics2;
-            this.indexMetrics2 = indexMetrics2;
-            this.shardsInfo = shardsInfo;
-            this.shardsInfo2 = shardsInfo2;
-        }
-
-        @Override
-        public Object answer(InvocationOnMock answer) {
+    private Client mockCollectClusterSamples(Client mock, Consumer<ActionListener<CollectClusterSamplesAction.Response>> onCompletion) {
+        doAnswer(answer -> {
             @SuppressWarnings("unchecked")
             var listener = (ActionListener<CollectClusterSamplesAction.Response>) answer.getArgument(2, ActionListener.class);
-            var currentRequest = requestNumber.addAndGet(1);
-            if (currentRequest == 1) {
-                listener.onResponse(
-                    new CollectClusterSamplesAction.Response(
-                        searchMetrics1.memorySize(),
-                        indexMetrics1.memorySize(),
-                        searchMetrics1.activity(),
-                        indexMetrics1.activity(),
-                        shardsInfo,
-                        List.of()
-                    )
-                );
-            } else {
-                listener.onResponse(
-                    new CollectClusterSamplesAction.Response(
-                        searchMetrics2.memorySize(),
-                        indexMetrics2.memorySize(),
-                        searchMetrics2.activity(),
-                        indexMetrics2.activity(),
-                        shardsInfo2,
-                        List.of()
-                    )
-                );
-            }
+            onCompletion.accept(listener);
             return null;
-        }
+        }).when(mock).execute(eq(CollectClusterSamplesAction.INSTANCE), any(), any());
+        return mock;
+    }
+
+    private Client mockCollectClusterSamplesSuccess(
+        Client mock,
+        SampledTierMetrics searchTier,
+        SampledTierMetrics indexTier,
+        Map<ShardId, ShardInfoMetrics> shardsInfo,
+        Exception... exceptions
+    ) {
+        return mockCollectClusterSamples(
+            mock,
+            l -> l.onResponse(
+                new CollectClusterSamplesAction.Response(
+                    searchTier.memorySize(),
+                    indexTier.memorySize(),
+                    searchTier.activity(),
+                    indexTier.activity(),
+                    shardsInfo,
+                    List.of(exceptions)
+                )
+            )
+        );
+    }
+
+    private Client mockCollectClusterSamplesSuccess(Client mock, CollectClusterSamplesAction.Response response) {
+        return mockCollectClusterSamples(mock, l -> l.onResponse(response));
+    }
+
+    private Client mockCollectClusterSamplesFailure(Client mock, Exception exception) {
+        return mockCollectClusterSamples(mock, l -> l.onFailure(exception));
     }
 
     public static SampledTierMetrics randomSampledTierMetrics() {
