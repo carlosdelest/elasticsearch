@@ -72,6 +72,7 @@ class UsageReportCollector {
     static final String METERING_REPORTS_DELAYED_TOTAL = "es.metering.reporting.runs.delayed.total";
     static final String METERING_REPORTS_RETRIED_TOTAL = "es.metering.reporting.runs.retried.total";
     static final String METERING_REPORTS_TIME = "es.metering.reporting.runs.time";
+    static final String METERING_REPORTS_PREPARATION_TIME = "es.metering.reporting.preparation.time";
     static final String METERING_REPORTS_SENT_TOTAL = "es.metering.reporting.sent.total";
     static final String METERING_REPORTS_BACKFILL_TOTAL = "es.metering.reporting.backfill.total";
     static final String METERING_REPORTS_BACKFILL_PERIODS_TOTAL = "es.metering.reporting.backfill.periods.total";
@@ -96,6 +97,7 @@ class UsageReportCollector {
     private final LongCounter reportsDelayedCounter;
     private final LongCounter reportsRetryCounter;
     private final LongHistogram reportsRunTime;
+    private final LongHistogram reportsPreparationTime;
     private final LongCounter reportsSentTotalCounter;
     private final LongCounter reportsBackfillTotalCounter;
     private final LongCounter reportsBackfillPeriodsCounter;
@@ -156,6 +158,11 @@ class UsageReportCollector {
             "unit"
         );
         this.reportsRunTime = meterRegistry.registerLongHistogram(METERING_REPORTS_TIME, "The run time of the reporting task, in ms", "ms");
+        this.reportsPreparationTime = meterRegistry.registerLongHistogram(
+            METERING_REPORTS_PREPARATION_TIME,
+            "The preparation time of usage reports, in ms",
+            "ms"
+        );
         this.reportsSentTotalCounter = meterRegistry.registerLongCounter(
             METERING_REPORTS_SENT_TOTAL,
             "The number of times the reporting task successfully published a report",
@@ -228,7 +235,7 @@ class UsageReportCollector {
         Instant startedAt = Instant.now(clock);
         var reportsSent = false;
         try {
-            reportsSent = collectMetricsAndSendReport(startedAt.truncatedTo(ChronoUnit.MILLIS), sampleTimestamp);
+            reportsSent = collectMetricsAndSendReport(startedAt, sampleTimestamp);
         } catch (RuntimeException e) {
             reportsFailedCounter.incrementBy(1, metricAttributes());
             log.error("Unexpected exception whilst collecting metrics and sending reports [stopped: {}]", isStopped(), e);
@@ -322,7 +329,8 @@ class UsageReportCollector {
         return false;
     }
 
-    private boolean collectMetricsAndSendReport(Instant now, Instant sampleTimestamp) {
+    private boolean collectMetricsAndSendReport(Instant start, Instant sampleTimestamp) {
+        Instant truncatedStart = start.truncatedTo(ChronoUnit.MILLIS);
         List<UsageRecord> records = new ArrayList<>();
 
         List<SampledMetricsProvider.MetricValues> sampledMetricValuesList = Collections.emptyList();
@@ -337,14 +345,14 @@ class UsageReportCollector {
                     CounterMetricsProvider.MetricValues metricValues = counterMetricsProvider.getMetrics();
                     counterMetricValuesList.add(metricValues);
                     for (var value : metricValues) {
-                        records.add(createUsageRecord(value, now));
+                        records.add(createUsageRecord(value, truncatedStart));
                     }
                 } catch (RuntimeException e) {
                     log.error(Strings.format("Failed to get counter metrics from %s", counterMetricsProvider.getClass().getName()), e);
                 }
             }
             if (records.isEmpty()) {
-                log.info("No counter usage records generated during this metrics collection [{}]", now);
+                log.info("No counter usage records generated during this metrics collection [{}]", truncatedStart);
             }
         }
 
@@ -388,6 +396,9 @@ class UsageReportCollector {
                 }
             }
         }
+
+        // record the preparation time (everything up to sending the report)
+        reportsPreparationTime.record(start.until(Instant.now(clock), ChronoUnit.MILLIS));
 
         // Note: success does not necessarily mean counters or samples were reported.
         if (records.isEmpty() || sendReport(records)) {
