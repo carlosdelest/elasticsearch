@@ -33,6 +33,7 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.telemetry.metric.DoubleHistogram;
 import org.elasticsearch.telemetry.metric.LongCounter;
+import org.elasticsearch.telemetry.metric.LongHistogram;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.util.ArrayList;
@@ -42,6 +43,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 interface ShardInfoMetricsReader {
     Map<ShardId, ShardInfoMetrics> getUpdatedShardInfos(String requestCacheToken);
@@ -61,11 +63,13 @@ interface ShardInfoMetricsReader {
         static final String SHARD_INFO_UNAVAILABLE_TOTAL_METRIC = "es.metering.shard_info.unavailable.total";
         static final String SHARD_INFO_RA_STORAGE_NEWER_GEN_TOTAL_METRIC = "es.metering.shard_info.computed.total";
         static final String SHARD_INFO_RA_STORAGE_APPROXIMATED_METRIC = "es.metering.shard_info.rastorage.approximated.ratio";
+        static final String SHARD_INFOS_TIME = "es.metering.shard_infos.time";
 
         private final IndicesService indicesService;
         private final ShardSizeStatsProvider shardSizeStatsProvider;
         private final InMemoryShardInfoMetricsCache shardMetricsCache;
 
+        private final LongHistogram shardInfosTime;
         private final LongCounter shardInfoShardsTotalCounter;
         private final LongCounter shardInfoCachedTotalCounter;
         private final LongCounter shardInfoUnavailableTotalCounter;
@@ -115,6 +119,7 @@ interface ShardInfoMetricsReader {
                 "Percentage of approximated segment sizes per shard",
                 "unit"
             );
+            this.shardInfosTime = meterRegistry.registerLongHistogram(SHARD_INFOS_TIME, "Runtime of the shard infos update", "ms");
         }
 
         private static Long getRawStorageFromUserData(SegmentInfos segmentInfos, ShardId shardId) {
@@ -275,6 +280,7 @@ interface ShardInfoMetricsReader {
         @Override
         public Map<ShardId, ShardInfoMetrics> getUpdatedShardInfos(String requestCacheToken) {
             assert requestCacheToken != null : "cacheToken required";
+            long nanoTime = System.nanoTime();
             Map<ShardId, ShardInfoMetrics> shardsWithNewInfo = new HashMap<>();
             Set<ShardId> activeShards = new HashSet<>();
             for (final IndexService indexService : indicesService) {
@@ -336,6 +342,7 @@ interface ShardInfoMetricsReader {
                 }
             }
             shardMetricsCache.retainActive(activeShards);
+            shardInfosTime.record(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - nanoTime));
             return shardsWithNewInfo;
         }
     }
