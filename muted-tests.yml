@@ -141,3 +141,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.lucene.SearchDirectoryTests
   method: testGetHighestOffsetSegmentInfos
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3923
+- class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
+  method: testTranslogStressRecoveryTest
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3939
