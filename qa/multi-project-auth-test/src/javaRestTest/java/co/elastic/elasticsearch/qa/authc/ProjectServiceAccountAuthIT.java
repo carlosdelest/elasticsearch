@@ -138,7 +138,8 @@ public class ProjectServiceAccountAuthIT extends ESRestTestCase {
             .setting("ingest.geoip.downloader.enabled", "false")
             .setting("ingest.geoip.downloader.eager.download", "false")
             .setting("metering.index-info-task.enabled", "false")
-            .user(ADMIN_USERNAME, ADMIN_PASSWORD, User.ROOT_USER_ROLE, true);
+            .configFile("operator_users.yml", Resource.fromClasspath("operator_users.yml"))
+            .user(ADMIN_USERNAME, ADMIN_PASSWORD, User.ROOT_USER_ROLE, false);
 
         PROJECTS.forEach(projectId -> {
             String secretsContent = getStringSecretsConfig(
@@ -202,10 +203,12 @@ public class ProjectServiceAccountAuthIT extends ESRestTestCase {
 
     public void testAuthenticationSuccessful() throws Exception {
         var projectId = randomFrom(PROJECTS);
-        serviceAccountAuthForProject(
-            projectId,
-            randomFrom(KIBANA_SERVICE_ACCOUNT_TOKEN_BY_PROJECT.get(projectId), FLEET_SERVICE_ACCOUNT_TOKEN_BY_PROJECT.get(projectId))
+        final ServiceAccountToken serviceAccountToken = randomFrom(
+            KIBANA_SERVICE_ACCOUNT_TOKEN_BY_PROJECT.get(projectId),
+            FLEET_SERVICE_ACCOUNT_TOKEN_BY_PROJECT.get(projectId)
         );
+        serviceAccountAuthForProject(projectId, serviceAccountToken);
+        assertCanAccessInternalApi(projectId, serviceAccountToken);
     }
 
     public void testAuthenticationFailUnknownProject() {
@@ -297,13 +300,7 @@ public class ProjectServiceAccountAuthIT extends ESRestTestCase {
 
     private void tryPrivileges(ProjectId projectId, ServiceAccountToken serviceAccountToken) throws IOException {
         Request request = new Request("GET", "/_security/user/_has_privileges");
-        request.setOptions(
-            request.getOptions()
-                .toBuilder()
-                .addHeader("X-Elastic-Project-Id", projectId.id())
-                .addHeader("Authorization", "Bearer " + serviceAccountToken.asBearerString().toString())
-                .build()
-        );
+        configureRequestCredentials(request, projectId, serviceAccountToken);
         request.setJsonEntity("{\"cluster\": [\"manage_security\", \"manage_own_api_key\"]}");
         Response response = adminClient().performRequest(request);
         assertOK(response);
@@ -360,6 +357,25 @@ public class ProjectServiceAccountAuthIT extends ESRestTestCase {
 
     private void serviceAccountAuthForProject(ProjectId projectId, ServiceAccountToken serviceAccountToken) throws Exception {
         final Request request = new Request("GET", "_security/_authenticate");
+        configureRequestCredentials(request, projectId, serviceAccountToken);
+        var resp = client().performRequest(request);
+        assertOK(resp);
+        var respMap = entityAsMap(resp);
+        assertThat(respMap, notNullValue());
+        assertThat(ObjectPath.evaluate(respMap, "token.name"), is(serviceAccountToken.getTokenName()));
+        assertThat(ObjectPath.evaluate(respMap, "token.type"), is("_service_account_file"));
+        assertThat(ObjectPath.evaluate(respMap, "operator"), is(true));
+    }
+
+    private void assertCanAccessInternalApi(ProjectId projectId, ServiceAccountToken serviceAccountToken) throws IOException {
+        final var nodesRequest = new Request("GET", "_nodes");
+        configureRequestCredentials(nodesRequest, projectId, serviceAccountToken);
+        var nodesResp = client().performRequest(nodesRequest);
+        assertOK(nodesResp);
+    }
+
+    private static void configureRequestCredentials(Request request, ProjectId projectId, ServiceAccountToken serviceAccountToken)
+        throws IOException {
         request.setOptions(
             request.getOptions()
                 .toBuilder()
@@ -367,12 +383,6 @@ public class ProjectServiceAccountAuthIT extends ESRestTestCase {
                 .addHeader("Authorization", "Bearer " + serviceAccountToken.asBearerString().toString())
                 .build()
         );
-        var resp = client().performRequest(request);
-        assertOK(resp);
-        var respMap = entityAsMap(resp);
-        assertThat(respMap, notNullValue());
-        assertThat(ObjectPath.evaluate(respMap, "token.name"), is(serviceAccountToken.getTokenName()));
-        assertThat(ObjectPath.evaluate(respMap, "token.type"), is("_service_account_file"));
     }
 
     private static String getProjectsStringArray(Set<ProjectId> projectIds) {
