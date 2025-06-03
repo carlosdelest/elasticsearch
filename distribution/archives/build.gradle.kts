@@ -101,6 +101,7 @@ distribution_archives {
                     }
                     exclude("*/bin/elasticsearch")
                     exclude("*/bin/elasticsearch.bat")
+                    exclude("*/modules/ingest-otel")
                     exclude("*/modules/searchable-snapshots")
                     exclude("*/modules/transform")
                     exclude("*/modules/x-pack-voting-only-node")
