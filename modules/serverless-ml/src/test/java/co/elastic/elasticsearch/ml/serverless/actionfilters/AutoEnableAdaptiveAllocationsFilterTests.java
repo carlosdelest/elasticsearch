@@ -30,7 +30,6 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.assertArg;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.only;
 import static org.mockito.Mockito.verify;
@@ -52,7 +51,16 @@ public class AutoEnableAdaptiveAllocationsFilterTests extends ESTestCase {
     public void testWithAdaptiveAllocationsEnabled() {
         var request = createRandom(null, new AdaptiveAllocationsSettings(true, 9, 9));
         callFilter(request);
-        verify(chain, only()).proceed(any(), eq(StartTrainedModelDeploymentAction.NAME), same(request), any());
+        verify(chain, only()).proceed(any(), eq(StartTrainedModelDeploymentAction.NAME), assertArg(actualRequest -> {
+            assertTrue(actualRequest.getAdaptiveAllocationsSettings().getEnabled());
+            assertThat(
+                "Min Allocations should always be set to 0",
+                actualRequest.getAdaptiveAllocationsSettings().getMinNumberOfAllocations(),
+                equalTo(0)
+            );
+            assertThat(actualRequest.getAdaptiveAllocationsSettings().getMaxNumberOfAllocations(), equalTo(9));
+            assertNull(actualRequest.getNumberOfAllocations());
+        }), any());
     }
 
     public void testWithAdaptiveAllocationsDisabledButPresent() {
@@ -60,7 +68,11 @@ public class AutoEnableAdaptiveAllocationsFilterTests extends ESTestCase {
         callFilter(request);
         verify(chain, only()).proceed(any(), eq(StartTrainedModelDeploymentAction.NAME), assertArg(actualRequest -> {
             assertTrue(actualRequest.getAdaptiveAllocationsSettings().getEnabled());
-            assertThat(actualRequest.getAdaptiveAllocationsSettings().getMinNumberOfAllocations(), equalTo(3));
+            assertThat(
+                "Min Allocations should always be set to 0",
+                actualRequest.getAdaptiveAllocationsSettings().getMinNumberOfAllocations(),
+                equalTo(0)
+            );
             assertThat(actualRequest.getAdaptiveAllocationsSettings().getMaxNumberOfAllocations(), equalTo(6));
             assertNull(actualRequest.getNumberOfAllocations());
         }), any());

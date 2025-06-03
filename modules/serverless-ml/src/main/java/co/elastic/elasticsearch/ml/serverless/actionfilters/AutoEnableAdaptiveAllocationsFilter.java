@@ -47,6 +47,8 @@ public class AutoEnableAdaptiveAllocationsFilter implements MappedActionFilter {
     private static final String PREVENT_DISABLING_ADAPTIVE_ALLOCATIONS =
         "Serverless does not support disabling adaptive allocations when starting the model. "
             + "Enabling adaptive allocations with min [{}] and max [{}].";
+    private static final String PREVENT_NONZERO_MIN_ALLOCATIONS =
+        "Serverless does not support adaptive allocations with min allocations above 0. Setting min allocations to 0.";
 
     @Override
     public String actionName() {
@@ -65,11 +67,12 @@ public class AutoEnableAdaptiveAllocationsFilter implements MappedActionFilter {
         var startTrainedModelRequest = (StartTrainedModelDeploymentAction.Request) request;
 
         var adaptiveAllocationsSettings = startTrainedModelRequest.getAdaptiveAllocationsSettings();
-        if (adaptiveAllocationsSettings == null || adaptiveAllocationsSettings.getEnabled() == false) {
+        var min = minNumberOfAllocations(adaptiveAllocationsSettings);
+        var max = maxNumberOfAllocations(startTrainedModelRequest, adaptiveAllocationsSettings);
+        startTrainedModelRequest.setAdaptiveAllocationsSettings(new AdaptiveAllocationsSettings(true, min, max));
+        startTrainedModelRequest.setNumberOfAllocations(null); // must be null if adaptive allocations is enabled
 
-            var min = minNumberOfAllocations(adaptiveAllocationsSettings);
-            var max = maxNumberOfAllocations(startTrainedModelRequest, adaptiveAllocationsSettings);
-            startTrainedModelRequest.setAdaptiveAllocationsSettings(new AdaptiveAllocationsSettings(true, min, max));
+        if (adaptiveAllocationsSettings == null || adaptiveAllocationsSettings.getEnabled() == false) {
             deprecationLogger.warn(
                 DeprecationCategory.API,
                 ADAPTIVE_ALLOCATIONS.getPreferredName(),
@@ -77,20 +80,20 @@ public class AutoEnableAdaptiveAllocationsFilter implements MappedActionFilter {
                 min,
                 max
             );
-
-            startTrainedModelRequest.setNumberOfAllocations(null); // must be null if adaptive allocations is enabled
-
         }
 
         chain.proceed(task, action, request, listener);
     }
 
     private int minNumberOfAllocations(AdaptiveAllocationsSettings adaptiveAllocationsSettings) {
-        if (adaptiveAllocationsSettings != null && adaptiveAllocationsSettings.getMinNumberOfAllocations() != null) {
-            return adaptiveAllocationsSettings.getMinNumberOfAllocations();
-        } else {
-            return DEFAULT_MIN_NUMBER_OF_ALLOCATIONS;
+        if (adaptiveAllocationsSettings != null
+            && adaptiveAllocationsSettings.getMinNumberOfAllocations() != null
+            && adaptiveAllocationsSettings.getMinNumberOfAllocations() != DEFAULT_MIN_NUMBER_OF_ALLOCATIONS) {
+            deprecationLogger.warn(DeprecationCategory.API, ADAPTIVE_ALLOCATIONS.getPreferredName(), PREVENT_NONZERO_MIN_ALLOCATIONS);
         }
+        // min allocations are always set to 0 in serverless
+        // this is to minimize costs for users, at the risk of unavailability due to cold start
+        return DEFAULT_MIN_NUMBER_OF_ALLOCATIONS;
     }
 
     private int maxNumberOfAllocations(
