@@ -37,6 +37,7 @@ public abstract class ServerlessPromotionPlugin implements Plugin<Project> {
     private static final String DAYS_BLOCKER_IGNORED_DAYS_ENV = "IGNORED_BLOCKER_DAYS";
     private static final String BLOCK_ON_ISSUES_UNTRIAGED = "BLOCK_ON_ISSUES_UNTRIAGED";
     private static final String BLOCK_ON_ISSUES_BLOCKER = "BLOCK_ON_ISSUES_BLOCKER";
+    private static final String BLOCKER_CHECK_ONLY = "BLOCKER_CHECK_ONLY";
 
     private static final int DAYS_BLOCKER_IGNORED = 7;
 
@@ -63,8 +64,9 @@ public abstract class ServerlessPromotionPlugin implements Plugin<Project> {
             task.getFailOnUntriaged()
                 .set(getProviderFactory().environmentVariable(BLOCK_ON_ISSUES_UNTRIAGED).map(Boolean::parseBoolean).orElse(true).get());
             task.getFailOnBlocker()
-                .set(getProviderFactory().environmentVariable(BLOCK_ON_ISSUES_BLOCKER).map(Boolean::parseBoolean).orElse(true).get()
-            );
+                .set(getProviderFactory().environmentVariable(BLOCK_ON_ISSUES_BLOCKER).map(Boolean::parseBoolean).orElse(true).get());
+            task.getBlockerCheckOnly()
+                .set(getProviderFactory().environmentVariable(BLOCKER_CHECK_ONLY).map(Boolean::parseBoolean).orElse(false).get());
             task.getCi().set(loadBuildParams(target).map(params -> params.getCi()));
         });
         target.getTasks().register(GENERATE_PROMOTION_REPORT_TASKNAME, GenerateServerlessPromotionNotesTask.class, task -> {

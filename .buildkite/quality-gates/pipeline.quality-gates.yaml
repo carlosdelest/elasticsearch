@@ -51,6 +51,22 @@ steps:
     soft_fail: true
     branches: "main patch/*"
     command: ".buildkite/scripts/annotate-promotion.sh"
+  - label: ":github: Check Blocker"
+    key: "checkblocker"
+    command: |
+      .buildkite/scripts/run-gradle.sh checkPromotionBlocker
+      buildkite-agent artifact upload "build/reports/blockers/serverless-promotion-blocker.json"
+    depends_on:
+      - quality-gates
+    env:
+      USE_GITHUB_CREDENTIALS: "true"
+      BLOCK_ON_ISSUES_UNTRIAGED: "false"
+      BLOCK_ON_ISSUES_BLOCKER: "true"
+      BLOCKER_CHECK_ONLY: "true"
+    agents:
+      provider: "gcp"
+      machineType: "n1-standard-16"
+      image: family/elasticsearch-ubuntu-2022
   - label: ":question: Maybe add manual gate"
     depends_on:
       - quality-gates

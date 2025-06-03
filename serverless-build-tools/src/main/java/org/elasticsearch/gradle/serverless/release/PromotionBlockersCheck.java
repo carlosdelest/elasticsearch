@@ -55,6 +55,9 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
     @Internal
     public abstract Property<Boolean> getCi();
 
+    @Internal
+    public abstract Property<Boolean> getBlockerCheckOnly();
+
     @Input
     public abstract Property<String> getJsonReportName();
 
@@ -73,7 +76,8 @@ public abstract class PromotionBlockersCheck extends DefaultTask implements Veri
     @TaskAction
     public void check() throws Exception {
         GithubApi gh = new GithubApi("elastic", getGithubToken().get());
-        verifyIssues(List.of(checkForNeedsRisk(gh), checkForBlocker(gh)));
+        var checks = getBlockerCheckOnly().get() ? List.of(checkForBlocker(gh)) : List.of(checkForNeedsRisk(gh), checkForBlocker(gh));
+        verifyIssues(checks);
     }
 
     private void verifyIssues(List<CheckedIssues> issues) {
