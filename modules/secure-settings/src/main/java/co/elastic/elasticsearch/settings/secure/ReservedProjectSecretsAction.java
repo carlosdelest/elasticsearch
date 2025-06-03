@@ -17,10 +17,12 @@
 
 package co.elastic.elasticsearch.settings.secure;
 
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.common.settings.ProjectSecrets;
 import org.elasticsearch.common.settings.SecureClusterStateSettings;
-import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
+import org.elasticsearch.reservedstate.ReservedProjectStateHandler;
 import org.elasticsearch.reservedstate.TransformState;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
 import org.elasticsearch.xcontent.ParseField;
@@ -33,7 +35,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ReservedProjectSecretsAction implements ReservedClusterStateHandler<ProjectMetadata, ProjectSecrets> {
+public class ReservedProjectSecretsAction implements ReservedProjectStateHandler<ProjectSecrets> {
     public static final String NAME = "project_secrets";
 
     public static final ParseField STRING_SECRETS_FIELD = new ParseField("string_secrets");
@@ -82,11 +84,14 @@ public class ReservedProjectSecretsAction implements ReservedClusterStateHandler
     }
 
     @Override
-    public TransformState<ProjectMetadata> transform(ProjectSecrets projecetSecret, TransformState<ProjectMetadata> prevState) {
-        ProjectMetadata projectMetadata = prevState.state();
-        return new TransformState<>(
-            ProjectMetadata.builder(projectMetadata).putCustom(ProjectSecrets.TYPE, projecetSecret).build(),
-            projecetSecret.getSettings().getSettingNames()
+    public TransformState transform(ProjectId projectId, ProjectSecrets source, TransformState prevState) throws Exception {
+        ClusterState clusterState = prevState.state();
+        ProjectMetadata projectMetadata = clusterState.metadata().getProject(projectId);
+        ProjectMetadata updatedMetadata = ProjectMetadata.builder(projectMetadata).putCustom(ProjectSecrets.TYPE, source).build();
+
+        return new TransformState(
+            ClusterState.builder(clusterState).putProjectMetadata(updatedMetadata).build(),
+            source.getSettings().getSettingNames()
         );
     }
 

@@ -17,16 +17,15 @@
 
 package co.elastic.elasticsearch.settings.secure;
 
-import org.elasticsearch.cluster.metadata.ProjectMetadata;
-import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
-import org.elasticsearch.reservedstate.ReservedClusterStateHandlerProvider;
+import org.elasticsearch.reservedstate.ReservedProjectStateHandler;
+import org.elasticsearch.reservedstate.ReservedStateHandlerProvider;
 
 import java.util.Collection;
 import java.util.List;
 
-public class ReservedProjectSecureSettingsHandlerProvider implements ReservedClusterStateHandlerProvider {
+public class ReservedProjectSecureSettingsHandlerProvider implements ReservedStateHandlerProvider {
     @Override
-    public Collection<ReservedClusterStateHandler<ProjectMetadata, ?>> projectHandlers() {
+    public Collection<ReservedProjectStateHandler<?>> projectHandlers() {
         return List.of(new ReservedProjectSecretsAction());
     }
 }

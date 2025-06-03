@@ -17,14 +17,13 @@
 
 package co.elastic.elasticsearch.serverless.multiproject;
 
-import org.elasticsearch.cluster.metadata.ProjectMetadata;
-import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
-import org.elasticsearch.reservedstate.ReservedClusterStateHandlerProvider;
+import org.elasticsearch.reservedstate.ReservedProjectStateHandler;
+import org.elasticsearch.reservedstate.ReservedStateHandlerProvider;
 
 import java.util.Collection;
 import java.util.List;
 
-public class ReservedProjectSettingsHandlerProvider implements ReservedClusterStateHandlerProvider {
+public class ReservedProjectSettingsHandlerProvider implements ReservedStateHandlerProvider {
     private final ServerlessMultiProjectPlugin plugin;
 
     public ReservedProjectSettingsHandlerProvider() {
@@ -36,7 +35,7 @@ public class ReservedProjectSettingsHandlerProvider implements ReservedClusterSt
     }
 
     @Override
-    public Collection<ReservedClusterStateHandler<ProjectMetadata, ?>> projectHandlers() {
+    public Collection<ReservedProjectStateHandler<?>> projectHandlers() {
         return List.of(plugin.getReservedProjectSettingsAction());
     }
 }

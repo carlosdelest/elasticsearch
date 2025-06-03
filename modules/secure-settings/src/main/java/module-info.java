@@ -17,11 +17,13 @@
 
 import co.elastic.elasticsearch.settings.secure.ReservedProjectSecureSettingsHandlerProvider;
 
+import org.elasticsearch.reservedstate.ReservedStateHandlerProvider;
+
 module org.elasticsearch.settings.secure {
     requires org.elasticsearch.server;
     requires org.elasticsearch.xcontent;
     requires org.apache.logging.log4j;
     requires org.elasticsearch.base;
 
-    provides org.elasticsearch.reservedstate.ReservedClusterStateHandlerProvider with ReservedProjectSecureSettingsHandlerProvider;
+    provides ReservedStateHandlerProvider with ReservedProjectSecureSettingsHandlerProvider;
 }

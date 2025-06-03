@@ -15,6 +15,8 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
+import org.elasticsearch.reservedstate.ReservedStateHandlerProvider;
+
 module org.elasticsearch.serverless.multiproject {
     requires org.elasticsearch.base;
     requires org.elasticsearch.xcontent;
@@ -39,7 +41,5 @@ module org.elasticsearch.serverless.multiproject {
         with
             co.elastic.elasticsearch.serverless.multiproject.ServerlessMultiProjectFeatureSpecification;
 
-    provides org.elasticsearch.reservedstate.ReservedClusterStateHandlerProvider
-        with
-            co.elastic.elasticsearch.serverless.multiproject.ReservedProjectSettingsHandlerProvider;
+    provides ReservedStateHandlerProvider with co.elastic.elasticsearch.serverless.multiproject.ReservedProjectSettingsHandlerProvider;
 }

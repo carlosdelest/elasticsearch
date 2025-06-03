@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.settings.secure;
 
+import org.elasticsearch.cluster.ClusterName;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.common.settings.ProjectSecrets;
@@ -35,20 +37,20 @@ import static org.elasticsearch.common.Strings.format;
 import static org.hamcrest.Matchers.is;
 
 public class ReservedProjectSecretsActionTests extends ESTestCase {
-    private TransformState<ProjectMetadata> processJSON(
-        ReservedProjectSecretsAction action,
-        TransformState<ProjectMetadata> prevState,
-        String json
-    ) throws Exception {
+    private TransformState processJSON(ProjectId projectId, ReservedProjectSecretsAction action, TransformState prevState, String json)
+        throws Exception {
         try (XContentParser parser = XContentType.JSON.xContent().createParser(XContentParserConfiguration.EMPTY, json)) {
-            return action.transform(action.fromXContent(parser), prevState);
+            return action.transform(projectId, action.fromXContent(parser), prevState);
         }
     }
 
     public void testValidation() {
         ProjectId projectId = randomUniqueProjectId();
-        ProjectMetadata state = ProjectMetadata.builder(projectId).build();
-        TransformState<ProjectMetadata> prevState = new TransformState<>(state, Collections.emptySet());
+        ProjectMetadata project = ProjectMetadata.builder(projectId).build();
+        TransformState prevState = new TransformState(
+            ClusterState.builder(ClusterName.DEFAULT).putProjectMetadata(project).build(),
+            Collections.emptySet()
+        );
         ReservedProjectSecretsAction action = new ReservedProjectSecretsAction();
 
         String json = """
@@ -57,15 +59,18 @@ public class ReservedProjectSecretsActionTests extends ESTestCase {
             }""";
 
         assertThat(
-            expectThrows(IllegalArgumentException.class, () -> processJSON(action, prevState, json)).getMessage(),
+            expectThrows(IllegalArgumentException.class, () -> processJSON(projectId, action, prevState, json)).getMessage(),
             is("[2:5] [project_secrets_parser] unknown field [not_a_field]")
         );
     }
 
     public void testSetAndOverwriteSettings() throws Exception {
         ProjectId projectId = randomUniqueProjectId();
-        ProjectMetadata state = ProjectMetadata.builder(projectId).build();
-        TransformState<ProjectMetadata> prevState = new TransformState<>(state, Collections.emptySet());
+        ProjectMetadata project = ProjectMetadata.builder(projectId).build();
+        TransformState prevState = new TransformState(
+            ClusterState.builder(ClusterName.DEFAULT).putProjectMetadata(project).build(),
+            Collections.emptySet()
+        );
         ReservedProjectSecretsAction action = new ReservedProjectSecretsAction();
 
         {
@@ -75,8 +80,8 @@ public class ReservedProjectSecretsActionTests extends ESTestCase {
                     "file_secrets": {"secure.test2": "%s"}
                 }""", new String(Base64.getEncoder().encode("test2".getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
 
-            prevState = processJSON(action, prevState, json);
-            ProjectSecrets projectSecrets = prevState.state().custom(ProjectSecrets.TYPE);
+            prevState = processJSON(projectId, action, prevState, json);
+            ProjectSecrets projectSecrets = prevState.state().getMetadata().getProject(projectId).custom(ProjectSecrets.TYPE);
             assertEquals("test1", projectSecrets.getSettings().getString("secure.test1").toString());
             assertEquals("test2", new String(projectSecrets.getSettings().getFile("secure.test2").readAllBytes(), StandardCharsets.UTF_8));
         }
@@ -87,8 +92,8 @@ public class ReservedProjectSecretsActionTests extends ESTestCase {
                     "file_secrets": {"secure.test3": "%s"}
                 }""", new String(Base64.getEncoder().encode("test4".getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
 
-            TransformState<ProjectMetadata> transformState = processJSON(action, prevState, json);
-            ProjectSecrets projectSecrets = transformState.state().custom(ProjectSecrets.TYPE);
+            TransformState transformState = processJSON(projectId, action, prevState, json);
+            ProjectSecrets projectSecrets = transformState.state().metadata().getProject(projectId).custom(ProjectSecrets.TYPE);
             assertEquals("test3", projectSecrets.getSettings().getString("secure.test1").toString());
             assertEquals("test4", new String(projectSecrets.getSettings().getFile("secure.test3").readAllBytes(), StandardCharsets.UTF_8));
             assertNull(projectSecrets.getSettings().getString("secure.test2"));
@@ -97,8 +102,11 @@ public class ReservedProjectSecretsActionTests extends ESTestCase {
 
     public void testDuplicateSecretFails() {
         ProjectId projectId = randomUniqueProjectId();
-        ProjectMetadata state = ProjectMetadata.builder(projectId).build();
-        TransformState<ProjectMetadata> prevState = new TransformState<>(state, Collections.emptySet());
+        ProjectMetadata project = ProjectMetadata.builder(projectId).build();
+        TransformState prevState = new TransformState(
+            ClusterState.builder(ClusterName.DEFAULT).putProjectMetadata(project).build(),
+            Collections.emptySet()
+        );
         ReservedProjectSecretsAction action = new ReservedProjectSecretsAction();
 
         String json = format("""
@@ -108,7 +116,9 @@ public class ReservedProjectSecretsActionTests extends ESTestCase {
             }""", new String(Base64.getEncoder().encode("test2".getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8));
 
         assertThat(
-            expectThrows(XContentParseException.class, () -> processJSON(action, prevState, json)).getCause().getCause().getMessage(),
+            expectThrows(XContentParseException.class, () -> processJSON(projectId, action, prevState, json)).getCause()
+                .getCause()
+                .getMessage(),
             is("Some settings were defined as both string and file settings: [secure.test1]")
         );
 

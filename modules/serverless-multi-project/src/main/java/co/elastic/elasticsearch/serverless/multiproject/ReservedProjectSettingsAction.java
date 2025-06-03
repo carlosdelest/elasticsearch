@@ -19,17 +19,19 @@ package co.elastic.elasticsearch.serverless.multiproject;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.common.settings.ProjectScopedSettings;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.reservedstate.ReservedClusterStateHandler;
+import org.elasticsearch.reservedstate.ReservedProjectStateHandler;
 import org.elasticsearch.reservedstate.TransformState;
 import org.elasticsearch.xcontent.XContentParser;
 
 import java.io.IOException;
 import java.util.Map;
 
-public class ReservedProjectSettingsAction implements ReservedClusterStateHandler<ProjectMetadata, Map<String, Object>> {
+public class ReservedProjectSettingsAction implements ReservedProjectStateHandler<Map<String, Object>> {
     private static final Logger log = LogManager.getLogger(ReservedProjectSettingsAction.class);
     public static final String NAME = "project_settings";
 
@@ -45,17 +47,20 @@ public class ReservedProjectSettingsAction implements ReservedClusterStateHandle
     }
 
     @Override
-    public TransformState<ProjectMetadata> transform(Map<String, Object> source, TransformState<ProjectMetadata> prevState) {
+    public TransformState transform(ProjectId projectId, Map<String, Object> source, TransformState prevState) throws Exception {
         Settings settingsToApply = Settings.builder().loadFromMap(source).build();
 
-        ProjectMetadata projectMetadata = prevState.state();
+        ClusterState clusterState = prevState.state();
         ProjectMetadata updatedMetadata = new ProjectSettingsUpdater(projectScopedSettings).updateProjectSettings(
-            projectMetadata,
+            clusterState.metadata().getProject(projectId),
             settingsToApply,
             log
         );
 
-        return new TransformState<>(updatedMetadata, updatedMetadata.settings().keySet());
+        return new TransformState(
+            ClusterState.builder(clusterState).putProjectMetadata(updatedMetadata).build(),
+            updatedMetadata.settings().keySet()
+        );
     }
 
     @Override

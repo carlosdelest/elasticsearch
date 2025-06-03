@@ -17,6 +17,8 @@
 
 package co.elastic.elasticsearch.serverless.multiproject;
 
+import org.elasticsearch.cluster.ClusterName;
+import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.common.settings.ProjectScopedSettings;
@@ -28,7 +30,6 @@ import org.elasticsearch.xcontent.XContentParser;
 import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.Set;
 
@@ -36,17 +37,14 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.is;
 
 public class ReservedProjectSettingsActionTests extends ESTestCase {
-    private TransformState<ProjectMetadata> processJSON(
-        ReservedProjectSettingsAction action,
-        TransformState<ProjectMetadata> prevState,
-        String json
-    ) throws IOException {
+    private TransformState processJSON(ProjectId projectId, ReservedProjectSettingsAction action, TransformState prevState, String json)
+        throws Exception {
         try (XContentParser parser = XContentType.JSON.xContent().createParser(XContentParserConfiguration.EMPTY, json)) {
-            return action.transform(action.fromXContent(parser), prevState);
+            return action.transform(projectId, action.fromXContent(parser), prevState);
         }
     }
 
-    public void testSettingSet() throws IOException {
+    public void testSettingSet() throws Exception {
         Setting<Integer> setting = Setting.intSetting(
             "project.setting",
             0,
@@ -56,7 +54,10 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
         );
         ProjectId projectId = randomUniqueProjectId();
         ProjectMetadata projectMetadata = ProjectMetadata.builder(projectId).build();
-        TransformState<ProjectMetadata> prevState = new TransformState<>(projectMetadata, Collections.emptySet());
+        TransformState prevState = new TransformState(
+            ClusterState.builder(ClusterName.DEFAULT).putProjectMetadata(projectMetadata).build(),
+            Collections.emptySet()
+        );
         ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(Settings.EMPTY, Set.of(setting));
         ReservedProjectSettingsAction action = new ReservedProjectSettingsAction(projectScopedSettings);
         String json = """
@@ -64,8 +65,8 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
                 "project.setting": "43"
             }""";
 
-        TransformState<ProjectMetadata> transformedState = processJSON(action, prevState, json);
-        ProjectMetadata updatedProject = transformedState.state();
+        TransformState transformedState = processJSON(projectId, action, prevState, json);
+        ProjectMetadata updatedProject = transformedState.state().getMetadata().getProject(projectId);
         assertThat(updatedProject.settings().keySet(), contains(setting.getKey()));
         assertThat(setting.get(updatedProject.settings()), is(43));
 
@@ -74,7 +75,7 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
         assertThat(keys, contains(setting.getKey()));
     }
 
-    public void testSettingUpdate() throws IOException {
+    public void testSettingUpdate() throws Exception {
         Setting<Integer> setting = Setting.intSetting(
             "project.setting",
             0,
@@ -84,7 +85,10 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
         );
         ProjectId projectId = randomUniqueProjectId();
         ProjectMetadata projectMetadata = ProjectMetadata.builder(projectId).build();
-        TransformState<ProjectMetadata> prevState = new TransformState<>(projectMetadata, Collections.emptySet());
+        TransformState prevState = new TransformState(
+            ClusterState.builder(ClusterName.DEFAULT).putProjectMetadata(projectMetadata).build(),
+            Collections.emptySet()
+        );
         ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(
             Settings.builder().put(setting.getKey(), 42).build(),
             Set.of(setting)
@@ -96,8 +100,8 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
                 "project.setting": "43"
             }""";
 
-        TransformState<ProjectMetadata> transformedState = processJSON(action, prevState, json);
-        ProjectMetadata updatedProject = transformedState.state();
+        TransformState transformedState = processJSON(projectId, action, prevState, json);
+        ProjectMetadata updatedProject = transformedState.state().getMetadata().getProject(projectId);
         assertThat(updatedProject.settings().keySet(), contains(setting.getKey()));
         assertThat(setting.get(updatedProject.settings()), is(43));
 
@@ -109,7 +113,10 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
     public void testUnknownSetting() {
         ProjectId projectId = randomUniqueProjectId();
         ProjectMetadata projectMetadata = ProjectMetadata.builder(projectId).build();
-        TransformState<ProjectMetadata> prevState = new TransformState<>(projectMetadata, Collections.emptySet());
+        TransformState prevState = new TransformState(
+            ClusterState.builder(ClusterName.DEFAULT).putProjectMetadata(projectMetadata).build(),
+            Collections.emptySet()
+        );
         ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(Settings.EMPTY, Collections.emptySet());
         ReservedProjectSettingsAction action = new ReservedProjectSettingsAction(projectScopedSettings);
 
@@ -119,7 +126,7 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
             }""";
 
         assertThat(
-            expectThrows(IllegalArgumentException.class, () -> processJSON(action, prevState, json)).getMessage(),
+            expectThrows(IllegalArgumentException.class, () -> processJSON(projectId, action, prevState, json)).getMessage(),
             is("project[" + projectId + "] setting [setting1.value], not recognized")
         );
     }
