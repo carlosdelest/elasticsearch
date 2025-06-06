@@ -121,9 +121,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3786
-- class: co.elastic.elasticsearch.stateless.StatelessReshardIT
-  method: testReshardTargetWillEqualToPrimaryTermOfSource
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3821
 - class: co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceIT
   method: testSettingsChange
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3902
