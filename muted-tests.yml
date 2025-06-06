@@ -145,3 +145,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.VirtualBatchedCompoundCommitsIT
   method: testUploadCorruptionHandling
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3962
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testRefreshesOnstartNodesAndHollowShards
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3963
