@@ -261,7 +261,8 @@ public final class ServerlessSsoIT extends ESRestTestCase {
             PRINCIPAL_ATTRIBUTE,
             NAME_ATTRIBUTE,
             EMAIL_ATTRIBUTE,
-            GROUPS_ATTRIBUTE
+            GROUPS_ATTRIBUTE,
+            Set.of()
         );
         return new CloudServiceProvider(
             SP_ENTITY_ID,
