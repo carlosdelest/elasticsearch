@@ -14,23 +14,21 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
-import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.PathUtils;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
+import org.elasticsearch.test.cluster.serverless.ServerlessMultiProjectRestTestCase;
 import org.elasticsearch.test.cluster.util.resource.Resource;
-import org.elasticsearch.test.rest.ESRestTestCase;
 import org.elasticsearch.test.rest.ObjectPath;
 import org.elasticsearch.xcontent.json.JsonXContent;
 import org.elasticsearch.xpack.security.authc.saml.SamlIdpMetadataBuilder;
 import org.elasticsearch.xpack.security.authc.saml.SamlResponseBuilder;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.rules.RuleChain;
+import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestRule;
 
 import java.io.FileNotFoundException;
@@ -44,24 +42,31 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.startsWith;
 
-public class MultiProjectSamlRealmIT extends ESRestTestCase {
+public class MultiProjectSamlRealmIT extends ServerlessMultiProjectRestTestCase {
 
+    static {
+        activeProject = "mjolnir";
+        extraProjects = Set.of("gungnir", "brisingamen");
+    }
+
+    public static final TemporaryFolder CONFIG_DIR = new TemporaryFolder();
     public static ElasticsearchCluster cluster = initTestCluster();
     private static Path caPath;
 
     @ClassRule
-    public static TestRule ruleChain = RuleChain.outerRule(cluster);
+    public static TestRule ruleChain = RuleChain.outerRule(CONFIG_DIR).around(cluster);
 
     private static final String IDP_ENTITY_ID = "https://idp.example.org/";
     private static final String MULTI_REALM_NAME = "multi-saml";
     private static final String SINGLE_REALM_NAME = "single-saml";
-    private static final List<String> PROJECT_IDS = List.of("mjolnir", "gungnir", "brisingamen");
+    private static final List<String> PROJECT_IDS = getAllProjectIds();
 
     private static ElasticsearchCluster initTestCluster() {
         return ServerlessElasticsearchCluster.local()
@@ -112,6 +117,7 @@ public class MultiProjectSamlRealmIT extends ESRestTestCase {
                 }
                 return settings;
             })
+            .node(0, nodeSpecBuilder -> nodeSpecBuilder.withConfigDir(() -> CONFIG_DIR.getRoot().toPath()))
             .build();
     }
 
@@ -134,16 +140,18 @@ public class MultiProjectSamlRealmIT extends ESRestTestCase {
         caPath = PathUtils.get(resource.toURI());
     }
 
-    @Before
-    public void initProjects() throws IOException {
-        for (String PROJECT_ID : PROJECT_IDS) {
-            createProject(PROJECT_ID);
-        }
+    @Override
+    protected ElasticsearchCluster cluster() {
+        return cluster;
     }
 
-    @After
-    public void deleteProjects() {
-        PROJECT_IDS.forEach(this::deleteProject);
+    @Override
+    protected TemporaryFolder configDir() {
+        return CONFIG_DIR;
+    }
+
+    protected boolean assertEmptyDefaultProject() {
+        return false; // security indices are eagerly created
     }
 
     @Override
@@ -203,7 +211,7 @@ public class MultiProjectSamlRealmIT extends ESRestTestCase {
         var projectPrefix = "xpack.security.authc.projects." + projectId;
         final String username = randomAlphaOfLengthBetween(4, 12);
 
-        createProject(projectId);
+        putProject(projectId);
         {
             var req = requestWithProjectHeader("PUT", "/_cluster/settings");
             final Map<String, Object> body = Map.of(
@@ -305,20 +313,5 @@ public class MultiProjectSamlRealmIT extends ESRestTestCase {
         assertThat(resp.keySet(), containsInAnyOrder("realm", "redirect", "id"));
         assertThat(resp.get("redirect").toString(), startsWith(IDP_ENTITY_ID));
         assertEquals(resp.get("realm"), MULTI_REALM_NAME);
-    }
-
-    private void deleteProject(String project) {
-        final Request request = new Request("DELETE", "/_project/" + project);
-        try {
-            adminClient().performRequest(request);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    @FixForMultiProject(description = "Enable when reset feature states work with multi-project")
-    @Override
-    protected boolean resetFeatureStates() {
-        return false;
     }
 }
