@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static co.elastic.elasticsearch.metering.usagereports.SampleTimestampUtils.calculateSampleTimestamp;
@@ -407,11 +408,13 @@ class UsageReportCollector {
 
             // Advance the committed sample timestamp if all providers returned a success for getMetrics().
             if (sampledMetricValuesList.isEmpty() == false) {
+                var startNanos = System.nanoTime();
                 var committed = sampledMetricsTimeCursor.commitUpTo(sampleTimestamp);
+                var elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
                 if (committed) {
                     lastSampledMetricValues = sampledMetricValuesById;
                 }
-                log.info("Updated committed timestamp to [{}], success: [{}]", sampleTimestamp, committed);
+                log.info("Updated committed timestamp to [{}] in {} ms [success: {}]", sampleTimestamp, elapsedMs, committed);
                 return committed;
             }
             return true;
