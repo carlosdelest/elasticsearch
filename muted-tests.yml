@@ -154,3 +154,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testStressWithoutFailures
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3968
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=cluster.health/10_basic/cluster health with closed index}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3970
