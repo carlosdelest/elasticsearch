@@ -160,3 +160,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.Before where ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3981
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {sample.After sort SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3982
