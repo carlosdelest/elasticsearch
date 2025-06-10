@@ -175,3 +175,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {lookup-join.LookupIPAndMessageFromRowWithShadowing ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3985
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {sample.After where SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3986
