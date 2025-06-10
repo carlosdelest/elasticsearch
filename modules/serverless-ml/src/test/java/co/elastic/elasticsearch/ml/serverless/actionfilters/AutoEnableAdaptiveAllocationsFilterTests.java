@@ -17,14 +17,23 @@
 
 package co.elastic.elasticsearch.ml.serverless.actionfilters;
 
+import co.elastic.elasticsearch.serverless.constants.ProjectType;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
+
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilterChain;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.ml.action.CreateTrainedModelAssignmentAction;
 import org.elasticsearch.xpack.core.ml.action.StartTrainedModelDeploymentAction;
 import org.elasticsearch.xpack.core.ml.inference.assignment.AdaptiveAllocationsSettings;
 import org.elasticsearch.xpack.core.ml.inference.assignment.AllocationStatus;
 import org.elasticsearch.xpack.core.ml.inference.assignment.Priority;
+import org.mockito.Mockito;
+
+import java.util.stream.Stream;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,11 +46,17 @@ import static org.mockito.Mockito.verify;
 public class AutoEnableAdaptiveAllocationsFilterTests extends ESTestCase {
     private AutoEnableAdaptiveAllocationsFilter autoEnableFilter;
     private ActionFilterChain<StartTrainedModelDeploymentAction.Request, CreateTrainedModelAssignmentAction.Response> chain;
+    private final TestCase testCase;
 
+    @Override
     public void setUp() throws Exception {
         super.setUp();
-        autoEnableFilter = new AutoEnableAdaptiveAllocationsFilter();
+        autoEnableFilter = new AutoEnableAdaptiveAllocationsFilter(Settings.EMPTY);
         chain = mock();
+    }
+
+    public AutoEnableAdaptiveAllocationsFilterTests(TestCase testCase) {
+        this.testCase = testCase;
     }
 
     public void testName() {
@@ -98,6 +113,70 @@ public class AutoEnableAdaptiveAllocationsFilterTests extends ESTestCase {
             assertThat(actualRequest.getAdaptiveAllocationsSettings().getMaxNumberOfAllocations(), equalTo(32));
             assertNull(actualRequest.getNumberOfAllocations());
         }), any());
+    }
+
+    public void test() {
+        var request = testCase.randomRequest();
+        autoEnableFilter = testCase.createFilter();
+        callFilter(request);
+        testCase.verify(chain);
+    }
+
+    @ParametersFactory(shuffle = false)
+    public static Iterable<Object[]> parameters() {
+        return Stream.of(
+            new TestCase(null, null, ProjectType.OBSERVABILITY, true, 0, 32),
+            new TestCase(1, null, ProjectType.ELASTICSEARCH_GENERAL_PURPOSE, true, 0, 1),
+            new TestCase(5, null, ProjectType.ELASTICSEARCH_SEARCH, true, 0, 5),
+            new TestCase(10, null, ProjectType.ELASTICSEARCH_TIMESERIES, true, 0, 10),
+            new TestCase(null, new AdaptiveAllocationsSettings(true, 9, 9), ProjectType.ELASTICSEARCH_VECTOR, true, 0, 9),
+            new TestCase(1, new AdaptiveAllocationsSettings(false, null, 9), ProjectType.ELASTICSEARCH_VECTOR, true, 0, 9),
+            new TestCase(null, new AdaptiveAllocationsSettings(false, 3, 6), ProjectType.OBSERVABILITY, true, 0, 6),
+            new TestCase(5, new AdaptiveAllocationsSettings(false, null, null), ProjectType.OBSERVABILITY, true, 0, 5),
+            new TestCase(null, null, ProjectType.SECURITY, true, 1, 32),
+            new TestCase(1, null, ProjectType.SECURITY, true, 1, 1),
+            new TestCase(5, null, ProjectType.SECURITY, true, 1, 5),
+            new TestCase(10, null, ProjectType.SECURITY, true, 1, 10),
+            new TestCase(null, new AdaptiveAllocationsSettings(true, 9, 9), ProjectType.SECURITY, true, 9, 9),
+            new TestCase(null, new AdaptiveAllocationsSettings(false, 3, 6), ProjectType.SECURITY, true, 3, 6),
+            new TestCase(5, new AdaptiveAllocationsSettings(false, null, null), ProjectType.SECURITY, true, 1, 5),
+            new TestCase(1, new AdaptiveAllocationsSettings(false, null, 9), ProjectType.SECURITY, true, 1, 9),
+            new TestCase(1, new AdaptiveAllocationsSettings(true, null, 9), ProjectType.SECURITY, true, 1, 9),
+            new TestCase(1, new AdaptiveAllocationsSettings(false, 2, 9), ProjectType.SECURITY, true, 2, 9),
+            new TestCase(1, new AdaptiveAllocationsSettings(true, 2, 9), ProjectType.SECURITY, true, 2, 9)
+        ).map(TestCase::toArray).toList();
+    }
+
+    public record TestCase(
+        Integer numAllocations,
+        AdaptiveAllocationsSettings adaptiveAllocationsSettings,
+        ProjectType projectType,
+        boolean expectedEnabled,
+        int expectedMin,
+        int expectedMax
+    ) {
+        StartTrainedModelDeploymentAction.Request randomRequest() {
+            return createRandom(numAllocations, adaptiveAllocationsSettings);
+        }
+
+        AutoEnableAdaptiveAllocationsFilter createFilter() {
+            return new AutoEnableAdaptiveAllocationsFilter(
+                Settings.builder().put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), projectType).build()
+            );
+        }
+
+        void verify(ActionFilterChain<StartTrainedModelDeploymentAction.Request, CreateTrainedModelAssignmentAction.Response> chain) {
+            Mockito.verify(chain, only()).proceed(any(), eq(StartTrainedModelDeploymentAction.NAME), assertArg(actualRequest -> {
+                assertEquals(actualRequest.getAdaptiveAllocationsSettings().getEnabled(), expectedEnabled);
+                assertThat(actualRequest.getAdaptiveAllocationsSettings().getMinNumberOfAllocations(), equalTo(expectedMin));
+                assertThat(actualRequest.getAdaptiveAllocationsSettings().getMaxNumberOfAllocations(), equalTo(expectedMax));
+                assertNull(actualRequest.getNumberOfAllocations());
+            }), any());
+        }
+
+        Object[] toArray() {
+            return new Object[] { this };
+        }
     }
 
     private void callFilter(StartTrainedModelDeploymentAction.Request request) {

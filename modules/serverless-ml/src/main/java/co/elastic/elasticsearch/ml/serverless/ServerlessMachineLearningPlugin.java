@@ -72,7 +72,7 @@ public class ServerlessMachineLearningPlugin extends Plugin implements ActionPlu
                 new GetJobStatsResponseFilter(threadContext),
                 new GetJobModelSnapshotsUpgradeStatsResponseFilter(threadContext),
                 new GetTrainedModelsStatsResponseFilter(threadContext),
-                new AutoEnableAdaptiveAllocationsFilter()
+                new AutoEnableAdaptiveAllocationsFilter(services.environment().settings())
             )
         );
 

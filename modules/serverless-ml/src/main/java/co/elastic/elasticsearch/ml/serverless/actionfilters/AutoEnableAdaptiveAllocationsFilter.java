@@ -17,6 +17,9 @@
 
 package co.elastic.elasticsearch.ml.serverless.actionfilters;
 
+import co.elastic.elasticsearch.serverless.constants.ProjectType;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
+
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionResponse;
@@ -24,6 +27,7 @@ import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.common.logging.DeprecationCategory;
 import org.elasticsearch.common.logging.DeprecationLogger;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.xpack.core.ml.action.StartTrainedModelDeploymentAction;
 import org.elasticsearch.xpack.core.ml.inference.assignment.AdaptiveAllocationsSettings;
@@ -41,6 +45,11 @@ public class AutoEnableAdaptiveAllocationsFilter implements MappedActionFilter {
 
     private static final int DEFAULT_MIN_NUMBER_OF_ALLOCATIONS = 0;
     private static final int DEFAULT_MAX_NUMBER_OF_ALLOCATIONS = 32;
+
+    // Security's min number of allocations is different because it includes the cost in the pricing model
+    // See https://elasticco.atlassian.net/browse/INC-3970
+    private static final int DEFAULT_MIN_NUMBER_OF_ALLOCATIONS_SECURITY = 1;
+
     private static final DeprecationLogger deprecationLogger = DeprecationLogger.getLogger(AutoEnableAdaptiveAllocationsFilter.class);
     private static final String AUTO_ENABLING_ADAPTIVE_ALLOCATIONS =
         "Automatically enabling adaptive allocations with min [{}] and max [{}].";
@@ -49,6 +58,12 @@ public class AutoEnableAdaptiveAllocationsFilter implements MappedActionFilter {
             + "Enabling adaptive allocations with min [{}] and max [{}].";
     private static final String PREVENT_NONZERO_MIN_ALLOCATIONS =
         "Serverless does not support adaptive allocations with min allocations above 0. Setting min allocations to 0.";
+
+    private final ProjectType projectType;
+
+    public AutoEnableAdaptiveAllocationsFilter(Settings nodeSettings) {
+        this.projectType = ServerlessSharedSettings.PROJECT_TYPE.get(nodeSettings);
+    }
 
     @Override
     public String actionName() {
@@ -86,6 +101,14 @@ public class AutoEnableAdaptiveAllocationsFilter implements MappedActionFilter {
     }
 
     private int minNumberOfAllocations(AdaptiveAllocationsSettings adaptiveAllocationsSettings) {
+        if (projectType == ProjectType.SECURITY) {
+            return minNumberOfAllocationsForSecurity(adaptiveAllocationsSettings);
+        } else {
+            return minNumberOfAllocationsNonSecurity(adaptiveAllocationsSettings);
+        }
+    }
+
+    private int minNumberOfAllocationsNonSecurity(AdaptiveAllocationsSettings adaptiveAllocationsSettings) {
         if (adaptiveAllocationsSettings != null
             && adaptiveAllocationsSettings.getMinNumberOfAllocations() != null
             && adaptiveAllocationsSettings.getMinNumberOfAllocations() != DEFAULT_MIN_NUMBER_OF_ALLOCATIONS) {
@@ -94,6 +117,15 @@ public class AutoEnableAdaptiveAllocationsFilter implements MappedActionFilter {
         // min allocations are always set to 0 in serverless
         // this is to minimize costs for users, at the risk of unavailability due to cold start
         return DEFAULT_MIN_NUMBER_OF_ALLOCATIONS;
+    }
+
+    private int minNumberOfAllocationsForSecurity(AdaptiveAllocationsSettings adaptiveAllocationsSettings) {
+        // For security, we accept whatever value given in the request. If the value is not included, we use the default of 1
+        if (adaptiveAllocationsSettings != null && adaptiveAllocationsSettings.getMinNumberOfAllocations() != null) {
+            return adaptiveAllocationsSettings.getMinNumberOfAllocations();
+        } else {
+            return DEFAULT_MIN_NUMBER_OF_ALLOCATIONS_SECURITY;
+        }
     }
 
     private int maxNumberOfAllocations(

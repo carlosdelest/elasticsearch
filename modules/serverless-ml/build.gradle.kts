@@ -22,6 +22,7 @@ configurations {
 dependencies {
     compileOnly(xpackModule("core"))
     compileOnly(xpackModule("ml"))
+    compileOnly(project(":libs:serverless-shared-constants"))
 
     testImplementation(testArtifact(xpackModule("core")))
 
