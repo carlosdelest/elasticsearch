@@ -181,3 +181,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {unsigned_long.SortAsc ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3987
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {lookup-join.FloatJoinInt ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3989
