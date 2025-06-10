@@ -187,3 +187,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {categorize.Mv via eval ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3990
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {multivalue_points.WhereWithinMultiValuePointsStatsFieldsCentroid ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3991
