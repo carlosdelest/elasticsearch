@@ -172,3 +172,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {bucket.BucketByDatePeriod ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3984
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {lookup-join.LookupIPAndMessageFromRowWithShadowing ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3985
