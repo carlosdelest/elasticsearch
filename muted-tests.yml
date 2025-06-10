@@ -163,3 +163,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.After sort SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3982
+- class: co.elastic.elasticsearch.stateless.cache.StatelessOnlinePrewarmingIT
+  method: testShardPrewarming
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3961
