@@ -202,3 +202,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.After stats SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3996
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {sample.Multiple samples SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3998
