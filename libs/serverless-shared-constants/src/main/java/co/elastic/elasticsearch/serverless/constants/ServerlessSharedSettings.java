@@ -18,11 +18,14 @@
 package co.elastic.elasticsearch.serverless.constants;
 
 import org.elasticsearch.common.settings.Setting;
+import org.elasticsearch.core.Strings;
 import org.elasticsearch.core.TimeValue;
 
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
+import static co.elastic.elasticsearch.serverless.constants.ObservabilityTier.ESSENTIALS;
 
 /**
  * Settings that may be read across multiple serverless modules.
@@ -133,6 +136,40 @@ public class ServerlessSharedSettings {
         // smallest *positive* double
         Double.MIN_VALUE,
         Double.POSITIVE_INFINITY,
+        Setting.Property.NodeScope
+    );
+
+    public static final Setting<ObservabilityTier> OBSERVABILITY_TIER = Setting.enumSetting(
+        ObservabilityTier.class,
+        "serverless.observability.tier",
+        ObservabilityTier.COMPLETE,
+        new Setting.Validator<>() {
+            @Override
+            public void validate(ObservabilityTier value) {}
+
+            @Override
+            public void validate(ObservabilityTier value, Map<Setting<?>, Object> settings) {
+                ProjectType projectType = (ProjectType) settings.get(PROJECT_TYPE);
+
+                // Observability tier can only be set to essentials for observability projects
+                if (value == ESSENTIALS && projectType != ProjectType.OBSERVABILITY) {
+                    throw new IllegalArgumentException(
+                        Strings.format(
+                            "Setting [%s] may only be set to [%s] when project type is [%s].",
+                            OBSERVABILITY_TIER.getKey(),
+                            value,
+                            ProjectType.OBSERVABILITY
+                        )
+                    );
+                }
+            }
+
+            @Override
+            public Iterator<Setting<?>> settings() {
+                List<Setting<?>> settings = List.of(PROJECT_TYPE);
+                return settings.iterator();
+            }
+        },
         Setting.Property.NodeScope
     );
 

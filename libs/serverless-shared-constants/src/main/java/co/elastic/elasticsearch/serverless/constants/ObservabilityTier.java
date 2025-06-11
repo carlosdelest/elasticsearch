@@ -15,16 +15,19 @@
  * permission is obtained from Elasticsearch B.V.
  */
 
-plugins {
-  id("elasticsearch.internal-java-rest-test")
-}
+package co.elastic.elasticsearch.serverless.constants;
 
-esplugin {
-  name = "serverless-rest-controller"
-  description = "Overrides RestController with serverless implementation"
-  classname = "co.elastic.elasticsearch.serverless.rest.ServerlessRestControllerPlugin"
-}
+/**
+ * Tier for serverless observability projects
+ */
+public enum ObservabilityTier {
+    /**
+     * Includes all serverless Elasticsearch capabilities
+     */
+    COMPLETE,
 
-dependencies {
-    compileOnly(project(":libs:serverless-shared-constants"))
+    /**
+     * "Logs essentials" tier
+     */
+    ESSENTIALS
 }

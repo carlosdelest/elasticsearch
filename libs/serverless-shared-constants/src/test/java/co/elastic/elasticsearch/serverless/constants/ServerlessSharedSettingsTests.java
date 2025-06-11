@@ -23,6 +23,10 @@ import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.test.ESTestCase;
 
+import java.util.Arrays;
+
+import static org.hamcrest.Matchers.is;
+
 public class ServerlessSharedSettingsTests extends ESTestCase {
     protected static final TimeValue DEFAULT_BOOST_WINDOW = TimeValue.timeValueDays(2);
 
@@ -206,6 +210,20 @@ public class ServerlessSharedSettingsTests extends ESTestCase {
                 + " ["
                 + newSPMax
                 + "]"
+        );
+    }
+
+    public void testFailingObservabilityTierOnNonObservabilityProjects() {
+        var unsupportedTypes = Arrays.stream(ProjectType.values()).filter(t -> t != ProjectType.OBSERVABILITY).toList();
+        var settings = Settings.builder()
+            .put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), randomFrom(unsupportedTypes))
+            .put(ServerlessSharedSettings.OBSERVABILITY_TIER.getKey(), ObservabilityTier.ESSENTIALS.name())
+            .build();
+
+        var exception = expectThrows(IllegalArgumentException.class, () -> ServerlessSharedSettings.OBSERVABILITY_TIER.get(settings));
+        assertThat(
+            exception.getMessage(),
+            is("Setting [serverless.observability.tier] may only be set to [ESSENTIALS] when project type is [OBSERVABILITY].")
         );
     }
 }

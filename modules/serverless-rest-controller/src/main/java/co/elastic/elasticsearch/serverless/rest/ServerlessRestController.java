@@ -17,11 +17,13 @@
 
 package co.elastic.elasticsearch.serverless.rest;
 
+import co.elastic.elasticsearch.serverless.constants.ObservabilityTier;
 import co.elastic.elasticsearch.serverless.rest.RestrictedRestParameters.ParameterValidator;
 
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.logging.Logger;
@@ -41,6 +43,9 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
+import static co.elastic.elasticsearch.serverless.constants.ObservabilityTier.ESSENTIALS;
+import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.OBSERVABILITY_TIER;
+
 public class ServerlessRestController extends RestController {
 
     static final String VERSION_HEADER_NAME = "Elastic-Api-Version";
@@ -50,16 +55,20 @@ public class ServerlessRestController extends RestController {
     private static final Logger logger = org.elasticsearch.logging.LogManager.getLogger(ServerlessRestController.class);
     private static final String PROJECT_ID_REST_HEADER = "X-Elastic-Project-Id";
     private static final String PROJECT_ID_THREADCONTEXT_HEADER = "project.id";
+    private static final String ML_BASE_PATH = "/_ml/";
+
+    private final ObservabilityTier observabilityTier;
 
     public ServerlessRestController(
         RestInterceptor restInterceptor,
         NodeClient client,
         CircuitBreakerService circuitBreakerService,
         UsageService usageService,
-        TelemetryProvider telemetryProvider
-
+        TelemetryProvider telemetryProvider,
+        Settings settings
     ) {
         super(restInterceptor, client, circuitBreakerService, usageService, telemetryProvider);
+        this.observabilityTier = OBSERVABILITY_TIER.get(settings);
     }
 
     @Override
@@ -67,6 +76,20 @@ public class ServerlessRestController extends RestController {
         assert request.isServerlessRequest() : "serverless rest controller should only receive serverless requests";
         if (false == request.isOperatorRequest()) {
             validateRestParameters(request.path(), handler.getConcreteRestHandler(), request.params());
+        }
+        if (observabilityTier == ESSENTIALS) {
+            filterLogsEssentialsRequests(request);
+        }
+    }
+
+    private void filterLogsEssentialsRequests(RestRequest request) throws ElasticsearchStatusException {
+        if (isMlRequest(request)) {
+            String message = "uri ["
+                + request.uri()
+                + "] with method ["
+                + request.method()
+                + "] exists but is not available in current project tier";
+            throw new ElasticsearchStatusException(message, RestStatus.BAD_REQUEST);
         }
     }
 
@@ -193,6 +216,10 @@ public class ServerlessRestController extends RestController {
             );
         }
         return values.get(0);
+    }
+
+    private static boolean isMlRequest(RestRequest request) {
+        return request.path().startsWith(ML_BASE_PATH);
     }
 
     private static ElasticsearchStatusException badRequest(String msg) {

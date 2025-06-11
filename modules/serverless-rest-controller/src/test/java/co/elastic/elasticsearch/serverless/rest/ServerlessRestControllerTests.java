@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.serverless.rest;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.client.internal.node.NodeClient;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.rest.BaseRestHandler;
@@ -80,7 +81,8 @@ public class ServerlessRestControllerTests extends ESTestCase {
             client,
             mock(CircuitBreakerService.class),
             mock(UsageService.class),
-            TelemetryProvider.NOOP
+            TelemetryProvider.NOOP,
+            Settings.EMPTY
         );
         this.restHandler = new DummyRestHandler(randomAlphaOfLength(3) + "_" + randomAlphaOfLength(5));
     }

@@ -17,6 +17,7 @@
 package co.elastic.elasticsearch.serverless.rest;
 
 import org.elasticsearch.client.internal.node.NodeClient;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import org.elasticsearch.plugins.Plugin;
@@ -28,6 +29,12 @@ import org.elasticsearch.usage.UsageService;
 
 public class ServerlessRestControllerPlugin extends Plugin implements RestServerActionPlugin {
 
+    private final Settings settings;
+
+    public ServerlessRestControllerPlugin(Settings settings) {
+        this.settings = settings;
+    }
+
     @Override
     public RestController getRestController(
         RestInterceptor interceptor,
@@ -36,7 +43,7 @@ public class ServerlessRestControllerPlugin extends Plugin implements RestServer
         UsageService usageService,
         TelemetryProvider telemetryProvider
     ) {
-        return new ServerlessRestController(interceptor, client, circuitBreakerService, usageService, telemetryProvider);
+        return new ServerlessRestController(interceptor, client, circuitBreakerService, usageService, telemetryProvider, settings);
     }
 
     @Override

@@ -20,4 +20,5 @@ module org.elasticsearch.serverless.rest {
     requires org.elasticsearch.server;
     requires org.elasticsearch.xcontent;
     requires org.elasticsearch.logging;
+    requires org.elasticsearch.serverless.constants;
 }
