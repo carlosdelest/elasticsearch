@@ -223,3 +223,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.Before limit SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4004
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeIT
+  method: test
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
