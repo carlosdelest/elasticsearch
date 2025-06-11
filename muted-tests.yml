@@ -205,3 +205,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {stats.ByDateAndKeywordAndInt SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4007
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {date.FilteringWithDateMath SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4008
