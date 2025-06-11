@@ -18,9 +18,7 @@
 package co.elastic.elasticsearch.serverless.multiproject;
 
 import co.elastic.elasticsearch.serverless.multiproject.action.DeleteProjectAction;
-import co.elastic.elasticsearch.serverless.multiproject.action.PutProjectAction;
 import co.elastic.elasticsearch.serverless.multiproject.action.RestDeleteProjectAction;
-import co.elastic.elasticsearch.serverless.multiproject.action.RestPutProjectAction;
 import co.elastic.elasticsearch.serverless.multiproject.action.TransportGetProjectStatusAction;
 import co.elastic.elasticsearch.serverless.multiproject.rest.action.RestGetProjectStatusAction;
 
@@ -108,7 +106,6 @@ public class ServerlessMultiProjectPlugin extends Plugin implements ActionPlugin
     public Collection<ActionHandler> getActions() {
         if (multiProjectEnabled) {
             return List.of(
-                new ActionHandler(PutProjectAction.INSTANCE, PutProjectAction.TransportPutProjectAction.class),
                 new ActionHandler(DeleteProjectAction.INSTANCE, DeleteProjectAction.TransportDeleteProjectAction.class),
                 new ActionHandler(TransportGetProjectStatusAction.INSTANCE, TransportGetProjectStatusAction.class)
             );
@@ -130,7 +127,7 @@ public class ServerlessMultiProjectPlugin extends Plugin implements ActionPlugin
         Predicate<NodeFeature> clusterSupportsFeature
     ) {
         if (multiProjectEnabled) {
-            return List.of(new RestPutProjectAction(), new RestDeleteProjectAction(), new RestGetProjectStatusAction());
+            return List.of(new RestDeleteProjectAction(), new RestGetProjectStatusAction());
         } else {
             return List.of();
         }
