@@ -170,26 +170,8 @@ tests:
   method: test {sample.After where ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3983
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {bucket.BucketByDatePeriod ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3984
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {lookup-join.LookupIPAndMessageFromRowWithShadowing ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3985
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.After where SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3986
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {unsigned_long.SortAsc ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3987
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {lookup-join.FloatJoinInt ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3989
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {categorize.Mv via eval ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3990
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {multivalue_points.WhereWithinMultiValuePointsStatsFieldsCentroid ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3991
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.Multiple samples ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3992
@@ -197,23 +179,14 @@ tests:
   method: test {sample.Adjust stats for sampling SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3994
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {categorize.On null ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3995
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.After stats SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3996
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.Multiple samples SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3998
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {boolean.ConvertFromDouble ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3999
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.Before limit ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4000
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {union_types.MultiIndexIpStringTsLongRenameToString ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4001
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.Before where SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4002
