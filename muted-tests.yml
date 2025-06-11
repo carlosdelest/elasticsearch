@@ -226,3 +226,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {string.NotEqualsToLowerPushedDown SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4015
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {ignore-order.BooleansFirst2 SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4016
