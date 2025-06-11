@@ -223,3 +223,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.Before sort ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4014
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {string.NotEqualsToLowerPushedDown SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4015
