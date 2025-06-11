@@ -217,3 +217,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {sample.Before where SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4002
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {sample.Adjust stats for sampling ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4003
