@@ -217,13 +217,13 @@ public class ServerlessSharedSettingsTests extends ESTestCase {
         var unsupportedTypes = Arrays.stream(ProjectType.values()).filter(t -> t != ProjectType.OBSERVABILITY).toList();
         var settings = Settings.builder()
             .put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), randomFrom(unsupportedTypes))
-            .put(ServerlessSharedSettings.OBSERVABILITY_TIER.getKey(), ObservabilityTier.ESSENTIALS.name())
+            .put(ServerlessSharedSettings.OBSERVABILITY_TIER.getKey(), ObservabilityTier.LOGS_ESSENTIALS.name())
             .build();
 
         var exception = expectThrows(IllegalArgumentException.class, () -> ServerlessSharedSettings.OBSERVABILITY_TIER.get(settings));
         assertThat(
             exception.getMessage(),
-            is("Setting [serverless.observability.tier] may only be set to [ESSENTIALS] when project type is [OBSERVABILITY].")
+            is("Setting [serverless.observability.tier] may only be set to [LOGS_ESSENTIALS] when project type is [OBSERVABILITY].")
         );
     }
 }

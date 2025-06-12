@@ -43,7 +43,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
-import static co.elastic.elasticsearch.serverless.constants.ObservabilityTier.ESSENTIALS;
+import static co.elastic.elasticsearch.serverless.constants.ObservabilityTier.LOGS_ESSENTIALS;
 import static co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings.OBSERVABILITY_TIER;
 
 public class ServerlessRestController extends RestController {
@@ -77,7 +77,7 @@ public class ServerlessRestController extends RestController {
         if (false == request.isOperatorRequest()) {
             validateRestParameters(request.path(), handler.getConcreteRestHandler(), request.params());
         }
-        if (observabilityTier == ESSENTIALS) {
+        if (observabilityTier == LOGS_ESSENTIALS) {
             filterLogsEssentialsRequests(request);
         }
     }

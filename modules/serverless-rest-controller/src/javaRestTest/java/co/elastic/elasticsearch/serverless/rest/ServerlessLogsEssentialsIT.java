@@ -39,7 +39,7 @@ public class ServerlessLogsEssentialsIT extends ESRestTestCase {
     @ClassRule
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
         .setting("serverless.project_type", "observability")
-        .setting("serverless.observability.tier", "essentials")
+        .setting("serverless.observability.tier", "logs_essentials")
         .build();
 
     public void testMlApisRejected() throws Exception {

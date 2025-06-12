@@ -27,7 +27,7 @@ public enum ObservabilityTier {
     COMPLETE,
 
     /**
-     * "Logs essentials" tier
+     * Logs essentials tier
      */
-    ESSENTIALS
+    LOGS_ESSENTIALS
 }

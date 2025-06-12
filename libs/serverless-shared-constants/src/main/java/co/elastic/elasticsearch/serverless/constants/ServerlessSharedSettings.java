@@ -25,7 +25,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static co.elastic.elasticsearch.serverless.constants.ObservabilityTier.ESSENTIALS;
+import static co.elastic.elasticsearch.serverless.constants.ObservabilityTier.LOGS_ESSENTIALS;
 
 /**
  * Settings that may be read across multiple serverless modules.
@@ -152,7 +152,7 @@ public class ServerlessSharedSettings {
                 ProjectType projectType = (ProjectType) settings.get(PROJECT_TYPE);
 
                 // Observability tier can only be set to essentials for observability projects
-                if (value == ESSENTIALS && projectType != ProjectType.OBSERVABILITY) {
+                if (value == LOGS_ESSENTIALS && projectType != ProjectType.OBSERVABILITY) {
                     throw new IllegalArgumentException(
                         Strings.format(
                             "Setting [%s] may only be set to [%s] when project type is [%s].",
