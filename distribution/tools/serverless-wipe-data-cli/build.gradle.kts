@@ -32,9 +32,9 @@ dependencies {
     // aws-java-sdk-(s3|core) dependencies, recursively
     // (in order of things throwing java.lang.NoClassDefFoundError if you don't have them)
     api("commons-logging:commons-logging:1.2")
-    api("com.fasterxml.jackson.core:jackson-databind:2.12.7.1")
-    api("com.fasterxml.jackson.core:jackson-core:2.12.7")
-    api("com.fasterxml.jackson.core:jackson-annotations:2.12.7")
+    api("com.fasterxml.jackson.core:jackson-databind:${versions["jackson"]}")
+    api("com.fasterxml.jackson.core:jackson-core:${versions["jackson"]}")
+    api("com.fasterxml.jackson.core:jackson-annotations:${versions["jackson"]}")
     api("org.apache.httpcomponents:httpclient:4.5.14")
     api("org.apache.httpcomponents:httpcore:4.4.16")
     api("joda-time:joda-time:2.8.1")
