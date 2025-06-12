@@ -153,87 +153,12 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.health/10_basic/cluster health with closed index}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3970
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.After stats ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3978
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.After sort ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3979
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Before where ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3981
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.After sort SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3982
 - class: co.elastic.elasticsearch.stateless.cache.StatelessOnlinePrewarmingIT
   method: testShardPrewarming
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3961
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.After where ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3983
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.After where SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3986
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Multiple samples ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3992
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Adjust stats for sampling SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3994
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.After stats SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3996
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Multiple samples SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3998
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Before limit ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4000
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Before where SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4002
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Adjust stats for sampling ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4003
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Before limit SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4004
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Before sort SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4006
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {stats.ByDateAndKeywordAndInt SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4007
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {date.FilteringWithDateMath SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4008
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {spatial.CartesianPointIntersectsPointShape ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4009
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {stats_percentile.PercentileOfInteger SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4010
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {grok.GrokStats SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4011
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {categorize.And then TO_LOWER ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4012
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {sample.Before sort ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4014
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {string.NotEqualsToLowerPushedDown SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4015
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {ignore-order.BooleansFirst2 SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4016
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {grok.EvalGrok ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4017
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   method: test {p0=esql/80_text/text with synthetic source}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4018
