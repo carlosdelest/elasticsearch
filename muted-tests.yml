@@ -175,3 +175,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   method: test {p0=esql/200_queries/Get with non-existent task ID}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4034
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {knn-function.KnnSearchWithKOption SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4035
