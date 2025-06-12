@@ -169,3 +169,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessPrefetchIT
   method: testSearchShardsStarted
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4031
+- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
+  method: test {p0=esql/80_text/text with synthetic source}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4018
