@@ -136,18 +136,12 @@ tests:
 - class: co.elastic.elasticsearch.stateless.engine.translog.StatelessTranslogIT
   method: testTranslogStressRecoveryTest
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3939
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testRefreshesOnstartNodesAndHollowShards
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3963
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testOnlyMasterNodePublishesIngestLoadMetrics
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3794
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testStressWithRelocationFailures
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3967
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testStressWithoutFailures
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3968
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.health/10_basic/cluster health with closed index}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3970
