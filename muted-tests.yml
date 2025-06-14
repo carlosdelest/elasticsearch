@@ -166,3 +166,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {knn-function.KnnSearchWithKOption ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4036
+- class: co.elastic.elasticsearch.stateless.StatelessPrefetchIT
+  method: testSearchShardsStarted
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4048
