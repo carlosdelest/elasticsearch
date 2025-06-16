@@ -46,13 +46,20 @@ import org.elasticsearch.xpack.security.rest.action.apikey.RestGrantApiKeyAction
 import org.elasticsearch.xpack.security.support.QueryableBuiltInRolesProviderFactory;
 module org.elasticsearch.internal.security {
 
-    requires org.elasticsearch.base;
-    requires org.elasticsearch.server;
     requires org.elasticsearch.xcore;
-    requires org.elasticsearch.xcontent;
-    requires org.apache.logging.log4j;
     requires org.elasticsearch.security;
     requires org.opensaml.security;
+    requires org.elasticsearch.serverless.constants;
+    requires org.elasticsearch.server;
+    requires org.elasticsearch.xcontent;
+    requires org.apache.logging.log4j;
+    requires org.apache.httpcomponents.httpclient;
+    requires org.apache.httpcomponents.httpcore;
+    requires org.apache.httpcomponents.httpasyncclient;
+    requires org.apache.httpcomponents.httpcore.nio;
+    requires org.elasticsearch.base;
+    requires org.apache.commons.codec;
+    requires org.slf4j;
 
     exports co.elastic.elasticsearch.serverless.security.apikey to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.operator to org.elasticsearch.server;

@@ -119,6 +119,13 @@ public class ServerlessSharedSettings {
 
     public static final Setting<String> PROJECT_ID = Setting.simpleString("serverless.project_id", Setting.Property.NodeScope);
 
+    // TODO elasticsearch-controller changes to inject this via file settings
+    public static final Setting<String> ORGANIZATION_ID = Setting.simpleString(
+        "serverless.organization_id",
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+
     public static final Setting<ProjectType> PROJECT_TYPE = Setting.enumSetting(
         ProjectType.class,
         "serverless.project_type",

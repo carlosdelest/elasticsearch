@@ -29,7 +29,9 @@ dependencies {
     javaRestTestImplementation(project(":modules:serverless-security"))
     javaRestTestImplementation(testArtifact(xpackModule("plugin")))
     javaRestTestImplementation(testArtifact(xpackModule("core")))
+    javaRestTestImplementation(project(":libs:serverless-shared-constants"))
     testImplementation(testArtifact(xpackModule("core")))
+    compileOnly(project(":libs:serverless-shared-constants"))
     compileOnly(xpackModule("core"))
     compileOnly(xpackModule("security"))
 }

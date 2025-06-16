@@ -30,6 +30,7 @@ import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.features.NodeFeature;
 import org.elasticsearch.plugins.ActionPlugin;
@@ -40,6 +41,8 @@ import org.elasticsearch.xpack.core.security.SecurityContext;
 import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
 import org.elasticsearch.xpack.core.security.authc.saml.SingleSpSamlRealmSettings;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -106,6 +109,14 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
+    public static final Setting<URI> UNIVERSAL_IAM_SERVICE_URL_SETTING = new Setting<>("serverless.universal_iam_service.url", "", s -> {
+        try {
+            return new URI(s);
+        } catch (URISyntaxException e) {
+            throw new SettingsException("Cannot parse [serverless.universal_iam_service.url] setting as a URL", e);
+        }
+    }, Setting.Property.NodeScope);
+
     private final AtomicReference<SecurityContext> securityContext = new AtomicReference<>();
 
     @Override
@@ -144,6 +155,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
                 NATIVE_ROLES_SETTING,
                 CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
                 NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
+                UNIVERSAL_IAM_SERVICE_URL_SETTING,
                 EXCLUDE_ROLES.apply(SingleSpSamlRealmSettings.TYPE)
             )
         );

@@ -32,6 +32,7 @@ public class ServerlessSharedSettingsExtension implements SettingsExtension {
             ServerlessSharedSettings.ENABLE_REPLICAS_FOR_INSTANT_FAILOVER,
             ServerlessSharedSettings.PROJECT_ID,
             ServerlessSharedSettings.PROJECT_TYPE,
+            ServerlessSharedSettings.ORGANIZATION_ID,
             ServerlessSharedSettings.VCPU_REQUEST,
             ServerlessSharedSettings.OBSERVABILITY_TIER
         );

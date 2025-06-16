@@ -18,19 +18,30 @@
 package co.elastic.elasticsearch.serverless.security.authc;
 
 import co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin;
+import co.elastic.elasticsearch.serverless.security.cloud.CloudApiKeyAuthenticator;
+import co.elastic.elasticsearch.serverless.security.cloud.CloudApiKeyService;
+import co.elastic.elasticsearch.serverless.security.cloud.ClusterSettingsProjectInfoSupplier;
+import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamClient;
 
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.xpack.core.XPackPlugin;
 import org.elasticsearch.xpack.core.security.SecurityExtension;
 import org.elasticsearch.xpack.core.security.authc.Realm;
 import org.elasticsearch.xpack.core.security.authc.RealmConfig;
 import org.elasticsearch.xpack.core.security.authc.RealmSettings;
+import org.elasticsearch.xpack.core.security.authc.apikey.CustomApiKeyAuthenticator;
 import org.elasticsearch.xpack.core.security.authc.service.ServiceAccountTokenStore;
 import org.elasticsearch.xpack.security.authc.saml.SamlRealm;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
+import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.UNIVERSAL_IAM_SERVICE_URL_SETTING;
+
 public class ServerlessSecurityExtension implements SecurityExtension {
+    private static final Logger logger = LoggerFactory.getLogger(ServerlessSecurityExtension.class);
     ServerlessSecurityPlugin plugin;
 
     public ServerlessSecurityExtension() {}
@@ -67,6 +78,25 @@ public class ServerlessSecurityExtension implements SecurityExtension {
             ProjectFileSettingsRealmSettings.TYPE,
             config -> new ProjectFileSettingsRealm(config, components.projectResolver(), components.clusterService())
         );
+    }
+
+    @Override
+    public CustomApiKeyAuthenticator getCustomApiKeyAuthenticator(SecurityComponents components) {
+        if (components.projectResolver().supportsMultipleProjects()) {
+            // TODO add multi-project support
+            return null;
+        }
+        final Settings settings = components.settings();
+        if (UNIVERSAL_IAM_SERVICE_URL_SETTING.exists(settings)) {
+            return new CloudApiKeyAuthenticator(
+                new CloudApiKeyService(
+                    Node.NODE_NAME_SETTING.get(settings),
+                    new UniversalIamClient(settings),
+                    new ClusterSettingsProjectInfoSupplier(settings)
+                )
+            );
+        }
+        return null;
     }
 
     private void ensureSinglePerProjectFileRealmConfigured(Settings settings) {
