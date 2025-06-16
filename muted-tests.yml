@@ -166,6 +166,24 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {knn-function.KnnSearchWithKOption ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4036
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {fork.ForkAfterCompletion ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {fork.ForkBeforeCompletion ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {fork.ForkAfterCompletion SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {fork.ForkBeforeCompletion SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {fork.ForkBranchWithCompletion ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {fork.ForkBranchWithCompletion SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
 - class: co.elastic.elasticsearch.stateless.StatelessPrefetchIT
   method: testSearchShardsStarted
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4048
