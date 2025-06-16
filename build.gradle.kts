@@ -49,3 +49,36 @@ allprojects {
         }
     }
 }
+
+tasks.named<UpdateDaemonJvm>("updateDaemonJvm") {
+    val myPlatforms = mutableListOf(
+        BuildPlatformFactory.of(
+            org.gradle.platform.Architecture.AARCH64,
+            org.gradle.platform.OperatingSystem.MAC_OS
+        ),
+        BuildPlatformFactory.of(
+            org.gradle.platform.Architecture.AARCH64,
+            org.gradle.platform.OperatingSystem.LINUX
+        ),
+        BuildPlatformFactory.of(
+            org.gradle.platform.Architecture.X86_64,
+            org.gradle.platform.OperatingSystem.LINUX
+        ),
+        BuildPlatformFactory.of(
+            org.gradle.platform.Architecture.X86_64,
+            org.gradle.platform.OperatingSystem.WINDOWS
+        ),
+        BuildPlatformFactory.of(
+            org.gradle.platform.Architecture.AARCH64,
+            org.gradle.platform.OperatingSystem.WINDOWS
+        ),
+        // anyone still using x86 osx?
+        BuildPlatformFactory.of(
+            org.gradle.platform.Architecture.X86_64,
+            org.gradle.platform.OperatingSystem.MAC_OS
+        )
+    )
+    toolchainPlatforms.set(myPlatforms)
+    languageVersion = JavaLanguageVersion.of(21)
+    vendor = JvmVendorSpec.ADOPTIUM
+}
