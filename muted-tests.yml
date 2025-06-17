@@ -198,3 +198,6 @@ tests:
 - class: "org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/4060"
   method: "test {knn-function.KnnSearchWithKOption SYNC}"
+- class: "org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/4061"
+  method: "test {knn-function.KnnSearchWithKOption ASYNC}"
