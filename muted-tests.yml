@@ -154,7 +154,13 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {knn-function.KnnSearchWithKOption SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4021
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {knn-function.KnnSearchWithKOption SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4021
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {knn-function.KnnSearchWithKOption ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4022
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {knn-function.KnnSearchWithKOption ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4022
 - class: "co.elastic.elasticsearch.stateless.cache.BlobCacheMetricsIT"
