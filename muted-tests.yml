@@ -208,9 +208,6 @@ tests:
 - class: "co.elastic.elasticsearch.stateless.multiproject.ProjectGlobalBlocksIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/4062"
   method: "testProjectGlobalBlockPreventsIndexing"
-- class: "co.elastic.elasticsearch.stateless.allocation.EstimatedHeapUsageAllocationDeciderIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/4063"
-  method: "testEstimatedHeapAllocationDecider"
 - class: org.elasticsearch.xpack.esql.qa.single_node.PushQueriesIT
   method: testEqualityOrTooBig {KEYWORD}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4064
