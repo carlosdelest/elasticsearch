@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
-import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.UNIVERSAL_IAM_SERVICE_URL_SETTING;
+import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.UNIVERSAL_IAM_SERVICE_ENABLED_SETTING;
 
 public class ServerlessSecurityExtension implements SecurityExtension {
     private static final Logger logger = LoggerFactory.getLogger(ServerlessSecurityExtension.class);
@@ -87,7 +87,7 @@ public class ServerlessSecurityExtension implements SecurityExtension {
             return null;
         }
         final Settings settings = components.settings();
-        if (UNIVERSAL_IAM_SERVICE_URL_SETTING.exists(settings)) {
+        if (UNIVERSAL_IAM_SERVICE_ENABLED_SETTING.get(settings)) {
             return new CloudApiKeyAuthenticator(
                 new CloudApiKeyService(
                     Node.NODE_NAME_SETTING.get(settings),

@@ -55,6 +55,7 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         .name("javaRestTest")
         .user(OPERATOR_USER, TEST_PASSWORD, User.ROOT_USER_ROLE, true)
         .setting("xpack.ml.enabled", "false")
+        .setting("serverless.universal_iam_service.enabled", "true")
         .setting("serverless.universal_iam_service.url", () -> "http://localhost:" + universalIamTestService.getAddress().getPort())
         // TODO we don't want metering for this test, however, metering is automatically enabled if project_id is set. furthermore,
         // metering uses a default https address which makes boot fail

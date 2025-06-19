@@ -109,13 +109,30 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         Setting.Property.NodeScope
     );
 
-    public static final Setting<URI> UNIVERSAL_IAM_SERVICE_URL_SETTING = new Setting<>("serverless.universal_iam_service.url", "", s -> {
-        try {
-            return new URI(s);
-        } catch (URISyntaxException e) {
-            throw new SettingsException("Cannot parse [serverless.universal_iam_service.url] setting as a URL", e);
-        }
-    }, Setting.Property.NodeScope);
+    /**
+     * Setting for enabling or disabling the Universal IAM service. Defaults to disabled.
+     */
+    public static final Setting<Boolean> UNIVERSAL_IAM_SERVICE_ENABLED_SETTING = Setting.boolSetting(
+        "serverless.universal_iam_service.enabled",
+        false,
+        Setting.Property.NodeScope
+    );
+
+    /**
+     * The URL of the Universal IAM service that is used to authenticate universal API keys and tokens. Defaults to regional UIAM service.
+     */
+    public static final Setting<URI> UNIVERSAL_IAM_SERVICE_URL_SETTING = new Setting<>(
+        "serverless.universal_iam_service.url",
+        "https://uiam.uiam-regional",
+        s -> {
+            try {
+                return new URI(s);
+            } catch (URISyntaxException e) {
+                throw new SettingsException("Cannot parse [serverless.universal_iam_service.url] setting as a URL", e);
+            }
+        },
+        Setting.Property.NodeScope
+    );
 
     private final AtomicReference<SecurityContext> securityContext = new AtomicReference<>();
 
@@ -156,6 +173,7 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
                 CLUSTER_STATE_ROLE_MAPPINGS_ENABLED_SETTING,
                 NATIVE_ROLE_MAPPINGS_ENABLED_SETTING,
                 UNIVERSAL_IAM_SERVICE_URL_SETTING,
+                UNIVERSAL_IAM_SERVICE_ENABLED_SETTING,
                 EXCLUDE_ROLES.apply(SingleSpSamlRealmSettings.TYPE)
             )
         );
