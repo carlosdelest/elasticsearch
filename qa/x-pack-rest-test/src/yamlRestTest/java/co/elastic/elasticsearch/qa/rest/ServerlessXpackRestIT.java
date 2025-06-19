@@ -73,6 +73,7 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
         .setting("xpack.security.authc.native_users.enabled", "true")
         .setting("xpack.security.authc.native_role_mappings.enabled", "true")
         .setting("stateless.translog.flush.interval", "20ms")
+        .setting("stateless.online.prewarming.enabled", "false")
         .keystore("bootstrap.password", "x-pack-test-password")
         .keystore("xpack.security.transport.ssl.secure_key_passphrase", "testnode")
         .user("x_pack_rest_user", "x-pack-test-password")
