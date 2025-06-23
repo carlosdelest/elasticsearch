@@ -116,7 +116,10 @@ tasks {
         "migrate/*/*",
         "migration/*/*",
         // Graph API is not available in Serverless
-        "graph/*/*"
+        "graph/*/*",
+
+        //Tests uses indices / get field mapping which is not available in serverless
+        "ml/sparse_vector_search/Check sparse_vector token pruning index_options mappings defaults"
     )
     yamlRestTest {
         val blacklistNonMultiprojectServerless = mutableListOf(
@@ -277,7 +280,8 @@ tasks {
             "^transform/transforms_unattended/*",
             "^transform/transforms_update/*",
             "^transform/transforms_upgrade/*",
-            "^voting_only_node/10_basic/*"
+            "^voting_only_node/10_basic/*",
+            "ml/sparse_vector_search/Check sparse_vector token pruning index_options mappings defaults"
         )
 
         blacklistMultiProject.addAll(blacklist)
