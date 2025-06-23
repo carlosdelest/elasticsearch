@@ -17,34 +17,40 @@
 
 package co.elastic.elasticsearch.serverless.security.cloud;
 
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
 import org.elasticsearch.xcontent.ParseField;
 import org.elasticsearch.xcontent.XContentParser;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 
+import static co.elastic.elasticsearch.serverless.security.cloud.UniversalIamUtils.createJsonParser;
 import static org.elasticsearch.xcontent.ConstructingObjectParser.constructorArg;
 import static org.elasticsearch.xcontent.ConstructingObjectParser.optionalConstructorArg;
 
 /**
  * Response of a successful cloud API key authentication against a serverless project.
  *
- * @param apiKeyId the ID of the cloud API key used for authentication.
- * @param organizationId the ID of the organization associated with the cloud API key.
- * @param applicationRoles the list of application roles granted to the cloud API key.
- * @param type the type of authentication, which can be null or a string indicating the type of authentication used (e.g. {@code api_key}).
+ * @param apiKeyId          the ID of the cloud API key used for authentication.
+ * @param organizationId    the ID of the organization associated with the cloud API key.
+ * @param applicationRoles  the list of application roles granted to the cloud API key.
+ * @param type              the type of authentication used (e.g. {@code api_key}).
+ * @param apiKeyDescription the optional description of the cloud API key.
  */
 public record CloudApiKeyAuthenticationResponse(
     String apiKeyId,
     String organizationId,
     List<String> applicationRoles,
-    @Nullable String type
+    @Nullable String type,
+    @Nullable String apiKeyDescription
 ) {
 
     private static final ParseField TYPE_FIELD = new ParseField("type");
     private static final ParseField API_KEY_ID_FIELD = new ParseField("api_key_id");
+    private static final ParseField API_KEY_DESCRIPTION_FIELD = new ParseField("api_key_description");
     private static final ParseField ORGANIZATION_ID_FIELD = new ParseField("organization_id");
     private static final ParseField APPLICATION_ROLES_FIELD = new ParseField("application_roles");
 
@@ -55,17 +61,41 @@ public record CloudApiKeyAuthenticationResponse(
         final ConstructingObjectParser<CloudApiKeyAuthenticationResponse, Void> parser = new ConstructingObjectParser<>(
             "authenticate_project_with_api_key_response",
             true,
-            a -> new CloudApiKeyAuthenticationResponse((String) a[0], (String) a[1], (List<String>) a[2], (String) a[3])
+            a -> new CloudApiKeyAuthenticationResponse((String) a[0], (String) a[1], (List<String>) a[2], (String) a[3], (String) a[4])
         );
         parser.declareString(constructorArg(), API_KEY_ID_FIELD);
         parser.declareString(constructorArg(), ORGANIZATION_ID_FIELD);
         parser.declareStringArray(constructorArg(), APPLICATION_ROLES_FIELD);
         parser.declareString(optionalConstructorArg(), TYPE_FIELD);
+        parser.declareString(optionalConstructorArg(), API_KEY_DESCRIPTION_FIELD);
         return parser;
     }
 
-    public static CloudApiKeyAuthenticationResponse fromXContent(XContentParser parser) throws IOException {
-        return PARSER.parse(parser, null);
+    public CloudApiKeyAuthenticationResponse(
+        String apiKeyId,
+        String organizationId,
+        List<String> applicationRoles,
+        @Nullable String type,
+        @Nullable String apiKeyDescription
+    ) {
+        this.apiKeyId = Strings.requireNonBlank(apiKeyId, "api_key_id must not be null or empty");
+        this.organizationId = Strings.requireNonBlank(organizationId, "organization_id must not be null or empty");
+        this.applicationRoles = List.copyOf(applicationRoles);
+        this.type = type;
+        this.apiKeyDescription = apiKeyDescription;
+    }
+
+    /**
+     * Parse a cloud API key authentication response from an input stream.
+     * The stream is expected to be in JSON format.
+     * The caller is responsible for closing the input stream.
+     *
+     * @throws IOException in case of an I/O error
+     */
+    public static CloudApiKeyAuthenticationResponse parse(InputStream inputStream) throws IOException {
+        try (XContentParser parser = createJsonParser(inputStream)) {
+            return PARSER.parse(parser, null);
+        }
     }
 
     @Override
@@ -75,6 +105,7 @@ public record CloudApiKeyAuthenticationResponse(
         sb.append(", organizationId=[").append(organizationId).append(']');
         sb.append(", applicationRoles=").append(applicationRoles);
         sb.append(", type=[']").append(type).append(']');
+        sb.append(", api_key_description=[").append(apiKeyDescription).append(']');
         sb.append('}');
         return sb.toString();
     }

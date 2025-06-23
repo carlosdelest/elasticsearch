@@ -133,9 +133,7 @@ public class UniversalIamClient implements Closeable {
         }
 
         try (InputStream inputStream = entity.getContent()) {
-            try (XContentParser parser = createJsonParser(inputStream)) {
-                listener.onResponse(CloudApiKeyAuthenticationResponse.fromXContent(parser));
-            }
+            listener.onResponse(CloudApiKeyAuthenticationResponse.parse(inputStream));
         } catch (Exception e) {
             listener.onFailure(new IllegalStateException("Failed to parse the response from universal IAM service", e));
         }

@@ -352,6 +352,7 @@ public final class ServerlessSsoIT extends ESRestTestCase {
         assertThat(ObjectPath.evaluate(responseBody, "authentication_type"), is("api_key"));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.name"), is(apiKeyName));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.id"), notNullValue());
+        assertThat(ObjectPath.evaluate(responseBody, "api_key.managed_by"), is("elasticsearch"));
         assertThat(ObjectPath.evaluate(responseBody, "metadata.saml_principal"), contains(owner.principal));
     }
 

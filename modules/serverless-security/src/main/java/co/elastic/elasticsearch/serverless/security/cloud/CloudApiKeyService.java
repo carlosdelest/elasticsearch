@@ -24,11 +24,13 @@ import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
+import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.user.User;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
@@ -62,10 +64,20 @@ public class CloudApiKeyService implements Closeable {
 
         client.authenticateProject(authenticationRequest, ActionListener.wrap(response -> {
             logger.debug("Got response from universal IAM service for authentication with cloud API key [{}]", response);
-            // TODO capture additional metadata for organization, project, etc
             // TODO consider failing authentication if returned roles are empty (subject has not effective access to the project)
-            final User user = new User(response.apiKeyId(), response.applicationRoles().toArray(new String[0]));
-            final Authentication authentication = Authentication.newCloudApiKeyAuthentication(AuthenticationResult.success(user), nodeName);
+            final String[] assignedRoles = response.applicationRoles().toArray(new String[0]);
+            final User user = new User(
+                response.apiKeyId(), // username == cloud API key ID
+                assignedRoles,
+                null,
+                null,
+                buildUserMetadata(response),
+                true
+            );
+            final Authentication authentication = Authentication.newCloudApiKeyAuthentication(
+                AuthenticationResult.success(user, buildAuthenticationMetadata(response, projectInfo)),
+                nodeName
+            );
             listener.onResponse(authentication);
         }, ex -> {
             logger.debug("Failed to authenticate cloud API key against universal IAM service", ex);
@@ -80,6 +92,40 @@ public class CloudApiKeyService implements Closeable {
     @Override
     public void close() throws IOException {
         client.close();
+    }
+
+    private static Map<String, Object> buildAuthenticationMetadata(
+        final CloudApiKeyAuthenticationResponse response,
+        final ProjectInfo projectInfo
+    ) {
+        if (false == projectInfo.organizationId().equals(response.organizationId())) {
+            throw new IllegalStateException(
+                "organization ID ["
+                    + response.organizationId()
+                    + "] returned by universal IAM service does not match sent organization ID ["
+                    + projectInfo.organizationId()
+                    + "]"
+            );
+        }
+        return Map.of(
+            CloudAuthenticationFields.AUTHENTICATING_PROJECT_METADATA_KEY,
+            Map.ofEntries(
+                Map.entry("project_type", projectInfo.projectType()),
+                Map.entry("organization_id", projectInfo.organizationId()),
+                Map.entry("project_id", projectInfo.projectId())
+            )
+        );
+    }
+
+    private static Map<String, Object> buildUserMetadata(final CloudApiKeyAuthenticationResponse response) {
+        if (response.apiKeyDescription() != null) {
+            return Map.ofEntries(
+                Map.entry(AuthenticationField.API_KEY_INTERNAL_KEY, false),
+                Map.entry(AuthenticationField.API_KEY_NAME_KEY, response.apiKeyDescription())
+            );
+        } else {
+            return Map.of(AuthenticationField.API_KEY_INTERNAL_KEY, false);
+        }
     }
 
     private static ElasticsearchSecurityException createAuthenticationException(String projectId) {

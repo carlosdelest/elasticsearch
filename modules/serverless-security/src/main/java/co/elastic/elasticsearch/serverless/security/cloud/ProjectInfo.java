@@ -39,5 +39,4 @@ public record ProjectInfo(String projectId, String organizationId, String projec
             case ProjectType.SECURITY -> "security";
         };
     }
-
 }
