@@ -139,9 +139,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.indexing.AutoscalingIndexingMetricsIT
   method: testOnlyMasterNodePublishesIngestLoadMetrics
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3794
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testStressWithRelocationFailures
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3967
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.health/10_basic/cluster health with closed index}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3970
