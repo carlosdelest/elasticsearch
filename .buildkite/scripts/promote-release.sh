@@ -20,7 +20,7 @@ if [[ -z "${PROMOTED_COMMIT}" ]]; then
     INTAKE_BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${BUILDKITE_BRANCH}&state=passed" | jq '. | map(select(.env.GITOPS_ENV == "dev")) | .[0] | {commit: .commit, url: .web_url}')
     PROMOTED_COMMIT=$(echo ${INTAKE_BUILD_JSON} | jq -r '.commit')
     PROMOTED_BUILD_URL=$(echo ${INTAKE_BUILD_JSON} | jq -r '.url')
-    echo "Promoted intake build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --style "info" --context "promoted-build-url"
+    echo "Promoted intake build: ${PROMOTED_BUILD_URL}" | buildkite-agent annotate --priority 9 --style "info" --context "promoted-build-url"
   else
     echo "--- Determining last successful ML QA build and related intake build"
     ML_QA_PIPELINE_SLUG="appex-qa-serverless-ml-scenarios"
@@ -29,9 +29,9 @@ if [[ -z "${PROMOTED_COMMIT}" ]]; then
     ML_QA_BUILD_URL=$(echo ${ML_QA_BUILD_JSON} | jq -r '.url')
     ML_QA_CHECKED_INTAKE_BUILD_JSON=$(curl -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" "https://api.buildkite.com/v2/organizations/elastic/pipelines/${INTAKE_PIPELINE_SLUG}/builds?branch=${BUILDKITE_BRANCH}&state=passed&commit=${PROMOTED_COMMIT}" | jq '.[0] | {commit: .commit, url: .web_url}')
     ML_QA_CHECKED_INTAKE_BUILD_URL=$(echo ${ML_QA_CHECKED_INTAKE_BUILD_JSON} | jq -r '.url')
-    cat << EOF | buildkite-agent annotate  --context "promoted-build-url" --style "info"
-      Promoted intake build: ${ML_QA_CHECKED_INTAKE_BUILD_URL}
-      ML QA build: ${ML_QA_BUILD_URL}
+    cat << EOF | buildkite-agent annotate --context "promoted-build-url" --priority 9 --style "info"
+Promoted intake build: ${ML_QA_CHECKED_INTAKE_BUILD_URL}
+ML QA build: ${ML_QA_BUILD_URL}
 EOF
   fi
   echo "Lock/Unlock qa / staging environnment https://argo-workflows.cd.internal.qa.elastic.cloud/login?redirect=https://argo-workflows.cd.internal.qa.elastic.cloud/workflow-templates/argo-events/gpctl-locking-management?sidePanel=submit" | buildkite-agent annotate --style "info" --context "lock-qa-staging"
