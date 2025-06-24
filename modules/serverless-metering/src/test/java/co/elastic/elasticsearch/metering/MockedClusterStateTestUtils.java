@@ -110,7 +110,19 @@ public class MockedClusterStateTestUtils {
             .build();
     }
 
+    public static void createMockClusterStateWithPersistentTask(
+        ClusterService clusterService,
+        int numberOfIndexNodes,
+        int numberOfSearchNodes
+    ) {
+        var clusterState = createMockClusterStateWithPersistentTask(
+            createMockClusterState(numberOfIndexNodes, numberOfSearchNodes, b -> {}),
+            LOCAL_NODE_ID
+        );
+        setState(clusterService, clusterState);
+    }
+
     public static void createMockClusterStateWithPersistentTask(ClusterService clusterService) {
-        setState(clusterService, createMockClusterStateWithPersistentTask(MockedClusterStateTestUtils.LOCAL_NODE_ID));
+        createMockClusterStateWithPersistentTask(clusterService, 2, 2);
     }
 }

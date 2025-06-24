@@ -59,7 +59,6 @@ import org.hamcrest.Matchers;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,6 +76,7 @@ import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSe
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.ANOTHER_NODE;
 import static co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsService.PersistentTaskNodeStatus.THIS_NODE;
 import static java.util.Map.entry;
+import static org.elasticsearch.test.LambdaMatchers.transformedMatch;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anEmptyMap;
@@ -224,25 +224,44 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         var shardsInfo = Map.ofEntries(
             entry(SHARD_0, shardInfoMetricsBuilder().withData(110L, 11L, 0L, 21L).withGeneration(1, 1, 0).build())
         );
-        var searchMetrics = randomSampledTierMetrics();
-        var indexMetrics = randomSampledTierMetrics();
+        var searchMetrics = new SampledTierMetrics(4 * 1_000_000_000L, ActivityTests.randomActivity());
+        var indexMetrics = new SampledTierMetrics(9 * 1_000_000_000L, ActivityTests.randomActivity());
 
         var clusterService = createMockClusterService(shardsInfo::keySet);
         var meterRegistry = new RecordingMeterRegistry();
         var service = new SampledClusterMetricsService(clusterService, mock(SystemIndices.class), meterRegistry, THIS_NODE);
 
-        var client = mockCollectClusterSamplesSuccess(mock(), searchMetrics, indexMetrics, shardsInfo, new Exception("Partial failure"));
+        var client = mockCollectClusterSamplesSuccess(
+            mock(),
+            new CollectClusterSamplesAction.Response(
+                searchMetrics.memorySize(),
+                indexMetrics.memorySize(),
+                searchMetrics.activity(),
+                indexMetrics.activity(),
+                shardsInfo,
+                2,
+                1,
+                5,
+                2
+            )
+        );
         safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
         assertSamplesReady(
             service,
             mapOf(hasEntry(is(SHARD_0), shardSize(11L))),
             mapOf(hasEntry(is(INDEX_1), both(indexSize(11)).and(indexMetadata(INDEX_1)))),
-            is(searchMetrics),
-            is(indexMetrics)
+            isExtrapolatedTierMetrics(searchMetrics, 2 * 4 * 1_000_000_000L), // 2 * 4GB, 1 of 2 nodes reported 4 GB total
+            isExtrapolatedTierMetrics(indexMetrics, 5 * (9 / 3) * 1_000_000_000L) // 5 * 3GB, 3 of 5 nodes reported 9 GB total
         );
         assertMeasurementTotal(meterRegistry, InstrumentType.LONG_COUNTER, NODE_INFO_COLLECTIONS_TOTAL, equalTo(1L));
         assertMeasurementTotal(meterRegistry, InstrumentType.LONG_COUNTER, NODE_INFO_COLLECTIONS_PARTIALS_TOTAL, equalTo(1L));
+    }
+
+    private Matcher<SampledTierMetrics> isExtrapolatedTierMetrics(SampledTierMetrics metrics, long extrapolatedMemorySize) {
+        return both(transformedMatch(SampledTierMetrics::activity, is(metrics.activity()))).and(
+            transformedMatch(SampledTierMetrics::memorySize, is(extrapolatedMemorySize))
+        );
     }
 
     public void testSamplesUpdateError() {
@@ -504,7 +523,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         // Update sample to non-empty Activity
         var client = mockCollectClusterSamplesSuccess(
             mock(),
-            new CollectClusterSamplesAction.Response(0, 0, searchActivity, indexActivity, Map.of(), List.of())
+            new CollectClusterSamplesAction.Response(0, 0, searchActivity, indexActivity, Map.of(), 1, 0, 1, 0)
         );
         safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
 
@@ -540,7 +559,10 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
                 ActivityTests.randomActivityNotEmpty(),
                 ActivityTests.randomActivityNotEmpty(),
                 Map.of(),
-                List.of()
+                1,
+                0,
+                1,
+                0
             )
         );
         safeAwait((ActionListener<Void> listener) -> service.updateSamples(client, listener));
@@ -727,8 +749,7 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
         Client mock,
         SampledTierMetrics searchTier,
         SampledTierMetrics indexTier,
-        Map<ShardId, ShardInfoMetrics> shardsInfo,
-        Exception... exceptions
+        Map<ShardId, ShardInfoMetrics> shardsInfo
     ) {
         return mockCollectClusterSamples(
             mock,
@@ -739,7 +760,10 @@ public class SampledClusterMetricsServiceTests extends ESTestCase {
                     searchTier.activity(),
                     indexTier.activity(),
                     shardsInfo,
-                    List.of(exceptions)
+                    1,
+                    0,
+                    1,
+                    0
                 )
             )
         );

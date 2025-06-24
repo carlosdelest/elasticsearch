@@ -26,9 +26,12 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.stream.Stream;
 
 public record Activity(
@@ -159,42 +162,66 @@ public record Activity(
         ).filter(p -> p.last.equals(Instant.EPOCH) == false);
     }
 
-    public static Activity merge(Stream<Activity> activities, Duration coolDown) {
+    /**
+     * Utility class to merge multiple activities.
+     */
+    public static class Merger {
+        // For merging periods have to be sorted reverse chronologically by end timestamp
+        private static final Comparator<Period> PERIOD_MERGE_COMPARATOR = Comparator.comparing(Period::last).reversed();
 
-        // Periods sorted reverse chronologically by end timestamp
-        final List<Period> activityPeriods = activities.flatMap(Activity::toPeriods)
-            .sorted(Comparator.comparing(Period::last).reversed())
-            .toList();
+        private final SortedSet<Period> periods = new TreeSet<>(PERIOD_MERGE_COMPARATOR);
 
-        if (activityPeriods.isEmpty()) {
-            return Activity.EMPTY;
-        }
-
-        final List<Period> resultPeriods = new ArrayList<>();
-        resultPeriods.add(activityPeriods.getFirst());
-
-        for (int i = 1; i < activityPeriods.size(); ++i) {
-            var current = resultPeriods.getLast();
-            var period = activityPeriods.get(i);
-
-            // Because of sort we know that current.last >= period.last
-            // Set new current if period is before cool down, else merge with current
-            if (period.last.isBefore(current.first.minus(coolDown))) {
-                resultPeriods.add(period);
-            } else {
-                var merged = new Period(current.last, min(period.first, current.first));
-                resultPeriods.set(resultPeriods.size() - 1, merged);
-            }
-
-            // We only keep two periods, but cannot break until there are three since the next might still merge with current.
-            if (resultPeriods.size() >= 3) {
-                break;
+        public void add(Activity activity) {
+            if (activity.lastActivityRecentPeriod.equals(Instant.EPOCH) == false) {
+                periods.add(new Period(activity.lastActivityRecentPeriod, activity.firstActivityRecentPeriod));
+                if (activity.lastActivityPreviousPeriod.equals(Instant.EPOCH) == false) {
+                    periods.add(new Period(activity.lastActivityPreviousPeriod, activity.firstActivityPreviousPeriod));
+                }
             }
         }
 
-        return resultPeriods.size() == 1
-            ? Activity.fromPeriods(resultPeriods.get(0), Period.EMPTY)
-            : Activity.fromPeriods(resultPeriods.get(0), resultPeriods.get(1));
+        public Activity merge(Duration coolDown) {
+            return mergePeriods(periods, coolDown);
+        }
+
+        public static Activity merge(Stream<Activity> activities, Duration coolDown) {
+            var activityPeriods = activities.flatMap(Activity::toPeriods).sorted(PERIOD_MERGE_COMPARATOR).toList();
+            return mergePeriods(activityPeriods, coolDown);
+        }
+
+        private static Activity mergePeriods(Collection<Period> sortedPeriods, Duration coolDown) {
+            if (sortedPeriods.isEmpty()) {
+                return Activity.EMPTY;
+            }
+
+            final List<Period> resultPeriods = new ArrayList<>();
+
+            for (var period : sortedPeriods) {
+                if (resultPeriods.isEmpty()) {
+                    resultPeriods.add(period);
+                    continue;
+                }
+
+                var current = resultPeriods.getLast();
+                // Because of sort we know that current.last >= period.last
+                // Set new current if period is before cool down, else merge with current
+                if (period.last.isBefore(current.first.minus(coolDown))) {
+                    resultPeriods.add(period);
+                } else {
+                    var merged = new Period(current.last, min(period.first, current.first));
+                    resultPeriods.set(resultPeriods.size() - 1, merged);
+                }
+
+                // We only keep two periods, but cannot break until there are three since the next might still merge with current.
+                if (resultPeriods.size() >= 3) {
+                    break;
+                }
+            }
+
+            return resultPeriods.size() == 1
+                ? Activity.fromPeriods(resultPeriods.get(0), Period.EMPTY)
+                : Activity.fromPeriods(resultPeriods.get(0), resultPeriods.get(1));
+        }
     }
 
     private static Instant min(Instant a, Instant b) {

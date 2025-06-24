@@ -49,8 +49,12 @@ public class ActivityTests extends ESTestCase {
 
     public void testMergeSingleActivity() {
         Activity activity = randomActivity();
-        Activity merged = Activity.merge(Stream.of(activity), COOL_DOWN);
-        assertEquals(activity, merged);
+
+        assertEquals(activity, Activity.Merger.merge(Stream.of(activity), COOL_DOWN));
+
+        var merger = new Activity.Merger();
+        merger.add(activity);
+        assertEquals(activity, merger.merge(COOL_DOWN));
     }
 
     public void testContainedActivityMerged() {
@@ -62,9 +66,14 @@ public class ActivityTests extends ESTestCase {
 
         Activity activityA = new Activity(aLast2, aFirst2, Instant.EPOCH, Instant.EPOCH);
         Activity activityB = new Activity(bLast2, bFirst2, Instant.EPOCH, Instant.EPOCH);
+        List<Activity> activities = shuffle(List.of(activityA, activityB));
+        Activity expected = activityA;
 
-        Activity merged = Activity.merge(shuffle(List.of(activityA, activityB)).stream(), COOL_DOWN);
-        assertEquals(new Activity(aLast2, aFirst2, Instant.EPOCH, Instant.EPOCH), merged);
+        assertEquals(expected, Activity.Merger.merge(activities.stream(), COOL_DOWN));
+
+        var merger = new Activity.Merger();
+        activities.forEach(merger::add);
+        assertEquals(expected, merger.merge(COOL_DOWN));
     }
 
     public void testMergeInterleaveNotCombine() {
@@ -83,10 +92,15 @@ public class ActivityTests extends ESTestCase {
 
         var activityA = new Activity(aLast2, aFirst2, aLast1, aFirst1);
         var activityB = new Activity(bLast2, bFirst2, bLast1, bFirst1);
+        List<Activity> activities = shuffle(List.of(activityA, activityB));
+        Activity expected = new Activity(bLast2, bFirst2, aLast2, aFirst2);
 
         // Ranges are separated by cool down period so should not merge
-        Activity merged = Activity.merge(shuffle(List.of(activityA, activityB)).stream(), COOL_DOWN);
-        assertEquals(new Activity(bLast2, bFirst2, aLast2, aFirst2), merged);
+        assertEquals(expected, Activity.Merger.merge(activities.stream(), COOL_DOWN));
+
+        var merger = new Activity.Merger();
+        activities.forEach(merger::add);
+        assertEquals(expected, merger.merge(COOL_DOWN));
     }
 
     public void testMergeInterleaveCombineIntoSinglePeriod() {
@@ -105,10 +119,15 @@ public class ActivityTests extends ESTestCase {
 
         var activityA = new Activity(aLast2, aFirst2, aLast1, aFirst1);
         var activityB = new Activity(bLast2, bFirst2, bLast1, bFirst1);
+        List<Activity> activities = shuffle(List.of(activityA, activityB));
+        Activity expected = new Activity(bLast2, aFirst1, Instant.EPOCH, Instant.EPOCH);
 
         // Ranges are not separated by cool down so are all merged into a single period
-        Activity merged = Activity.merge(shuffle(List.of(activityA, activityB)).stream(), COOL_DOWN);
-        assertEquals(new Activity(bLast2, aFirst1, Instant.EPOCH, Instant.EPOCH), merged);
+        assertEquals(expected, Activity.Merger.merge(activities.stream(), COOL_DOWN));
+
+        var merger = new Activity.Merger();
+        activities.forEach(merger::add);
+        assertEquals(expected, merger.merge(COOL_DOWN));
     }
 
     public void testMergeInterleaveCombineIntoTwoPeriods() {
@@ -128,10 +147,15 @@ public class ActivityTests extends ESTestCase {
 
         var activityA = new Activity(aLast2, aFirst2, aLast1, aFirst1);
         var activityB = new Activity(bLast2, bFirst2, bLast1, bFirst1);
+        List<Activity> activities = shuffle(List.of(activityA, activityB));
+        Activity expected = new Activity(bLast2, aFirst2, bLast1, aFirst1);
 
         // Ranges are not separated by cool down so are all merged into a single period
-        Activity merged = Activity.merge(shuffle(List.of(activityA, activityB)).stream(), COOL_DOWN);
-        assertEquals(new Activity(bLast2, aFirst2, bLast1, aFirst1), merged);
+        assertEquals(expected, Activity.Merger.merge(activities.stream(), COOL_DOWN));
+
+        var merger = new Activity.Merger();
+        activities.forEach(merger::add);
+        assertEquals(expected, merger.merge(COOL_DOWN));
     }
 
     public void testActivitySnapshotEmpty() {

@@ -26,11 +26,13 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionListenerResponseHandler;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.injection.guice.Inject;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -42,14 +44,10 @@ import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
 
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /**
  * Performs a scatter-gather operation towards all search nodes, collecting from each node a valid
@@ -93,7 +91,7 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
         ActionFilters actionFilters,
         Executor executor
     ) {
-        super(CollectClusterSamplesAction.NAME, false, transportService, actionFilters, CollectClusterSamplesAction.Request::new, executor);
+        super(CollectClusterSamplesAction.NAME, false, transportService, actionFilters, in -> TransportAction.localOnly(), executor);
         this.transportService = transportService;
         this.clusterService = clusterService;
         this.executor = executor;
@@ -102,29 +100,17 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     }
 
     private static class SingleNodeResponse {
-        private final GetNodeSamplesAction.Response response;
-        private final Exception ex;
+        private final boolean isSearchTier;
+        private final boolean isIndexTier;
+        private final GetNodeSamplesAction.Response success;
+        private final Exception failure;
 
-        SingleNodeResponse(GetNodeSamplesAction.Response response) {
-            this.response = response;
-            this.ex = null;
-        }
-
-        SingleNodeResponse(Exception ex) {
-            this.response = null;
-            this.ex = ex;
-        }
-
-        boolean isValid() {
-            return ex == null;
-        }
-
-        Exception getFailure() {
-            return ex;
-        }
-
-        GetNodeSamplesAction.Response getResponse() {
-            return response;
+        SingleNodeResponse(DiscoveryNode node, GetNodeSamplesAction.Response success, Exception failure) {
+            this.isSearchTier = node.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName());
+            this.isIndexTier = node.hasRole(DiscoveryNodeRole.INDEX_ROLE.roleName());
+            this.success = success;
+            this.failure = failure;
+            assert (success == null) != (failure == null);
         }
     }
 
@@ -136,10 +122,6 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
     ) {
         logger.debug("Executing TransportCollectClusterSamplesAction");
         var clusterState = clusterService.state();
-        var nodes = clusterState.nodes()
-            .stream()
-            .filter(n -> n.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName()) || n.hasRole(DiscoveryNodeRole.INDEX_ROLE.roleName()))
-            .toList();
 
         var persistentTask = SampledClusterMetricsSchedulingTask.findTask(clusterState);
         if (persistentTask == null || persistentTask.isAssigned() == false) {
@@ -153,19 +135,23 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
             return;
         }
         var currentPersistentTaskAllocation = Long.toString(persistentTask.getAllocationId());
+
+        final var nodes = clusterState.nodes()
+            .stream()
+            .filter(n -> n.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName()) || n.hasRole(DiscoveryNodeRole.INDEX_ROLE.roleName()))
+            .toList();
         final int expectedOps = nodes.size();
         logger.trace("querying {} data nodes based on cluster state version [{}]", expectedOps, clusterState.version());
 
         if (expectedOps == 0) {
-            ActionListener.completeWith(listener, TransportCollectClusterSamplesAction::buildEmptyResponse);
+            listener.onFailure(new IllegalStateException("Cluster state nodes empty"));
             return;
         }
+
         final AtomicInteger counterOps = new AtomicInteger();
         // Since we will not concurrently update individual entries (each node will update a single indexed reference) we do not need
         // a AtomicReferenceArray
         final SingleNodeResponse[] responses = new SingleNodeResponse[expectedOps];
-        final AtomicLong searchTierMemory = new AtomicLong();
-        final AtomicLong indexTierMemory = new AtomicLong();
 
         int i = 0;
         for (DiscoveryNode node : nodes) {
@@ -179,67 +165,85 @@ public class TransportCollectClusterSamplesAction extends HandledTransportAction
 
             sendRequest(node, shardInfoRequest, ActionListener.wrap(response -> {
                 logger.debug("received GetNodeSamplesAction response from [{}]", node.getId());
-                responses[nodeIndex] = new SingleNodeResponse(response);
-
-                if (node.hasRole(DiscoveryNodeRole.SEARCH_ROLE.roleName())) {
-                    searchTierMemory.addAndGet(response.getPhysicalMemorySize());
-                } else if (node.hasRole(DiscoveryNodeRole.INDEX_ROLE.roleName())) {
-                    indexTierMemory.addAndGet(response.getPhysicalMemorySize());
-                }
-
+                responses[nodeIndex] = new SingleNodeResponse(node, response, null);
                 if (expectedOps == counterOps.incrementAndGet()) {
-                    ActionListener.completeWith(listener, () -> buildResponse(searchTierMemory.get(), indexTierMemory.get(), responses));
+                    respond(listener, responses, nodeIndex);
                 }
             }, ex -> {
                 logger.warn("error while sending GetNodeSamplesAction.Request to [{}]: {}", node.getId(), ex);
-                responses[nodeIndex] = new SingleNodeResponse(ex);
+                responses[nodeIndex] = new SingleNodeResponse(node, null, ex);
                 if (expectedOps == counterOps.incrementAndGet()) {
-                    ActionListener.completeWith(listener, () -> buildResponse(searchTierMemory.get(), indexTierMemory.get(), responses));
+                    respond(listener, responses, nodeIndex);
                 }
             }));
         }
     }
 
     private static CollectClusterSamplesAction.Response buildEmptyResponse() {
-        return new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, Map.of(), List.of());
+        return new CollectClusterSamplesAction.Response(0, 0, Activity.EMPTY, Activity.EMPTY, Map.of(), 1, 0, 1, 0);
     }
 
-    private CollectClusterSamplesAction.Response buildResponse(
-        long searchTierMemory,
-        long indexTierMemory,
-        SingleNodeResponse[] responses
-    ) {
-        var normalizedShards = Arrays.stream(responses)
-            .filter(SingleNodeResponse::isValid)
-            .map(SingleNodeResponse::getResponse)
-            .flatMap(m -> m.getShardInfos().entrySet().stream())
-            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, ShardInfoMetrics::mostRecent));
+    private void respond(ActionListener<CollectClusterSamplesAction.Response> listener, SingleNodeResponse[] responses, int currentIndex) {
+        Map<ShardId, ShardInfoMetrics> shardInfoMetrics = new HashMap<>();
+        Activity.Merger searchActivity = new Activity.Merger();
+        Activity.Merger indexActivity = new Activity.Merger();
 
-        var failures = Arrays.stream(responses)
-            .filter(Predicate.not(SingleNodeResponse::isValid))
-            .map(SingleNodeResponse::getFailure)
-            .toList();
+        long searchMemory = 0;
+        long indexMemory = 0;
 
-        var searchActivities = Arrays.stream(responses)
-            .filter(SingleNodeResponse::isValid)
-            .map(SingleNodeResponse::getResponse)
-            .map(GetNodeSamplesAction.Response::getSearchActivity);
-        Activity searchActivityMerged = Activity.merge(searchActivities, coolDownPeriod);
+        int searchNodes = 0;
+        int searchNodeErrors = 0;
+        int indexNodes = 0;
+        int indexNodeErrors = 0;
 
-        var indexActivities = Arrays.stream(responses)
-            .filter(SingleNodeResponse::isValid)
-            .map(SingleNodeResponse::getResponse)
-            .map(GetNodeSamplesAction.Response::getIndexActivity);
-        Activity indexActivityMerged = Activity.merge(indexActivities, coolDownPeriod);
+        for (var nodeResponse : responses) {
+            if (nodeResponse.success != null) {
+                var response = nodeResponse.success;
+                response.getShardInfos().forEach((id, shardInfo) -> shardInfoMetrics.merge(id, shardInfo, ShardInfoMetrics::mostRecent));
+                searchActivity.add(response.getSearchActivity());
+                indexActivity.add(response.getIndexActivity());
+                if (nodeResponse.isSearchTier) {
+                    searchMemory += response.getPhysicalMemorySize();
+                    searchNodes++;
+                } else if (nodeResponse.isIndexTier) {
+                    indexMemory += response.getPhysicalMemorySize();
+                    indexNodes++;
+                }
+            } else {
+                if (nodeResponse.isSearchTier) {
+                    searchNodes++;
+                    searchNodeErrors++;
+                } else if (nodeResponse.isIndexTier) {
+                    indexNodes++;
+                    indexNodeErrors++;
+                }
+            }
+        }
 
-        return new CollectClusterSamplesAction.Response(
-            searchTierMemory,
-            indexTierMemory,
-            searchActivityMerged,
-            indexActivityMerged,
-            normalizedShards,
-            failures
-        );
+        if (responses.length > searchNodeErrors + indexNodeErrors) {
+            listener.onResponse(
+                new CollectClusterSamplesAction.Response(
+                    searchMemory,
+                    indexMemory,
+                    searchActivity.merge(coolDownPeriod),
+                    indexActivity.merge(coolDownPeriod),
+                    shardInfoMetrics,
+                    searchNodes,
+                    searchNodeErrors,
+                    indexNodes,
+                    indexNodeErrors
+                )
+            );
+        } else {
+            var exception = responses[currentIndex].failure;
+            assert exception != null : "Expected exception for current index, all nodes have failed";
+            for (var nodeResponse : responses) {
+                if (exception != nodeResponse.failure) {
+                    exception.addSuppressed(nodeResponse.failure);
+                }
+            }
+            listener.onFailure(exception);
+        }
     }
 
     private void sendRequest(

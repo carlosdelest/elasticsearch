@@ -170,8 +170,8 @@ public class TaskActivityTracker {
         var thisSearch = searchTasksPresent || bothTasksPresent ? search.extendCurrentPeriod(now) : search;
         var thisIndex = indexTasksPresent || bothTasksPresent ? index.extendCurrentPeriod(now) : index;
 
-        search = Activity.merge(Stream.of(thisSearch, otherSearch), coolDownPeriod);
-        index = Activity.merge(Stream.of(thisIndex, otherIndex), coolDownPeriod);
+        search = Activity.Merger.merge(Stream.of(thisSearch, otherSearch), coolDownPeriod);
+        index = Activity.Merger.merge(Stream.of(thisIndex, otherIndex), coolDownPeriod);
     }
 
     void onTaskStart(String action, Task task) {

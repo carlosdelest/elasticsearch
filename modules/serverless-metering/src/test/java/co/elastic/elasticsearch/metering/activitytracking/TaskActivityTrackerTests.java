@@ -445,8 +445,8 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
         tracker.mergeActivity(otherSearch, otherIndex);
 
-        assertEquals(tracker.getSearchSampleActivity(), Activity.merge(Stream.of(otherSearch, thisSearchBefore), coolDown));
-        assertEquals(tracker.getIndexSampleActivity(), Activity.merge(Stream.of(otherIndex, thisIndexBefore), coolDown));
+        assertEquals(tracker.getSearchSampleActivity(), Activity.Merger.merge(Stream.of(otherSearch, thisSearchBefore), coolDown));
+        assertEquals(tracker.getIndexSampleActivity(), Activity.Merger.merge(Stream.of(otherIndex, thisIndexBefore), coolDown));
 
     }
 
@@ -494,11 +494,11 @@ public class TaskActivityTrackerTests extends ESTestCase {
 
         assertEquals(
             tracker.getSearchSampleActivity(),
-            Activity.merge(Stream.of(otherSearch, thisSearch.extendCurrentPeriod(mergeTime)), coolDown)
+            Activity.Merger.merge(Stream.of(otherSearch, thisSearch.extendCurrentPeriod(mergeTime)), coolDown)
         );
         assertEquals(
             tracker.getIndexSampleActivity(),
-            Activity.merge(Stream.of(otherIndex, thisIndex.extendCurrentPeriod(mergeTime)), coolDown)
+            Activity.Merger.merge(Stream.of(otherIndex, thisIndex.extendCurrentPeriod(mergeTime)), coolDown)
         );
     }
 

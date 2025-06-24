@@ -25,12 +25,10 @@ import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.ActionType;
-import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.index.shard.ShardId;
 
-import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -52,17 +50,8 @@ public class CollectClusterSamplesAction {
             this.indexActivity = indexActivity;
         }
 
-        public Request(StreamInput in) throws IOException {
-            super(in);
-            this.searchActivity = Activity.readFrom(in);
-            this.indexActivity = Activity.readFrom(in);
-        }
-
-        @Override
-        public void writeTo(StreamOutput out) throws IOException {
-            super.writeTo(out);
-            searchActivity.writeTo(out);
-            indexActivity.writeTo(out);
+        public void writeTo(StreamOutput output) {
+            TransportAction.localOnly();
         }
 
         @Override
@@ -90,16 +79,10 @@ public class CollectClusterSamplesAction {
         private final Activity searchActivity;
         private final Activity indexActivity;
         private final Map<ShardId, ShardInfoMetrics> shardInfos;
-        private final List<Exception> exceptions;
-
-        public Response(StreamInput in) throws IOException {
-            this.searchTierMemorySize = in.readVLong();
-            this.indexTierMemorySize = in.readVLong();
-            searchActivity = Activity.readFrom(in);
-            indexActivity = Activity.readFrom(in);
-            this.shardInfos = in.readImmutableMap(ShardId::new, ShardInfoMetrics::from);
-            this.exceptions = in.readCollectionAsImmutableList(StreamInput::readException);
-        }
+        private final int searchNodes;
+        private final int searchNodeErrors;
+        private final int indexNodes;
+        private final int indexNodeErrors;
 
         public Response(
             long searchTierMemorySize,
@@ -107,24 +90,27 @@ public class CollectClusterSamplesAction {
             final Activity searchActivity,
             final Activity indexActivity,
             Map<ShardId, ShardInfoMetrics> shardInfos,
-            List<Exception> exceptions
+            int searchNodes,
+            int searchNodeErrors,
+            int indexNodes,
+            int indexNodeErrors
         ) {
             this.searchTierMemorySize = searchTierMemorySize;
             this.indexTierMemorySize = indexTierMemorySize;
             this.searchActivity = searchActivity;
             this.indexActivity = indexActivity;
             this.shardInfos = shardInfos;
-            this.exceptions = exceptions;
+            this.searchNodes = searchNodes;
+            this.searchNodeErrors = searchNodeErrors;
+            this.indexNodes = indexNodes;
+            this.indexNodeErrors = indexNodeErrors;
+            assert searchNodes >= searchNodeErrors && searchNodeErrors >= 0;
+            assert indexNodes >= indexNodeErrors && indexNodeErrors >= 0;
         }
 
         @Override
-        public void writeTo(StreamOutput output) throws IOException {
-            output.writeVLong(searchTierMemorySize);
-            output.writeVLong(indexTierMemorySize);
-            searchActivity.writeTo(output);
-            indexActivity.writeTo(output);
-            output.writeMap(shardInfos, StreamOutput::writeWriteable, StreamOutput::writeWriteable);
-            output.writeGenericList(exceptions, StreamOutput::writeException);
+        public void writeTo(StreamOutput output) {
+            TransportAction.localOnly();
         }
 
         @Override
@@ -138,14 +124,61 @@ public class CollectClusterSamplesAction {
                     && Objects.equals(searchActivity, response.searchActivity)
                     && Objects.equals(indexActivity, response.indexActivity)
                     && Objects.equals(shardInfos, response.shardInfos)
-                    && Objects.equals(exceptions, response.exceptions);
+                    && searchNodes == response.searchNodes
+                    && searchNodeErrors == response.searchNodeErrors
+                    && indexNodes == response.indexNodes
+                    && indexNodeErrors == response.indexNodeErrors;
             }
             return false;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(searchTierMemorySize, indexTierMemorySize, searchActivity, indexActivity, shardInfos, exceptions);
+            return Objects.hash(
+                searchTierMemorySize,
+                indexTierMemorySize,
+                searchActivity,
+                indexActivity,
+                shardInfos,
+                searchNodes,
+                searchNodeErrors,
+                indexNodes,
+                indexNodeErrors
+            );
+        }
+
+        public long getExtrapolatedSearchTierMemorySize() {
+            if (searchNodes <= searchNodeErrors) {
+                return 0; // no memory metrics available
+            } else if (searchNodeErrors == 0) {
+                return searchTierMemorySize; // no extrapolation needed
+            }
+            return (searchTierMemorySize / (searchNodes - searchNodeErrors)) * searchNodes;
+        }
+
+        public long getExtrapolatedIndexTierMemorySize() {
+            if (indexNodes <= indexNodeErrors) {
+                return 0; // no memory metrics available
+            } else if (indexNodeErrors == 0) {
+                return indexTierMemorySize; // no extrapolation needed
+            }
+            return (indexTierMemorySize / (indexNodes - indexNodeErrors)) * indexNodes;
+        }
+
+        public int getSearchNodes() {
+            return searchNodes;
+        }
+
+        public int getSearchNodeErrors() {
+            return searchNodeErrors;
+        }
+
+        public int getIndexNodes() {
+            return indexNodes;
+        }
+
+        public int getIndexNodeErrors() {
+            return indexNodeErrors;
         }
 
         public long getIndexTierMemorySize() {
@@ -168,12 +201,8 @@ public class CollectClusterSamplesAction {
             return shardInfos;
         }
 
-        public boolean isComplete() {
-            return exceptions.isEmpty();
-        }
-
-        public List<Exception> getFailures() {
-            return exceptions;
+        public boolean isPartialSuccess() {
+            return searchNodeErrors > 0 || indexNodeErrors > 0;
         }
     }
 }

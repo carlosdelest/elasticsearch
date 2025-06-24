@@ -26,7 +26,7 @@ import co.elastic.elasticsearch.metering.sampling.SampledClusterMetricsSchedulin
 import co.elastic.elasticsearch.metering.sampling.ShardInfoMetrics;
 
 import org.elasticsearch.action.support.ActionFilters;
-import org.elasticsearch.action.support.PlainActionFuture;
+import org.elasticsearch.action.support.SubscribableListener;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeRole;
@@ -71,7 +71,6 @@ import static java.util.function.Function.identity;
 import static org.elasticsearch.test.ClusterServiceUtils.createClusterService;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
@@ -149,7 +148,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         var searchActivity = ActivityTests.randomActivity();
         var indexActivity = ActivityTests.randomActivity();
         var request = new CollectClusterSamplesAction.Request(searchActivity, indexActivity);
-        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
+        var listener = new SubscribableListener<CollectClusterSamplesAction.Response>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
@@ -177,8 +176,28 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         }
     }
 
-    public void testResultAggregation() throws ExecutionException, InterruptedException {
+    public void testAllNodesFail() {
         createMockClusterStateWithPersistentTask(clusterService);
+
+        var listener = new SubscribableListener<CollectClusterSamplesAction.Response>();
+
+        action.doExecute(mock(Task.class), new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY), listener);
+        flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
+        Map<String, List<CapturingTransport.CapturedRequest>> capturedRequests = transport.getCapturedRequestsByTargetNodeAndClear();
+
+        for (Map.Entry<String, List<CapturingTransport.CapturedRequest>> entry : capturedRequests.entrySet()) {
+            for (var capturedRequest : entry.getValue()) {
+                transport.handleRemoteError(capturedRequest.requestId(), new Exception()); // simulate node failure
+            }
+        }
+
+        safeAwaitFailure(listener);
+    }
+
+    public void testResultAggregation() throws ExecutionException, InterruptedException {
+        int indexNodes = 2, searchNodes = 3;
+        createMockClusterStateWithPersistentTask(clusterService, indexNodes, searchNodes);
+
         var shards = List.of(
             new ShardId("index1", "index1UUID", 1),
             new ShardId("index1", "index1UUID", 2),
@@ -189,7 +208,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
 
         var nodes = clusterService.state().nodes();
         var nodeIds = nodes.stream().map(DiscoveryNode::getId).collect(Collectors.toSet());
-        var successNodeIds = rarely() ? randomSubsetOf(nodeIds) : nodeIds;
+        var successNodeIds = randomBoolean() ? randomNonEmptySubsetOf(nodeIds) : nodeIds;
 
         var nodesShardAnswers = nodes.stream()
             .filter(e -> e.getRoles().contains(DiscoveryNodeRole.SEARCH_ROLE))
@@ -211,7 +230,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         var nodeIndexActivity = nodeIds.stream().collect(Collectors.toMap(identity(), (k) -> ActivityTests.randomActivity()));
 
         var request = new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY);
-        var listener = new PlainActionFuture<CollectClusterSamplesAction.Response>();
+        var listener = new SubscribableListener<CollectClusterSamplesAction.Response>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
@@ -239,11 +258,13 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         }
 
         var totalShards = seenShards.size();
-        var response = listener.get();
+        var response = safeAwait(listener);
 
-        assertThat(response.isComplete(), is(nodeIds.size() == successNodeIds.size()));
+        assertThat(response.isPartialSuccess(), is(nodeIds.size() > successNodeIds.size()));
         assertThat(totalSuccess, is(successNodeIds.size()));
-        assertThat(response.getFailures(), hasSize(nodes.size() - successNodeIds.size()));
+        assertThat(response.getSearchNodes(), is(searchNodes));
+        assertThat(response.getIndexNodes(), is(indexNodes));
+        assertThat(response.getIndexNodeErrors() + response.getSearchNodeErrors(), is(nodes.size() - successNodeIds.size()));
 
         assertThat(response.getShardInfos(), aMapWithSize(totalShards));
 
@@ -265,11 +286,15 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         );
 
         var coolDown = Duration.ofMillis(TaskActivityTracker.COOL_DOWN_PERIOD.get(clusterService.getSettings()).millis());
-        assertEquals("search activity", Activity.merge(nodeSearchActivity.values().stream(), coolDown), response.getSearchActivity());
-        assertEquals("index activity", Activity.merge(nodeIndexActivity.values().stream(), coolDown), response.getIndexActivity());
+        assertEquals(
+            "search activity",
+            Activity.Merger.merge(nodeSearchActivity.values().stream(), coolDown),
+            response.getSearchActivity()
+        );
+        assertEquals("index activity", Activity.Merger.merge(nodeIndexActivity.values().stream(), coolDown), response.getIndexActivity());
     }
 
-    public void testMostRecentUsedInResultAggregation() throws ExecutionException, InterruptedException {
+    public void testMostRecentUsedInResultAggregation() {
         createMockClusterStateWithPersistentTask(clusterService);
 
         var searchNodes = clusterService.state()
@@ -316,7 +341,7 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
         var expectedIngestedSizes = Map.of(shard1Id, 24L, shard2Id, 15L, shard3Id, 16L);
 
         var request = new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY);
-        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
+        var listener = new SubscribableListener<CollectClusterSamplesAction.Response>();
 
         action.doExecute(mock(Task.class), request, listener);
         flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
@@ -331,9 +356,9 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             }
         }
 
-        var response = listener.get();
+        var response = safeAwait(listener);
         assertEquals("total shards", 3, response.getShardInfos().size());
-        assertTrue(response.isComplete());
+        assertThat(response.isPartialSuccess(), is(false));
         assertThat(response.getShardInfos().get(shard1Id).totalSizeInBytes(), is(expectedSizes.get(shard1Id)));
         assertThat(response.getShardInfos().get(shard2Id).totalSizeInBytes(), is(expectedSizes.get(shard2Id)));
         assertThat(response.getShardInfos().get(shard3Id).totalSizeInBytes(), is(expectedSizes.get(shard3Id)));
@@ -346,14 +371,10 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
     public void testNoPersistentTaskNodeFails() {
         createMockClusterState(clusterService);
 
-        var request = new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY);
-        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
-
-        action.doExecute(mock(Task.class), request, listener);
-        flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
-
-        var exception = expectThrows(ExecutionException.class, listener::get);
-        assertThat(exception.getCause(), instanceOf(PersistentTaskNodeNotAssignedException.class));
+        safeAwaitFailure(PersistentTaskNodeNotAssignedException.class, CollectClusterSamplesAction.Response.class, listener -> {
+            action.doExecute(mock(Task.class), new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY), listener);
+            flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
+        });
     }
 
     public void testWrongPersistentTaskNodeFails() {
@@ -368,14 +389,10 @@ public class TransportCollectClusterSamplesActionTests extends ESTestCase {
             b.metadata(Metadata.builder().putCustom(PersistentTasksCustomMetadata.TYPE, taskMetadata).build());
         });
 
-        var request = new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY);
-        PlainActionFuture<CollectClusterSamplesAction.Response> listener = new PlainActionFuture<>();
-
-        action.doExecute(mock(Task.class), request, listener);
-        flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
-
-        var exception = expectThrows(ExecutionException.class, listener::get);
-        assertThat(exception.getCause(), instanceOf(NotPersistentTaskNodeException.class));
+        safeAwaitFailure(NotPersistentTaskNodeException.class, CollectClusterSamplesAction.Response.class, listener -> {
+            action.doExecute(mock(Task.class), new CollectClusterSamplesAction.Request(Activity.EMPTY, Activity.EMPTY), listener);
+            flushThreadPoolExecutor(THREAD_POOL, TEST_THREAD_POOL_NAME);
+        });
     }
 
     static ShardInfoMetrics createMeteringShardInfo(ShardId shardId) {

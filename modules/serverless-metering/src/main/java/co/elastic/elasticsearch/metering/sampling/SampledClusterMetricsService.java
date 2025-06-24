@@ -211,7 +211,10 @@ public class SampledClusterMetricsService {
         static final SampledTierMetrics EMPTY = new SampledTierMetrics(0, Activity.EMPTY);
 
         SampledTierMetrics merge(long newMemory, Activity newActivity, Duration coolDown) {
-            return new SampledTierMetrics(newMemory, Activity.merge(Stream.of(activity(), newActivity), coolDown));
+            return new SampledTierMetrics(
+                newMemory > 0 ? newMemory : memorySize,
+                Activity.Merger.merge(Stream.of(activity(), newActivity), coolDown)
+            );
         }
     }
 
@@ -271,7 +274,7 @@ public class SampledClusterMetricsService {
             @Override
             public void onResponse(CollectClusterSamplesAction.Response response) {
                 collectionsTotalCounter.increment();
-                if (response.isComplete() == false) {
+                if (response.isPartialSuccess()) {
                     collectionsPartialsCounter.increment();
                 }
 
@@ -293,7 +296,7 @@ public class SampledClusterMetricsService {
 
             @Override
             public void onFailure(Exception e) {
-                logger.error("Failed to collect samples in cluster", e);
+                logger.warn("Failed to collect samples in cluster", e);
                 collectionsTotalCounter.increment();
                 collectionsErrorsCounter.increment();
                 metricsState.getAndUpdate(
@@ -340,10 +343,18 @@ public class SampledClusterMetricsService {
         boolean evictOldEntries
     ) {
         return new SampledClusterMetrics(
-            current.searchTierMetrics().merge(response.getSearchTierMemorySize(), response.getSearchActivity(), activityCoolDownPeriod),
-            current.indexTierMetrics().merge(response.getIndexTierMemorySize(), response.getIndexActivity(), activityCoolDownPeriod),
+            current.searchTierMetrics.merge(
+                response.getExtrapolatedSearchTierMemorySize(),
+                response.getSearchActivity(),
+                activityCoolDownPeriod
+            ),
+            current.indexTierMetrics.merge(
+                response.getExtrapolatedIndexTierMemorySize(),
+                response.getIndexActivity(),
+                activityCoolDownPeriod
+            ),
             mergeStorageMetrics(current.storageMetrics(), response.getShardInfos(), evictOldEntries),
-            response.isComplete() ? EnumSet.noneOf(SamplingStatus.class) : EnumSet.of(SamplingStatus.PARTIAL)
+            response.isPartialSuccess() ? EnumSet.of(SamplingStatus.PARTIAL) : EnumSet.noneOf(SamplingStatus.class)
         );
     }
 
