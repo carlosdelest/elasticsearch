@@ -95,15 +95,15 @@ public class MultiProjectSmokeIT extends ServerlessMultiProjectRestTestCase {
 
     private static void assertProjectSettings(RestClient client, List<String> projectIds, boolean geoipDownloaderEnabledForActiveProject)
         throws IOException {
-        Request request = new Request("GET", "/_cluster/state/metadata?multi_project=true");
+        Request request = new Request("GET", "/_cluster/state?multi_project=true");
         ObjectPath response = ObjectPath.createFromResponse(client.performRequest(request));
-        List<Map<String, Object>> projectsMetadata = response.evaluate("metadata.projects");
+        List<Map<String, Object>> projectsSettingsList = response.evaluate("projects_registry.projects");
 
         Map<String, Map<String, Object>> projectsSettings = new HashMap<>();
-        for (Map<String, Object> projectMetadata : projectsMetadata) {
-            String id = (String) projectMetadata.get("id");
+        for (Map<String, Object> projectSettings : projectsSettingsList) {
+            String id = (String) projectSettings.get("id");
             @SuppressWarnings("unchecked")
-            Map<String, Object> settings = (Map<String, Object>) projectMetadata.get("settings");
+            Map<String, Object> settings = (Map<String, Object>) projectSettings.get("settings");
             projectsSettings.put(id, settings);
         }
         for (String projectId : projectIds) {

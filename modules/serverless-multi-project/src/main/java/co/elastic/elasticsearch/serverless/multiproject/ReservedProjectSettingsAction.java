@@ -21,7 +21,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.ProjectId;
-import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.cluster.project.ProjectStateRegistry;
 import org.elasticsearch.common.settings.ProjectScopedSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.reservedstate.ReservedProjectStateHandler;
@@ -47,19 +47,25 @@ public class ReservedProjectSettingsAction implements ReservedProjectStateHandle
     }
 
     @Override
-    public TransformState transform(ProjectId projectId, Map<String, Object> source, TransformState prevState) throws Exception {
+    public TransformState transform(ProjectId projectId, Map<String, Object> source, TransformState prevState) {
         Settings settingsToApply = Settings.builder().loadFromMap(source).build();
 
         ClusterState clusterState = prevState.state();
-        ProjectMetadata updatedMetadata = new ProjectSettingsUpdater(projectScopedSettings).updateProjectSettings(
-            clusterState.metadata().getProject(projectId),
+        Settings appliedSettings = new ProjectSettingsUpdater(projectScopedSettings).updateProjectSettings(
+            projectId,
+            ProjectStateRegistry.getProjectSettings(projectId, clusterState),
             settingsToApply,
             log
         );
 
         return new TransformState(
-            ClusterState.builder(clusterState).putProjectMetadata(updatedMetadata).build(),
-            updatedMetadata.settings().keySet()
+            ClusterState.builder(clusterState)
+                .putCustom(
+                    ProjectStateRegistry.TYPE,
+                    ProjectStateRegistry.builder(clusterState).putProjectSettings(projectId, appliedSettings).build()
+                )
+                .build(),
+            appliedSettings.keySet()
         );
     }
 

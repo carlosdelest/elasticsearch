@@ -18,7 +18,7 @@
 package co.elastic.elasticsearch.serverless.multiproject;
 
 import org.apache.logging.log4j.Logger;
-import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.common.settings.BaseSettingsUpdater;
 import org.elasticsearch.common.settings.ProjectScopedSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -31,13 +31,13 @@ public final class ProjectSettingsUpdater extends BaseSettingsUpdater {
         super(scopedSettings);
     }
 
-    public ProjectMetadata updateProjectSettings(
-        final ProjectMetadata projectMetadata,
+    public Settings updateProjectSettings(
+        final ProjectId projectId,
+        final Settings existingSettings,
         final Settings settingsToApply,
         final Logger logger
     ) {
-        final Settings existingSettings = projectMetadata.settings();
-        final String settingsType = "project[" + projectMetadata.id() + "]";
+        final String settingsType = "project[" + projectId + "]";
 
         final Settings finalSettings;
         final Settings unknownOrInvalidSettings;
@@ -47,7 +47,7 @@ public final class ProjectSettingsUpdater extends BaseSettingsUpdater {
             scopedSettings.updateSettings(settingsToApply, builder, Settings.builder(), settingsType);
             finalSettings = builder.build();
             unknownOrInvalidSettings = Settings.EMPTY;
-            logger.debug("Project [{}] has empty settings, update it to [{}]", projectMetadata.id(), finalSettings);
+            logger.debug("Project [{}] has empty settings, update it to [{}]", projectId, finalSettings);
         } else {
             final Tuple<Settings, Settings> partitionedSettings = partitionKnownAndValidSettings(existingSettings, settingsType, logger);
             final Settings knownAndValidPersistentSettings = partitionedSettings.v1();
@@ -63,19 +63,18 @@ public final class ProjectSettingsUpdater extends BaseSettingsUpdater {
             );
             boolean changed = scopedSettings.updateDynamicSettings(dynamicSettingsToApply, builder, Settings.builder(), settingsType);
             if (changed == false) {
-                return projectMetadata;
+                return existingSettings;
             }
             finalSettings = builder.build();
-            logger.debug("Update project [{}] with settings [{}]", projectMetadata.id(), dynamicSettingsToApply);
+            logger.debug("Update project [{}] with settings [{}]", projectId, dynamicSettingsToApply);
         }
         // validate that settings and their values are correct
         scopedSettings.validate(finalSettings, true);
 
         Settings resultSettings = Settings.builder().put(finalSettings).put(unknownOrInvalidSettings).build();
-        ProjectMetadata.Builder result = ProjectMetadata.builder(projectMetadata).settings(resultSettings);
         // validate that SettingsUpdaters can be applied without errors
         scopedSettings.validateUpdate(resultSettings);
 
-        return result.build();
+        return resultSettings;
     }
 }

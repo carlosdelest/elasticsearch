@@ -19,8 +19,10 @@ package co.elastic.elasticsearch.serverless.multiproject;
 
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ProjectState;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.cluster.project.ProjectStateRegistry;
 import org.elasticsearch.common.settings.ProjectScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
@@ -66,7 +68,7 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
             }""";
 
         TransformState transformedState = processJSON(projectId, action, prevState, json);
-        ProjectMetadata updatedProject = transformedState.state().getMetadata().getProject(projectId);
+        ProjectState updatedProject = transformedState.state().projectState(projectId);
         assertThat(updatedProject.settings().keySet(), contains(setting.getKey()));
         assertThat(setting.get(updatedProject.settings()), is(43));
 
@@ -85,14 +87,18 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
         );
         ProjectId projectId = randomUniqueProjectId();
         ProjectMetadata projectMetadata = ProjectMetadata.builder(projectId).build();
+        Settings existingSettings = Settings.builder().put(setting.getKey(), 42).build();
         TransformState prevState = new TransformState(
-            ClusterState.builder(ClusterName.DEFAULT).putProjectMetadata(projectMetadata).build(),
+            ClusterState.builder(ClusterName.DEFAULT)
+                .putProjectMetadata(projectMetadata)
+                .putCustom(
+                    ProjectStateRegistry.TYPE,
+                    ProjectStateRegistry.builder().putProjectSettings(projectId, existingSettings).build()
+                )
+                .build(),
             Collections.emptySet()
         );
-        ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(
-            Settings.builder().put(setting.getKey(), 42).build(),
-            Set.of(setting)
-        );
+        ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(existingSettings, Set.of(setting));
 
         ReservedProjectSettingsAction action = new ReservedProjectSettingsAction(projectScopedSettings);
         String json = """
@@ -101,7 +107,7 @@ public class ReservedProjectSettingsActionTests extends ESTestCase {
             }""";
 
         TransformState transformedState = processJSON(projectId, action, prevState, json);
-        ProjectMetadata updatedProject = transformedState.state().getMetadata().getProject(projectId);
+        ProjectState updatedProject = transformedState.state().projectState(projectId);
         assertThat(updatedProject.settings().keySet(), contains(setting.getKey()));
         assertThat(setting.get(updatedProject.settings()), is(43));
 

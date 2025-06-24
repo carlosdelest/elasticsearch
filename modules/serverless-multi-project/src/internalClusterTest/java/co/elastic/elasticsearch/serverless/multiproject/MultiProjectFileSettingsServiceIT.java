@@ -32,6 +32,7 @@ import org.elasticsearch.client.internal.FilterClient;
 import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ProjectState;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
@@ -394,13 +395,10 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         if (projectId == null) {
             return;
         }
-        ProjectMetadata projectMetadata = clusterState.metadata().getProject(projectId);
+        ProjectState projectState = clusterState.projectState(projectId);
 
-        assertThat(
-            TestServerlessMutiProjectPlugin.MULTI_PROJECT_TEST_SETTING.get(projectMetadata.settings()),
-            equalTo(projectSettingValue)
-        );
-        assertProjectMetadataReservedState(projectMetadata);
+        assertThat(TestServerlessMutiProjectPlugin.MULTI_PROJECT_TEST_SETTING.get(projectState.settings()), equalTo(projectSettingValue));
+        assertProjectMetadataReservedState(clusterState.getMetadata().getProject(projectId));
     }
 
     private static void assertProjectMetadataReservedState(ProjectMetadata projectMetadata) {
@@ -529,6 +527,8 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         internalCluster().restartNode(masterNode);
 
         final ClusterStateResponse clusterStateResponse = clusterAdmin().state(new ClusterStateRequest(TEST_REQUEST_TIMEOUT)).actionGet();
+        assertExpectedProjectSettings(clusterStateResponse.getState(), projectId, 43);
+
         assertThat(
             clusterStateResponse.getState()
                 .metadata()

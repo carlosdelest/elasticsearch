@@ -16,8 +16,12 @@
  */
 package co.elastic.elasticsearch.serverless.multiproject;
 
+import org.elasticsearch.cluster.ClusterName;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ProjectState;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.cluster.project.ProjectStateRegistry;
 import org.elasticsearch.common.settings.ProjectScopedSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
@@ -61,9 +65,13 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
         Property.ProjectScope
     );
 
-    private static ProjectMetadata projectWithSettings(Settings settings) {
+    private static ProjectState projectWithSettings(Settings settings) {
         ProjectId projectId = randomUniqueProjectId();
-        return ProjectMetadata.builder(projectId).settings(settings).build();
+        ClusterState clusterState = ClusterState.builder(ClusterName.DEFAULT)
+            .putCustom(ProjectStateRegistry.TYPE, ProjectStateRegistry.builder().putProjectSettings(projectId, settings).build())
+            .putProjectMetadata(ProjectMetadata.builder(projectId).build())
+            .build();
+        return clusterState.projectState(projectId);
     }
 
     public void testUpdateSetting() {
@@ -73,21 +81,27 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
         projectScopedSettings.addSettingsUpdateConsumer(SETTING_A, valueA::set);
         projectScopedSettings.addSettingsUpdateConsumer(SETTING_B, valueB::set);
         ProjectSettingsUpdater updater = new ProjectSettingsUpdater(projectScopedSettings);
-        ProjectMetadata projectMetadata = projectWithSettings(
+        ProjectState projectState = projectWithSettings(
             Settings.builder().put(SETTING_A.getKey(), 1.5).put(SETTING_B.getKey(), 2.5).build()
         );
-        ProjectMetadata updatedProjectMetadata = updater.updateProjectSettings(
-            projectMetadata,
+        Settings newSettings = updater.updateProjectSettings(
+            projectState.projectId(),
+            projectState.settings(),
             Settings.builder().put(SETTING_A.getKey(), 0.5).build(),
             logger
         );
-        assertNotSame(updatedProjectMetadata, projectMetadata);
-        assertEquals(SETTING_A.get(updatedProjectMetadata.settings()), 0.4, 0.1);
-        assertEquals(SETTING_B.get(updatedProjectMetadata.settings()), 2.5, 0.1);
+        assertNotSame(newSettings, projectState.settings());
+        assertEquals(SETTING_A.get(newSettings), 0.4, 0.1);
+        assertEquals(SETTING_B.get(newSettings), 2.5, 0.1);
 
-        updatedProjectMetadata = updater.updateProjectSettings(projectMetadata, Settings.builder().putNull("project.*").build(), logger);
-        assertEquals(SETTING_A.get(updatedProjectMetadata.settings()), 0.55, 0.1);
-        assertEquals(SETTING_B.get(updatedProjectMetadata.settings()), 0.1, 0.1);
+        newSettings = updater.updateProjectSettings(
+            projectState.projectId(),
+            projectState.settings(),
+            Settings.builder().putNull("project.*").build(),
+            logger
+        );
+        assertEquals(SETTING_A.get(newSettings), 0.55, 0.1);
+        assertEquals(SETTING_B.get(newSettings), 0.1, 0.1);
 
         assertNull("updater only does a dryRun", valueA.get());
         assertNull("updater only does a dryRun", valueB.get());
@@ -101,38 +115,40 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
         );
         ProjectSettingsUpdater updater = new ProjectSettingsUpdater(projectScopedSettings);
         // A project is created first with empty settings
-        final ProjectMetadata projectMetadata = projectWithSettings(Settings.EMPTY);
+        final ProjectState projectState = projectWithSettings(Settings.EMPTY);
 
         // Update the static setting for works for empty settings
-        final ProjectMetadata updatedProjectMetadata1 = updater.updateProjectSettings(
-            projectMetadata,
+        final Settings newSettings1 = updater.updateProjectSettings(
+            projectState.projectId(),
+            projectState.settings(),
             Settings.builder().put(staticSetting.getKey(), 42).put(SETTING_A.getKey(), 0.9).build(),
             logger
         );
-        assertNotSame(updatedProjectMetadata1, projectMetadata);
-        assertEquals(42, (int) staticSetting.get(updatedProjectMetadata1.settings()));
-        assertEquals(SETTING_A.get(updatedProjectMetadata1.settings()), 0.9, 0.1);
-        assertEquals(SETTING_B.get(updatedProjectMetadata1.settings()), 0.1, 0.1);
+        assertNotSame(newSettings1, projectState);
+        assertEquals(42, (int) staticSetting.get(newSettings1));
+        assertEquals(SETTING_A.get(newSettings1), 0.9, 0.1);
+        assertEquals(SETTING_B.get(newSettings1), 0.1, 0.1);
 
         // Update dynamic settings works as long as the static setting is not changed
-        final ProjectMetadata updatedProjectMetadata2 = updater.updateProjectSettings(
-            updatedProjectMetadata1,
+        final Settings newSettings2 = updater.updateProjectSettings(
+            projectState.projectId(),
+            newSettings1,
             Settings.builder().put(staticSetting.getKey(), 42).putNull(SETTING_A.getKey()).put(SETTING_B.getKey(), 0.5).build(),
             logger
         );
-        assertEquals(42, (int) staticSetting.get(updatedProjectMetadata2.settings()));
-        assertEquals(SETTING_A.get(updatedProjectMetadata2.settings()), 0.55, 0.1);
-        assertEquals(SETTING_B.get(updatedProjectMetadata2.settings()), 0.5, 0.1);
+        assertEquals(42, (int) staticSetting.get(newSettings2));
+        assertEquals(SETTING_A.get(newSettings2), 0.55, 0.1);
+        assertEquals(SETTING_B.get(newSettings2), 0.5, 0.1);
 
         // Update the static setting errors out when the project already has settings
         Settings settingsToApply = Settings.builder().put(staticSetting.getKey(), 43).put(SETTING_A.getKey(), 0.9).build();
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> updater.updateProjectSettings(updatedProjectMetadata2, settingsToApply, logger)
+            () -> updater.updateProjectSettings(projectState.projectId(), newSettings2, settingsToApply, logger)
         );
         assertThat(
             exception.getMessage(),
-            is("project[" + projectMetadata.id() + "] setting [project.static_setting], not dynamically updateable")
+            is("project[" + projectState.projectId() + "] setting [project.static_setting], not dynamically updateable")
         );
     }
 
@@ -143,13 +159,14 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
         projectScopedSettings.addSettingsUpdateConsumer(SETTING_A, valueA::set);
         projectScopedSettings.addSettingsUpdateConsumer(SETTING_B, valueB::set);
         ProjectSettingsUpdater updater = new ProjectSettingsUpdater(projectScopedSettings);
-        ProjectMetadata projectMetadata = projectWithSettings(
+        ProjectState projectState = projectWithSettings(
             Settings.builder().put(SETTING_A.getKey(), 1.5).put(SETTING_B.getKey(), 2.5).build()
         );
 
         try {
             updater.updateProjectSettings(
-                projectMetadata,
+                projectState.projectId(),
+                projectState.settings(),
                 Settings.builder().put(SETTING_A.getKey(), "not a float").put(SETTING_B.getKey(), 1.0f).build(),
                 logger
             );
@@ -174,18 +191,19 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
         ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(Settings.EMPTY, Set.of(deprecatedSetting, SETTING_A));
         projectScopedSettings.addSettingsUpdateConsumer(deprecatedSetting, s -> {});
         ProjectSettingsUpdater settingsUpdater = new ProjectSettingsUpdater(projectScopedSettings);
-        ProjectMetadata projectMetadata = projectWithSettings(settings);
+        ProjectState projectState = projectWithSettings(settings);
 
         final Settings toApplyDebug = Settings.builder().put(SETTING_A.getKey(), 1.0f).build();
-        final ProjectMetadata afterDebug = settingsUpdater.updateProjectSettings(projectMetadata, toApplyDebug, logger);
+        ProjectId projectId = projectState.projectId();
+        final Settings afterDebug = settingsUpdater.updateProjectSettings(projectId, projectState.settings(), toApplyDebug, logger);
         assertSettingDeprecationsAndWarnings(new Setting<?>[] { deprecatedSetting });
 
         final Settings toApplyUnset = Settings.builder().putNull(SETTING_A.getKey()).build();
-        final ProjectMetadata afterUnset = settingsUpdater.updateProjectSettings(afterDebug, toApplyUnset, logger);
+        final Settings afterUnset = settingsUpdater.updateProjectSettings(projectId, afterDebug, toApplyUnset, logger);
         assertSettingDeprecationsAndWarnings(new Setting<?>[] { deprecatedSetting });
 
         // we also check that if no settings are changed, deprecation logging still occurs
-        settingsUpdater.updateProjectSettings(afterUnset, toApplyUnset, logger);
+        settingsUpdater.updateProjectSettings(projectId, afterUnset, toApplyUnset, logger);
         assertSettingDeprecationsAndWarnings(new Setting<?>[] { deprecatedSetting });
     }
 
@@ -237,7 +255,7 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
             projectScopedSettings.addSettingsUpdateConsumer(dynamicSetting, s -> {});
         }
         ProjectSettingsUpdater settingsUpdater = new ProjectSettingsUpdater(projectScopedSettings);
-        ProjectMetadata projectMetadata = projectWithSettings(existingSettings.build());
+        ProjectState projectState = projectWithSettings(existingSettings.build());
 
         // prepare the dynamic settings update
         final Settings.Builder toApply = Settings.builder();
@@ -250,31 +268,36 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
             toApply.put(dynamicSettings.getFirst().getKey(), "new_value");
         }
 
-        final ProjectMetadata afterUpdate = settingsUpdater.updateProjectSettings(projectMetadata, toApply.build(), logger);
+        final Settings afterUpdate = settingsUpdater.updateProjectSettings(
+            projectState.projectId(),
+            projectState.settings(),
+            toApply.build(),
+            logger
+        );
 
         // the invalid settings should be archived and not present in non-archived form
         for (final Setting<String> invalidSetting : invalidSettings) {
-            assertThat(afterUpdate.settings().keySet(), hasItem(ARCHIVED_SETTINGS_PREFIX + invalidSetting.getKey()));
-            assertThat(afterUpdate.settings().keySet(), not(hasItem(invalidSetting.getKey())));
+            assertThat(afterUpdate.keySet(), hasItem(ARCHIVED_SETTINGS_PREFIX + invalidSetting.getKey()));
+            assertThat(afterUpdate.keySet(), not(hasItem(invalidSetting.getKey())));
         }
 
         // the unknown settings should be archived and not present in non-archived form
         for (final Setting<String> unknownSetting : unknownSettings) {
-            assertThat(afterUpdate.settings().keySet(), hasItem(ARCHIVED_SETTINGS_PREFIX + unknownSetting.getKey()));
-            assertThat(afterUpdate.settings().keySet(), not(hasItem(unknownSetting.getKey())));
+            assertThat(afterUpdate.keySet(), hasItem(ARCHIVED_SETTINGS_PREFIX + unknownSetting.getKey()));
+            assertThat(afterUpdate.keySet(), not(hasItem(unknownSetting.getKey())));
         }
 
         // the dynamic settings should be applied
         for (final Setting<String> dynamicSetting : dynamicSettings) {
             if (toApply.keys().contains(dynamicSetting.getKey())) {
-                assertThat(afterUpdate.settings().keySet(), hasItem(dynamicSetting.getKey()));
-                assertThat(afterUpdate.settings().get(dynamicSetting.getKey()), equalTo("new_value"));
+                assertThat(afterUpdate.keySet(), hasItem(dynamicSetting.getKey()));
+                assertThat(afterUpdate.get(dynamicSetting.getKey()), equalTo("new_value"));
             } else {
                 if (existingSettings.keys().contains(dynamicSetting.getKey())) {
-                    assertThat(afterUpdate.settings().keySet(), hasItem(dynamicSetting.getKey()));
-                    assertThat(afterUpdate.settings().get(dynamicSetting.getKey()), equalTo("existing_value"));
+                    assertThat(afterUpdate.keySet(), hasItem(dynamicSetting.getKey()));
+                    assertThat(afterUpdate.get(dynamicSetting.getKey()), equalTo("existing_value"));
                 } else {
-                    assertThat(afterUpdate.settings().keySet(), not(hasItem(dynamicSetting.getKey())));
+                    assertThat(afterUpdate.keySet(), not(hasItem(dynamicSetting.getKey())));
                 }
             }
         }
@@ -318,27 +341,32 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
         ).collect(Collectors.toSet());
         final ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(Settings.EMPTY, knownSettings);
         ProjectSettingsUpdater settingsUpdater = new ProjectSettingsUpdater(projectScopedSettings);
-        final ProjectMetadata projectMetadata = projectWithSettings(existingSettings.build());
+        final ProjectState projectState = projectWithSettings(existingSettings.build());
 
         final Settings.Builder toApply = Settings.builder().put("archived.*", (String) null);
 
-        final ProjectMetadata afterUpdate = settingsUpdater.updateProjectSettings(projectMetadata, toApply.build(), logger);
+        final Settings afterUpdate = settingsUpdater.updateProjectSettings(
+            projectState.projectId(),
+            projectState.settings(),
+            toApply.build(),
+            logger
+        );
 
         // existing archived settings are removed
         for (final Setting<String> archivedSetting : archivedSettings) {
-            assertThat(afterUpdate.settings().keySet(), not(hasItem(ARCHIVED_SETTINGS_PREFIX + archivedSetting.getKey())));
+            assertThat(afterUpdate.keySet(), not(hasItem(ARCHIVED_SETTINGS_PREFIX + archivedSetting.getKey())));
         }
 
         // the invalid settings should be archived and not present in non-archived form
         for (final Setting<String> invalidSetting : invalidSettings) {
-            assertThat(afterUpdate.settings().keySet(), hasItem(ARCHIVED_SETTINGS_PREFIX + invalidSetting.getKey()));
-            assertThat(afterUpdate.settings().keySet(), not(hasItem(invalidSetting.getKey())));
+            assertThat(afterUpdate.keySet(), hasItem(ARCHIVED_SETTINGS_PREFIX + invalidSetting.getKey()));
+            assertThat(afterUpdate.keySet(), not(hasItem(invalidSetting.getKey())));
         }
 
         // the unknown settings should be archived and not present in non-archived form
         for (final Setting<String> unknownSetting : unknownSettings) {
-            assertThat(afterUpdate.settings().keySet(), hasItem(ARCHIVED_SETTINGS_PREFIX + unknownSetting.getKey()));
-            assertThat(afterUpdate.settings().keySet(), not(hasItem(unknownSetting.getKey())));
+            assertThat(afterUpdate.keySet(), hasItem(ARCHIVED_SETTINGS_PREFIX + unknownSetting.getKey()));
+            assertThat(afterUpdate.keySet(), not(hasItem(unknownSetting.getKey())));
         }
     }
 
@@ -450,43 +478,53 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
             new HashSet<>(asList(SETTING_FOO_LOW, SETTING_FOO_HIGH))
         );
         final ProjectSettingsUpdater updater = new ProjectSettingsUpdater(projectScopedSettings);
-        ProjectMetadata projectMetadata = projectWithSettings(Settings.EMPTY);
+        ProjectState projectState = projectWithSettings(Settings.EMPTY);
 
-        projectMetadata = updater.updateProjectSettings(
-            projectMetadata,
+        ProjectId projectId = projectState.projectId();
+        Settings newSettings = updater.updateProjectSettings(
+            projectId,
+            projectState.settings(),
             Settings.builder().put(SETTING_FOO_LOW.getKey(), 20).build(),
             logger
         );
-        assertThat(projectMetadata.settings().get(SETTING_FOO_LOW.getKey()), equalTo("20"));
+        assertThat(newSettings.get(SETTING_FOO_LOW.getKey()), equalTo("20"));
 
-        projectMetadata = updater.updateProjectSettings(
-            projectMetadata,
+        newSettings = updater.updateProjectSettings(
+            projectId,
+            newSettings,
             Settings.builder().put(SETTING_FOO_HIGH.getKey(), 40).build(),
             logger
         );
-        assertThat(projectMetadata.settings().get(SETTING_FOO_LOW.getKey()), equalTo("20"));
-        assertThat(projectMetadata.settings().get(SETTING_FOO_HIGH.getKey()), equalTo("40"));
+        assertThat(newSettings.get(SETTING_FOO_LOW.getKey()), equalTo("20"));
+        assertThat(newSettings.get(SETTING_FOO_HIGH.getKey()), equalTo("40"));
 
-        projectMetadata = updater.updateProjectSettings(
-            projectMetadata,
+        newSettings = updater.updateProjectSettings(
+            projectId,
+            newSettings,
             Settings.builder().put(SETTING_FOO_LOW.getKey(), 5).build(),
             logger
         );
-        assertThat(projectMetadata.settings().get(SETTING_FOO_LOW.getKey()), equalTo("5"));
-        assertThat(projectMetadata.settings().get(SETTING_FOO_HIGH.getKey()), equalTo("40"));
+        assertThat(newSettings.get(SETTING_FOO_LOW.getKey()), equalTo("5"));
+        assertThat(newSettings.get(SETTING_FOO_HIGH.getKey()), equalTo("40"));
 
-        projectMetadata = updater.updateProjectSettings(
-            projectMetadata,
+        newSettings = updater.updateProjectSettings(
+            projectId,
+            newSettings,
             Settings.builder().put(SETTING_FOO_HIGH.getKey(), 8).build(),
             logger
         );
-        assertThat(projectMetadata.settings().get(SETTING_FOO_LOW.getKey()), equalTo("5"));
-        assertThat(projectMetadata.settings().get(SETTING_FOO_HIGH.getKey()), equalTo("8"));
+        assertThat(newSettings.get(SETTING_FOO_LOW.getKey()), equalTo("5"));
+        assertThat(newSettings.get(SETTING_FOO_HIGH.getKey()), equalTo("8"));
 
-        final ProjectMetadata finalProjectMetadata = projectMetadata;
+        final Settings finalSettings = newSettings;
         Exception exception = expectThrows(
             IllegalArgumentException.class,
-            () -> updater.updateProjectSettings(finalProjectMetadata, Settings.builder().put(SETTING_FOO_HIGH.getKey(), 2).build(), logger)
+            () -> updater.updateProjectSettings(
+                projectId,
+                finalSettings,
+                Settings.builder().put(SETTING_FOO_HIGH.getKey(), 2).build(),
+                logger
+            )
         );
 
         assertThat(
@@ -498,19 +536,20 @@ public class ProjectSettingsUpdaterTests extends ESTestCase {
     public void testNotExistingSetting() {
         ProjectScopedSettings projectScopedSettings = new ProjectScopedSettings(Settings.EMPTY, Set.of(SETTING_A));
         ProjectSettingsUpdater updater = new ProjectSettingsUpdater(projectScopedSettings);
-        ProjectMetadata projectMetadata = projectWithSettings(Settings.EMPTY);
+        ProjectState projectState = projectWithSettings(Settings.EMPTY);
         Setting<Float> notExistingSetting = Setting.floatSetting("not.existing.setting", 0.1f, 0.0f, Property.Dynamic, Property.NodeScope);
 
         IllegalArgumentException ex = expectThrows(
             IllegalArgumentException.class,
             () -> updater.updateProjectSettings(
-                projectMetadata,
+                projectState.projectId(),
+                projectState.settings(),
                 Settings.builder().put(notExistingSetting.getKey(), "value").build(),
                 logger
             )
         );
         assertThat(
-            "project[" + projectMetadata.id() + "] setting [" + notExistingSetting.getKey() + "], not recognized",
+            "project[" + projectState.projectId() + "] setting [" + notExistingSetting.getKey() + "], not recognized",
             equalTo(ex.getMessage())
         );
     }
