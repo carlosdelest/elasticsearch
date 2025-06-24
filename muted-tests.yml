@@ -129,7 +129,7 @@ tests:
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3903
 - class: "co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/3535"
-  method: "test {yaml=ml/set_upgrade_mode/Setting upgrade_mode to enabled}"
+  method: "test {yaml=ml/set_upgrade_mode/*}"
 - class: co.elastic.elasticsearch.stateless.lucene.SearchDirectoryTests
   method: testGetHighestOffsetSegmentInfos
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3923
