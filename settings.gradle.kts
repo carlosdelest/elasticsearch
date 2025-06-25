@@ -94,6 +94,7 @@ include(":modules:serverless-api-filtering")
 include(":modules:serverless-health-shards-availability")
 include(":modules:serverless-snapshots")
 include(":modules:serverless-no-wait-for-active-shards")
+include(":modules:serverless-logs-essentials")
 
 
 /*
