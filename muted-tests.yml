@@ -199,3 +199,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {floats.ScalbWithHugeconstantFirstArgument SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4109
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {math.LogofNegativeZero ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4110
