@@ -12,6 +12,9 @@ logger.org.elasticsearch.snapshots.SnapshotShardsService.ShardStatusConsistencyC
 logger.org.elasticsearch.cluster.service.ClusterApplierRecordingService: DEBUG
 cluster.service.slow_task_thread_dump_timeout: 10s
 
+# Publish agent health metrics (see https://www.elastic.co/docs/reference/apm/agents/java/metrics#metrics-agenthealth)
+telemetry.agent.agent_reporter_health_metrics: true
+
 # Enable LogsDB by default (original PR #3112)
 cluster.logsdb.enabled: true
 
