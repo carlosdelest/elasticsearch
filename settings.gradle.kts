@@ -152,6 +152,7 @@ include(":serverless-benchmarks")
  * Stateful ES QA Projects
  */
 includeStatefulTests(":modules:aggregations", includeYamlTests = true, includeJavaTests = false)
+includeStatefulTests(":modules:mapper-extras", includeYamlTests = true, includeJavaTests = false)
 includeStatefulTests(":modules:data-streams", includeYamlTests = true, includeJavaTests = true)
 includeStatefulTests(":modules:ingest-common", includeYamlTests = true, includeJavaTests = false)
 includeStatefulTests(":test:external-modules:test-esql-heap-attack", includeYamlTests = false, includeJavaTests = true)
