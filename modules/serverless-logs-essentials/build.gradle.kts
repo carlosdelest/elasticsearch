@@ -28,6 +28,7 @@ esplugin {
 
 dependencies {
     compileOnly(project(":libs:serverless-shared-constants"))
+    compileOnly(xpackModule("core"))
     compileOnly(xpackModule("esql"))
     compileOnly(xpackModule("esql-core"))
 

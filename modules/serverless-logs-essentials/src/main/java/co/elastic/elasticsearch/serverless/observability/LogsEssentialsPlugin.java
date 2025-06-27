@@ -17,6 +17,38 @@
 
 package co.elastic.elasticsearch.serverless.observability;
 
+import co.elastic.elasticsearch.serverless.constants.ObservabilityTier;
+import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
+import co.elastic.elasticsearch.serverless.observability.api.LogsEssentialsAsyncSearchRequestValidator;
+import co.elastic.elasticsearch.serverless.observability.api.LogsEssentialsSearchRequestValidator;
+
+import org.apache.lucene.util.SetOnce;
+import org.elasticsearch.action.support.MappedActionFilter;
+import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
 
-public class LogsEssentialsPlugin extends Plugin {}
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+
+public class LogsEssentialsPlugin extends Plugin implements ActionPlugin {
+    private final SetOnce<Settings> settings = new SetOnce<>();
+
+    @Override
+    public Collection<?> createComponents(PluginServices services) {
+        settings.set(services.clusterService().getSettings());
+        return Collections.emptyList();
+    }
+
+    @Override
+    public Collection<MappedActionFilter> getMappedActionFilters() {
+        boolean logsEssentials = ServerlessSharedSettings.OBSERVABILITY_TIER.get(settings.get()) == ObservabilityTier.LOGS_ESSENTIALS;
+        return (logsEssentials)
+            ? List.of(
+                new LogsEssentialsAsyncSearchRequestValidator(settings.get()),
+                new LogsEssentialsSearchRequestValidator(settings.get())
+            )
+            : Collections.emptyList();
+    }
+}
