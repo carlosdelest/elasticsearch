@@ -56,6 +56,8 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
     private static final AtomicLong reservedStateVersionCounter = new AtomicLong(0);
 
     public static ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
+        // Reduce the buffer size per thread write buffer to keep direct memory usage under control
+        .systemProperty("es.searchable.snapshot.shared_cache.write_buffer.size", "256k")
         .name("yamlRestTest")
         .setting("serverless.multi_project.enabled", String.valueOf(MULTI_PROJECT_ENABLED))
         .setting("xpack.ml.enabled", "true")
@@ -73,7 +75,6 @@ public class ServerlessXpackRestIT extends AbstractXPackRestTest {
         .setting("xpack.security.authc.native_users.enabled", "true")
         .setting("xpack.security.authc.native_role_mappings.enabled", "true")
         .setting("stateless.translog.flush.interval", "20ms")
-        .setting("stateless.online.prewarming.enabled", "false")
         .keystore("bootstrap.password", "x-pack-test-password")
         .keystore("xpack.security.transport.ssl.secure_key_passphrase", "testnode")
         .user("x_pack_rest_user", "x-pack-test-password")
