@@ -142,9 +142,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=cluster.health/10_basic/cluster health with closed index}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3970
-- class: co.elastic.elasticsearch.stateless.cache.StatelessOnlinePrewarmingIT
-  method: testShardPrewarming
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3961
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
