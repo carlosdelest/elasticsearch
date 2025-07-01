@@ -16,6 +16,8 @@
  */
 package co.elastic.elasticsearch.serverless.autoscaling.action;
 
+import co.elastic.elasticsearch.stateless.autoscaling.indexing.IngestMetricsService;
+
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.cluster.project.TestProjectResolvers;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -78,7 +80,14 @@ public class TransportGetTierMetricsTests extends ESTestCase {
         );
         new TransportGetMachineLearningTierMetrics(transportService, actionFilters, clusterService, null);
         new TransportGetSearchTierMetrics(transportService, clusterService, threadPool, actionFilters, null);
-        new TransportGetIndexTierMetrics(transportService, clusterService, threadPool, actionFilters, null);
+        new TransportGetIndexTierMetrics(
+            transportService,
+            clusterService,
+            threadPool,
+            actionFilters,
+            Mockito.mock(IngestMetricsService.class),
+            null
+        );
     }
 
     public void testCanTripCircuitBreaker() {

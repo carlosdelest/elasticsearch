@@ -24,6 +24,9 @@ import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeAction;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceShardsAllocator;
+import org.elasticsearch.cluster.routing.allocation.allocator.DesiredBalanceStats;
+import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocator;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.injection.guice.Inject;
@@ -31,9 +34,12 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
+import java.util.function.Supplier;
+
 public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetIndexTierMetrics.Request, GetIndexTierMetrics.Response> {
 
     private final IngestMetricsService ingestMetricsService;
+    private final Supplier<DesiredBalanceStats> desiredBalanceStatsSupplier;
 
     @Inject
     public TransportGetIndexTierMetrics(
@@ -41,7 +47,8 @@ public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetI
         ClusterService clusterService,
         ThreadPool threadPool,
         ActionFilters actionFilters,
-        IngestMetricsService ingestMetricsService
+        IngestMetricsService ingestMetricsService,
+        ShardsAllocator shardsAllocator
     ) {
         super(
             GetIndexTierMetrics.NAME,
@@ -55,6 +62,9 @@ public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetI
             EsExecutors.DIRECT_EXECUTOR_SERVICE
         );
         this.ingestMetricsService = ingestMetricsService;
+        this.desiredBalanceStatsSupplier = shardsAllocator instanceof DesiredBalanceShardsAllocator desiredBalanceShardsAllocator
+            ? desiredBalanceShardsAllocator::getStats
+            : () -> null;
     }
 
     @Override
@@ -66,7 +76,9 @@ public class TransportGetIndexTierMetrics extends TransportMasterNodeAction<GetI
     ) {
         ActionListener.completeWith(
             listener,
-            () -> new GetIndexTierMetrics.Response(ingestMetricsService.getIndexTierMetrics(clusterService.state()))
+            () -> new GetIndexTierMetrics.Response(
+                ingestMetricsService.getIndexTierMetrics(clusterService.state(), desiredBalanceStatsSupplier.get())
+            )
         );
     }
 
