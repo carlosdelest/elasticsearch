@@ -145,24 +145,9 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {knn-function.KnnSearchWithKOption SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4021
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {knn-function.KnnSearchWithKOption SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4021
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {knn-function.KnnSearchWithKOption ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4022
-- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {knn-function.KnnSearchWithKOption ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4022
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {knn-function.KnnSearchWithKOption SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4035
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {knn-function.KnnSearchWithKOption ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4036
+- class: "co.elastic.elasticsearch.stateless.cache.BlobCacheMetricsIT"
+  issue: "https://github.com/elastic/elasticsearch-serverless/issues/4024"
+  method: "testSearchNodeMetrics"
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {fork.ForkAfterCompletion ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
