@@ -34,4 +34,20 @@ dependencies {
     compileOnly(project(":libs:serverless-shared-constants"))
     compileOnly(xpackModule("core"))
     compileOnly(xpackModule("security"))
+    api("org.apache.httpcomponents.client5:httpclient5:5.5") {
+        exclude("org.conscrypt.Conscrypt")
+    }
+    api("org.apache.httpcomponents.core5:httpcore5:5.3.4") {
+        exclude("org.conscrypt.Conscrypt")
+    }
+    api("org.apache.httpcomponents.core5:httpcore5-h2:5.3.4") {
+        exclude("org.conscrypt.Conscrypt")
+    }
+
+}
+
+tasks.thirdPartyAudit.configure {
+    ignoreMissingClasses(
+        "org.conscrypt.Conscrypt"
+    )
 }

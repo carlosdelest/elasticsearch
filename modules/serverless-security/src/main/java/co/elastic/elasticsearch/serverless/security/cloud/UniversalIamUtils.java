@@ -22,12 +22,11 @@ import org.elasticsearch.xcontent.XContentParserConfiguration;
 import org.elasticsearch.xcontent.XContentType;
 
 import java.io.IOException;
-import java.io.InputStream;
 
 public final class UniversalIamUtils {
 
-    public static XContentParser createJsonParser(InputStream stream) throws IOException {
-        return XContentType.JSON.xContent().createParser(XContentParserConfiguration.EMPTY, stream);
+    public static XContentParser createJsonParser(byte[] data) throws IOException {
+        return XContentType.JSON.xContent().createParser(XContentParserConfiguration.EMPTY, data);
     }
 
 }

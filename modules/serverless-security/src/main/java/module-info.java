@@ -60,6 +60,12 @@ module org.elasticsearch.internal.security {
     requires org.elasticsearch.base;
     requires org.apache.commons.codec;
     requires org.slf4j;
+    requires org.apache.httpcomponents.client5.httpclient5;
+    requires org.apache.httpcomponents.core5.httpcore5.h2;
+    requires org.apache.httpcomponents.core5.httpcore5;
+    requires org.apache.logging.log4j.core;
+    requires org.apache.lucene.core;
+    requires org.elasticsearch.sslconfig;
 
     exports co.elastic.elasticsearch.serverless.security.apikey to org.elasticsearch.server;
     exports co.elastic.elasticsearch.serverless.security.operator to org.elasticsearch.server;

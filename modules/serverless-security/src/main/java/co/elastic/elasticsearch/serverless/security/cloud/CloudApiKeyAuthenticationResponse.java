@@ -24,7 +24,6 @@ import org.elasticsearch.xcontent.ParseField;
 import org.elasticsearch.xcontent.XContentParser;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
 
 import static co.elastic.elasticsearch.serverless.security.cloud.UniversalIamUtils.createJsonParser;
@@ -92,8 +91,8 @@ public record CloudApiKeyAuthenticationResponse(
      *
      * @throws IOException in case of an I/O error
      */
-    public static CloudApiKeyAuthenticationResponse parse(InputStream inputStream) throws IOException {
-        try (XContentParser parser = createJsonParser(inputStream)) {
+    public static CloudApiKeyAuthenticationResponse parse(byte[] data) throws IOException {
+        try (XContentParser parser = createJsonParser(data)) {
             return PARSER.parse(parser, null);
         }
     }

@@ -52,6 +52,7 @@ allprojects {
     pluginManager.withPlugin("elasticsearch.build") {
         dependencies {
             add("jarHell", "org.elasticsearch:core")
+            add("jdkJarHell", "org.elasticsearch:core")
         }
     }
 

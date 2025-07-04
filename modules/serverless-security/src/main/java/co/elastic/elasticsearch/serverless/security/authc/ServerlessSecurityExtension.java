@@ -22,6 +22,7 @@ import co.elastic.elasticsearch.serverless.security.cloud.CloudApiKeyAuthenticat
 import co.elastic.elasticsearch.serverless.security.cloud.CloudApiKeyService;
 import co.elastic.elasticsearch.serverless.security.cloud.ClusterSettingsProjectInfoSupplier;
 import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamClient;
+import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamSslConfig;
 
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.node.Node;
@@ -88,10 +89,15 @@ public class ServerlessSecurityExtension implements SecurityExtension {
         }
         final Settings settings = components.settings();
         if (UNIVERSAL_IAM_SERVICE_ENABLED_SETTING.get(settings)) {
+            UniversalIamSslConfig sslConfig = new UniversalIamSslConfig(
+                settings,
+                components.environment(),
+                components.resourceWatcherService()
+            );
             return new CloudApiKeyAuthenticator(
                 new CloudApiKeyService(
                     Node.NODE_NAME_SETTING.get(settings),
-                    new UniversalIamClient(settings),
+                    new UniversalIamClient(settings, sslConfig),
                     new ClusterSettingsProjectInfoSupplier(settings)
                 )
             );

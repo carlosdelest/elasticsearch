@@ -20,6 +20,8 @@ package co.elastic.elasticsearch.serverless.security;
 import co.elastic.elasticsearch.serverless.security.authc.MultiProjectSpSamlRealmSettings;
 import co.elastic.elasticsearch.serverless.security.authc.ProjectFileSettingsRealmSettings;
 import co.elastic.elasticsearch.serverless.security.authc.ProjectServiceAccountTokenStoreSettings;
+import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamClient;
+import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamSslConfig;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -180,6 +182,8 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
         settings.addAll(ProjectFileSettingsRealmSettings.getSettings());
         settings.addAll(MultiProjectSpSamlRealmSettings.getSettings());
         settings.addAll(ProjectServiceAccountTokenStoreSettings.getSettings());
+        settings.addAll(UniversalIamClient.getSettings());
+        settings.addAll(UniversalIamSslConfig.getSettings());
         return settings;
     }
 

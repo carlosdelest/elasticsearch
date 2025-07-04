@@ -71,7 +71,18 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         .user(OPERATOR_USER, TEST_PASSWORD, User.ROOT_USER_ROLE, true)
         .setting("xpack.ml.enabled", "false")
         .setting("serverless.universal_iam_service.enabled", "true")
-        .setting("serverless.universal_iam_service.url", () -> "http://localhost:" + universalIamTestService.getAddress().getPort())
+        .setting("serverless.universal_iam_service.url", () -> "https://localhost:" + universalIamTestService.getAddress().getPort())
+        .setting("serverless.universal_iam_service.http.connect_timeout", () -> "2s")
+        .setting("serverless.universal_iam_service.http.socket_timeout", () -> "2s")
+        .setting("serverless.universal_iam_service.http.max_connections", () -> "10")
+        .setting("serverless.universal_iam_service.ssl.truststore.path", () -> "keystore.jks")
+        .setting("serverless.universal_iam_service.ssl.truststore.password", () -> "changeit")
+        .setting("serverless.universal_iam_service.ssl.truststore.type", () -> "JKS")
+        .setting(
+            "serverless.universal_iam_service.ssl.cipher_suites",
+            () -> "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+        )
+        .setting("serverless.universal_iam_service.ssl.supported_protocols", () -> "TLSv1.2,TLSv1.3")
         // TODO we don't want metering for this test, however, metering is automatically enabled if project_id is set. furthermore,
         // metering uses a default https address which makes boot fail
         // we should fix this to allow disabling metering via a metering-specific setting (e.g., metering.url)
@@ -82,6 +93,7 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         .setting("serverless.project_type", PROJECT_TYPE.name())
         .setting("serverless.project_id", PROJECT_ID)
         .setting("serverless.organization_id", ORGANIZATION_ID)
+        .configFile("keystore.jks", Resource.fromClasspath("uiam/unified-keystore.jks"))
         .rolesFile(Resource.fromString("""
             admin:
               cluster: [ "all" ]

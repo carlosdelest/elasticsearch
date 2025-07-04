@@ -18,7 +18,6 @@
 package co.elastic.elasticsearch.serverless.security.cloud;
 
 import org.elasticsearch.common.bytes.BytesReference;
-import org.elasticsearch.common.io.stream.ByteArrayStreamInput;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.json.JsonXContent;
@@ -55,7 +54,7 @@ public class CloudApiKeyAuthenticationResponseTests extends ESTestCase {
         }
 
         final String responseJson = mapToJsonString(responseMap);
-        var result = CloudApiKeyAuthenticationResponse.parse(new ByteArrayStreamInput(responseJson.getBytes(StandardCharsets.UTF_8)));
+        var result = CloudApiKeyAuthenticationResponse.parse(responseJson.getBytes(StandardCharsets.UTF_8));
 
         assertEquals(apiKeyId, result.apiKeyId());
         assertEquals(organizationId, result.organizationId());
@@ -146,10 +145,7 @@ public class CloudApiKeyAuthenticationResponseTests extends ESTestCase {
     }
 
     private static void assertParsingFails(String expectedMessage, String responseJson) {
-        var e = expectThrows(
-            Exception.class,
-            () -> CloudApiKeyAuthenticationResponse.parse(new ByteArrayStreamInput(responseJson.getBytes(StandardCharsets.UTF_8)))
-        );
+        var e = expectThrows(Exception.class, () -> CloudApiKeyAuthenticationResponse.parse(responseJson.getBytes(StandardCharsets.UTF_8)));
         if (e.getCause() != null) {
             assertThat(e.getCause().getMessage(), containsString(expectedMessage));
         } else {
