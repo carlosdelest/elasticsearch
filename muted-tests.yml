@@ -193,3 +193,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.cache.StatelessOnlinePrewarmingIT
   method: testShardPrewarming
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3961
+- class: co.elastic.elasticsearch.stateless.objectstore.S3MultiProjectObjectStoreIT
+  method: testMultiProjectSnapshots
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4158
