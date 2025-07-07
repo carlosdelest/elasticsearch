@@ -196,3 +196,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.objectstore.S3MultiProjectObjectStoreIT
   method: testMultiProjectSnapshots
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4158
+- class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
+  method: test {yaml=ml/filter_crud/Test delete in-use filter}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4167
