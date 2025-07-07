@@ -22,6 +22,7 @@ import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentHelper;
+import org.elasticsearch.core.Booleans;
 import org.elasticsearch.xcontent.XContentType;
 
 import java.io.IOException;
@@ -181,7 +182,7 @@ public class MeteringVCURestTestIT extends AbstractMeteringRestTestIT {
                 Instant.parse((String) extractValue("creation_timestamp", record)),
                 (String) extractValue("usage.type", record),
                 (long) extractValue("usage.quantity", record),
-                Boolean.parseBoolean((String) extractValue("usage.metadata.active", record)),
+                Booleans.parseBoolean((String) extractValue("usage.metadata.active", record), false),
                 (String) extractValue("usage.metadata.application_tier", record),
                 latestActivity == null ? null : Instant.parse(latestActivity),
                 spMinProvisionedMemory == null ? null : Long.parseLong(spMinProvisionedMemory),

@@ -19,6 +19,7 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.core.Booleans;
 import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
@@ -46,7 +47,7 @@ import static org.hamcrest.Matchers.notNullValue;
 @TimeoutSuite(millis = 40 * TimeUnits.MINUTE)
 public class ServerlessClientYamlTestSuiteIT extends ESClientYamlSuiteTestCase {
 
-    public static final boolean MULTI_PROJECT_ENABLED = Boolean.parseBoolean(System.getProperty("tests.multi_project.enabled", "false"));
+    public static final boolean MULTI_PROJECT_ENABLED = Booleans.parseBoolean(System.getProperty("tests.multi_project.enabled", "false"));
 
     public static final TemporaryFolder CONFIG_DIR = new TemporaryFolder();
     private static final AtomicLong reservedStateVersionCounter = new AtomicLong(0);

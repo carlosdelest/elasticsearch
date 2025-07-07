@@ -18,6 +18,7 @@ import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.core.Booleans;
 import org.elasticsearch.core.FixForMultiProject;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
@@ -50,7 +51,7 @@ import static org.hamcrest.Matchers.notNullValue;
 @FixForMultiProject(description = "shttps://elasticco.atlassian.net/browse/ES-10292")
 public class ServerlessXpackRestIT extends AbstractXPackRestTest {
 
-    public static final boolean MULTI_PROJECT_ENABLED = Boolean.parseBoolean(System.getProperty("tests.multi_project.enabled", "false"));
+    public static final boolean MULTI_PROJECT_ENABLED = Booleans.parseBoolean(System.getProperty("tests.multi_project.enabled", "false"));
 
     public static final TemporaryFolder CONFIG_DIR = new TemporaryFolder();
     private static final AtomicLong reservedStateVersionCounter = new AtomicLong(0);
