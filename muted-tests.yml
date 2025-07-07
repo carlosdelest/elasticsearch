@@ -187,9 +187,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testIndexSettingsUpdateDoesNotUnhollow
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4130
-- class: "co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/4131"
-  method: "testIndexSettingsUpdateDoesNotUnhollow"
 - class: co.elastic.elasticsearch.stateless.cache.StatelessOnlinePrewarmingIT
   method: testShardPrewarming
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3961
