@@ -161,6 +161,7 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
         String dataNode = internalCluster().startNode(Settings.builder().put(dataOnlyNode()).put("discovery.initial_state_timeout", "1s"));
 
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
 
         // Make sure the secure settings dir is only watched on the master
@@ -229,6 +230,7 @@ public class MultiProjectFileSecureSettingsIT extends ESIntegTestCase {
 
         // Start master node
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
 
         safeAwait(createdProjectsLatch.v1());

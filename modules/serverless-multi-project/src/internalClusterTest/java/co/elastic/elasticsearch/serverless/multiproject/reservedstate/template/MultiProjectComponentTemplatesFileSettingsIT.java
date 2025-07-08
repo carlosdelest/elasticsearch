@@ -673,6 +673,7 @@ public class MultiProjectComponentTemplatesFileSettingsIT extends ESIntegTestCas
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
 
         assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2());
@@ -746,10 +747,13 @@ public class MultiProjectComponentTemplatesFileSettingsIT extends ESIntegTestCas
     public void testErrorSaved() throws Exception {
         internalCluster().setBootstrapMasterNodeIndex(0);
         logger.info("--> start data node / non master node");
-        internalCluster().startNode(Settings.builder().put(dataOnlyNode()).put("discovery.initial_state_timeout", "1s"));
+        final String dataNode = internalCluster().startNode(
+            Settings.builder().put(dataOnlyNode()).put("discovery.initial_state_timeout", "1s")
+        );
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
         var savedClusterState = setupClusterStateListenerForError(masterNode);
 

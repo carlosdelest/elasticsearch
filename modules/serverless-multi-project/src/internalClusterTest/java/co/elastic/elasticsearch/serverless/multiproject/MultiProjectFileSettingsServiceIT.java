@@ -422,6 +422,7 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
         long version = versionCounter.incrementAndGet();
         var savedClusterState = setupClusterStateListener(List.of(masterNode, dataNode), Map.of(projectId, version), version);
@@ -449,6 +450,7 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
         long version = versionCounter.incrementAndGet();
         var savedClusterState = setupClusterStateListener(List.of(masterNode, dataNode), Map.of(projectId, version), version);
@@ -491,6 +493,7 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
 
         FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
@@ -649,6 +652,7 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         final String masterNode = internalCluster().startMasterOnlyNode(
             Settings.builder().put(INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()
         );
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
         var savedClusterState = setupClusterStateListenerForError(masterNode);
 
@@ -673,6 +677,7 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         final String masterNode = internalCluster().startMasterOnlyNode(
             Settings.builder().put(INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()
         );
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
         var savedClusterState = setupClusterStateListenerForError(masterNode);
 
@@ -709,6 +714,7 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         final String masterNode = internalCluster().startMasterOnlyNode(
             Settings.builder().put(INITIAL_STATE_TIMEOUT_SETTING.getKey(), "0s").build()
         );
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
         var savedClusterState = setupClusterStateListenerForError(masterNode);
 
@@ -811,6 +817,7 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
 
         FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);

@@ -201,7 +201,6 @@ public final class ServerlessSsoIT extends ESRestTestCase {
                     try {
                         final Request request = new Request("GET", "_cluster/state/metadata");
                         request.addParameter("filter_path", "metadata.role_mappings");
-                        request.addParameter("local", "true");
                         var response = new ObjectPath(entityAsMap(client.performRequest(request)));
                         List<?> mappings = response.evaluate("metadata.role_mappings.role_mappings");
                         assertThat(mappings, not(empty()));

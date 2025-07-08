@@ -95,6 +95,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
         var savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
 
@@ -122,6 +123,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
         var savedClusterState = setupClusterStateListener(masterNode, -1);
 
@@ -148,6 +150,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
         var savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
 
@@ -180,6 +183,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
         var savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
 
@@ -216,6 +220,7 @@ public class FileSecureSettingsServiceIT extends ESIntegTestCase {
 
         logger.info("--> start master node");
         final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
         assertMasterNode(internalCluster().nonMasterClient(), masterNode);
         var savedClusterState = setupClusterStateListener(masterNode, versionCounter.incrementAndGet());
 
