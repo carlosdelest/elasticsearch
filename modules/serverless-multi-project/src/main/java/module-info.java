@@ -41,5 +41,6 @@ module org.elasticsearch.serverless.multiproject {
         with
             co.elastic.elasticsearch.serverless.multiproject.ServerlessMultiProjectFeatureSpecification;
 
-    provides ReservedStateHandlerProvider with co.elastic.elasticsearch.serverless.multiproject.ReservedProjectSettingsHandlerProvider;
+    provides ReservedStateHandlerProvider with co.elastic.elasticsearch.serverless.multiproject.MultiProjectReservedStateHandlerProvider;
+
 }

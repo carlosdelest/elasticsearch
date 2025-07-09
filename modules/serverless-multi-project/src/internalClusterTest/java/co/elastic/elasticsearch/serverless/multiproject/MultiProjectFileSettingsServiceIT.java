@@ -39,6 +39,7 @@ import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.cluster.metadata.ReservedStateErrorMetadata;
 import org.elasticsearch.cluster.metadata.ReservedStateHandlerMetadata;
 import org.elasticsearch.cluster.metadata.ReservedStateMetadata;
+import org.elasticsearch.cluster.project.ProjectStateRegistry;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.settings.Settings;
@@ -207,6 +208,19 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
                  }
              }
         }""";
+    private static final String projectMarkedForDeletion = """
+        {
+             "metadata": {
+                 "version": "%s",
+                 "compatibility": "8.4.0"
+             },
+             "state": {
+                "project_settings": {
+                    "project.test.setting.value": 43
+                },
+                "marked_for_deletion": true
+             }
+        }""";
 
     @Override
     protected boolean multiProjectIntegrationTest() {
@@ -358,10 +372,15 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         String expectedBytesPerSec,
         int projectSettingValue
     ) throws Exception {
-        assertTrue(savedClusterState.await(20, TimeUnit.SECONDS));
-        ClusterState clusterState = getClusterState(metadataVersion);
+        ClusterState clusterState = awaitClusterState(savedClusterState, metadataVersion);
         assertExpectedRecoveryBytesSettingAndVersion(expectedBytesPerSec, clusterState);
         assertExpectedProjectSettings(clusterState, projectId, projectSettingValue);
+    }
+
+    private static ClusterState awaitClusterState(CountDownLatch savedClusterState, AtomicLong metadataVersion)
+        throws InterruptedException {
+        assertTrue(savedClusterState.await(20, TimeUnit.SECONDS));
+        return getClusterState(metadataVersion);
     }
 
     private static ClusterState getClusterState(AtomicLong metadataVersion) {
@@ -853,4 +872,208 @@ public class MultiProjectFileSettingsServiceIT extends ESIntegTestCase {
         ).actionGet();
         return clusterStateResponse.getState().getMetadata().reservedStateMetadata().get(FileSettingsService.NAMESPACE).errorMetadata();
     }
+
+    public void testProjectMarkedForDeletion() throws Exception {
+        internalCluster().setBootstrapMasterNodeIndex(0);
+        logger.info("--> start data node / non master node");
+        String dataNode = internalCluster().startNode(Settings.builder().put(dataOnlyNode()).put("discovery.initial_state_timeout", "1s"));
+        FileSettingsService dataFileSettingsService = internalCluster().getInstance(FileSettingsService.class, dataNode);
+
+        assertFalse(dataFileSettingsService.watching());
+
+        ProjectId projectId = randomUniqueProjectId();
+
+        logger.info("--> start master node");
+        final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
+        assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
+        long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(List.of(masterNode, dataNode), Map.of(projectId, version), version);
+
+        FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
+
+        assertTrue(waitUntil(masterFileSettingsService::watching));
+        assertFalse(dataFileSettingsService.watching());
+
+        writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, version);
+        writeProjectFile(masterNode, projectSettings, projectId.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, version);
+        assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), projectId, "50mb", 43);
+
+        version = versionCounter.incrementAndGet();
+        var savedClusterState2 = setupClusterStateListener(List.of(masterNode, dataNode), Map.of(projectId, version), version);
+        writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, version);
+        writeProjectFile(masterNode, projectMarkedForDeletion, projectId.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, version);
+
+        ClusterState clusterState = awaitClusterState(savedClusterState2.v1(), savedClusterState2.v2());
+        assertProjectIsMarkedForDeletion(clusterState, projectId);
+    }
+
+    public void testProjectMarkedForDeletionAppliedOnStart() throws Exception {
+        internalCluster().setBootstrapMasterNodeIndex(0);
+        logger.info("--> start data node / non master node");
+        String dataNode = internalCluster().startNode(Settings.builder().put(dataOnlyNode()).put("discovery.initial_state_timeout", "1s"));
+        FileSettingsService dataFileSettingsService = internalCluster().getInstance(FileSettingsService.class, dataNode);
+
+        ProjectId projectId = randomUniqueProjectId();
+        assertFalse(dataFileSettingsService.watching());
+
+        long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(List.of(dataNode), Map.of(projectId, version), version);
+
+        writeSettingsFile(dataNode, testJSON, List.of(projectId.id()), logger, version);
+        writeProjectFile(dataNode, projectMarkedForDeletion, projectId.id(), logger, version);
+        writeSecretsFile(dataNode, emptyProjectSecrets, projectId.id(), logger, version);
+
+        logger.info("--> start master node");
+        final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
+        assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
+
+        FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
+
+        assertTrue(waitUntil(masterFileSettingsService::watching));
+        assertFalse(dataFileSettingsService.watching());
+
+        ClusterState clusterState = awaitClusterState(savedClusterState.v1(), savedClusterState.v2());
+        assertProjectIsMarkedForDeletion(clusterState, projectId);
+    }
+
+    public void testProjectMarkedForDeletionAppliedOnMasterReElection() throws Exception {
+        internalCluster().setBootstrapMasterNodeIndex(0);
+        logger.info("--> start master node");
+        final String masterNode = internalCluster().startMasterOnlyNode();
+
+        logger.info("--> start master eligible nodes, 2 more for quorum");
+        String masterNode1 = internalCluster().startNode(Settings.builder().put(masterNode()).put("discovery.initial_state_timeout", "1s"));
+        String masterNode2 = internalCluster().startNode(Settings.builder().put(masterNode()).put("discovery.initial_state_timeout", "1s"));
+        internalCluster().validateClusterFormed();
+        ensureStableCluster(3);
+
+        FileSettingsService master1FS = internalCluster().getInstance(FileSettingsService.class, masterNode1);
+        FileSettingsService master2FS = internalCluster().getInstance(FileSettingsService.class, masterNode2);
+
+        assertFalse(master1FS.watching());
+        assertFalse(master2FS.watching());
+
+        ProjectId projectId = randomUniqueProjectId();
+
+        long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(
+            List.of(masterNode, masterNode1, masterNode2),
+            Map.of(projectId, version),
+            version
+        );
+        FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
+
+        assertTrue(masterFileSettingsService.watching());
+
+        writeSettingsFile(masterNode, testJSON, List.of(projectId.id()), logger, version);
+        writeProjectFile(masterNode, projectSettings, projectId.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId.id(), logger, version);
+        assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), projectId, "50mb", 43);
+
+        internalCluster().stopCurrentMasterNode();
+        internalCluster().validateClusterFormed();
+        ensureStableCluster(2);
+
+        FileSettingsService masterFS = internalCluster().getCurrentMasterNodeInstance(FileSettingsService.class);
+        assertTrue(masterFS.watching());
+
+        logger.info("--> start another master eligible node to form a quorum");
+        String masterNode3 = internalCluster().startNode(Settings.builder().put(masterNode()).put("discovery.initial_state_timeout", "1s"));
+        internalCluster().validateClusterFormed();
+        ensureStableCluster(3);
+
+        // Now mark project for deletion after master re-election
+        version = versionCounter.incrementAndGet();
+        savedClusterState = setupClusterStateListener(
+            List.of(internalCluster().getMasterName(), masterNode3, masterNode1, masterNode2),
+            Map.of(projectId, version),
+            version
+        );
+
+        writeSettingsFile(internalCluster().getMasterName(), testJSON, List.of(projectId.id()), logger, version);
+        writeProjectFile(internalCluster().getMasterName(), projectMarkedForDeletion, projectId.id(), logger, version);
+        writeSecretsFile(internalCluster().getMasterName(), emptyProjectSecrets, projectId.id(), logger, version);
+
+        ClusterState clusterState = awaitClusterState(savedClusterState.v1(), savedClusterState.v2());
+        assertProjectIsMarkedForDeletion(clusterState, projectId);
+    }
+
+    public void testProjectMarkedForDeletionWithOtherProject() throws Exception {
+        internalCluster().setBootstrapMasterNodeIndex(0);
+        logger.info("--> start data node / non master node");
+        String dataNode = internalCluster().startNode(Settings.builder().put(dataOnlyNode()).put("discovery.initial_state_timeout", "1s"));
+        FileSettingsService dataFileSettingsService = internalCluster().getInstance(FileSettingsService.class, dataNode);
+
+        assertFalse(dataFileSettingsService.watching());
+
+        ProjectId projectId1 = randomUniqueProjectId();
+        ProjectId projectId2 = randomUniqueProjectId();
+
+        logger.info("--> start master node");
+        final String masterNode = internalCluster().startMasterOnlyNode();
+        awaitMasterNode(dataNode, masterNode);
+        assertMasterNode(wrap(internalCluster().nonMasterClient()), masterNode);
+        long version = versionCounter.incrementAndGet();
+        var savedClusterState = setupClusterStateListener(
+            List.of(masterNode, dataNode),
+            Map.of(projectId1, version, projectId2, version),
+            version
+        );
+
+        FileSettingsService masterFileSettingsService = internalCluster().getInstance(FileSettingsService.class, masterNode);
+
+        assertTrue(waitUntil(masterFileSettingsService::watching));
+        assertFalse(dataFileSettingsService.watching());
+
+        // create two projects
+        writeSettingsFile(masterNode, testJSON, List.of(projectId1.id(), projectId2.id()), logger, version);
+        writeProjectFile(masterNode, projectSettings, projectId1.id(), logger, version);
+        writeProjectFile(masterNode, projectSettings, projectId2.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId1.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId2.id(), logger, version);
+
+        assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), projectId1, "50mb", 43);
+        assertClusterStateSaveOK(savedClusterState.v1(), savedClusterState.v2(), projectId2, "50mb", 43);
+
+        // delete the first project, check that the second exists
+        version = versionCounter.incrementAndGet();
+        var savedClusterState2 = setupClusterStateListener(
+            List.of(masterNode, dataNode),
+            Map.of(projectId1, version, projectId2, version - 1),
+            version
+        );
+        writeSettingsFile(masterNode, testJSON, List.of(projectId1.id(), projectId2.id()), logger, version);
+        writeProjectFile(masterNode, projectMarkedForDeletion, projectId1.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId1.id(), logger, version);
+
+        ClusterState clusterState = awaitClusterState(savedClusterState2.v1(), savedClusterState2.v2());
+        assertProjectIsMarkedForDeletion(clusterState, projectId1);
+        assertClusterStateSaveOK(savedClusterState2.v1(), savedClusterState2.v2(), projectId2, "50mb", 43);
+
+        // update settings for the second project, check that the first still marked for deletion
+        version = versionCounter.incrementAndGet();
+        var savedClusterState3 = setupClusterStateListener(
+            List.of(masterNode, dataNode),
+            Map.of(projectId1, version - 1, projectId2, version),
+            version
+        );
+        writeSettingsFile(masterNode, testJSON, List.of(projectId1.id(), projectId2.id()), logger, version);
+        writeProjectFile(masterNode, projectSettings2, projectId2.id(), logger, version);
+        writeSecretsFile(masterNode, emptyProjectSecrets, projectId2.id(), logger, version);
+
+        clusterState = awaitClusterState(savedClusterState3.v1(), savedClusterState3.v2());
+        assertProjectIsMarkedForDeletion(clusterState, projectId1);
+        assertClusterStateSaveOK(savedClusterState3.v1(), savedClusterState3.v2(), projectId2, "50mb", 42);
+    }
+
+    private static void assertProjectIsMarkedForDeletion(ClusterState clusterState, ProjectId projectId) {
+        ProjectStateRegistry projectStateRegistry = clusterState.custom(ProjectStateRegistry.TYPE);
+        assertThat(projectStateRegistry, notNullValue());
+        assertThat(projectStateRegistry.isProjectMarkedForDeletion(projectId), is(true));
+    }
+
 }

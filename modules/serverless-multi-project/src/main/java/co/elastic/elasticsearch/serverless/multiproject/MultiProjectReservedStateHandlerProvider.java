@@ -23,19 +23,19 @@ import org.elasticsearch.reservedstate.ReservedStateHandlerProvider;
 import java.util.Collection;
 import java.util.List;
 
-public class ReservedProjectSettingsHandlerProvider implements ReservedStateHandlerProvider {
+public class MultiProjectReservedStateHandlerProvider implements ReservedStateHandlerProvider {
     private final ServerlessMultiProjectPlugin plugin;
 
-    public ReservedProjectSettingsHandlerProvider() {
+    public MultiProjectReservedStateHandlerProvider() {
         throw new IllegalStateException("Provider must be constructed using PluginsService");
     }
 
-    public ReservedProjectSettingsHandlerProvider(ServerlessMultiProjectPlugin plugin) {
+    public MultiProjectReservedStateHandlerProvider(ServerlessMultiProjectPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public Collection<ReservedProjectStateHandler<?>> projectHandlers() {
-        return List.of(plugin.getReservedProjectSettingsAction());
+        return List.of(plugin.getReservedProjectSettingsAction(), new ReservedProjectSoftDeleteAction());
     }
 }
