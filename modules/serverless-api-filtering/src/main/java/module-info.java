@@ -17,10 +17,8 @@
 
 module org.elasticsearch.serverless.apifiltering {
     requires org.elasticsearch.base;
-    requires org.elasticsearch.server;
-    requires org.elasticsearch.xcontent;
     requires org.elasticsearch.xcore;
-    requires org.elasticsearch.logging;
+    requires org.elasticsearch.server;
 
     exports co.elastic.elasticsearch.api.filtering to org.elasticsearch.server;
     exports co.elastic.elasticsearch.api.validation to org.elasticsearch.server;

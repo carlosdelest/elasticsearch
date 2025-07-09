@@ -21,10 +21,12 @@ import co.elastic.elasticsearch.serverless.constants.ObservabilityTier;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 import co.elastic.elasticsearch.serverless.observability.api.LogsEssentialsAsyncSearchRequestValidator;
 import co.elastic.elasticsearch.serverless.observability.api.LogsEssentialsSearchRequestValidator;
+import co.elastic.elasticsearch.serverless.observability.api.MlXpackInfoApiFilter;
 
 import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
 
@@ -34,10 +36,12 @@ import java.util.List;
 
 public class LogsEssentialsPlugin extends Plugin implements ActionPlugin {
     private final SetOnce<Settings> settings = new SetOnce<>();
+    private final SetOnce<ThreadContext> threadContext = new SetOnce<>();
 
     @Override
     public Collection<?> createComponents(PluginServices services) {
         settings.set(services.clusterService().getSettings());
+        threadContext.set(services.threadPool().getThreadContext());
         return Collections.emptyList();
     }
 
@@ -47,7 +51,8 @@ public class LogsEssentialsPlugin extends Plugin implements ActionPlugin {
         return (logsEssentials)
             ? List.of(
                 new LogsEssentialsAsyncSearchRequestValidator(settings.get()),
-                new LogsEssentialsSearchRequestValidator(settings.get())
+                new LogsEssentialsSearchRequestValidator(settings.get()),
+                new MlXpackInfoApiFilter(settings.get())
             )
             : Collections.emptyList();
     }

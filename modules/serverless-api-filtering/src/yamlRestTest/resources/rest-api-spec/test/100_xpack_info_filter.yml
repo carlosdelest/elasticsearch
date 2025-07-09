@@ -1,0 +1,9 @@
+---
+"ML feature is available with non-logs essentials projects":
+  - skip:
+      features: headers
+  - do:
+      headers: { Authorization: "Basic eF9wYWNrX3Jlc3RfdXNlcjp4LXBhY2stdGVzdC1wYXNzd29yZA==" } # x_pack_rest_user, an operator
+      xpack.info: {}
+  - match: { features.ml.enabled: true }
+  - match: { features.ml.available: true }
