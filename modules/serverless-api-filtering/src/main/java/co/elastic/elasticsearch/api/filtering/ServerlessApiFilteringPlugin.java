@@ -88,7 +88,8 @@ public class ServerlessApiFilteringPlugin extends Plugin implements ActionPlugin
                 // Validation for dot-prefixed index creation
                 new CreateIndexDotValidator(context, clusterService),
                 new AutoCreateDotValidator(context, clusterService),
-                new IndexTemplateDotValidator(context, clusterService)
+                new IndexTemplateDotValidator(context, clusterService),
+                new HealthApiResponseFilter(context)
             )
         );
 
