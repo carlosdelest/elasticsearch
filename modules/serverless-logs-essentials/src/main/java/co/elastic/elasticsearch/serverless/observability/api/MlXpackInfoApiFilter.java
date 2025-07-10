@@ -20,47 +20,30 @@ package co.elastic.elasticsearch.serverless.observability.api;
 import co.elastic.elasticsearch.serverless.constants.ObservabilityTier;
 import co.elastic.elasticsearch.serverless.constants.ServerlessSharedSettings;
 
-import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.ActionResponse;
-import org.elasticsearch.action.support.ActionFilterChain;
-import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.protocol.xpack.XPackInfoResponse;
-import org.elasticsearch.tasks.Task;
 import org.elasticsearch.xpack.core.XPackField;
 import org.elasticsearch.xpack.core.action.XPackInfoFeatureAction;
 import org.elasticsearch.xpack.core.action.XPackInfoFeatureResponse;
+import org.elasticsearch.xpack.core.api.filtering.ApiFilteringActionFilter;
 
-public class MlXpackInfoApiFilter implements MappedActionFilter {
+public class MlXpackInfoApiFilter extends ApiFilteringActionFilter<XPackInfoFeatureResponse> {
     private final boolean isLogsEssentialsProject;
 
-    public MlXpackInfoApiFilter(Settings settings) {
+    public MlXpackInfoApiFilter(ThreadContext context, Settings settings) {
+        super(context, XPackInfoFeatureAction.MACHINE_LEARNING.name(), XPackInfoFeatureResponse.class, true);
         this.isLogsEssentialsProject = ServerlessSharedSettings.OBSERVABILITY_TIER.get(settings) == ObservabilityTier.LOGS_ESSENTIALS;
     }
 
     @Override
-    public String actionName() {
-        return XPackInfoFeatureAction.MACHINE_LEARNING.name();
-    }
+    protected XPackInfoFeatureResponse filterResponse(XPackInfoFeatureResponse response) throws Exception {
+        if (isLogsEssentialsProject && response.getInfo().name().equals(XPackField.MACHINE_LEARNING)) {
+            return new XPackInfoFeatureResponse(
+                new XPackInfoResponse.FeatureSetsInfo.FeatureSet(XPackField.MACHINE_LEARNING, false, false)
+            );
+        }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public <Request extends ActionRequest, Response extends ActionResponse> void apply(
-        Task task,
-        String action,
-        Request request,
-        ActionListener<Response> listener,
-        ActionFilterChain<Request, Response> chain
-    ) {
-        chain.proceed(task, action, request, listener.map(resp -> {
-            if (resp instanceof XPackInfoFeatureResponse && isLogsEssentialsProject) {
-                return (Response) new XPackInfoFeatureResponse(
-                    new XPackInfoResponse.FeatureSetsInfo.FeatureSet(XPackField.MACHINE_LEARNING, false, false)
-                );
-            } else {
-                return resp;
-            }
-        }));
+        return response;
     }
 }

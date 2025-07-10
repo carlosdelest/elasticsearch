@@ -52,7 +52,7 @@ public class LogsEssentialsPlugin extends Plugin implements ActionPlugin {
             ? List.of(
                 new LogsEssentialsAsyncSearchRequestValidator(settings.get()),
                 new LogsEssentialsSearchRequestValidator(settings.get()),
-                new MlXpackInfoApiFilter(settings.get())
+                new MlXpackInfoApiFilter(threadContext.get(), settings.get())
             )
             : Collections.emptyList();
     }
