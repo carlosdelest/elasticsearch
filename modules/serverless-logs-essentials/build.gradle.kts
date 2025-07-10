@@ -32,6 +32,8 @@ dependencies {
     compileOnly(xpackModule("esql"))
     compileOnly(xpackModule("esql-core"))
 
+    testImplementation(xpackModule("ml"))
+
     javaRestTestImplementation(project(":libs:serverless-shared-constants"))
 }
 

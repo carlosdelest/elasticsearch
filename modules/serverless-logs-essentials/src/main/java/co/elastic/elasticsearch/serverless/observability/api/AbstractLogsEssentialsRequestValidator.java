@@ -30,6 +30,8 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregatorFactories;
+import org.elasticsearch.search.aggregations.BaseAggregationBuilder;
+import org.elasticsearch.search.aggregations.PipelineAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.tasks.Task;
 
@@ -57,22 +59,29 @@ abstract class AbstractLogsEssentialsRequestValidator implements MappedActionFil
             AggregatorFactories.Builder aggregations = getSource(request).aggregations();
             if (aggregations != null) {
                 for (AggregationBuilder aggBuilder : aggregations.getAggregatorFactories()) {
-                    validateAggregations(aggBuilder);
+                    validateAggregationsRecursively(aggBuilder);
+                }
+                for (PipelineAggregationBuilder aggBuilder : aggregations.getPipelineAggregatorFactories()) {
+                    validateAggregation(aggBuilder);
                 }
             }
         }
         chain.proceed(task, action, request, listener);
     }
 
-    private void validateAggregations(AggregationBuilder aggregation) {
-        String aggregationName = aggregation.getName();
-        if (PROHIBITED_AGGREGATIONS.contains(aggregationName)) {
-            String message = "Aggregation [" + aggregationName + "] is not available in current project tier";
-            throw new ElasticsearchStatusException(message, RestStatus.BAD_REQUEST);
-        }
+    private void validateAggregationsRecursively(AggregationBuilder aggregationBuilder) {
+        validateAggregation(aggregationBuilder);
 
-        for (AggregationBuilder subAggregation : aggregation.getSubAggregations()) {
-            validateAggregations(subAggregation);
+        for (AggregationBuilder subAggregation : aggregationBuilder.getSubAggregations()) {
+            validateAggregationsRecursively(subAggregation);
+        }
+    }
+
+    private static void validateAggregation(BaseAggregationBuilder baseAggregationBuilder) {
+        String aggregationType = baseAggregationBuilder.getType();
+        if (PROHIBITED_AGGREGATIONS.contains(aggregationType)) {
+            String message = "Aggregation [" + aggregationType + "] is not available in current project tier";
+            throw new ElasticsearchStatusException(message, RestStatus.BAD_REQUEST);
         }
     }
 }

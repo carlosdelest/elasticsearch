@@ -58,9 +58,9 @@ public class LogsEssentialsAggregationsFilterIT extends ESRestTestCase {
             {
               "size": 0,
               "aggs": {
-                "categorize_text": {
-                  "terms": {
-                    "field": "message.keyword"
+                "categories": {
+                  "categorize_text": {
+                    "field": "message"
                   }
                 }
               }
@@ -79,6 +79,70 @@ public class LogsEssentialsAggregationsFilterIT extends ESRestTestCase {
         );
     }
 
+    public void testPipelineAggregation() {
+        String searchBody = """
+            {
+              "aggs": {
+                "date":{
+                  "date_histogram": {
+                    "field": "@timestamp",
+                    "fixed_interval": "1d"
+                  },
+                  "aggs": {
+                    "avg": {
+                      "avg": {
+                        "field": "bytes"
+                      }
+                    }
+                  }
+                },
+                "change_points_avg": {
+                  "change_point": {
+                    "buckets_path": "date>avg"
+                  }
+                }
+              }
+            }
+            """;
+
+        Request searchRequest = new Request("POST", "/_search");
+        searchRequest.setJsonEntity(searchBody);
+
+        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(searchRequest));
+
+        assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(400));
+        assertThat(exception.getMessage(), containsString("Aggregation [change_point] is not available in current project tier"));
+    }
+
+    public void testAsyncSearchWithFrequentItemSetsAggregation() {
+        String searchBody = """
+            {
+               "size":0,
+               "aggs":{
+                  "my_agg":{
+                     "frequent_item_sets":{
+                        "minimum_set_size":3,
+                        "fields":[
+                           {
+                              "field":"log.level"
+                           }
+                        ],
+                        "size":3
+                     }
+                  }
+               }
+            }
+            """;
+
+        Request searchRequest = new Request("POST", "/_async_search");
+        searchRequest.setJsonEntity(searchBody);
+
+        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(searchRequest));
+
+        assertThat(exception.getResponse().getStatusLine().getStatusCode(), equalTo(400));
+        assertThat(exception.getMessage(), containsString("Aggregation [frequent_item_sets] is not available in current project tier"));
+    }
+
     public void testSearchWithNestedProhibitedAggregation() {
         String searchBody = """
             {
@@ -90,7 +154,7 @@ public class LogsEssentialsAggregationsFilterIT extends ESRestTestCase {
                   },
                   "aggs": {
                     "categorize_text": {
-                      "terms": {
+                      "categorize_text": {
                         "field": "message.keyword"
                       }
                     }

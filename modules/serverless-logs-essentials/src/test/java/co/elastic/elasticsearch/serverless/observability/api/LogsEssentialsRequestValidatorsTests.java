@@ -30,6 +30,8 @@ import org.elasticsearch.action.search.TransportSearchAction;
 import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.search.aggregations.AggregationBuilder;
+import org.elasticsearch.search.aggregations.PipelineAggregationBuilder;
 import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.AvgAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
@@ -37,8 +39,10 @@ import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.search.action.SubmitAsyncSearchAction;
 import org.elasticsearch.xpack.core.search.action.SubmitAsyncSearchRequest;
+import org.elasticsearch.xpack.ml.aggs.categorization.CategorizeTextAggregationBuilder;
+import org.elasticsearch.xpack.ml.aggs.changepoint.ChangePointAggregationBuilder;
+import org.elasticsearch.xpack.ml.aggs.frequentitemsets.FrequentItemSetsAggregationBuilder;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.function.Function;
 
@@ -55,12 +59,40 @@ public class LogsEssentialsRequestValidatorsTests extends ESTestCase {
             .build();
 
         LogsEssentialsSearchRequestValidator validator = new LogsEssentialsSearchRequestValidator(settings);
-        verifyAggregations(TransportSearchAction.NAME, validator, aggName -> {
+        verifyAggregations(TransportSearchAction.NAME, validator, builder -> {
             SearchRequest request = new SearchRequest();
-            SearchSourceBuilder sourceBuilder = createSearchSourceBuilderWithAgg(aggName);
+            SearchSourceBuilder sourceBuilder = createSearchSourceBuilderWithAgg(builder);
             request.source(sourceBuilder);
             return request;
         });
+    }
+
+    public void testPipelineAggregations() {
+        Settings settings = Settings.builder()
+            .put(ServerlessSharedSettings.PROJECT_TYPE.getKey(), ProjectType.OBSERVABILITY.name())
+            .put(ServerlessSharedSettings.OBSERVABILITY_TIER.getKey(), ObservabilityTier.LOGS_ESSENTIALS.name())
+            .build();
+
+        LogsEssentialsSearchRequestValidator validator = new LogsEssentialsSearchRequestValidator(settings);
+        SearchRequest request = new SearchRequest();
+
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+
+        AvgAggregationBuilder avgAgg = new AvgAggregationBuilder("avg_value");
+        avgAgg.field("value");
+        sourceBuilder.aggregation(avgAgg);
+
+        PipelineAggregationBuilder prohibitedAgg = new ChangePointAggregationBuilder("change_point", "avg_value");
+        sourceBuilder.aggregations().addPipelineAggregator(prohibitedAgg);
+
+        request.source(sourceBuilder);
+        ElasticsearchStatusException exception = expectThrows(
+            ElasticsearchStatusException.class,
+            () -> validateRequest(TransportSearchAction.NAME, validator, request)
+        );
+
+        assertThat(RestStatus.BAD_REQUEST, equalTo(exception.status()));
+        assertThat("Aggregation [change_point] is not available in current project tier", equalTo(exception.getMessage()));
     }
 
     public void testAsyncRequestAggregations() {
@@ -76,15 +108,12 @@ public class LogsEssentialsRequestValidatorsTests extends ESTestCase {
         });
     }
 
-    private static SearchSourceBuilder createSearchSourceBuilderWithAgg(String aggName) {
+    private static SearchSourceBuilder createSearchSourceBuilderWithAgg(AggregationBuilder aggregationBuilder) {
         SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-
-        TermsAggregationBuilder prohibitedAgg = new TermsAggregationBuilder(aggName);
-        prohibitedAgg.field("test_field");
 
         AvgAggregationBuilder avgAgg = new AvgAggregationBuilder("avg_value");
         avgAgg.field("value");
-        avgAgg.subAggregation(prohibitedAgg);
+        avgAgg.subAggregation(aggregationBuilder);
 
         sourceBuilder.aggregation(avgAgg);
         return sourceBuilder;
@@ -114,17 +143,21 @@ public class LogsEssentialsRequestValidatorsTests extends ESTestCase {
     private static <Request extends ActionRequest> void verifyAggregations(
         String action,
         AbstractLogsEssentialsRequestValidator validator,
-        Function<String, Request> requestCreator
+        Function<AggregationBuilder, Request> requestCreator
     ) {
         assertThat(action, equalTo(validator.actionName()));
 
-        String allowedAggregation = AvgAggregationBuilder.NAME;
+        AggregationBuilder allowedAggregation = new AvgAggregationBuilder("test");
         requestCreator.apply(allowedAggregation);
 
-        Collection<String> prohibitedAggregations = List.of("categorize_text", "change_point", "frequent_item_sets");
+        List<AggregationBuilder> prohibitedAggregations = List.of(
+            new CategorizeTextAggregationBuilder("test", "test_field"),
+            new FrequentItemSetsAggregationBuilder("test", List.of(), 1, 1, 3, null, "map")
+        );
 
-        for (String prohibitedAggName : prohibitedAggregations) {
-            Request request = requestCreator.apply(prohibitedAggName);
+        for (AggregationBuilder prohibitedAgg : prohibitedAggregations) {
+            String prohibitedAggName = prohibitedAgg.getType();
+            Request request = requestCreator.apply(prohibitedAgg);
 
             ElasticsearchStatusException exception = expectThrows(
                 ElasticsearchStatusException.class,
