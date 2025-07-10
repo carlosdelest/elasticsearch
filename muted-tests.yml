@@ -199,3 +199,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchPowerAffectsReplica
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4192
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
+  method: test {inlinestats.GroupByRenamedExpression ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4193
