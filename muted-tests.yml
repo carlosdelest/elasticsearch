@@ -202,3 +202,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
   method: test {inlinestats.GroupByMultipleRenamedColumns_AndSameNameExpressionGroupingOverride ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4185
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {inlinestats.TwoAggregatesGroupedBy_AField_And_AnExpression ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4187
