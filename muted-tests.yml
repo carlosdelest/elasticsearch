@@ -193,3 +193,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/filter_crud/Test delete in-use filter}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4167
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
+  method: test {inlinestats.TwoAggregatesGroupedBy_AField_And_AnExpression ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4183
