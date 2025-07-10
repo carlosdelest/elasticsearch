@@ -208,3 +208,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
   method: test {inlinestats.TwoAggregatesGroupedBy_AField_And_AnExpression SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4188
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
+  method: test {inlinestats.GroupByRenamedExpression SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4190
