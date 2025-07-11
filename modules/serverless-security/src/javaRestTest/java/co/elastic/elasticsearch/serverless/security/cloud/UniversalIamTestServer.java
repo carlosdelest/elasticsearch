@@ -87,6 +87,9 @@ public class UniversalIamTestServer extends ExternalResource {
             exchange.getResponseHeaders().add("Content-Type", "application/json; charset=utf-8");
             exchange.sendResponseHeaders(response.responseCode(), responseBytes.length());
             responseBytes.writeTo(exchange.getResponseBody());
+        } catch (Exception e) {
+            logger.error("Error handling request", e);
+            exchange.sendResponseHeaders(500, 0);
         }
     }
 
@@ -99,7 +102,7 @@ public class UniversalIamTestServer extends ExternalResource {
     HttpServer configureHttpServer() throws IOException {
         HttpsServer server = HttpsServer.create();
         server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
-        server.createContext("/uiam/api/v1/authentication/_authenticate-project", this::handle);
+        server.createContext("/uiam/api/v1/authentication/_authenticate", this::handle);
 
         SSLContext sslContext;
         try (InputStream keystoreInput = getClass().getClassLoader().getResourceAsStream("uiam/unified-keystore.jks")) {
@@ -152,7 +155,8 @@ public class UniversalIamTestServer extends ExternalResource {
         String apiKeyId,
         String apiKeyDescription,
         String organizationId,
-        String... applicationRoles
+        CloudCredentialsMetadata credentials,
+        CloudAuthenticateProjectContext context
     ) implements UniversalIamResponse {
 
         @Override
@@ -167,10 +171,25 @@ public class UniversalIamTestServer extends ExternalResource {
             xcb.field("type", type);
             xcb.field("api_key_id", apiKeyId);
             xcb.field("organization_id", organizationId);
-            xcb.field("application_roles", applicationRoles);
+            xcb.startArray("contexts");
+            xcb.startObject();
+            xcb.field("project_id", context.project().projectId());
+            xcb.field("project_organization_id", context.project().organizationId());
+            xcb.field("project_type", context.project().projectType());
+            xcb.field("application_roles", context.applicationRoles());
+            xcb.endObject();
+            xcb.endArray();
             if (apiKeyDescription != null) {
                 xcb.field("api_key_description", apiKeyDescription);
             }
+            xcb.startObject("credentials");
+            xcb.field("type", "api-key");
+            xcb.field("internal", credentials.internal());
+            xcb.field("creation", credentials.creation().toEpochMilli());
+            if (credentials.expiration() != null) {
+                xcb.field("expiration", credentials.expiration().toEpochMilli());
+            }
+            xcb.endObject();
             xcb.endObject();
             return BytesReference.bytes(xcb);
         }

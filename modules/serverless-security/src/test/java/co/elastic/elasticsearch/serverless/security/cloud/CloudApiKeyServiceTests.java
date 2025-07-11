@@ -28,6 +28,8 @@ import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -51,12 +53,14 @@ public class CloudApiKeyServiceTests extends ESTestCase {
     private final Supplier<ProjectInfo> projectInfoSupplier = () -> new ProjectInfo(PROJECT_ID, ORGANIZATION_ID, PROJECT_TYPE);
 
     public void testSuccessfulAuthentication() {
+        final SecureString sharedSecret = randomBoolean() ? new SecureString("shared-secret".toCharArray()) : null;
+        final boolean internal = sharedSecret != null;
         final List<String> roles = List.of("viewer", "editor");
-        final UniversalIamClient client = mockUniversalIamClient(roles);
+        final UniversalIamClient client = mockUniversalIamClient(roles, internal);
         final PlainActionFuture<Authentication> future = new PlainActionFuture<>();
         final CloudApiKeyService cloudApiKeyService = new CloudApiKeyService(NODE_ID, client, projectInfoSupplier);
 
-        cloudApiKeyService.authenticate(new CloudApiKey(new SecureString("essu_test-api-key".toCharArray())), future);
+        cloudApiKeyService.authenticate(new CloudApiKey(new SecureString("essu_test-api-key".toCharArray()), sharedSecret), future);
 
         Authentication authentication = future.actionGet();
         assertThat(authentication, notNullValue());
@@ -71,7 +75,7 @@ public class CloudApiKeyServiceTests extends ESTestCase {
             equalTo(
                 Map.ofEntries(
                     Map.entry(AuthenticationField.API_KEY_NAME_KEY, API_KEY_NAME),
-                    Map.entry(AuthenticationField.API_KEY_INTERNAL_KEY, false)
+                    Map.entry(AuthenticationField.API_KEY_INTERNAL_KEY, internal)
                 )
             )
         );
@@ -95,8 +99,9 @@ public class CloudApiKeyServiceTests extends ESTestCase {
         final UniversalIamClient client = mockUniversalIamClient(new RuntimeException("test exception"));
         final PlainActionFuture<Authentication> future = new PlainActionFuture<>();
         final CloudApiKeyService cloudApiKeyService = new CloudApiKeyService(NODE_ID, client, projectInfoSupplier);
+        final SecureString sharedSecret = randomBoolean() ? new SecureString("shared-secret".toCharArray()) : null;
 
-        cloudApiKeyService.authenticate(new CloudApiKey(new SecureString("essu_test-api-key".toCharArray())), future);
+        cloudApiKeyService.authenticate(new CloudApiKey(new SecureString("essu_test-api-key".toCharArray()), sharedSecret), future);
 
         // TODO: Should be changed once we improve error handling
         ElasticsearchSecurityException ese = expectThrows(ElasticsearchSecurityException.class, future::actionGet);
@@ -105,14 +110,20 @@ public class CloudApiKeyServiceTests extends ESTestCase {
     }
 
     @SuppressWarnings("unchecked")
-    private UniversalIamClient mockUniversalIamClient(List<String> roles) {
+    private UniversalIamClient mockUniversalIamClient(List<String> roles, boolean internal) {
         UniversalIamClient client = mock(UniversalIamClient.class);
         doAnswer(invocation -> {
             CloudApiKeyAuthenticationResponse response = new CloudApiKeyAuthenticationResponse(
                 API_KEY_ID,
                 ORGANIZATION_ID,
-                roles,
-                "api_key",
+                List.of(new CloudAuthenticateProjectContext(new ProjectInfo(PROJECT_ID, ORGANIZATION_ID, "elasticsearch"), roles)),
+                new CloudCredentialsMetadata(
+                    "api-key",
+                    internal,
+                    Instant.now(),
+                    randomBoolean() ? Instant.now().plus(Duration.ofDays(7)) : null
+                ),
+                "api-key",
                 API_KEY_NAME
             );
             ((ActionListener<CloudApiKeyAuthenticationResponse>) invocation.getArgument(1)).onResponse(response);

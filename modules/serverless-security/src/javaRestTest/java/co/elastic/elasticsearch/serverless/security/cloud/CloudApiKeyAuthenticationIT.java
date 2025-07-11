@@ -43,8 +43,11 @@ import org.junit.rules.TestRule;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -63,6 +66,7 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
     private static final String ORGANIZATION_ID = "test-org-id";
     private static final String PROJECT_ID = "test-project-id";
     private static final ProjectType PROJECT_TYPE = ProjectType.ELASTICSEARCH_GENERAL_PURPOSE;
+    private static final ProjectInfo PROJECT_INFO = new ProjectInfo(PROJECT_ID, ORGANIZATION_ID, PROJECT_TYPE);
 
     private static final UniversalIamTestServer universalIamTestService = new UniversalIamTestServer();
 
@@ -131,25 +135,35 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
     public void testAuthenticateWithCloudApiKey() throws IOException {
         final String apiKeyName = randomBoolean() ? "my-api-key-name-" + randomAlphaOfLength(20) : null;
         final String apiKeyId = "test-api-key-id";
+        final String clientSharedSecret = randomBoolean() ? "shared_secret_" + randomAlphaOfLength(64) : null;
+        final boolean internal = clientSharedSecret != null;
+        final String apiKey = "essu_" + randomAlphaOfLength(64);
+        final CloudCredentialsMetadata credentialsMetadata = new CloudCredentialsMetadata(
+            "api-key",
+            internal,
+            Instant.now(),
+            randomBoolean() ? Instant.now().plus(Duration.ofDays(7)) : null
+        );
         var authenticateResponse = new SuccessfulAuthenticateProjectResponse(
-            "apikey",
+            "api-key",
             apiKeyId,
             apiKeyName,
             ORGANIZATION_ID,
-            "role1",
-            "role2"
+            credentialsMetadata,
+            new CloudAuthenticateProjectContext(PROJECT_INFO, List.of("role1", "role2"))
+
         );
         universalIamTestService.setResponse(authenticateResponse);
 
         Map<String, Object> responseBody = responseAsMap(
-            performRequestWithCloudApiKey("essu_" + randomAlphaOfLength(64), new Request("GET", "/_security/_authenticate"))
+            performRequestWithCloudApiKey(apiKey, clientSharedSecret, new Request("GET", "/_security/_authenticate"))
         );
 
         assertThat(ObjectPath.evaluate(responseBody, "username"), is(authenticateResponse.apiKeyId()));
-        assertResponseHasRoles(responseBody, authenticateResponse.applicationRoles());
+        assertResponseHasRoles(responseBody, authenticateResponse.context().applicationRoles());
         assertThat(ObjectPath.evaluate(responseBody, "authentication_type"), is("api_key"));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.id"), is(apiKeyId));
-        assertThat(ObjectPath.evaluate(responseBody, "api_key.internal"), is(false));
+        assertThat(ObjectPath.evaluate(responseBody, "api_key.internal"), is(internal));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.name"), is(apiKeyName));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.managed_by"), is("cloud"));
         assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.name"), is("_cloud_api_key"));
@@ -157,18 +171,25 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         assertThat(ObjectPath.evaluate(responseBody, "lookup_realm.name"), is("_cloud_api_key"));
         assertThat(ObjectPath.evaluate(responseBody, "lookup_realm.type"), is("_cloud_api_key"));
 
-        authenticateResponse = new SuccessfulAuthenticateProjectResponse("apikey", apiKeyId, apiKeyName, ORGANIZATION_ID);
+        authenticateResponse = new SuccessfulAuthenticateProjectResponse(
+            "apikey",
+            apiKeyId,
+            apiKeyName,
+            ORGANIZATION_ID,
+            credentialsMetadata,
+            new CloudAuthenticateProjectContext(PROJECT_INFO, List.of())
+        );
         universalIamTestService.setResponse(authenticateResponse);
 
         responseBody = responseAsMap(
-            performRequestWithCloudApiKey("essu_" + randomAlphaOfLength(64), new Request("GET", "/_security/_authenticate"))
+            performRequestWithCloudApiKey(apiKey, clientSharedSecret, new Request("GET", "/_security/_authenticate"))
         );
 
         assertThat(ObjectPath.evaluate(responseBody, "username"), is(authenticateResponse.apiKeyId()));
         assertResponseHasNoRoles(responseBody);
         assertThat(ObjectPath.evaluate(responseBody, "authentication_type"), is("api_key"));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.id"), is(apiKeyId));
-        assertThat(ObjectPath.evaluate(responseBody, "api_key.internal"), is(false));
+        assertThat(ObjectPath.evaluate(responseBody, "api_key.internal"), is(internal));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.name"), is(apiKeyName));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.managed_by"), is("cloud"));
         assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.name"), is("_cloud_api_key"));
@@ -180,11 +201,11 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
     public void testFailedAuthenticationWithCloudApiKey() throws IOException {
         final String errorMessage = "No authentication mechanism found";
         universalIamTestService.setResponse(new FailedAuthenticateProjectResponse(401, errorMessage));
-
+        final String clientSharedSecret = randomBoolean() ? randomAlphaOfLength(64) : null;
         final String apiKey = "essu_" + randomAlphaOfLength(64);
         var e = expectThrows(
             ResponseException.class,
-            () -> performRequestWithCloudApiKey(apiKey, new Request("GET", "/_security/_authenticate"))
+            () -> performRequestWithCloudApiKey(apiKey, clientSharedSecret, new Request("GET", "/_security/_authenticate"))
         );
 
         // TODO: adjust after improving error handling
@@ -198,12 +219,22 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         final String apiKey = "essu_" + randomAlphaOfLength(64);
         final String apiKeyName = randomBoolean() ? "my-api-key-name-" + randomAlphaOfLength(20) : null;
         final String apiKeyId = "test-api-key-id";
+        final String clientSharedSecret = randomBoolean() ? "shared_secret_" + randomAlphaOfLength(64) : null;
+        final CloudCredentialsMetadata credentialsMetadata = new CloudCredentialsMetadata(
+            "api-key",
+            clientSharedSecret != null,
+            Instant.now(),
+            randomBoolean() ? Instant.now().plus(Duration.ofDays(7)) : null
+        );
+
         var authenticateResponse = new SuccessfulAuthenticateProjectResponse(
             "apikey",
             apiKeyId,
             apiKeyName,
             ORGANIZATION_ID,
-            "test_viewer"
+            credentialsMetadata,
+            new CloudAuthenticateProjectContext(PROJECT_INFO, List.of("test_viewer"))
+
         );
         universalIamTestService.setResponse(authenticateResponse);
 
@@ -220,7 +251,7 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
 
         {
             Request searchRequest = new Request("POST", "/*/_search");
-            Response searchResponse = performRequestWithCloudApiKey(apiKey, searchRequest);
+            Response searchResponse = performRequestWithCloudApiKey(apiKey, clientSharedSecret, searchRequest);
             assertSearchResponseContainsIndices(searchResponse, Set.of("test-index-1", "test-index-2"));
         }
         {
@@ -257,20 +288,27 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
     }
 
     @SuppressWarnings("unchecked")
-    private static void assertResponseHasRoles(Map<String, Object> responseBody, String... expectedRoles) throws IOException {
+    private static void assertResponseHasRoles(Map<String, Object> responseBody, List<String> expectedRoles) throws IOException {
         final Object actualRoles = ObjectPath.evaluate(responseBody, "roles");
         assertThat(actualRoles, is(instanceOf(Collection.class)));
-        assertThat((Collection<String>) actualRoles, containsInAnyOrder(expectedRoles));
+        assertThat((Collection<String>) actualRoles, containsInAnyOrder(expectedRoles.toArray(new String[0])));
     }
 
     private static void assertResponseHasNoRoles(Map<String, Object> responseBody) throws IOException {
-        assertResponseHasRoles(responseBody);
+        assertResponseHasRoles(responseBody, List.of());
     }
 
     private static Response performRequestWithCloudApiKey(String apiKey, Request request) throws IOException {
-        request.setOptions(
-            RequestOptions.DEFAULT.toBuilder().addHeader("Authorization", randomFrom("ApiKey", "apikey", "APIKEY") + " " + apiKey).build()
-        );
+        return performRequestWithCloudApiKey(apiKey, null, request);
+    }
+
+    private static Response performRequestWithCloudApiKey(String apiKey, String sharedSecret, Request request) throws IOException {
+        RequestOptions.Builder options = RequestOptions.DEFAULT.toBuilder();
+        options.addHeader("Authorization", randomFrom("ApiKey", "apikey", "APIKEY") + " " + apiKey);
+        if (sharedSecret != null) {
+            options.addHeader(CloudApiKeyAuthenticator.CLIENT_AUTHENTICATION_HEADER, sharedSecret);
+        }
+        request.setOptions(options.build());
         return client().performRequest(request);
     }
 }

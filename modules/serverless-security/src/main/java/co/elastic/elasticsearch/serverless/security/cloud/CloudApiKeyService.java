@@ -30,6 +30,7 @@ import org.elasticsearch.xpack.core.security.user.User;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -60,22 +61,36 @@ public class CloudApiKeyService implements Closeable {
      */
     public void authenticate(CloudApiKey cloudApiKey, ActionListener<Authentication> listener) {
         final ProjectInfo projectInfo = projectInfoSupplier.get();
-        final CloudApiKeyAuthenticationRequest authenticationRequest = new CloudApiKeyAuthenticationRequest(projectInfo, cloudApiKey);
+        final CloudApiKeyAuthenticationRequest authenticationRequest = new CloudApiKeyAuthenticationRequest(
+            List.of(projectInfo),
+            cloudApiKey
+        );
 
         client.authenticateProject(authenticationRequest, ActionListener.wrap(response -> {
             logger.debug("Got response from universal IAM service for authentication with cloud API key [{}]", response);
+            if (response.contexts().size() != 1) {
+                logger.error("expected to get 1 authentication context, but got [{}]", response.contexts().size());
+                listener.onFailure(createAuthenticationException(projectInfo.projectId()));
+                return;
+            }
+            final CloudAuthenticateProjectContext context = response.contexts().getFirst();
+            if (false == context.project().equals(projectInfo)) {
+                logger.error("Expected to get authentication context for project [{}], but got [{}]", projectInfo, context.project());
+                listener.onFailure(createAuthenticationException(projectInfo.projectId()));
+                return;
+            }
             // TODO consider failing authentication if returned roles are empty (subject has not effective access to the project)
-            final String[] assignedRoles = response.applicationRoles().toArray(new String[0]);
+            final String[] assignedRoles = context.applicationRoles().toArray(new String[0]);
             final User user = new User(
                 response.apiKeyId(), // username == cloud API key ID
                 assignedRoles,
                 null,
                 null,
-                buildUserMetadata(response),
+                buildUserMetadata(cloudApiKey, response),
                 true
             );
             final Authentication authentication = Authentication.newCloudApiKeyAuthentication(
-                AuthenticationResult.success(user, buildAuthenticationMetadata(response, projectInfo)),
+                AuthenticationResult.success(user, buildAuthenticationMetadata(response, context)),
                 nodeName
             );
             listener.onResponse(authentication);
@@ -96,35 +111,34 @@ public class CloudApiKeyService implements Closeable {
 
     private static Map<String, Object> buildAuthenticationMetadata(
         final CloudApiKeyAuthenticationResponse response,
-        final ProjectInfo projectInfo
+        final CloudAuthenticateProjectContext context
     ) {
-        if (false == projectInfo.organizationId().equals(response.organizationId())) {
-            throw new IllegalStateException(
-                "organization ID ["
-                    + response.organizationId()
-                    + "] returned by universal IAM service does not match sent organization ID ["
-                    + projectInfo.organizationId()
-                    + "]"
-            );
-        }
+        final ProjectInfo projectInfo = context.project();
         return Map.of(
             CloudAuthenticationFields.AUTHENTICATING_PROJECT_METADATA_KEY,
             Map.ofEntries(
                 Map.entry("project_type", projectInfo.projectType()),
-                Map.entry("organization_id", projectInfo.organizationId()),
+                Map.entry("organization_id", response.organizationId()),
                 Map.entry("project_id", projectInfo.projectId())
             )
         );
     }
 
-    private static Map<String, Object> buildUserMetadata(final CloudApiKeyAuthenticationResponse response) {
+    private static Map<String, Object> buildUserMetadata(final CloudApiKey cloudApiKey, final CloudApiKeyAuthenticationResponse response) {
+        // TODO: change this once we have credentials metadata received for all requests
+        final boolean internal;
+        if (response.credentialsMetadata() != null) {
+            internal = response.credentialsMetadata().internal();
+        } else {
+            internal = cloudApiKey.clientAuthenticationSharedSecret() != null;
+        }
         if (response.apiKeyDescription() != null) {
             return Map.ofEntries(
-                Map.entry(AuthenticationField.API_KEY_INTERNAL_KEY, false),
+                Map.entry(AuthenticationField.API_KEY_INTERNAL_KEY, internal),
                 Map.entry(AuthenticationField.API_KEY_NAME_KEY, response.apiKeyDescription())
             );
         } else {
-            return Map.of(AuthenticationField.API_KEY_INTERNAL_KEY, false);
+            return Map.of(AuthenticationField.API_KEY_INTERNAL_KEY, internal);
         }
     }
 

@@ -99,7 +99,8 @@ public class ServerlessSecurityExtension implements SecurityExtension {
                     Node.NODE_NAME_SETTING.get(settings),
                     new UniversalIamClient(settings, sslConfig),
                     new ClusterSettingsProjectInfoSupplier(settings)
-                )
+                ),
+                components.threadPool()
             );
         }
         return null;

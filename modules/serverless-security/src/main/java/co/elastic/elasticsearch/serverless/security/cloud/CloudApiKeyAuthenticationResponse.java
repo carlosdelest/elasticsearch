@@ -35,23 +35,27 @@ import static org.elasticsearch.xcontent.ConstructingObjectParser.optionalConstr
  *
  * @param apiKeyId          the ID of the cloud API key used for authentication.
  * @param organizationId    the ID of the organization associated with the cloud API key.
- * @param applicationRoles  the list of application roles granted to the cloud API key.
+ * @param contexts           the context holds information about requested project authentications
+ * @param credentialsMetadata the metadata of the cloud API key which (among other information)
+ *                            includes if the key is internal or not.
  * @param type              the type of authentication used (e.g. {@code api_key}).
  * @param apiKeyDescription the optional description of the cloud API key.
  */
 public record CloudApiKeyAuthenticationResponse(
     String apiKeyId,
     String organizationId,
-    List<String> applicationRoles,
+    List<CloudAuthenticateProjectContext> contexts,
+    CloudCredentialsMetadata credentialsMetadata,
     @Nullable String type,
     @Nullable String apiKeyDescription
 ) {
 
     private static final ParseField TYPE_FIELD = new ParseField("type");
+    private static final ParseField CONTEXTS_FIELD = new ParseField("contexts");
+    private static final ParseField CREDENTIALS_FIELD = new ParseField("credentials");
     private static final ParseField API_KEY_ID_FIELD = new ParseField("api_key_id");
     private static final ParseField API_KEY_DESCRIPTION_FIELD = new ParseField("api_key_description");
     private static final ParseField ORGANIZATION_ID_FIELD = new ParseField("organization_id");
-    private static final ParseField APPLICATION_ROLES_FIELD = new ParseField("application_roles");
 
     private static final ConstructingObjectParser<CloudApiKeyAuthenticationResponse, Void> PARSER = buildParser();
 
@@ -60,11 +64,19 @@ public record CloudApiKeyAuthenticationResponse(
         final ConstructingObjectParser<CloudApiKeyAuthenticationResponse, Void> parser = new ConstructingObjectParser<>(
             "authenticate_project_with_api_key_response",
             true,
-            a -> new CloudApiKeyAuthenticationResponse((String) a[0], (String) a[1], (List<String>) a[2], (String) a[3], (String) a[4])
+            a -> new CloudApiKeyAuthenticationResponse(
+                (String) a[0],       // apiKeyId
+                (String) a[1],       // organizationId
+                (List<CloudAuthenticateProjectContext>) a[2], // contexts
+                (CloudCredentialsMetadata) a[3], // credentials
+                (String) a[4],       // type
+                (String) a[5]        // apiKeyDescription
+            )
         );
         parser.declareString(constructorArg(), API_KEY_ID_FIELD);
         parser.declareString(constructorArg(), ORGANIZATION_ID_FIELD);
-        parser.declareStringArray(constructorArg(), APPLICATION_ROLES_FIELD);
+        parser.declareObjectArray(constructorArg(), (p, c) -> CloudAuthenticateProjectContext.parse(p), CONTEXTS_FIELD);
+        parser.declareObject(optionalConstructorArg(), (p, c) -> CloudCredentialsMetadata.parse(p), CREDENTIALS_FIELD);
         parser.declareString(optionalConstructorArg(), TYPE_FIELD);
         parser.declareString(optionalConstructorArg(), API_KEY_DESCRIPTION_FIELD);
         return parser;
@@ -73,13 +85,15 @@ public record CloudApiKeyAuthenticationResponse(
     public CloudApiKeyAuthenticationResponse(
         String apiKeyId,
         String organizationId,
-        List<String> applicationRoles,
+        List<CloudAuthenticateProjectContext> contexts,
+        CloudCredentialsMetadata credentialsMetadata,
         @Nullable String type,
         @Nullable String apiKeyDescription
     ) {
         this.apiKeyId = Strings.requireNonBlank(apiKeyId, "api_key_id must not be null or empty");
         this.organizationId = Strings.requireNonBlank(organizationId, "organization_id must not be null or empty");
-        this.applicationRoles = List.copyOf(applicationRoles);
+        this.contexts = List.copyOf(contexts);
+        this.credentialsMetadata = credentialsMetadata;
         this.type = type;
         this.apiKeyDescription = apiKeyDescription;
     }
@@ -102,10 +116,12 @@ public record CloudApiKeyAuthenticationResponse(
         final StringBuilder sb = new StringBuilder("ApiKeyProjectAuthenticationResponse{");
         sb.append("apiKeyId=[").append(apiKeyId).append(']');
         sb.append(", organizationId=[").append(organizationId).append(']');
-        sb.append(", applicationRoles=").append(applicationRoles);
+        sb.append(", contexts=").append(contexts);
+        sb.append(", credentialsMetadata=").append(credentialsMetadata);
         sb.append(", type=[']").append(type).append(']');
         sb.append(", api_key_description=[").append(apiKeyDescription).append(']');
         sb.append('}');
         return sb.toString();
     }
+
 }

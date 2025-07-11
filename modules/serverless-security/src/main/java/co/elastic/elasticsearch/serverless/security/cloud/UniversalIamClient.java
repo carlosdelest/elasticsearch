@@ -29,7 +29,6 @@ import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.Method;
 import org.apache.hc.core5.http2.HttpVersionPolicy;
-import org.apache.hc.core5.net.URIBuilder;
 import org.apache.hc.core5.pool.PoolConcurrencyPolicy;
 import org.apache.hc.core5.pool.PoolReusePolicy;
 import org.apache.hc.core5.util.TimeValue;
@@ -38,23 +37,21 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.rest.RestStatus;
-import org.elasticsearch.xcontent.XContentParser;
-import org.elasticsearch.xcontent.XContentParserConfiguration;
-import org.elasticsearch.xcontent.XContentType;
 import org.elasticsearch.xpack.security.authc.ApiKeyService;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.UNIVERSAL_IAM_SERVICE_URL_SETTING;
+import static co.elastic.elasticsearch.serverless.security.cloud.CloudApiKeyAuthenticator.CLIENT_AUTHENTICATION_HEADER;
 import static org.elasticsearch.common.settings.Setting.timeSetting;
 
 public class UniversalIamClient implements Closeable {
@@ -85,15 +82,14 @@ public class UniversalIamClient implements Closeable {
 
     private static final Logger logger = LogManager.getLogger(UniversalIamClient.class);
     private static final String BASE_UIAM_PATH = "/uiam/api/v1";
-    private static final String AUTHENTICATE_PROJECT_ENDPOINT = BASE_UIAM_PATH + "/authentication/_authenticate-project";
-    private static final String HEADER_X_CLIENT_AUTHENTICATION = "X-Client-Authentication";
+    private static final String AUTHENTICATE_PROJECTS_ENDPOINT = BASE_UIAM_PATH + "/authentication/_authenticate";
     private final UniversalIamSslConfig sslConfig;
 
     private final URI authenticateProjectUri;
     private final CloseableHttpAsyncClient httpClient;
 
     public UniversalIamClient(Settings settings, UniversalIamSslConfig sslConfig) {
-        this.authenticateProjectUri = UNIVERSAL_IAM_SERVICE_URL_SETTING.get(settings).resolve(AUTHENTICATE_PROJECT_ENDPOINT);
+        this.authenticateProjectUri = UNIVERSAL_IAM_SERVICE_URL_SETTING.get(settings).resolve(AUTHENTICATE_PROJECTS_ENDPOINT);
         this.sslConfig = sslConfig;
         this.httpClient = createHttpClient(settings, sslConfig);
 
@@ -106,15 +102,13 @@ public class UniversalIamClient implements Closeable {
      * or a 401 error if the authentication fails. Every other response is considered an internal error.
      */
     public void authenticateProject(CloudApiKeyAuthenticationRequest request, ActionListener<CloudApiKeyAuthenticationResponse> listener) {
-        final SimpleHttpRequest httpGet = toSimpleHttpGetRequest(authenticateProjectUri, request);
-
-        logger.debug("Authenticating against universal IAM service [{}]", httpGet.getRequestUri());
-
-        httpClient.execute(httpGet, new FutureCallback<>() {
-
+        assert request.projects().size() == 1 : "only authenticating a single project is supported";
+        final SimpleHttpRequest httpPost = toHttpPost(authenticateProjectUri, request);
+        logger.debug("Authenticating against universal IAM service [{}]", httpPost.getRequestUri());
+        httpClient.execute(httpPost, new FutureCallback<>() {
             @Override
             public void completed(final SimpleHttpResponse result) {
-                logger.debug("cloud API key authentication request against universal IAM service [{}] succeeded", httpGet.getRequestUri());
+                logger.debug("cloud API key authentication request against universal IAM service [{}] succeeded", httpPost.getRequestUri());
                 handleResponse(result, listener);
             }
 
@@ -176,25 +170,15 @@ public class UniversalIamClient implements Closeable {
         }
     }
 
-    protected XContentParser createJsonParser(byte[] data) throws IOException {
-        return XContentType.JSON.xContent().createParser(XContentParserConfiguration.EMPTY, data);
-    }
-
-    private static SimpleHttpRequest toSimpleHttpGetRequest(URI baseUri, CloudApiKeyAuthenticationRequest request) {
-        final URI fullUri;
-        final ProjectInfo projectInfo = request.projectInfo();
+    private static SimpleHttpRequest toHttpPost(URI baseUri, CloudApiKeyAuthenticationRequest request) {
         final CloudApiKey cloudApiKey = request.cloudApiKey();
-        try {
-            fullUri = new URIBuilder(baseUri).addParameter("project_id", projectInfo.projectId())
-                .addParameter("project_owner", projectInfo.organizationId())
-                .addParameter("project_type", projectInfo.projectType())
-                .build();
-        } catch (URISyntaxException e) {
-            throw new IllegalStateException("failed to create full URI for universal IAM service", e);
+        final SimpleHttpRequest httpPost = SimpleHttpRequest.create(Method.POST, baseUri);
+        httpPost.setBody(Strings.toString(request), ContentType.APPLICATION_JSON);
+        httpPost.addHeader(HttpHeaders.AUTHORIZATION, ApiKeyService.withApiKeyPrefix(cloudApiKey.cloudApiKeyCredentials().toString()));
+        if (cloudApiKey.clientAuthenticationSharedSecret() != null) {
+            httpPost.addHeader(CLIENT_AUTHENTICATION_HEADER, cloudApiKey.clientAuthenticationSharedSecret().toString());
         }
-        SimpleHttpRequest simpleRequest = SimpleHttpRequest.create(Method.GET, fullUri);
-        simpleRequest.setHeader(HttpHeaders.AUTHORIZATION, ApiKeyService.withApiKeyPrefix(cloudApiKey.cloudApiKeyCredentials().toString()));
-        return simpleRequest;
+        return httpPost;
     }
 
     private static CloseableHttpAsyncClient createHttpClient(Settings settings, UniversalIamSslConfig sslConfig) {

@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.serverless.security.cloud;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.core.Nullable;
+import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationResult;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationToken;
@@ -37,10 +38,14 @@ import java.io.IOException;
  */
 public class CloudApiKeyAuthenticator implements CustomApiKeyAuthenticator, Closeable {
 
-    private final CloudApiKeyService cloudApiKeyService;
+    public static final String CLIENT_AUTHENTICATION_HEADER = "X-Client-Authentication";
 
-    public CloudApiKeyAuthenticator(CloudApiKeyService cloudApiKeyService) {
+    private final CloudApiKeyService cloudApiKeyService;
+    private final ThreadPool threadPool;
+
+    public CloudApiKeyAuthenticator(CloudApiKeyService cloudApiKeyService, ThreadPool threadPool) {
         this.cloudApiKeyService = cloudApiKeyService;
+        this.threadPool = threadPool;
     }
 
     @Override
@@ -48,9 +53,21 @@ public class CloudApiKeyAuthenticator implements CustomApiKeyAuthenticator, Clos
         return "cloud API key";
     }
 
+    /**
+     * Extracts a {@link CloudApiKey} from the given secure string if it starts with the cloud API key prefix.
+     */
     @Override
     public AuthenticationToken extractCredentials(@Nullable SecureString apiKeyCredentials) {
-        return CloudApiKey.fromApiKeyString(apiKeyCredentials);
+        if (apiKeyCredentials != null) {
+            if (CloudApiKey.hasCloudApiKeyPrefix(apiKeyCredentials)) {
+                SecureString clientCredentials = UniversalIamUtils.getHeaderValue(
+                    threadPool.getThreadContext(),
+                    CLIENT_AUTHENTICATION_HEADER
+                );
+                return new CloudApiKey(apiKeyCredentials, clientCredentials);
+            }
+        }
+        return null;
     }
 
     @Override

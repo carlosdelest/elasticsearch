@@ -29,8 +29,13 @@ import java.io.Closeable;
  * @param cloudApiKeyCredentials the secure string containing the cloud API key credentials.
  *                               The cloud API key credentials start with a prefix {@code essu_},
  *                               which is used to identify the key as a cloud API key.
+ * @param clientAuthenticationSharedSecret the secure string containing the client authentication shared secret.
+ *                                         It is used to authenticate the internal cloud API key.
  */
-public record CloudApiKey(SecureString cloudApiKeyCredentials) implements AuthenticationToken, Closeable {
+public record CloudApiKey(SecureString cloudApiKeyCredentials, @Nullable SecureString clientAuthenticationSharedSecret)
+    implements
+        AuthenticationToken,
+        Closeable {
 
     /**
      * Prefix of the universal cloud API keys. All cloud API keys created by universal IAM service will have this prefix.
@@ -49,25 +54,25 @@ public record CloudApiKey(SecureString cloudApiKeyCredentials) implements Authen
 
     @Override
     public void clearCredentials() {
-        cloudApiKeyCredentials.close();
+        close();
     }
 
     @Override
     public void close() {
         cloudApiKeyCredentials.close();
+        if (clientAuthenticationSharedSecret != null) {
+            clientAuthenticationSharedSecret.close();
+        }
     }
 
-    /**
-     * Extracts a {@link CloudApiKey} from the given secure string if it starts with the cloud API key prefix.
-     */
-    @Nullable
-    public static CloudApiKey fromApiKeyString(@Nullable SecureString apiKeyString) {
-        return apiKeyString != null && hasCloudApiKeyPrefix(apiKeyString) ? new CloudApiKey(apiKeyString) : null;
-    }
-
-    private static boolean hasCloudApiKeyPrefix(SecureString apiKeyString) {
+    public static boolean hasCloudApiKeyPrefix(SecureString apiKeyString) {
         final String rawString = apiKeyString.toString();
         return rawString.length() > CLOUD_API_KEY_CREDENTIAL_PREFIX.length()
             && rawString.regionMatches(true, 0, CLOUD_API_KEY_CREDENTIAL_PREFIX, 0, CLOUD_API_KEY_CREDENTIAL_PREFIX.length());
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "@" + Integer.toHexString(hashCode());
     }
 }

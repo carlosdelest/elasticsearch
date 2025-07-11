@@ -24,4 +24,11 @@ public final class CloudAuthenticationFields {
      */
     public static final String AUTHENTICATING_PROJECT_METADATA_KEY = "_security_serverless_authenticating_project";
 
+    public static final String PROJECT_ID_FIELD = "project_id";
+    public static final String PROJECT_ORGANIZATION_FIELD = "project_organization_id";
+    public static final String PROJECT_TYPE_FIELD = "project_type";
+    public static final String APPLICATION_ROLES_FIELD = "application_roles";
+    public static final String CONTEXTS_FIELD = "contexts";
+    public static final String TYPE_FIELD = "type";
+
 }
