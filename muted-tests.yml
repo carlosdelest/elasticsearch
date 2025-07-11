@@ -193,9 +193,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/filter_crud/Test delete in-use filter}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4167
-- class: co.elastic.elasticsearch.stateless.StatelessReshardIT
-  method: testReshardTargetWillNotTransitionToHandoffIfSourcePrimaryTermChanged
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4184
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchPowerAffectsReplica
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4192
