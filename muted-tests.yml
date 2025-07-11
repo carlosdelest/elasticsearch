@@ -193,3 +193,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
   method: test {inlinestats.GroupByRenamedExpression ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4193
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {floats.ScalbWithHugeConstantScaleFactor SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4199
