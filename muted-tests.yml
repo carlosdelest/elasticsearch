@@ -205,3 +205,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.cache.StatelessOnlinePrewarmingIT
   method: testShardPrewarming
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4202
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
+  method: test {inlinestats.TwoAggregatesGroupedBy_AField_And_AnExpression ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4203
