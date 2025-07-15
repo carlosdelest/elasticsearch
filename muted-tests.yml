@@ -226,3 +226,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
   method: test {inlinestats.GroupByMultipleRenamedColumns_AndConstantValue SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4213
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
+  method: test {spatial.AirportsSortCityName ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4214
