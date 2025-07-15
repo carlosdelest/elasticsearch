@@ -229,3 +229,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
   method: test {spatial.AirportsSortCityName ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4214
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {spatial_shapes.CartesianPointIntersectsPolygon ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4218
