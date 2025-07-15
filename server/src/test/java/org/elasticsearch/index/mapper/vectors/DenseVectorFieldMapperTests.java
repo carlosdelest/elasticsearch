@@ -1972,7 +1972,7 @@ public class DenseVectorFieldMapperTests extends SyntheticVectorsMapperTestCase 
             containsString("Failed to parse mapping: Mapping definition for [field] has unsupported parameters:  [foo : {}]")
         );
         List<String> floatOnlyQuantizations = new ArrayList<>(
-            Arrays.asList("int4_hnsw", "int8_hnsw", "int8_flat", "int4_flat", "bbq_hnsw", "bbq_flat")
+            Arrays.asList("int4_hnsw", "int8_hnsw", "int8_flat", "int4_flat", "bbq_hnsw")
         );
         for (String quantizationKind : floatOnlyQuantizations) {
             e = expectThrows(

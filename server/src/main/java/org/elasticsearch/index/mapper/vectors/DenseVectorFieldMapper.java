@@ -2242,7 +2242,6 @@ public class DenseVectorFieldMapper extends FieldMapper {
 
         @Override
         KnnVectorsFormat getVectorsFormat(ElementType elementType) {
-            assert elementType == ElementType.FLOAT;
             return new ES818BinaryQuantizedVectorsFormat();
         }
 
