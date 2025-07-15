@@ -223,3 +223,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
   method: test {rename.RenameProjectEval ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4212
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
+  method: test {inlinestats.GroupByMultipleRenamedColumns_AndConstantValue SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4213
