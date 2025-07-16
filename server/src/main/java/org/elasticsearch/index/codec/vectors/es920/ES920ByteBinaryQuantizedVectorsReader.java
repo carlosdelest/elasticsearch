@@ -246,11 +246,6 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
 
     @Override
     public void search(String field, byte[] target, KnnCollector knnCollector, Bits acceptDocs) throws IOException {
-        rawVectorsReader.search(field, target, knnCollector, acceptDocs);
-    }
-
-    @Override
-    public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs) throws IOException {
         if (knnCollector.k() == 0) return;
         final RandomVectorScorer scorer = getRandomVectorScorer(field, target);
         if (scorer == null) return;
@@ -262,6 +257,11 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
                 collector.incVisitedCount(1);
             }
         }
+    }
+
+    @Override
+    public void search(String field, float[] target, KnnCollector knnCollector, Bits acceptDocs) throws IOException {
+        rawVectorsReader.search(field, target, knnCollector, acceptDocs);
     }
 
     @Override
