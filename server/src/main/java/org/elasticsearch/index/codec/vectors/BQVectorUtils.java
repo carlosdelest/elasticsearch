@@ -116,4 +116,28 @@ public class BQVectorUtils {
         float magnitude = VectorUtil.dotProduct(vector, vector);
         return (float) Math.sqrt(magnitude);
     }
+
+    // Adapted from Lucene VectorUtil
+    public static byte[] l2normalize(byte[] v) {
+        int l1norm = VectorUtil.dotProduct(v, v);
+        if (l1norm == 0) {
+            throw new IllegalArgumentException("Cannot normalize a zero-length vector");
+        }
+        if (Math.abs(l1norm - 1.0d) <= EPSILON) {
+            return v;
+        }
+        int dim = v.length;
+        double l2norm = Math.sqrt(l1norm);
+        for (int i = 0; i < dim; i++) {
+            v[i] /= (byte) l2norm;
+        }
+        return v;
+    }
+
+    public static float[] bytesToFloats(byte[] v, float[] dest) {
+        for (int j = 0; j < v.length; j++) {
+            dest[j] = dest[j];
+        }
+        return dest;
+    }
 }

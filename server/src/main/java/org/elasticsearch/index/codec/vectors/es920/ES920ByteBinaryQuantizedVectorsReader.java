@@ -177,7 +177,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
     }
 
     @Override
-    public RandomVectorScorer getRandomVectorScorer(String field, float[] target) throws IOException {
+    public RandomVectorScorer getRandomVectorScorer(String field, byte[] target) throws IOException {
         FieldEntry fi = fields.get(field);
         if (fi == null || fi.size() == 0) {
             return null;
@@ -202,7 +202,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
     }
 
     @Override
-    public RandomVectorScorer getRandomVectorScorer(String field, byte[] target) throws IOException {
+    public RandomVectorScorer getRandomVectorScorer(String field, float[] target) throws IOException {
         return rawVectorsReader.getRandomVectorScorer(field, target);
     }
 
@@ -213,14 +213,14 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
     }
 
     @Override
-    public FloatVectorValues getFloatVectorValues(String field) throws IOException {
+    public ByteVectorValues getByteVectorValues(String field) throws IOException {
         FieldEntry fi = fields.get(field);
         if (fi == null) {
             return null;
         }
-        if (fi.vectorEncoding != VectorEncoding.FLOAT32) {
+        if (fi.vectorEncoding != VectorEncoding.BYTE) {
             throw new IllegalArgumentException(
-                "field=\"" + field + "\" is encoded as: " + fi.vectorEncoding + " expected: " + VectorEncoding.FLOAT32
+                "field=\"" + field + "\" is encoded as: " + fi.vectorEncoding + " expected: " + VectorEncoding.BYTE
             );
         }
         OffHeapByteBinarizedVectorValues bvv = OffHeapByteBinarizedVectorValues.load(
@@ -236,12 +236,12 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
             fi.vectorDataLength,
             quantizedVectorData
         );
-        return new BinarizedVectorValues(rawVectorsReader.getFloatVectorValues(field), bvv);
+        return new BinarizedVectorValues(rawVectorsReader.getByteVectorValues(field), bvv);
     }
 
     @Override
-    public ByteVectorValues getByteVectorValues(String field) throws IOException {
-        return rawVectorsReader.getByteVectorValues(field);
+    public FloatVectorValues getFloatVectorValues(String field) throws IOException {
+        return rawVectorsReader.getFloatVectorValues(field);
     }
 
     @Override
@@ -394,11 +394,11 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
     }
 
     /** Binarized vector values holding row and quantized vector values */
-    protected static final class BinarizedVectorValues extends FloatVectorValues {
-        private final FloatVectorValues rawVectorValues;
-        private final BinarizedByteVectorValues quantizedVectorValues;
+    protected static final class BinarizedVectorValues extends ByteVectorValues {
+        private final ByteVectorValues rawVectorValues;
+        private final AbstractBinarizedByteVectorValues quantizedVectorValues;
 
-        BinarizedVectorValues(FloatVectorValues rawVectorValues, BinarizedByteVectorValues quantizedVectorValues) {
+        BinarizedVectorValues(ByteVectorValues rawVectorValues, AbstractBinarizedByteVectorValues quantizedVectorValues) {
             this.rawVectorValues = rawVectorValues;
             this.quantizedVectorValues = quantizedVectorValues;
         }
@@ -414,7 +414,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
         }
 
         @Override
-        public float[] vectorValue(int ord) throws IOException {
+        public byte[] vectorValue(int ord) throws IOException {
             return rawVectorValues.vectorValue(ord);
         }
 
@@ -439,11 +439,11 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
         }
 
         @Override
-        public VectorScorer scorer(float[] query) throws IOException {
+        public VectorScorer scorer(byte[] query) throws IOException {
             return quantizedVectorValues.scorer(query);
         }
 
-        BinarizedByteVectorValues getQuantizedVectorValues() throws IOException {
+        AbstractBinarizedByteVectorValues getQuantizedVectorValues() throws IOException {
             return quantizedVectorValues;
         }
     }

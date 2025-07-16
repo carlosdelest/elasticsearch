@@ -41,7 +41,7 @@ import static org.apache.lucene.util.quantization.OptimizedScalarQuantizer.discr
  *
  * @lucene.internal
  */
-public abstract class OffHeapByteBinarizedVectorValues extends BinarizedByteVectorValues {
+public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarizedByteVectorValues {
 
   final int dimension;
   final int size;
