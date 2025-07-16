@@ -203,8 +203,8 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         byte[] vector = new byte[discreteDims / 8];
         for (int i = 0; i < fieldData.getVectors().size(); i++) {
             byte[] byteVector = fieldData.getVectors().get(i);
-            bytesToFloats(byteVector, floatVector);
             OptimizedScalarQuantizer.QuantizationResult corrections = scalarQuantizer.scalarQuantize(
+                byteVector,
                 floatVector,
                 quantizationScratch,
                 (byte) 1,
@@ -253,7 +253,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         float[] floatVector = new float[fieldData.fieldInfo.getVectorDimension()];
         for (int ordinal : ordMap) {
             OptimizedScalarQuantizer.QuantizationResult corrections = scalarQuantizer.scalarQuantize(
-                bytesToFloats(fieldData.getVectors().get(ordinal), floatVector),
+                fieldData.getVectors().get(ordinal), floatVector,
                 quantizationScratch,
                 (byte) 1,
                 clusterCenter
@@ -342,7 +342,8 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         BinarizedByteVectorValues binarizedVectorValues = new BinarizedByteVectorValues(
             byteVectorValues,
             new OptimizedScalarQuantizer(fieldInfo.getVectorSimilarityFunction()),
-            centroid
+            centroid,
+            fieldInfo.getVectorSimilarityFunction()
         );
         long vectorDataOffset = binarizedVectorData.alignFilePointer(Float.BYTES);
         DocsWithFieldSet docsWithField = writeBinarizedVectorData(binarizedVectorData, binarizedVectorValues);
@@ -364,8 +365,8 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         IndexOutput binarizedQueryData,
         ByteVectorValues byteVectorValues,
         float[] centroid,
-        OptimizedScalarQuantizer binaryQuantizer
-    ) throws IOException {
+        OptimizedScalarQuantizer binaryQuantizer,
+        VectorSimilarityFunction similarityFunction) throws IOException {
         int discretizedDimension = BQVectorUtils.discretize(byteVectorValues.dimension(), 64);
         DocsWithFieldSet docsWithField = new DocsWithFieldSet();
         int[][] quantizationScratch = new int[2][byteVectorValues.dimension()];
@@ -376,7 +377,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         for (int docV = iterator.nextDoc(); docV != NO_MORE_DOCS; docV = iterator.nextDoc()) {
             // write index vector
             OptimizedScalarQuantizer.QuantizationResult[] r = binaryQuantizer.multiScalarQuantize(
-                bytesToFloats(byteVectorValues.vectorValue(iterator.index()), vectorValue),
+                bytesToFloats(byteVectorValues.vectorValue(iterator.index()), vectorValue, similarityFunction),
                 quantizationScratch,
                 new byte[] { 1, 4 },
                 centroid
@@ -481,7 +482,8 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
                 tempScoreQuantizedVectorData,
                 byteVectorValues,
                 centroid,
-                quantizer
+                quantizer,
+                fieldInfo.getVectorSimilarityFunction()
             );
             CodecUtil.writeFooter(tempQuantizedVectorData);
             IOUtils.close(tempQuantizedVectorData);
@@ -572,11 +574,11 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         int totalVectorCount = 0;
         for (int i = 0; i < mergeState.knnVectorsReaders.length; i++) {
             KnnVectorsReader knnVectorsReader = mergeState.knnVectorsReaders[i];
-            if (knnVectorsReader == null || knnVectorsReader.getFloatVectorValues(fieldInfo.name) == null) {
+            if (knnVectorsReader == null || knnVectorsReader.getByteVectorValues(fieldInfo.name) == null) {
                 continue;
             }
             float[] centroid = getCentroid(knnVectorsReader, fieldInfo.name);
-            int vectorCount = knnVectorsReader.getFloatVectorValues(fieldInfo.name).size();
+            int vectorCount = knnVectorsReader.getByteVectorValues(fieldInfo.name).size();
             if (vectorCount == 0) {
                 continue;
             }
@@ -673,7 +675,9 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
                 byte[] vector = flatFieldVectorsWriter.getVectors().get(i);
                 float magnitude = magnitudes.get(i);
                 for (int j = 0; j < vector.length; j++) {
-                    vector[j] = (byte) (vector[j] / magnitude);
+                    float normalized = vector[j] / magnitude;
+                    // Scale from -1.0..1.0 to -127..127
+                    vector[j] = (byte) Math.round(normalized * 127);
                 }
             }
         }
@@ -812,16 +816,23 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         private final ByteVectorValues values;
         private final OptimizedScalarQuantizer quantizer;
         private final float[] floatValue;
+        private final VectorSimilarityFunction similarityFunction;
 
         private int lastOrd = -1;
 
-        BinarizedByteVectorValues(ByteVectorValues delegate, OptimizedScalarQuantizer quantizer, float[] centroid) {
+        BinarizedByteVectorValues(
+            ByteVectorValues delegate,
+            OptimizedScalarQuantizer quantizer,
+            float[] centroid,
+            VectorSimilarityFunction similarityFunction
+        ) {
             this.values = delegate;
             this.quantizer = quantizer;
             this.binarized = new byte[BQVectorUtils.discretize(delegate.dimension(), 64) / 8];
             this.initQuantized = new int[delegate.dimension()];
             this.centroid = centroid;
             this.floatValue = new float[delegate.dimension()];
+            this.similarityFunction = similarityFunction;
         }
 
         @Override
@@ -870,12 +881,16 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
 
         @Override
         public AbstractBinarizedByteVectorValues copy() throws IOException {
-            return new BinarizedByteVectorValues(values.copy(), quantizer, centroid);
+            return new BinarizedByteVectorValues(values.copy(), quantizer, centroid, similarityFunction);
         }
 
         private void binarize(int ord) throws IOException {
-            // TODO create specific scalarQuantize for byte[]?
-            corrections = quantizer.scalarQuantize(bytesToFloats(values.vectorValue(ord), floatValue), initQuantized, (byte) 1, centroid);
+            corrections = quantizer.scalarQuantize(
+                values.vectorValue(ord), floatValue,
+                initQuantized,
+                (byte) 1,
+                centroid
+            );
             BQVectorUtils.packAsBinary(initQuantized, binarized);
         }
 

@@ -35,6 +35,7 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.KnnVectorValues;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.SegmentReader;
@@ -86,6 +87,9 @@ import java.util.OptionalLong;
 import static java.lang.String.format;
 import static org.apache.lucene.index.VectorSimilarityFunction.DOT_PRODUCT;
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+import static org.elasticsearch.index.codec.vectors.BQVectorUtils.bytesToFloats;
+import static org.elasticsearch.index.codec.vectors.BQVectorUtils.isUnitVector;
+import static org.elasticsearch.index.codec.vectors.BQVectorUtils.l2normalize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.oneOf;
@@ -251,17 +255,16 @@ public class ES920ByteBinaryQuantizedVectorsFormatTests extends BaseKnnVectorsFo
                     }
                     KnnVectorValues.DocIndexIterator docIndexIterator = vectorValues.iterator();
 
-                    ByteBuffer vectorValue = ByteBuffer.allocate(dims);
+                    float[] vectorValue = new float[dims];
                     while (docIndexIterator.nextDoc() != NO_MORE_DOCS) {
-                        vectorValue.put(0, vectorValues.vectorValue(docIndexIterator.index()));
                         OptimizedScalarQuantizer.QuantizationResult corrections = quantizer.scalarQuantize(
-                            vectorValue.asFloatBuffer().array(),
+                            bytesToFloats(vectorValues.vectorValue(docIndexIterator.index()), vectorValue, similarityFunction),
                             quantizedVector,
                             (byte) 1,
                             centroid
                         );
                         BQVectorUtils.packAsBinary(quantizedVector, expectedVector);
-                        assertArrayEquals(expectedVector, vectorValue.array());
+                        assertArrayEquals(expectedVector, qvectorValues.vectorValue(docIndexIterator.index()));
                         assertEquals(corrections, qvectorValues.getCorrectiveTerms(docIndexIterator.index()));
                     }
                 }

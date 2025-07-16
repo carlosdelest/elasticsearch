@@ -19,6 +19,7 @@
  */
 package org.elasticsearch.index.codec.vectors;
 
+import org.apache.lucene.index.VectorSimilarityFunction;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BitUtil;
 import org.apache.lucene.util.VectorUtil;
@@ -129,15 +130,23 @@ public class BQVectorUtils {
         int dim = v.length;
         double l2norm = Math.sqrt(l1norm);
         for (int i = 0; i < dim; i++) {
-            v[i] /= (byte) l2norm;
+            double normalized = v[i] / l2norm;
+            // Scale from -1.0..1.0 to -127..127
+            v[i] = (byte) Math.round(normalized * 127);
         }
         return v;
     }
 
-    public static float[] bytesToFloats(byte[] v, float[] dest) {
+    public static float[] bytesToFloats(byte[] v, float[] dest, VectorSimilarityFunction similarityFunction) {
+        float factor = similarityFunction == VectorSimilarityFunction.COSINE ? 127f : 1f;
         for (int j = 0; j < v.length; j++) {
-            dest[j] = dest[j];
+            dest[j] = v[j] / factor;
         }
         return dest;
+    }
+
+    public static boolean isUnitVector(float[] v, float epsilon) {
+        double l1norm = VectorUtil.dotProduct(v, v);
+        return Math.abs(l1norm - 1.0d) <= epsilon;
     }
 }

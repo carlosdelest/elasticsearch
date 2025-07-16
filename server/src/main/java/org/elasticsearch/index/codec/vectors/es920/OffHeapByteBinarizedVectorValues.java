@@ -234,7 +234,7 @@ public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarized
     }
 
     @Override
-    public VectorScorer scorer(float[] target) throws IOException {
+    public VectorScorer scorer(byte[] target) throws IOException {
       DenseOffHeapVectorValues copy = copy();
       DocIndexIterator iterator = copy.iterator();
       RandomVectorScorer scorer =
@@ -337,7 +337,7 @@ public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarized
     }
 
     @Override
-    public VectorScorer scorer(float[] target) throws IOException {
+    public VectorScorer scorer(byte[] target) throws IOException {
       SparseOffHeapVectorValues copy = copy();
       DocIndexIterator iterator = copy.iterator();
       RandomVectorScorer scorer =
@@ -380,7 +380,7 @@ public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarized
     }
 
     @Override
-    public VectorScorer scorer(float[] target) {
+    public VectorScorer scorer(byte[] target) {
       return null;
     }
   }

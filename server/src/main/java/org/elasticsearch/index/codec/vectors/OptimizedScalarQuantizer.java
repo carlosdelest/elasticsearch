@@ -15,8 +15,12 @@ import org.elasticsearch.simdvec.ESVectorUtil;
 
 import static org.apache.lucene.index.VectorSimilarityFunction.COSINE;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
+import static org.elasticsearch.index.codec.vectors.BQVectorUtils.bytesToFloats;
 
 public class OptimizedScalarQuantizer {
+
+    private static final float BYTE_VECTORS_UNIT_EPSILON = 0.03f;
+
     public static void initInterval(byte bits, float vecStd, float vecMean, float min, float max, float[] initInterval) {
         initInterval[0] = (float) clamp(MINIMUM_MSE_GRID[bits - 1][0] * vecStd + vecMean, min, max);
         initInterval[1] = (float) clamp(MINIMUM_MSE_GRID[bits - 1][1] * vecStd + vecMean, min, max);
@@ -138,8 +142,18 @@ public class OptimizedScalarQuantizer {
         );
     }
 
+    public QuantizationResult scalarQuantize(byte[] vector, float[] scratchFloatVector, int[] destination, byte bits, float[] centroid) {
+        bytesToFloats(vector, scratchFloatVector, similarityFunction);
+        assert similarityFunction != COSINE || BQVectorUtils.isUnitVector(scratchFloatVector, BYTE_VECTORS_UNIT_EPSILON);
+        return innerScalarQuantize(scratchFloatVector, destination, bits, centroid);
+    }
+
     public QuantizationResult scalarQuantize(float[] vector, int[] destination, byte bits, float[] centroid) {
         assert similarityFunction != COSINE || VectorUtil.isUnitVector(vector);
+        return innerScalarQuantize(vector, destination, bits, centroid);
+    }
+
+    private QuantizationResult innerScalarQuantize(float[] vector, int[] destination, byte bits, float[] centroid) {
         assert similarityFunction != COSINE || VectorUtil.isUnitVector(centroid);
         assert vector.length <= destination.length;
         assert bits > 0 && bits <= 8;
