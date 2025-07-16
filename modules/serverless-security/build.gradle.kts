@@ -30,6 +30,7 @@ dependencies {
     javaRestTestImplementation(testArtifact(xpackModule("plugin")))
     javaRestTestImplementation(testArtifact(xpackModule("core")))
     javaRestTestImplementation(project(":libs:serverless-shared-constants"))
+    javaRestTestImplementation(project(":serverless-test-fixture:uiam-fixture"))
     testImplementation(testArtifact(xpackModule("core")))
     compileOnly(project(":libs:serverless-shared-constants"))
     compileOnly(xpackModule("core"))

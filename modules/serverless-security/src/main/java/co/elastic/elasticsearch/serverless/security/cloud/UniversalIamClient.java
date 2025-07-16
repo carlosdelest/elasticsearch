@@ -35,7 +35,6 @@ import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Setting;
@@ -53,6 +52,7 @@ import java.util.concurrent.TimeUnit;
 import static co.elastic.elasticsearch.serverless.security.ServerlessSecurityPlugin.UNIVERSAL_IAM_SERVICE_URL_SETTING;
 import static co.elastic.elasticsearch.serverless.security.cloud.CloudApiKeyAuthenticator.CLIENT_AUTHENTICATION_HEADER;
 import static org.elasticsearch.common.settings.Setting.timeSetting;
+import static org.elasticsearch.xpack.core.security.support.Exceptions.authenticationError;
 
 public class UniversalIamClient implements Closeable {
 
@@ -108,7 +108,6 @@ public class UniversalIamClient implements Closeable {
         httpClient.execute(httpPost, new FutureCallback<>() {
             @Override
             public void completed(final SimpleHttpResponse result) {
-                logger.debug("cloud API key authentication request against universal IAM service [{}] succeeded", httpPost.getRequestUri());
                 handleResponse(result, listener);
             }
 
@@ -139,7 +138,7 @@ public class UniversalIamClient implements Closeable {
                     httpResponse.getCode(),
                     responseContent
                 );
-                listener.onFailure(new ElasticsearchSecurityException("Cloud API key authentication failed."));
+                listener.onFailure(authenticationError("failed to authenticate cloud API key"));
             } else {
                 // everything else is considered as unexpected (i.e. internal server error)
                 logger.error(
@@ -154,7 +153,7 @@ public class UniversalIamClient implements Closeable {
 
         final ContentType contentTypeHeader = httpResponse.getContentType();
         final String contentTypeValue = contentTypeHeader == null ? null : contentTypeHeader.getMimeType();
-        if (false == ContentType.APPLICATION_JSON.getMimeType().equals(contentTypeValue)) {
+        if (false == ContentType.APPLICATION_JSON.getMimeType().equalsIgnoreCase(contentTypeValue)) {
             listener.onFailure(
                 new IllegalStateException(
                     "unable to parse response. Content type was expected to be [application/json] but was [" + contentTypeValue + "]"

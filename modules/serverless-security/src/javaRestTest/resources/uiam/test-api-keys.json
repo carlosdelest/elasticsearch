@@ -1,0 +1,110 @@
+[
+  {
+    "id": "b1b18f35a4814a5290d9e8e446f5e6fc",
+    "hash": "{SSHA-256}$1hjrRmzTWCchx3jNKu1hSXebAuBr0kZmWXpIEzq6YA0=$xhSE48GlLQM9BBEnJyW6e+T6c8/L/n/M6zbQoSKe8I8=",
+    "creator": "6",
+    "organization_id": "1",
+    "description": "test-revoked-api-key",
+    "internal": true,
+    "role_assignments": {
+      "project": [
+        {
+          "role_id": "elasticsearch-viewer",
+          "organization_id": "1",
+          "project_scope": {
+            "scope": "all"
+          },
+          "project_type": "elasticsearch",
+          "application_roles": [
+            "viewer"
+          ]
+        }
+      ]
+    },
+    "revoked": true,
+    "metadata": {
+      "created": "2016-06-18T19:35:08.214Z"
+    }
+  },
+  {
+    "id": "f5b6bfd76d7a447597939fcc29ca1a63",
+    "hash": "{SSHA-256}$N35U9Kh6D8ecMiUWC0b1SOjH7NxBcwtG70eBSVAXWrk=$PHAK22sWA1BSiP2m8J8xFOAeNB/9pWZZ2RVNqSITxVo=",
+    "creator": "7",
+    "organization_id": "1",
+    "description": "test-internal-api-key",
+    "internal": true,
+    "role_assignments": {
+      "project": [
+        {
+          "role_id": "elasticsearch-admin",
+          "organization_id": "1",
+          "project_scope": {
+            "scope": "all"
+          },
+          "project_type": "elasticsearch",
+          "application_roles": [
+            "superuser"
+          ]
+        }
+      ]
+    },
+    "revoked": false,
+    "metadata": {
+      "created": "2017-07-18T19:35:08.214Z"
+    }
+  },
+  {
+    "id": "dced80ca157f45b6aab11f6c0ab9c5ae",
+    "hash": "{SSHA-256}$lLDGc2/N3HxM1rhoV6NXMM9p9IdnFq0tbkKNR88nsT0=$F2BlLwaYZAhHIPc7n5X5KWMiTRTmCXRlIeEVjSAmHm8=",
+    "creator": "8",
+    "organization_id": "1",
+    "description": "test-viewer-api-key",
+    "internal": false,
+    "role_assignments": {
+      "project": [
+        {
+          "role_id": "elasticsearch-admin",
+          "organization_id": "1",
+          "project_scope": {
+            "scope": "all"
+          },
+          "project_type": "elasticsearch",
+          "application_roles": [
+            "test_viewer"
+          ]
+        }
+      ]
+    },
+    "revoked": false,
+    "metadata": {
+      "created": "2018-08-18T19:35:08.214Z"
+    }
+  },
+  {
+    "id": "a97654adbb804e48a6f12f1e6fe7dd8b",
+    "hash": "{SSHA-256}$AW6fTCcaKfdvhPxW986tegw7oQvUSuvNuEbkxFv6xn4=$mUWdsBMSZOq0H1DIOuGxGYFc5b2myGcHUXf/T3/7PFw=",
+    "creator": "9",
+    "organization_id": "1",
+    "description": "test-admin-api-key",
+    "internal": false,
+    "role_assignments": {
+      "project": [
+        {
+          "role_id": "elasticsearch-admin",
+          "organization_id": "1",
+          "project_scope": {
+            "scope": "all"
+          },
+          "project_type": "elasticsearch",
+          "application_roles": [
+            "admin"
+          ]
+        }
+      ]
+    },
+    "revoked": false,
+    "metadata": {
+      "created": "2019-09-18T19:35:08.214Z"
+    }
+  }
+]

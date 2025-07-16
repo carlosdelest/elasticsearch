@@ -18,8 +18,10 @@
 package co.elastic.elasticsearch.serverless.security.cloud;
 
 import co.elastic.elasticsearch.serverless.constants.ProjectType;
-import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamTestServer.FailedAuthenticateProjectResponse;
-import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamTestServer.SuccessfulAuthenticateProjectResponse;
+import co.elastic.elasticsearch.test.fixtures.uiam.CosmosDbEmulatorTestContainer;
+import co.elastic.elasticsearch.test.fixtures.uiam.UiamServiceTestContainer;
+
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakFilters;
 
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.RequestOptions;
@@ -28,13 +30,16 @@ import org.elasticsearch.client.ResponseException;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ThreadContext;
+import org.elasticsearch.core.PathUtils;
 import org.elasticsearch.core.Strings;
+import org.elasticsearch.core.Tuple;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchResponseUtils;
 import org.elasticsearch.test.cluster.ElasticsearchCluster;
 import org.elasticsearch.test.cluster.local.model.User;
 import org.elasticsearch.test.cluster.serverless.ServerlessElasticsearchCluster;
 import org.elasticsearch.test.cluster.util.resource.Resource;
+import org.elasticsearch.test.fixtures.testcontainers.TestContainersThreadFilter;
 import org.elasticsearch.test.rest.ESRestTestCase;
 import org.elasticsearch.test.rest.ObjectPath;
 import org.junit.ClassRule;
@@ -43,8 +48,9 @@ import org.junit.rules.TestRule;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.time.Duration;
-import java.time.Instant;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -57,36 +63,68 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
 
-public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
+@ThreadLeakFilters(filters = { TestContainersThreadFilter.class })
+public class UniversalIamIT extends ESRestTestCase {
 
+    private static final ProjectType PROJECT_TYPE = ProjectType.ELASTICSEARCH_GENERAL_PURPOSE;
     private static final String OPERATOR_USER = "elastic-operator-user";
     private static final String TEST_PASSWORD = "elastic-password";
-    private static final String ORGANIZATION_ID = "test-org-id";
-    private static final String PROJECT_ID = "test-project-id";
-    private static final ProjectType PROJECT_TYPE = ProjectType.ELASTICSEARCH_GENERAL_PURPOSE;
-    private static final ProjectInfo PROJECT_INFO = new ProjectInfo(PROJECT_ID, ORGANIZATION_ID, PROJECT_TYPE);
+    private static final String ORGANIZATION_ID = "1";
+    private static final String PROJECT_ID = "1";
 
-    private static final UniversalIamTestServer universalIamTestService = new UniversalIamTestServer();
+    private static final Map<String, Tuple<String, String>> testApiKeys = Map.ofEntries(
+        Map.entry(
+            "revoked",
+            new Tuple<>(
+                "b1b18f35a4814a5290d9e8e446f5e6fc",
+                "essu_dev_WWpGaU1UaG1NelZoTkRneE5HRTFNamt3WkRsbE9HVTBORFptTldVMlptTTZZb"
+                    + "VE0WmpNMk5UY3RZelUxWmkwME1HVmpMV0l4TlRNdE1EZGlOamsyTkdVNE5tRm0AAAAAZ+1AHg=="
+            )
+        ),
+        Map.entry(
+            "internal",
+            new Tuple<>(
+                "f5b6bfd76d7a447597939fcc29ca1a63",
+                "essu_dev_WmpWaU5tSm1aRGMyWkRkaE5EUTNOVGszT1RNNVptTmpNamxqWVRGaE5qTT"
+                    + "ZNMkZqWWpBME16QXRPV1ZpTUMwMFpHWXhMV0poTWpndFpUVXhaamxsWlRjMFlqazAAAAAAP3YUwQ=="
+            )
+        ),
+        Map.entry(
+            "test_viewer",
+            new Tuple<>(
+                "dced80ca157f45b6aab11f6c0ab9c5ae",
+                "essu_dev_WkdObFpEZ3dZMkV4TlRkbU5EVmlObUZoWWpFeFpqWmpNR0ZpT1dNMVlXVTZ"
+                    + "NemsyWXpWbVpUWXRNVFl5TUMwMFpERXhMVGsxT1RjdFl6UmhaR0kxTTJGaVpqbGgAAAAAa0jjHg=="
+            )
+        ),
+        Map.entry(
+            "admin",
+            new Tuple<>(
+                "a97654adbb804e48a6f12f1e6fe7dd8b",
+                "essu_dev_WVRrM05qVTBZV1JpWWpnd05HVTBPR0UyWmpFeVpqRmxObVpsTjJSa09HSTZ"
+                    + "ZemhsTTJZeU9Ea3ROakV5WWkwMFpqWTBMV0ptTm1VdFlqSm1abVk0T0RkaU1qWTUAAAAAlM/ZAA=="
+            )
+        )
+
+    );
+    private static final CosmosDbEmulatorTestContainer cosmosDbContainer = new CosmosDbEmulatorTestContainer(
+        getResourcePath("uiam/test-api-keys.json")
+    );
+
+    private static final UiamServiceTestContainer uiamContainer = new UiamServiceTestContainer(cosmosDbContainer);
 
     private static final ElasticsearchCluster cluster = ServerlessElasticsearchCluster.local()
-        .name("javaRestTest")
+        .name("uiam-it-tests")
         .user(OPERATOR_USER, TEST_PASSWORD, User.ROOT_USER_ROLE, true)
         .setting("xpack.ml.enabled", "false")
         .setting("serverless.universal_iam_service.enabled", "true")
-        .setting("serverless.universal_iam_service.url", () -> "https://localhost:" + universalIamTestService.getAddress().getPort())
-        .setting("serverless.universal_iam_service.http.connect_timeout", () -> "2s")
-        .setting("serverless.universal_iam_service.http.socket_timeout", () -> "2s")
-        .setting("serverless.universal_iam_service.http.max_connections", () -> "10")
-        .setting("serverless.universal_iam_service.ssl.truststore.path", () -> "keystore.jks")
-        .setting("serverless.universal_iam_service.ssl.truststore.password", () -> "changeit")
-        .setting("serverless.universal_iam_service.ssl.truststore.type", () -> "JKS")
-        .setting(
-            "serverless.universal_iam_service.ssl.cipher_suites",
-            () -> "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
-        )
-        .setting("serverless.universal_iam_service.ssl.supported_protocols", () -> "TLSv1.2,TLSv1.3")
+        .setting("serverless.universal_iam_service.url", uiamContainer::getUiamUrl)
+        .setting("serverless.universal_iam_service.http.connect_timeout", "2s")
+        .setting("serverless.universal_iam_service.http.socket_timeout", "30s")
+        .setting("serverless.universal_iam_service.http.max_connections", "5")
+        // Disable SSL verification for now
+        .setting("serverless.universal_iam_service.ssl.verification_mode", "none")
         // TODO we don't want metering for this test, however, metering is automatically enabled if project_id is set. furthermore,
         // metering uses a default https address which makes boot fail
         // we should fix this to allow disabling metering via a metering-specific setting (e.g., metering.url)
@@ -97,7 +135,7 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         .setting("serverless.project_type", PROJECT_TYPE.name())
         .setting("serverless.project_id", PROJECT_ID)
         .setting("serverless.organization_id", ORGANIZATION_ID)
-        .configFile("keystore.jks", Resource.fromClasspath("uiam/unified-keystore.jks"))
+        .setting("logger.co.elastic.elasticsearch.serverless.security", "TRACE")
         .rolesFile(Resource.fromString("""
             admin:
               cluster: [ "all" ]
@@ -119,7 +157,7 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         .build();
 
     @ClassRule
-    public static final TestRule rule = RuleChain.outerRule(universalIamTestService).around(cluster);
+    public static final TestRule rule = RuleChain.outerRule(cosmosDbContainer).around(uiamContainer).around(cluster);
 
     @Override
     protected String getTestRestCluster() {
@@ -133,64 +171,18 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
     }
 
     public void testAuthenticateWithCloudApiKey() throws IOException {
-        final String apiKeyName = randomBoolean() ? "my-api-key-name-" + randomAlphaOfLength(20) : null;
-        final String apiKeyId = "test-api-key-id";
-        final String clientSharedSecret = randomBoolean() ? "shared_secret_" + randomAlphaOfLength(64) : null;
-        final boolean internal = clientSharedSecret != null;
-        final String apiKey = "essu_" + randomAlphaOfLength(64);
-        final CloudCredentialsMetadata credentialsMetadata = new CloudCredentialsMetadata(
-            "api-key",
-            internal,
-            Instant.now(),
-            randomBoolean() ? Instant.now().plus(Duration.ofDays(7)) : null
-        );
-        var authenticateResponse = new SuccessfulAuthenticateProjectResponse(
-            "api-key",
-            apiKeyId,
-            apiKeyName,
-            ORGANIZATION_ID,
-            credentialsMetadata,
-            new CloudAuthenticateProjectContext(PROJECT_INFO, List.of("role1", "role2"))
+        final String apiKey = testApiKeys.get("test_viewer").v2();
+        final String apiKeyId = testApiKeys.get("test_viewer").v1();
 
-        );
-        universalIamTestService.setResponse(authenticateResponse);
+        var responseBody = responseAsMap(performRequestWithCloudApiKey(apiKey, new Request("GET", "/_security/_authenticate")));
 
-        Map<String, Object> responseBody = responseAsMap(
-            performRequestWithCloudApiKey(apiKey, clientSharedSecret, new Request("GET", "/_security/_authenticate"))
-        );
-
-        assertThat(ObjectPath.evaluate(responseBody, "username"), is(authenticateResponse.apiKeyId()));
-        assertResponseHasRoles(responseBody, authenticateResponse.context().applicationRoles());
+        assertThat(ObjectPath.evaluate(responseBody, "username"), is(apiKeyId));
+        assertResponseHasRoles(responseBody, List.of("test_viewer"));
         assertThat(ObjectPath.evaluate(responseBody, "authentication_type"), is("api_key"));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.id"), is(apiKeyId));
-        assertThat(ObjectPath.evaluate(responseBody, "api_key.internal"), is(internal));
-        assertThat(ObjectPath.evaluate(responseBody, "api_key.name"), is(apiKeyName));
-        assertThat(ObjectPath.evaluate(responseBody, "api_key.managed_by"), is("cloud"));
-        assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.name"), is("_cloud_api_key"));
-        assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.type"), is("_cloud_api_key"));
-        assertThat(ObjectPath.evaluate(responseBody, "lookup_realm.name"), is("_cloud_api_key"));
-        assertThat(ObjectPath.evaluate(responseBody, "lookup_realm.type"), is("_cloud_api_key"));
-
-        authenticateResponse = new SuccessfulAuthenticateProjectResponse(
-            "apikey",
-            apiKeyId,
-            apiKeyName,
-            ORGANIZATION_ID,
-            credentialsMetadata,
-            new CloudAuthenticateProjectContext(PROJECT_INFO, List.of())
-        );
-        universalIamTestService.setResponse(authenticateResponse);
-
-        responseBody = responseAsMap(
-            performRequestWithCloudApiKey(apiKey, clientSharedSecret, new Request("GET", "/_security/_authenticate"))
-        );
-
-        assertThat(ObjectPath.evaluate(responseBody, "username"), is(authenticateResponse.apiKeyId()));
-        assertResponseHasNoRoles(responseBody);
-        assertThat(ObjectPath.evaluate(responseBody, "authentication_type"), is("api_key"));
-        assertThat(ObjectPath.evaluate(responseBody, "api_key.id"), is(apiKeyId));
-        assertThat(ObjectPath.evaluate(responseBody, "api_key.internal"), is(internal));
-        assertThat(ObjectPath.evaluate(responseBody, "api_key.name"), is(apiKeyName));
+        assertThat(ObjectPath.evaluate(responseBody, "api_key.internal"), is(false));
+        // TODO: API key name is not yet returned by the UIAM service
+        // assertThat(ObjectPath.evaluate(responseBody, "api_key.name"), is("test-viewer-api-key"));
         assertThat(ObjectPath.evaluate(responseBody, "api_key.managed_by"), is("cloud"));
         assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.name"), is("_cloud_api_key"));
         assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.type"), is("_cloud_api_key"));
@@ -198,45 +190,57 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         assertThat(ObjectPath.evaluate(responseBody, "lookup_realm.type"), is("_cloud_api_key"));
     }
 
-    public void testFailedAuthenticationWithCloudApiKey() throws IOException {
-        final String errorMessage = "No authentication mechanism found";
-        universalIamTestService.setResponse(new FailedAuthenticateProjectResponse(401, errorMessage));
-        final String clientSharedSecret = randomBoolean() ? randomAlphaOfLength(64) : null;
-        final String apiKey = "essu_" + randomAlphaOfLength(64);
-        var e = expectThrows(
-            ResponseException.class,
-            () -> performRequestWithCloudApiKey(apiKey, clientSharedSecret, new Request("GET", "/_security/_authenticate"))
+    public void testAuthenticateWithInternalCloudApiKey() throws IOException {
+        final String apiKey = testApiKeys.get("internal").v2();
+        final String apiKeyId = testApiKeys.get("internal").v1();
+        final String sharedSecret = uiamContainer.getSharedSecret();
+
+        var responseBody = responseAsMap(
+            performRequestWithCloudApiKey(apiKey, sharedSecret, new Request("GET", "/_security/_authenticate"))
         );
 
-        // TODO: adjust after improving error handling
+        assertThat(ObjectPath.evaluate(responseBody, "username"), is(apiKeyId));
+        assertResponseHasRoles(responseBody, List.of("superuser"));
+        assertThat(ObjectPath.evaluate(responseBody, "authentication_type"), is("api_key"));
+        assertThat(ObjectPath.evaluate(responseBody, "api_key.id"), is(apiKeyId));
+        assertThat(ObjectPath.evaluate(responseBody, "api_key.internal"), is(true));
+        // TODO: API key name is not yet returned by the UIAM service
+        // assertThat(ObjectPath.evaluate(responseBody, "api_key.name"), is("test-internal-api-key"));
+        assertThat(ObjectPath.evaluate(responseBody, "api_key.managed_by"), is("cloud"));
+        assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.name"), is("_cloud_api_key"));
+        assertThat(ObjectPath.evaluate(responseBody, "authentication_realm.type"), is("_cloud_api_key"));
+        assertThat(ObjectPath.evaluate(responseBody, "lookup_realm.name"), is("_cloud_api_key"));
+        assertThat(ObjectPath.evaluate(responseBody, "lookup_realm.type"), is("_cloud_api_key"));
+    }
+
+    public void testAuthenticateWithInternalCloudApiKeyFailsWithoutSharedSecret() {
+        final String apiKey = testApiKeys.get("internal").v2();
+
+        var e = expectThrows(
+            ResponseException.class,
+            () -> performRequestWithCloudApiKey(apiKey, new Request("GET", "/_security/_authenticate"))
+        );
+
         assertThat(e.getResponse().getStatusLine().getStatusCode(), is(401));
         assertThat(e.getMessage(), containsString("failed to authenticate cloud API key"));
         assertThat(e.getMessage(), containsString("failed to authenticate cloud API key for project [" + PROJECT_ID + "]"));
-        assertThat(e.getMessage(), not(containsString(errorMessage)));
+    }
+
+    public void testFailedAuthenticationWithCloudApiKey() {
+        final String apiKey = "essu_invalid_" + randomAlphaOfLength(64);
+        var e = expectThrows(
+            ResponseException.class,
+            () -> performRequestWithCloudApiKey(apiKey, new Request("GET", "/_security/_authenticate"))
+        );
+
+        assertThat(e.getResponse().getStatusLine().getStatusCode(), is(401));
+        assertThat(e.getMessage(), containsString("failed to authenticate cloud API key"));
+        assertThat(e.getMessage(), containsString("failed to authenticate cloud API key for project [" + PROJECT_ID + "]"));
     }
 
     public void testSearchWithCloudApiKey() throws IOException {
-        final String apiKey = "essu_" + randomAlphaOfLength(64);
-        final String apiKeyName = randomBoolean() ? "my-api-key-name-" + randomAlphaOfLength(20) : null;
-        final String apiKeyId = "test-api-key-id";
-        final String clientSharedSecret = randomBoolean() ? "shared_secret_" + randomAlphaOfLength(64) : null;
-        final CloudCredentialsMetadata credentialsMetadata = new CloudCredentialsMetadata(
-            "api-key",
-            clientSharedSecret != null,
-            Instant.now(),
-            randomBoolean() ? Instant.now().plus(Duration.ofDays(7)) : null
-        );
-
-        var authenticateResponse = new SuccessfulAuthenticateProjectResponse(
-            "apikey",
-            apiKeyId,
-            apiKeyName,
-            ORGANIZATION_ID,
-            credentialsMetadata,
-            new CloudAuthenticateProjectContext(PROJECT_INFO, List.of("test_viewer"))
-
-        );
-        universalIamTestService.setResponse(authenticateResponse);
+        final String apiKey = testApiKeys.get("test_viewer").v2();
+        final String apiKeyId = testApiKeys.get("test_viewer").v1();
 
         final Request bulkRequest = new Request("POST", "/_bulk?refresh=true");
         bulkRequest.setJsonEntity(Strings.format("""
@@ -251,7 +255,7 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
 
         {
             Request searchRequest = new Request("POST", "/*/_search");
-            Response searchResponse = performRequestWithCloudApiKey(apiKey, clientSharedSecret, searchRequest);
+            Response searchResponse = performRequestWithCloudApiKey(apiKey, searchRequest);
             assertSearchResponseContainsIndices(searchResponse, Set.of("test-index-1", "test-index-2"));
         }
         {
@@ -294,10 +298,6 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         assertThat((Collection<String>) actualRoles, containsInAnyOrder(expectedRoles.toArray(new String[0])));
     }
 
-    private static void assertResponseHasNoRoles(Map<String, Object> responseBody) throws IOException {
-        assertResponseHasRoles(responseBody, List.of());
-    }
-
     private static Response performRequestWithCloudApiKey(String apiKey, Request request) throws IOException {
         return performRequestWithCloudApiKey(apiKey, null, request);
     }
@@ -310,5 +310,14 @@ public class CloudApiKeyAuthenticationIT extends ESRestTestCase {
         }
         request.setOptions(options.build());
         return client().performRequest(request);
+    }
+
+    private static Path getResourcePath(String path) {
+        final URL resource = UniversalIamIT.class.getClassLoader().getResource(path);
+        try {
+            return PathUtils.get(resource.toURI());
+        } catch (URISyntaxException e) {
+            throw new AssertionError("Failed to build resource path for [" + path + "]", e);
+        }
     }
 }

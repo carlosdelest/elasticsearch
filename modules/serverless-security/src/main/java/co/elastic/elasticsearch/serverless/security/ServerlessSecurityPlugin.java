@@ -20,6 +20,7 @@ package co.elastic.elasticsearch.serverless.security;
 import co.elastic.elasticsearch.serverless.security.authc.MultiProjectSpSamlRealmSettings;
 import co.elastic.elasticsearch.serverless.security.authc.ProjectFileSettingsRealmSettings;
 import co.elastic.elasticsearch.serverless.security.authc.ProjectServiceAccountTokenStoreSettings;
+import co.elastic.elasticsearch.serverless.security.cloud.CloudApiKeyAuthenticator;
 import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamClient;
 import co.elastic.elasticsearch.serverless.security.cloud.UniversalIamSslConfig;
 
@@ -39,6 +40,7 @@ import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.rest.RestHeaderDefinition;
 import org.elasticsearch.xpack.core.security.SecurityContext;
 import org.elasticsearch.xpack.core.security.authc.esnative.NativeRealmSettings;
 import org.elasticsearch.xpack.core.security.authc.saml.SingleSpSamlRealmSettings;
@@ -205,5 +207,10 @@ public class ServerlessSecurityPlugin extends Plugin implements ActionPlugin {
 
     public SecurityContext getSecurityContext() {
         return securityContext.get();
+    }
+
+    @Override
+    public Collection<RestHeaderDefinition> getRestHeaders() {
+        return List.of(new RestHeaderDefinition(CloudApiKeyAuthenticator.CLIENT_AUTHENTICATION_HEADER, false));
     }
 }

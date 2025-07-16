@@ -96,6 +96,9 @@ include(":modules:serverless-snapshots")
 include(":modules:serverless-no-wait-for-active-shards")
 include(":modules:serverless-logs-essentials")
 
+// Test fixtures
+include(":serverless-test-fixture")
+include(":serverless-test-fixture:uiam-fixture")
 
 /*
  * Extraneous libs
