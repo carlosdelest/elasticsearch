@@ -34,7 +34,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-64"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
       buildDirectory: /dev/shm/bk
       zones: us-central1-a,us-central1-b,us-central1-c
     env:
@@ -53,7 +53,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
     notify:
       - github_commit_status:
           context: "elasticsearch-serverless/third party tests"
@@ -66,7 +66,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
 
   - label: ":serverless: Run synthetics tests against Serverless dev env (elasticsearch:${BUILDKITE_COMMIT:0:12})"
     if: build.env('GITOPS_ENV') == 'dev' && (build.branch == 'main' || build.branch =~ /^patch\//) && pipeline.slug != "elasticsearch-serverless-pull-request" && pipeline.slug != "elasticsearch-serverless-es-pr-check"
@@ -185,4 +185,4 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-4"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404

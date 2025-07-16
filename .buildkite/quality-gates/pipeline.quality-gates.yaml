@@ -43,7 +43,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
   - label: ":elasticsearch: Annotate promotion in O11y dashboards"
     key: annotate
     depends_on:
@@ -66,7 +66,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
   - label: ":question: Maybe add manual gate"
     depends_on:
       - quality-gates
@@ -81,4 +81,3 @@ notify:
         - "#es-search-engine-serverless-alerts"
         - "#es-datastore-serverless-alerts"
     if: (build.branch == "main" || build.branch =~ /^patch\//) && build.state == "failed"
-

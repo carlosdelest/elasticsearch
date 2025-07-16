@@ -8,7 +8,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-64"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
       diskSizeGb: 250
       buildDirectory: /dev/shm/bk
       zones: us-central1-a,us-central1-b,us-central1-c
@@ -26,7 +26,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
       diskSizeGb: 250
     notify:
       - github_commit_status:

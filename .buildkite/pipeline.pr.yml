@@ -17,7 +17,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-64"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
       buildDirectory: /dev/shm/bk
       zones: us-central1-a,us-central1-b,us-central1-c
     env:
@@ -34,7 +34,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-64"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
       buildDirectory: /dev/shm/bk
       zones: us-central1-a,us-central1-b,us-central1-c
     env:
@@ -51,7 +51,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
     notify:
       - github_commit_status:
           context: "elasticsearch-serverless/third party tests"
@@ -64,7 +64,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
 
   - label: ":pipeline: Trigger Pull Request specific tests"
     if: pipeline.slug == "elasticsearch-serverless-pull-request" || pipeline.slug == "elasticsearch-serverless-es-pr-check"

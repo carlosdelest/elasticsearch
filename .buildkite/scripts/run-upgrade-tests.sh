@@ -55,7 +55,7 @@ for commit in ${UNIQUE_COMMITS[@]}; do
         agents:
           provider: "gcp"
           machineType: "n1-standard-16"
-          image: family/elasticsearch-ubuntu-2022
+          image: family/elasticsearch-ubuntu-2404
         notify:
           - github_commit_status:
               context: "elasticsearch-serverless/test upgrade from $(environments_for $commit)"

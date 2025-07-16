@@ -65,7 +65,7 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
   - label: ":git: Validate patch branch has been merged"
     key: "validate-patch-merged"
     command: ".buildkite/scripts/validate-patch-merged.sh"
@@ -107,5 +107,5 @@ steps:
     agents:
       provider: "gcp"
       machineType: "n1-standard-16"
-      image: family/elasticsearch-ubuntu-2022
+      image: family/elasticsearch-ubuntu-2404
 EOF
