@@ -26,69 +26,73 @@ public class FloatToInt8 {
 
     private static final float MINIMUM_CONFIDENCE_INTERVAL = 0.9f;
 
+    private static final String QUANTIZATION_SUFFIX = "-quantized.vec";
+
     public static void main(String[] args) throws Exception {
         if (args.length < 3) {
             System.err.println(
-                "Usage: java FloatToInt8 <input-float-file> <output-byte-file> <dimension> <num_vectors> "
+                "Usage: java FloatToInt8 <docs-file> <num-docs> <query-file> <num-queries> <dimension> "
                     + "[similarity=COSINE] [confidence=1.0] [bits=7]"
             );
             System.exit(1);
         }
         CLIArgs cliArgs = getCliArgs(args);
 
-        quantizeFloatsToBytes(
-            new CLIArgs(
-                cliArgs.inputFile(),
-                cliArgs.outputFile(),
-                cliArgs.dimensions(),
-                cliArgs.numVectors(),
-                cliArgs.similarity(),
-                cliArgs.bits(),
-                cliArgs.confidence()
-            )
-        );
+        quantizeFloatsToBytes(cliArgs);
     }
 
     private static CLIArgs getCliArgs(String[] args) {
-        String inputFile = args[0];
-        String outputFile = args[1];
-        int dimensions = Integer.parseInt(args[2]);
-        int numVectors = Integer.parseInt(args[3]);
-        VectorSimilarityFunction similarity = args.length > 4 ? VectorSimilarityFunction.valueOf(args[4]) : VectorSimilarityFunction.COSINE;
-        byte bits = (byte) (args.length > 5 ? Integer.parseInt(args[5]) : 7);
-        float confidence = args.length > 6 ? Float.parseFloat(args[6]) : calculateDefaultConfidenceInterval(numVectors);
-        CLIArgs result = new CLIArgs(inputFile, outputFile, dimensions, numVectors, similarity, bits, confidence);
-        return result;
+        String docsFile = args[0];
+        int numDocs = Integer.parseInt(args[1]);
+        String queryFile = args[2];
+        int numQueries = Integer.parseInt(args[3]);
+        int dimensions = Integer.parseInt(args[4]);
+        VectorSimilarityFunction similarity = args.length > 5 ? VectorSimilarityFunction.valueOf(args[5]) : VectorSimilarityFunction.COSINE;
+        byte bits = (byte) (args.length > 6 ? Integer.parseInt(args[6]) : 7);
+        float confidence = args.length > 7 ? Float.parseFloat(args[7]) : calculateDefaultConfidenceInterval(numDocs);
+
+        return new CLIArgs(docsFile, queryFile, dimensions, numDocs, numQueries, similarity, bits, confidence);
     }
 
     private record CLIArgs(
-        String inputFile,
-        String outputFile,
+        String docsFile,
+        String queryFile,
         int dimensions,
-        int numVectors,
+        int numDocs,
+        int numQueries,
         VectorSimilarityFunction similarity,
         byte bits,
         float confidence
     ) {}
 
     private static void quantizeFloatsToBytes(CLIArgs args) throws IOException {
+        ScalarQuantizer quantizer = quantizeFileFloatToBytes(args, args.docsFile(), args.numDocs(), null);
+        quantizeFileFloatToBytes(args, args.queryFile(), args.numQueries(), quantizer);
+    }
+
+    private static ScalarQuantizer quantizeFileFloatToBytes(CLIArgs args, String inputFile, int numVectors, ScalarQuantizer quantizer)
+        throws IOException {
+
         List<float[]> vectors = new ArrayList<>();
-        try (FileChannel in = FileChannel.open(PathUtils.get(args.inputFile()))) {
+        String outputFile = inputFile + QUANTIZATION_SUFFIX;
+        try (FileChannel in = FileChannel.open(PathUtils.get(inputFile))) {
             KnnIndexer.VectorReader vectorReader = KnnIndexer.getVectorReader(
-                args.inputFile(),
+                inputFile,
                 in,
                 VectorEncoding.FLOAT32,
                 args.dimensions()
             );
-            for (int i = 0; i < args.numVectors(); i++) {
+            for (int i = 0; i < numVectors; i++) {
                 float[] v = new float[args.dimensions()];
                 vectorReader.next(v);
                 vectors.add(v);
             }
         }
         FloatVectorValues floatVectorValues = FloatVectorValues.fromFloats(vectors, args.dimensions());
-        ScalarQuantizer quantizer = ScalarQuantizer.fromVectors(floatVectorValues, args.confidence(), vectors.size(), args.bits());
-        try (OutputStream out = new BufferedOutputStream(new FileOutputStream(args.outputFile()))) {
+        if (quantizer == null) {
+            quantizer = ScalarQuantizer.fromVectors(floatVectorValues, args.confidence(), vectors.size(), args.bits());
+        }
+        try (OutputStream out = new BufferedOutputStream(new FileOutputStream(outputFile))) {
             byte[] quantized = new byte[args.dimensions()];
             for (float[] vector : vectors) {
                 quantizer.quantize(vector, quantized, args.similarity());
@@ -104,24 +108,26 @@ public class FloatToInt8 {
                 + " to "
                 + args.bits()
                 + " bits per component ("
-                + args.outputFile()
+                + inputFile
                 + ")"
         );
 
         // Check that we can read back the quantized vectors
-        try (FileChannel in = FileChannel.open(PathUtils.get(args.outputFile()))) {
+        try (FileChannel in = FileChannel.open(PathUtils.get(outputFile))) {
             KnnIndexer.VectorReader vectorReader = KnnIndexer.getVectorReader(
-                args.outputFile(),
+                args.queryFile(),
                 in,
                 VectorEncoding.BYTE,
                 args.dimensions()
             );
             byte[] quantized = new byte[args.dimensions()];
-            for (int i = 0; i < args.numVectors(); i++) {
+            for (int i = 0; i < numVectors; i++) {
                 vectorReader.next(quantized);
             }
-            System.out.println("Read " + args.numVectors() + " vectors from " + args.outputFile());
+            System.out.println("Checked " + numVectors + " vectors from " + outputFile);
         }
+
+        return quantizer;
     }
 
     private static float calculateDefaultConfidenceInterval(int vectorDimension) {
