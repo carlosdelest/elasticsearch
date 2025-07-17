@@ -525,7 +525,7 @@ class KnnSearcher {
                 for (int i = 0; i < numQueryVectors; i++) {
                     byte[] queryVector = new byte[dim];
                     queryReader.next(queryVector);
-                    tasks.add(new ComputeNNByteTask(i, queryVector, result, reader, filterQuery, similarityFunction));
+                    tasks.add(new ComputeNNByteTask(i, topK, queryVector, result, reader, filterQuery, similarityFunction));
                 }
                 ForkJoinPool.commonPool().invokeAll(tasks);
             }
@@ -588,6 +588,7 @@ class KnnSearcher {
     static class ComputeNNByteTask implements Callable<Void> {
 
         private final int queryOrd;
+        private final int topK;
         private final byte[] query;
         private final int[][] result;
         private final IndexReader reader;
@@ -596,6 +597,7 @@ class KnnSearcher {
 
         ComputeNNByteTask(
             int queryOrd,
+            int topK,
             byte[] query,
             int[][] result,
             IndexReader reader,
@@ -603,6 +605,7 @@ class KnnSearcher {
             VectorSimilarityFunction similarityFunction
         ) {
             this.queryOrd = queryOrd;
+            this.topK = topK;
             this.query = query;
             this.result = result;
             this.reader = reader;
@@ -613,7 +616,6 @@ class KnnSearcher {
         @Override
         public Void call() {
             IndexSearcher searcher = new IndexSearcher(reader);
-            int topK = result[0].length;
             try {
                 var queryVector = new ConstKnnByteVectorValueSource(query);
                 var docVectors = new ByteKnnVectorFieldSource(VECTOR_FIELD);

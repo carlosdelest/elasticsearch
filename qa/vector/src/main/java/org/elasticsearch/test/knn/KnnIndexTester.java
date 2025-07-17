@@ -14,12 +14,15 @@ import com.sun.management.ThreadMXBean;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.lucene101.Lucene101Codec;
+import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
+import org.apache.lucene.index.VectorEncoding;
 import org.elasticsearch.cli.ProcessInfo;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.LogConfigurator;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.PathUtils;
+import org.elasticsearch.index.codec.vectors.ES813FlatVectorFormat;
 import org.elasticsearch.index.codec.vectors.ES813Int8FlatVectorFormat;
 import org.elasticsearch.index.codec.vectors.ES814HnswScalarQuantizedVectorsFormat;
 import org.elasticsearch.index.codec.vectors.IVFVectorsFormat;
@@ -97,7 +100,7 @@ public class KnnIndexTester {
                 } else {
                     format = new ES818HnswBinaryQuantizedVectorsFormat(args.hnswM(), args.hnswEfConstruction(), 1, null);
                 }
-            } else if (args.quantizeBits() < 32) {
+            } else if (args.vectorEncoding() == VectorEncoding.FLOAT32 && (args.quantizeBits() < 32)) {
                 if (args.indexType() == IndexType.FLAT) {
                     format = new ES813Int8FlatVectorFormat(null, args.quantizeBits(), true);
                 } else {
@@ -110,9 +113,15 @@ public class KnnIndexTester {
                     );
                 }
             } else {
-                format = new Lucene99HnswVectorsFormat(args.hnswM(), args.hnswEfConstruction(), 1, null);
+                if (args.indexType() == IndexType.FLAT) {
+                    format = new ES813FlatVectorFormat();
+                } else {
+                    format = new Lucene99HnswVectorsFormat(args.hnswM(), args.hnswEfConstruction(), 1, null);
+                }
             }
         }
+        logger.info("Using vectors format: {}", format);
+
         return new Lucene101Codec() {
             @Override
             public KnnVectorsFormat getKnnVectorsFormatForField(String field) {
