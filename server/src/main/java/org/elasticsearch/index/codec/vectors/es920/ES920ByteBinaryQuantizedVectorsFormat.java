@@ -98,8 +98,9 @@ public class ES920ByteBinaryQuantizedVectorsFormat extends FlatVectorsFormat {
     static final String VECTOR_DATA_EXTENSION = "veb";
     static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 
-    private static final FlatVectorsFormat rawVectorFormat =
-        new Lucene99FlatVectorsFormat(FlatVectorScorerUtil.getLucene99FlatVectorsScorer());
+    private static final FlatVectorsFormat rawVectorFormat = new Lucene99FlatVectorsFormat(
+        FlatVectorScorerUtil.getLucene99FlatVectorsScorer()
+    );
 
     private static final ES920ByteBinaryFlatVectorsScorer scorer = new ES920ByteBinaryFlatVectorsScorer(
         FlatVectorScorerUtil.getLucene99FlatVectorsScorer()

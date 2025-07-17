@@ -253,7 +253,8 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         float[] floatVector = new float[fieldData.fieldInfo.getVectorDimension()];
         for (int ordinal : ordMap) {
             OptimizedScalarQuantizer.QuantizationResult corrections = scalarQuantizer.scalarQuantize(
-                fieldData.getVectors().get(ordinal), floatVector,
+                fieldData.getVectors().get(ordinal),
+                floatVector,
                 quantizationScratch,
                 (byte) 1,
                 clusterCenter
@@ -366,7 +367,8 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         ByteVectorValues byteVectorValues,
         float[] centroid,
         OptimizedScalarQuantizer binaryQuantizer,
-        VectorSimilarityFunction similarityFunction) throws IOException {
+        VectorSimilarityFunction similarityFunction
+    ) throws IOException {
         int discretizedDimension = BQVectorUtils.discretize(byteVectorValues.dimension(), 64);
         DocsWithFieldSet docsWithField = new DocsWithFieldSet();
         int[][] quantizationScratch = new int[2][byteVectorValues.dimension()];
@@ -885,12 +887,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         }
 
         private void binarize(int ord) throws IOException {
-            corrections = quantizer.scalarQuantize(
-                values.vectorValue(ord), floatValue,
-                initQuantized,
-                (byte) 1,
-                centroid
-            );
+            corrections = quantizer.scalarQuantize(values.vectorValue(ord), floatValue, initQuantized, (byte) 1, centroid);
             BQVectorUtils.packAsBinary(initQuantized, binarized);
         }
 

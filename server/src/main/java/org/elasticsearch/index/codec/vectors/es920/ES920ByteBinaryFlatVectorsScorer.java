@@ -33,12 +33,10 @@ import org.elasticsearch.index.codec.vectors.OptimizedScalarQuantizer;
 import org.elasticsearch.simdvec.ESVectorUtil;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 import static org.apache.lucene.index.VectorSimilarityFunction.COSINE;
 import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 import static org.apache.lucene.index.VectorSimilarityFunction.MAXIMUM_INNER_PRODUCT;
-import static org.elasticsearch.index.codec.vectors.BQVectorUtils.bytesToFloats;
 
 /** Vector scorer over binarized vector values */
 public class ES920ByteBinaryFlatVectorsScorer implements FlatVectorsScorer {
