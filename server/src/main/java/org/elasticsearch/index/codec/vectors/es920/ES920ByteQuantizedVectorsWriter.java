@@ -78,7 +78,13 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
     private final FlatVectorsWriter rawVectorDelegate;
     private final ES920ByteQuantizedFlatVectorsScorer vectorsScorer;
     private boolean finished;
-    private final int quantizedBits;
+    private final byte quantizedBits;
+    private final byte queryQuantizedBits;
+
+    MISSING WORK:
+    - Do not binarize data
+    - Propagate query quantized bits and index quantized bits
+    - Test recall using byte models (See FloatsToInt8)
 
     /**
      * Sole constructor
@@ -87,13 +93,14 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
      */
     @SuppressWarnings("this-escape")
     protected ES920ByteQuantizedVectorsWriter(
-        int quantizedBits,
-        ES920ByteQuantizedFlatVectorsScorer vectorsScorer,
+        byte quantizedBits,
+        byte queryQuantizedBits, ES920ByteQuantizedFlatVectorsScorer vectorsScorer,
         FlatVectorsWriter rawVectorDelegate,
         SegmentWriteState state
     ) throws IOException {
         super(vectorsScorer);
         this.quantizedBits = quantizedBits;
+        this.queryQuantizedBits = queryQuantizedBits;
         this.vectorsScorer = vectorsScorer;
         this.segmentWriteState = state;
         String metaFileName = IndexFileNames.segmentFileName(
@@ -210,7 +217,7 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
                 byteVector,
                 floatVector,
                 quantizationScratch,
-                (byte) quantizedBits,
+                quantizedBits,
                 clusterCenter
             );
             BQVectorUtils.packAsBinary(quantizationScratch, vector);
@@ -237,14 +244,14 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
 
         // write vector values
         long vectorDataOffset = binarizedVectorData.alignFilePointer(Float.BYTES);
-        writeSortedBinarizedVectors(fieldData, clusterCenter, ordMap, scalarQuantizer);
+        writeSortedQuantizedVectors(fieldData, clusterCenter, ordMap, scalarQuantizer);
         long quantizedVectorLength = binarizedVectorData.getFilePointer() - vectorDataOffset;
 
         float centroidDp = VectorUtil.dotProduct(clusterCenter, clusterCenter);
         writeMeta(fieldData.fieldInfo, maxDoc, vectorDataOffset, quantizedVectorLength, clusterCenter, centroidDp, newDocsWithField);
     }
 
-    private void writeSortedBinarizedVectors(
+    private void writeSortedQuantizedVectors(
         FieldWriter fieldData,
         float[] clusterCenter,
         int[] ordMap,
@@ -259,7 +266,7 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
                 fieldData.getVectors().get(ordinal),
                 floatVector,
                 quantizationScratch,
-                (byte) 1,
+                quantizedBits,
                 clusterCenter
             );
             BQVectorUtils.packAsBinary(quantizationScratch, vector);
@@ -350,7 +357,7 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
             fieldInfo.getVectorSimilarityFunction()
         );
         long vectorDataOffset = binarizedVectorData.alignFilePointer(Float.BYTES);
-        DocsWithFieldSet docsWithField = writeBinarizedVectorData(binarizedVectorData, binarizedVectorValues);
+        DocsWithFieldSet docsWithField = writeQuantizedVectorData(binarizedVectorData, binarizedVectorValues);
         long vectorDataLength = binarizedVectorData.getFilePointer() - vectorDataOffset;
         float centroidDp = docsWithField.cardinality() > 0 ? VectorUtil.dotProduct(centroid, centroid) : 0;
         writeMeta(
@@ -364,7 +371,7 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
         );
     }
 
-    static DocsWithFieldSet writeBinarizedVectorAndQueryData(
+    static DocsWithFieldSet writeQuantizedVectorAndQueryData(
         IndexOutput binarizedVectorData,
         IndexOutput binarizedQueryData,
         ByteVectorValues byteVectorValues,
@@ -389,7 +396,7 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
             );
             // pack and store document bit vector
             BQVectorUtils.packAsBinary(quantizationScratch[0], toIndex);
-            binarizedVectorData.writeBytes(toIndex, toIndex.length);
+            binarizedVectorData.writeBytes(quantizationScratch[0], quantizationScratch[0].length);
             binarizedVectorData.writeInt(Float.floatToIntBits(r[0].lowerInterval()));
             binarizedVectorData.writeInt(Float.floatToIntBits(r[0].upperInterval()));
             binarizedVectorData.writeInt(Float.floatToIntBits(r[0].additionalCorrection()));
@@ -409,7 +416,7 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
         return docsWithField;
     }
 
-    static DocsWithFieldSet writeBinarizedVectorData(IndexOutput output, QuantizedByteVectorValues binarizedByteVectorValues)
+    static DocsWithFieldSet writeQuantizedVectorData(IndexOutput output, QuantizedByteVectorValues binarizedByteVectorValues)
         throws IOException {
         DocsWithFieldSet docsWithField = new DocsWithFieldSet();
         KnnVectorValues.DocIndexIterator iterator = binarizedByteVectorValues.iterator();
@@ -482,7 +489,7 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
             if (fieldInfo.getVectorSimilarityFunction() == COSINE) {
                 byteVectorValues = new NormalizedByteVectorValues(byteVectorValues);
             }
-            DocsWithFieldSet docsWithField = writeBinarizedVectorAndQueryData(
+            DocsWithFieldSet docsWithField = writeQuantizedVectorAndQueryData(
                 tempQuantizedVectorData,
                 tempScoreQuantizedVectorData,
                 byteVectorValues,
@@ -533,7 +540,7 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
                 ),
                 vectorValues
             );
-            return new BinarizedCloseableRandomVectorScorerSupplier(scorerSupplier, vectorValues, () -> {
+            return new QuantizedCloseableRandomVectorScorerSupplier(scorerSupplier, vectorValues, () -> {
                 IOUtils.close(finalBinarizedDataInput, finalBinarizedScoreDataInput);
                 IOUtils.deleteFilesIgnoringExceptions(
                     segmentWriteState.directory,
@@ -905,12 +912,12 @@ public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
         }
     }
 
-    static class BinarizedCloseableRandomVectorScorerSupplier implements CloseableRandomVectorScorerSupplier {
+    static class QuantizedCloseableRandomVectorScorerSupplier implements CloseableRandomVectorScorerSupplier {
         private final RandomVectorScorerSupplier supplier;
         private final KnnVectorValues vectorValues;
         private final Closeable onClose;
 
-        BinarizedCloseableRandomVectorScorerSupplier(RandomVectorScorerSupplier supplier, KnnVectorValues vectorValues, Closeable onClose) {
+        QuantizedCloseableRandomVectorScorerSupplier(RandomVectorScorerSupplier supplier, KnnVectorValues vectorValues, Closeable onClose) {
             this.supplier = supplier;
             this.onClose = onClose;
             this.vectorValues = vectorValues;
