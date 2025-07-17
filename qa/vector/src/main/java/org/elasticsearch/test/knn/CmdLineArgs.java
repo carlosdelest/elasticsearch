@@ -50,6 +50,7 @@ record CmdLineArgs(
     long seed,
     VectorSimilarityFunction vectorSpace,
     int quantizeBits,
+    int quantizeQueryBits,
     VectorEncoding vectorEncoding,
     int dimensions,
     boolean earlyTermination
@@ -74,6 +75,7 @@ record CmdLineArgs(
     static final ParseField FORCE_MERGE_FIELD = new ParseField("force_merge");
     static final ParseField VECTOR_SPACE_FIELD = new ParseField("vector_space");
     static final ParseField QUANTIZE_BITS_FIELD = new ParseField("quantize_bits");
+    static final ParseField QUANTIZE_QUERY_BITS_FIELD = new ParseField("quantize_query_bits");
     static final ParseField VECTOR_ENCODING_FIELD = new ParseField("vector_encoding");
     static final ParseField DIMENSIONS_FIELD = new ParseField("dimensions");
     static final ParseField EARLY_TERMINATION_FIELD = new ParseField("early_termination");
@@ -107,6 +109,7 @@ record CmdLineArgs(
         PARSER.declareBoolean(Builder::setForceMerge, FORCE_MERGE_FIELD);
         PARSER.declareString(Builder::setVectorSpace, VECTOR_SPACE_FIELD);
         PARSER.declareInt(Builder::setQuantizeBits, QUANTIZE_BITS_FIELD);
+        PARSER.declareInt(Builder::setQuantizeBits, QUANTIZE_QUERY_BITS_FIELD);
         PARSER.declareString(Builder::setVectorEncoding, VECTOR_ENCODING_FIELD);
         PARSER.declareInt(Builder::setDimensions, DIMENSIONS_FIELD);
         PARSER.declareBoolean(Builder::setEarlyTermination, EARLY_TERMINATION_FIELD);
@@ -178,6 +181,7 @@ record CmdLineArgs(
         private boolean earlyTermination;
         private float filterSelectivity = 1f;
         private long seed = 1751900822751L;
+        private int quantizeQueryBits = 8;
 
         public Builder setDocVectors(String docVectors) {
             this.docVectors = PathUtils.get(docVectors);
@@ -274,6 +278,11 @@ record CmdLineArgs(
             return this;
         }
 
+        public Builder setQuantizeQueryBits(int quantizeQueryBits) {
+            this.quantizeQueryBits = quantizeQueryBits;
+            return this;
+        }
+
         public Builder setVectorEncoding(String vectorEncoding) {
             this.vectorEncoding = VectorEncoding.valueOf(vectorEncoding.toUpperCase(Locale.ROOT));
             return this;
@@ -330,6 +339,7 @@ record CmdLineArgs(
                 seed,
                 vectorSpace,
                 quantizeBits,
+                quantizeQueryBits,
                 vectorEncoding,
                 dimensions,
                 earlyTermination

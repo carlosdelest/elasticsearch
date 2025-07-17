@@ -41,7 +41,7 @@ import static org.apache.lucene.util.quantization.OptimizedScalarQuantizer.discr
  *
  * @lucene.internal
  */
-public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarizedByteVectorValues {
+public abstract class OffHeapByteQuantizedVectorValues extends QuantizedByteVectorValues {
 
     final int dimension;
     final int size;
@@ -61,7 +61,7 @@ public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarized
     final float centroidDp;
     private final int discretizedDimensions;
 
-    OffHeapByteBinarizedVectorValues(
+    OffHeapByteQuantizedVectorValues(
         int dimension,
         int size,
         float[] centroid,
@@ -156,7 +156,7 @@ public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarized
         return numBytes;
     }
 
-    static OffHeapByteBinarizedVectorValues load(
+    static OffHeapByteQuantizedVectorValues load(
         OrdToDocDISIReaderConfiguration configuration,
         int dimension,
         int size,
@@ -202,7 +202,7 @@ public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarized
     }
 
     /** Dense off-heap binarized vector values */
-    static class DenseOffHeapVectorValues extends OffHeapByteBinarizedVectorValues {
+    static class DenseOffHeapVectorValues extends OffHeapByteQuantizedVectorValues {
         DenseOffHeapVectorValues(
             int dimension,
             int size,
@@ -260,7 +260,7 @@ public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarized
     }
 
     /** Sparse off-heap binarized vector values */
-    private static class SparseOffHeapVectorValues extends OffHeapByteBinarizedVectorValues {
+    private static class SparseOffHeapVectorValues extends OffHeapByteQuantizedVectorValues {
         private final DirectMonotonicReader ordToDoc;
         private final IndexedDISI disi;
         // dataIn was used to init a new IndexedDIS for #randomAccess()
@@ -349,7 +349,7 @@ public abstract class OffHeapByteBinarizedVectorValues extends AbstractBinarized
         }
     }
 
-    private static class EmptyOffHeapVectorValues extends OffHeapByteBinarizedVectorValues {
+    private static class EmptyOffHeapVectorValues extends OffHeapByteQuantizedVectorValues {
         EmptyOffHeapVectorValues(int dimension, VectorSimilarityFunction similarityFunction, FlatVectorsScorer vectorsScorer) {
             super(dimension, 0, null, Float.NaN, null, similarityFunction, vectorsScorer, null);
         }

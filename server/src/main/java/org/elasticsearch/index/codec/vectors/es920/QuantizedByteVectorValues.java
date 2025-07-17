@@ -29,7 +29,7 @@ import java.io.IOException;
 import static org.apache.lucene.util.quantization.OptimizedScalarQuantizer.discretize;
 
 /** Binarized byte vector values */
-abstract class AbstractBinarizedByteVectorValues extends ByteVectorValues {
+abstract class QuantizedByteVectorValues extends ByteVectorValues {
 
     /**
      * Retrieve the corrective terms for the given vector ordinal. For the dot-product family of
@@ -77,7 +77,7 @@ abstract class AbstractBinarizedByteVectorValues extends ByteVectorValues {
     public abstract VectorScorer scorer(byte[] query) throws IOException;
 
     @Override
-    public abstract AbstractBinarizedByteVectorValues copy() throws IOException;
+    public abstract QuantizedByteVectorValues copy() throws IOException;
 
     float getCentroidDP() throws IOException {
         // this only gets executed on-merge

@@ -55,26 +55,26 @@ import java.util.Objects;
 
 import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader.readSimilarityFunction;
 import static org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsReader.readVectorEncoding;
-import static org.elasticsearch.index.codec.vectors.es920.ES920ByteBinaryQuantizedVectorsFormat.VECTOR_DATA_EXTENSION;
+import static org.elasticsearch.index.codec.vectors.es920.ES920ByteQuantizedVectorsFormat.VECTOR_DATA_EXTENSION;
 
 /**
  * Copied from Lucene, replace with Lucene's implementation sometime after Lucene 10
  */
 @SuppressForbidden(reason = "Lucene classes")
-public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader implements OffHeapStats {
+public class ES920ByteQuantizedVectorsReader extends FlatVectorsReader implements OffHeapStats {
 
-    private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(ES920ByteBinaryQuantizedVectorsReader.class);
+    private static final long SHALLOW_SIZE = RamUsageEstimator.shallowSizeOfInstance(ES920ByteQuantizedVectorsReader.class);
 
     private final Map<String, FieldEntry> fields;
     private final IndexInput quantizedVectorData;
     private final FlatVectorsReader rawVectorsReader;
-    private final ES920ByteBinaryFlatVectorsScorer vectorScorer;
+    private final ES920ByteQuantizedFlatVectorsScorer vectorScorer;
 
     @SuppressWarnings("this-escape")
-    ES920ByteBinaryQuantizedVectorsReader(
+    ES920ByteQuantizedVectorsReader(
         SegmentReadState state,
         FlatVectorsReader rawVectorsReader,
-        ES920ByteBinaryFlatVectorsScorer vectorsScorer
+        ES920ByteQuantizedFlatVectorsScorer vectorsScorer
     ) throws IOException {
         super(vectorsScorer);
         this.fields = new HashMap<>();
@@ -84,7 +84,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
         String metaFileName = IndexFileNames.segmentFileName(
             state.segmentInfo.name,
             state.segmentSuffix,
-            ES920ByteBinaryQuantizedVectorsFormat.META_EXTENSION
+            ES920ByteQuantizedVectorsFormat.META_EXTENSION
         );
         boolean success = false;
         try (ChecksumIndexInput meta = state.directory.openChecksumInput(metaFileName)) {
@@ -92,9 +92,9 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
             try {
                 versionMeta = CodecUtil.checkIndexHeader(
                     meta,
-                    ES920ByteBinaryQuantizedVectorsFormat.META_CODEC_NAME,
-                    ES920ByteBinaryQuantizedVectorsFormat.VERSION_START,
-                    ES920ByteBinaryQuantizedVectorsFormat.VERSION_CURRENT,
+                    ES920ByteQuantizedVectorsFormat.META_CODEC_NAME,
+                    ES920ByteQuantizedVectorsFormat.VERSION_START,
+                    ES920ByteQuantizedVectorsFormat.VERSION_CURRENT,
                     state.segmentInfo.getId(),
                     state.segmentSuffix
                 );
@@ -108,7 +108,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
                 state,
                 versionMeta,
                 VECTOR_DATA_EXTENSION,
-                ES920ByteBinaryQuantizedVectorsFormat.VECTOR_DATA_CODEC_NAME,
+                ES920ByteQuantizedVectorsFormat.VECTOR_DATA_CODEC_NAME,
                 // Quantized vectors are accessed randomly from their node ID stored in the HNSW
                 // graph.
                 state.context.withReadAdvice(ReadAdvice.RANDOM)
@@ -121,7 +121,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
         }
     }
 
-    private ES920ByteBinaryQuantizedVectorsReader(ES920ByteBinaryQuantizedVectorsReader clone, FlatVectorsReader rawVectorsReader) {
+    private ES920ByteQuantizedVectorsReader(ES920ByteQuantizedVectorsReader clone, FlatVectorsReader rawVectorsReader) {
         super(clone.vectorScorer);
         this.rawVectorsReader = rawVectorsReader;
         this.vectorScorer = clone.vectorScorer;
@@ -136,7 +136,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
 
     @Override
     public FlatVectorsReader getMergeInstance() {
-        return new ES920ByteBinaryQuantizedVectorsReader(this, rawVectorsReader.getMergeInstance());
+        return new ES920ByteQuantizedVectorsReader(this, rawVectorsReader.getMergeInstance());
     }
 
     private void readFields(ChecksumIndexInput meta, FieldInfos infos) throws IOException {
@@ -184,7 +184,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
         }
         return vectorScorer.getRandomVectorScorer(
             fi.similarityFunction,
-            OffHeapByteBinarizedVectorValues.load(
+            OffHeapByteQuantizedVectorValues.load(
                 fi.ordToDocDISIReaderConfiguration,
                 fi.dimension,
                 fi.size,
@@ -223,7 +223,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
                 "field=\"" + field + "\" is encoded as: " + fi.vectorEncoding + " expected: " + VectorEncoding.BYTE
             );
         }
-        OffHeapByteBinarizedVectorValues bvv = OffHeapByteBinarizedVectorValues.load(
+        OffHeapByteQuantizedVectorValues bvv = OffHeapByteQuantizedVectorValues.load(
             fi.ordToDocDISIReaderConfiguration,
             fi.dimension,
             fi.size,
@@ -312,8 +312,8 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
             int versionVectorData = CodecUtil.checkIndexHeader(
                 in,
                 codecName,
-                ES920ByteBinaryQuantizedVectorsFormat.VERSION_START,
-                ES920ByteBinaryQuantizedVectorsFormat.VERSION_CURRENT,
+                ES920ByteQuantizedVectorsFormat.VERSION_START,
+                ES920ByteQuantizedVectorsFormat.VERSION_CURRENT,
                 state.segmentInfo.getId(),
                 state.segmentSuffix
             );
@@ -396,9 +396,9 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
     /** Binarized vector values holding row and quantized vector values */
     protected static final class BinarizedVectorValues extends ByteVectorValues {
         private final ByteVectorValues rawVectorValues;
-        private final AbstractBinarizedByteVectorValues quantizedVectorValues;
+        private final QuantizedByteVectorValues quantizedVectorValues;
 
-        BinarizedVectorValues(ByteVectorValues rawVectorValues, AbstractBinarizedByteVectorValues quantizedVectorValues) {
+        BinarizedVectorValues(ByteVectorValues rawVectorValues, QuantizedByteVectorValues quantizedVectorValues) {
             this.rawVectorValues = rawVectorValues;
             this.quantizedVectorValues = quantizedVectorValues;
         }
@@ -443,7 +443,7 @@ public class ES920ByteBinaryQuantizedVectorsReader extends FlatVectorsReader imp
             return quantizedVectorValues.scorer(query);
         }
 
-        AbstractBinarizedByteVectorValues getQuantizedVectorValues() throws IOException {
+        QuantizedByteVectorValues getQuantizedVectorValues() throws IOException {
             return quantizedVectorValues;
         }
     }

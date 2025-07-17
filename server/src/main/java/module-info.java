@@ -7,6 +7,7 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
+import org.elasticsearch.index.codec.vectors.es920.ES920ByteQuantizedVectorsFormat;
 import org.elasticsearch.plugins.internal.RestExtension;
 import org.elasticsearch.reservedstate.ReservedStateHandlerProvider;
 
@@ -460,7 +461,7 @@ module org.elasticsearch.server {
             org.elasticsearch.index.codec.vectors.es818.ES818BinaryQuantizedVectorsFormat,
             org.elasticsearch.index.codec.vectors.es818.ES818HnswBinaryQuantizedVectorsFormat,
             org.elasticsearch.index.codec.vectors.IVFVectorsFormat,
-            org.elasticsearch.index.codec.vectors.es920.ES920ByteBinaryQuantizedVectorsFormat;
+            ES920ByteQuantizedVectorsFormat;
 
     provides org.apache.lucene.codecs.Codec
         with
@@ -485,4 +486,5 @@ module org.elasticsearch.server {
     exports org.elasticsearch.index.codec.perfield;
     exports org.elasticsearch.index.codec.vectors to org.elasticsearch.test.knn;
     exports org.elasticsearch.index.codec.vectors.es818 to org.elasticsearch.test.knn;
+    exports org.elasticsearch.index.codec.vectors.es920 to org.elasticsearch.test.knn;
 }

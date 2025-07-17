@@ -85,7 +85,7 @@ import static org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper.MAX_
   *  <li>The sparse vector information, if required, mapping vector ordinal to doc ID
   * </ul>
  */
-public class ES920ByteBinaryQuantizedVectorsFormat extends FlatVectorsFormat {
+public class ES920ByteQuantizedVectorsFormat extends FlatVectorsFormat {
 
     public static final String BINARIZED_VECTOR_COMPONENT = "BVEC";
     public static final String NAME = "ES920BinaryQuantizedVectorsFormat";
@@ -98,27 +98,35 @@ public class ES920ByteBinaryQuantizedVectorsFormat extends FlatVectorsFormat {
     static final String VECTOR_DATA_EXTENSION = "veb";
     static final int DIRECT_MONOTONIC_BLOCK_SHIFT = 16;
 
+    private static int QUANTIZE_BITS = 7;
+    private static int QUANTIZE_QUERY_BITS = 7;
+
     private static final FlatVectorsFormat rawVectorFormat = new Lucene99FlatVectorsFormat(
         FlatVectorScorerUtil.getLucene99FlatVectorsScorer()
     );
 
-    private static final ES920ByteBinaryFlatVectorsScorer scorer = new ES920ByteBinaryFlatVectorsScorer(
+    private static final ES920ByteQuantizedFlatVectorsScorer scorer = new ES920ByteQuantizedFlatVectorsScorer(
         FlatVectorScorerUtil.getLucene99FlatVectorsScorer()
     );
 
-    /** Creates a new instance with the default number of vectors per cluster. */
-    public ES920ByteBinaryQuantizedVectorsFormat() {
+    public ES920ByteQuantizedVectorsFormat() {
+        this(QUANTIZE_BITS, QUANTIZE_QUERY_BITS);
+    }
+
+    public ES920ByteQuantizedVectorsFormat(int quantizeBits, int quantizeQueryBits) {
         super(NAME);
+        QUANTIZE_BITS = quantizeBits;
+        QUANTIZE_QUERY_BITS = quantizeQueryBits;
     }
 
     @Override
     public FlatVectorsWriter fieldsWriter(SegmentWriteState state) throws IOException {
-        return new ES920ByteBinaryQuantizedVectorsWriter(scorer, rawVectorFormat.fieldsWriter(state), state);
+        return new ES920ByteQuantizedVectorsWriter(scorer, rawVectorFormat.fieldsWriter(state), state);
     }
 
     @Override
     public FlatVectorsReader fieldsReader(SegmentReadState state) throws IOException {
-        return new ES920ByteBinaryQuantizedVectorsReader(state, rawVectorFormat.fieldsReader(state), scorer);
+        return new ES920ByteQuantizedVectorsReader(state, rawVectorFormat.fieldsReader(state), scorer);
     }
 
     @Override

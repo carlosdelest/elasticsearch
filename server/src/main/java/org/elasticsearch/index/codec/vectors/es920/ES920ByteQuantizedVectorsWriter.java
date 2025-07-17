@@ -62,22 +62,23 @@ import static org.apache.lucene.index.VectorSimilarityFunction.COSINE;
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 import static org.apache.lucene.util.RamUsageEstimator.shallowSizeOfInstance;
 import static org.elasticsearch.index.codec.vectors.BQVectorUtils.bytesToFloats;
-import static org.elasticsearch.index.codec.vectors.es920.ES920ByteBinaryQuantizedVectorsFormat.BINARIZED_VECTOR_COMPONENT;
-import static org.elasticsearch.index.codec.vectors.es920.ES920ByteBinaryQuantizedVectorsFormat.DIRECT_MONOTONIC_BLOCK_SHIFT;
+import static org.elasticsearch.index.codec.vectors.es920.ES920ByteQuantizedVectorsFormat.BINARIZED_VECTOR_COMPONENT;
+import static org.elasticsearch.index.codec.vectors.es920.ES920ByteQuantizedVectorsFormat.DIRECT_MONOTONIC_BLOCK_SHIFT;
 
 /**
  * Copied from Lucene, replace with Lucene's implementation sometime after Lucene 10
  */
 @SuppressForbidden(reason = "Lucene classes")
-public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
-    private static final long SHALLOW_RAM_BYTES_USED = shallowSizeOfInstance(ES920ByteBinaryQuantizedVectorsWriter.class);
+public class ES920ByteQuantizedVectorsWriter extends FlatVectorsWriter {
+    private static final long SHALLOW_RAM_BYTES_USED = shallowSizeOfInstance(ES920ByteQuantizedVectorsWriter.class);
 
     private final SegmentWriteState segmentWriteState;
     private final List<FieldWriter> fields = new ArrayList<>();
     private final IndexOutput meta, binarizedVectorData;
     private final FlatVectorsWriter rawVectorDelegate;
-    private final ES920ByteBinaryFlatVectorsScorer vectorsScorer;
+    private final ES920ByteQuantizedFlatVectorsScorer vectorsScorer;
     private boolean finished;
+    private final int quantizedBits;
 
     /**
      * Sole constructor
@@ -85,24 +86,26 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
      * @param vectorsScorer the scorer to use for scoring vectors
      */
     @SuppressWarnings("this-escape")
-    protected ES920ByteBinaryQuantizedVectorsWriter(
-        ES920ByteBinaryFlatVectorsScorer vectorsScorer,
+    protected ES920ByteQuantizedVectorsWriter(
+        int quantizedBits,
+        ES920ByteQuantizedFlatVectorsScorer vectorsScorer,
         FlatVectorsWriter rawVectorDelegate,
         SegmentWriteState state
     ) throws IOException {
         super(vectorsScorer);
+        this.quantizedBits = quantizedBits;
         this.vectorsScorer = vectorsScorer;
         this.segmentWriteState = state;
         String metaFileName = IndexFileNames.segmentFileName(
             state.segmentInfo.name,
             state.segmentSuffix,
-            ES920ByteBinaryQuantizedVectorsFormat.META_EXTENSION
+            ES920ByteQuantizedVectorsFormat.META_EXTENSION
         );
 
         String binarizedVectorDataFileName = IndexFileNames.segmentFileName(
             state.segmentInfo.name,
             state.segmentSuffix,
-            ES920ByteBinaryQuantizedVectorsFormat.VECTOR_DATA_EXTENSION
+            ES920ByteQuantizedVectorsFormat.VECTOR_DATA_EXTENSION
         );
         this.rawVectorDelegate = rawVectorDelegate;
         boolean success = false;
@@ -112,15 +115,15 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
 
             CodecUtil.writeIndexHeader(
                 meta,
-                ES920ByteBinaryQuantizedVectorsFormat.META_CODEC_NAME,
-                ES920ByteBinaryQuantizedVectorsFormat.VERSION_CURRENT,
+                ES920ByteQuantizedVectorsFormat.META_CODEC_NAME,
+                ES920ByteQuantizedVectorsFormat.VERSION_CURRENT,
                 state.segmentInfo.getId(),
                 state.segmentSuffix
             );
             CodecUtil.writeIndexHeader(
                 binarizedVectorData,
-                ES920ByteBinaryQuantizedVectorsFormat.VECTOR_DATA_CODEC_NAME,
-                ES920ByteBinaryQuantizedVectorsFormat.VERSION_CURRENT,
+                ES920ByteQuantizedVectorsFormat.VECTOR_DATA_CODEC_NAME,
+                ES920ByteQuantizedVectorsFormat.VERSION_CURRENT,
                 state.segmentInfo.getId(),
                 state.segmentSuffix
             );
@@ -180,7 +183,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         throws IOException {
         // write vector values
         long vectorDataOffset = binarizedVectorData.alignFilePointer(Float.BYTES);
-        writeBinarizedVectors(fieldData, clusterCenter, quantizer);
+        writeQuantizedVectors(fieldData, clusterCenter, quantizer);
         long vectorDataLength = binarizedVectorData.getFilePointer() - vectorDataOffset;
         float centroidDp = fieldData.getVectors().size() > 0 ? VectorUtil.dotProduct(clusterCenter, clusterCenter) : 0;
 
@@ -195,7 +198,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         );
     }
 
-    private void writeBinarizedVectors(FieldWriter fieldData, float[] clusterCenter, OptimizedScalarQuantizer scalarQuantizer)
+    private void writeQuantizedVectors(FieldWriter fieldData, float[] clusterCenter, OptimizedScalarQuantizer scalarQuantizer)
         throws IOException {
         int discreteDims = BQVectorUtils.discretize(fieldData.fieldInfo.getVectorDimension(), 64);
         int[] quantizationScratch = new int[discreteDims];
@@ -207,7 +210,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
                 byteVector,
                 floatVector,
                 quantizationScratch,
-                (byte) 1,
+                (byte) quantizedBits,
                 clusterCenter
             );
             BQVectorUtils.packAsBinary(quantizationScratch, vector);
@@ -406,7 +409,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         return docsWithField;
     }
 
-    static DocsWithFieldSet writeBinarizedVectorData(IndexOutput output, AbstractBinarizedByteVectorValues binarizedByteVectorValues)
+    static DocsWithFieldSet writeBinarizedVectorData(IndexOutput output, QuantizedByteVectorValues binarizedByteVectorValues)
         throws IOException {
         DocsWithFieldSet docsWithField = new DocsWithFieldSet();
         KnnVectorValues.DocIndexIterator iterator = binarizedByteVectorValues.iterator();
@@ -511,7 +514,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
             success = true;
             final IndexInput finalBinarizedDataInput = binarizedDataInput;
             final IndexInput finalBinarizedScoreDataInput = binarizedScoreDataInput;
-            OffHeapByteBinarizedVectorValues vectorValues = new OffHeapByteBinarizedVectorValues.DenseOffHeapVectorValues(
+            OffHeapByteQuantizedVectorValues vectorValues = new OffHeapByteQuantizedVectorValues.DenseOffHeapVectorValues(
                 fieldInfo.getVectorDimension(),
                 docsWithField.cardinality(),
                 centroid,
@@ -565,7 +568,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         if (vectorsReader instanceof PerFieldKnnVectorsFormat.FieldsReader candidateReader) {
             vectorsReader = candidateReader.getFieldReader(fieldName);
         }
-        if (vectorsReader instanceof ES920ByteBinaryQuantizedVectorsReader reader) {
+        if (vectorsReader instanceof ES920ByteQuantizedVectorsReader reader) {
             return reader.getCentroid(fieldName);
         }
         return null;
@@ -810,7 +813,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         }
     }
 
-    static class BinarizedByteVectorValues extends AbstractBinarizedByteVectorValues {
+    static class BinarizedByteVectorValues extends QuantizedByteVectorValues {
         private OptimizedScalarQuantizer.QuantizationResult corrections;
         private final byte[] binarized;
         private final int[] initQuantized;
@@ -882,7 +885,7 @@ public class ES920ByteBinaryQuantizedVectorsWriter extends FlatVectorsWriter {
         }
 
         @Override
-        public AbstractBinarizedByteVectorValues copy() throws IOException {
+        public QuantizedByteVectorValues copy() throws IOException {
             return new BinarizedByteVectorValues(values.copy(), quantizer, centroid, similarityFunction);
         }
 

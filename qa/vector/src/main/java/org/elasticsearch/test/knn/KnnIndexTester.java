@@ -14,7 +14,6 @@ import com.sun.management.ThreadMXBean;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.KnnVectorsFormat;
 import org.apache.lucene.codecs.lucene101.Lucene101Codec;
-import org.apache.lucene.codecs.lucene99.Lucene99FlatVectorsFormat;
 import org.apache.lucene.codecs.lucene99.Lucene99HnswVectorsFormat;
 import org.apache.lucene.index.VectorEncoding;
 import org.elasticsearch.cli.ProcessInfo;
@@ -22,12 +21,12 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.LogConfigurator;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.core.PathUtils;
-import org.elasticsearch.index.codec.vectors.ES813FlatVectorFormat;
 import org.elasticsearch.index.codec.vectors.ES813Int8FlatVectorFormat;
 import org.elasticsearch.index.codec.vectors.ES814HnswScalarQuantizedVectorsFormat;
 import org.elasticsearch.index.codec.vectors.IVFVectorsFormat;
 import org.elasticsearch.index.codec.vectors.es818.ES818BinaryQuantizedVectorsFormat;
 import org.elasticsearch.index.codec.vectors.es818.ES818HnswBinaryQuantizedVectorsFormat;
+import org.elasticsearch.index.codec.vectors.es920.ES920ByteQuantizedVectorsFormat;
 import org.elasticsearch.logging.Level;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
@@ -114,7 +113,7 @@ public class KnnIndexTester {
                 }
             } else {
                 if (args.indexType() == IndexType.FLAT) {
-                    format = new ES813FlatVectorFormat();
+                    format = new ES920ByteQuantizedVectorsFormat(args.quantizeBits(), args.quantizeQueryBits());
                 } else {
                     format = new Lucene99HnswVectorsFormat(args.hnswM(), args.hnswEfConstruction(), 1, null);
                 }

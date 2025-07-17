@@ -39,11 +39,11 @@ import static org.apache.lucene.index.VectorSimilarityFunction.EUCLIDEAN;
 import static org.apache.lucene.index.VectorSimilarityFunction.MAXIMUM_INNER_PRODUCT;
 
 /** Vector scorer over binarized vector values */
-public class ES920ByteBinaryFlatVectorsScorer implements FlatVectorsScorer {
+public class ES920ByteQuantizedFlatVectorsScorer implements FlatVectorsScorer {
     private final FlatVectorsScorer nonQuantizedDelegate;
     private static final float FOUR_BIT_SCALE = 1f / ((1 << 4) - 1);
 
-    public ES920ByteBinaryFlatVectorsScorer(FlatVectorsScorer nonQuantizedDelegate) {
+    public ES920ByteQuantizedFlatVectorsScorer(FlatVectorsScorer nonQuantizedDelegate) {
         this.nonQuantizedDelegate = nonQuantizedDelegate;
     }
 
@@ -52,7 +52,7 @@ public class ES920ByteBinaryFlatVectorsScorer implements FlatVectorsScorer {
         VectorSimilarityFunction similarityFunction,
         KnnVectorValues vectorValues
     ) throws IOException {
-        if (vectorValues instanceof AbstractBinarizedByteVectorValues) {
+        if (vectorValues instanceof QuantizedByteVectorValues) {
             throw new UnsupportedOperationException(
                 "getRandomVectorScorerSupplier(VectorSimilarityFunction,RandomAccessVectorValues) not implemented for binarized format"
             );
@@ -66,7 +66,7 @@ public class ES920ByteBinaryFlatVectorsScorer implements FlatVectorsScorer {
         KnnVectorValues vectorValues,
         byte[] target
     ) throws IOException {
-        if (vectorValues instanceof AbstractBinarizedByteVectorValues binarizedVectors) {
+        if (vectorValues instanceof QuantizedByteVectorValues binarizedVectors) {
             assert binarizedVectors.getQuantizer() != null
                 : "BinarizedByteVectorValues must have a quantizer for ES920ByteBinaryFlatVectorsScorer";
             assert binarizedVectors.size() > 0
@@ -120,8 +120,8 @@ public class ES920ByteBinaryFlatVectorsScorer implements FlatVectorsScorer {
 
     RandomVectorScorerSupplier getRandomVectorScorerSupplier(
         VectorSimilarityFunction similarityFunction,
-        ES920ByteBinaryQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues scoringVectors,
-        AbstractBinarizedByteVectorValues targetVectors
+        ES920ByteQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues scoringVectors,
+        QuantizedByteVectorValues targetVectors
     ) {
         return new BinarizedRandomVectorScorerSupplier(scoringVectors, targetVectors, similarityFunction);
     }
@@ -133,13 +133,13 @@ public class ES920ByteBinaryFlatVectorsScorer implements FlatVectorsScorer {
 
     /** Vector scorer supplier over binarized vector values */
     static class BinarizedRandomVectorScorerSupplier implements RandomVectorScorerSupplier {
-        private final ES920ByteBinaryQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors;
-        private final AbstractBinarizedByteVectorValues targetVectors;
+        private final ES920ByteQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors;
+        private final QuantizedByteVectorValues targetVectors;
         private final VectorSimilarityFunction similarityFunction;
 
         BinarizedRandomVectorScorerSupplier(
-            ES920ByteBinaryQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors,
-            AbstractBinarizedByteVectorValues targetVectors,
+            ES920ByteQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors,
+            QuantizedByteVectorValues targetVectors,
             VectorSimilarityFunction similarityFunction
         ) {
             this.queryVectors = queryVectors;
@@ -160,16 +160,16 @@ public class ES920ByteBinaryFlatVectorsScorer implements FlatVectorsScorer {
 
     /** Vector scorer over binarized vector values */
     public static class BinarizedRandomVectorScorer extends UpdateableRandomVectorScorer.AbstractUpdateableRandomVectorScorer {
-        private final ES920ByteBinaryQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors;
-        private final AbstractBinarizedByteVectorValues targetVectors;
+        private final ES920ByteQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors;
+        private final QuantizedByteVectorValues targetVectors;
         private final VectorSimilarityFunction similarityFunction;
         private final byte[] quantizedQuery;
         private OptimizedScalarQuantizer.QuantizationResult queryCorrections = null;
         private int currentOrdinal = -1;
 
         BinarizedRandomVectorScorer(
-            ES920ByteBinaryQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors,
-            AbstractBinarizedByteVectorValues targetVectors,
+            ES920ByteQuantizedVectorsWriter.OffHeapBinarizedQueryVectorValues queryVectors,
+            QuantizedByteVectorValues targetVectors,
             VectorSimilarityFunction similarityFunction
         ) {
             super(targetVectors);

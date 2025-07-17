@@ -90,14 +90,14 @@ import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.oneOf;
 
-public class ES920ByteBinaryQuantizedVectorsFormatTests extends BaseKnnVectorsFormatTestCase {
+public class ES920ByteQuantizedVectorsFormatTests extends BaseKnnVectorsFormatTestCase {
 
     static {
         LogConfigurator.loadLog4jPlugins();
         LogConfigurator.configureESLogging(); // native access requires logging to be initialized
     }
 
-    static final Codec codec = TestUtil.alwaysKnnVectorsFormat(new ES920ByteBinaryQuantizedVectorsFormat());
+    static final Codec codec = TestUtil.alwaysKnnVectorsFormat(new ES920ByteQuantizedVectorsFormat());
 
     @Override
     protected Codec getCodec() {
@@ -191,7 +191,7 @@ public class ES920ByteBinaryQuantizedVectorsFormatTests extends BaseKnnVectorsFo
         FilterCodec customCodec = new FilterCodec("foo", Codec.getDefault()) {
             @Override
             public KnnVectorsFormat knnVectorsFormat() {
-                return new ES920ByteBinaryQuantizedVectorsFormat();
+                return new ES920ByteQuantizedVectorsFormat();
             }
         };
         String expectedPattern = "ES920BinaryQuantizedVectorsFormat("
@@ -238,8 +238,8 @@ public class ES920ByteBinaryQuantizedVectorsFormatTests extends BaseKnnVectorsFo
                     LeafReader r = getOnlyLeafReader(reader);
                     ByteVectorValues vectorValues = r.getByteVectorValues(fieldName);
                     assertEquals(vectorValues.size(), numVectors);
-                    AbstractBinarizedByteVectorValues qvectorValues =
-                        ((ES920ByteBinaryQuantizedVectorsReader.BinarizedVectorValues) vectorValues).getQuantizedVectorValues();
+                    QuantizedByteVectorValues qvectorValues =
+                        ((ES920ByteQuantizedVectorsReader.BinarizedVectorValues) vectorValues).getQuantizedVectorValues();
                     float[] centroid = qvectorValues.getCentroid();
                     assertEquals(centroid.length, dims);
 
@@ -247,7 +247,7 @@ public class ES920ByteBinaryQuantizedVectorsFormatTests extends BaseKnnVectorsFo
                     int[] quantizedVector = new int[dims];
                     byte[] expectedVector = new byte[BQVectorUtils.discretize(dims, 64) / 8];
                     if (similarityFunction == VectorSimilarityFunction.COSINE) {
-                        vectorValues = new ES920ByteBinaryQuantizedVectorsWriter.NormalizedByteVectorValues(vectorValues);
+                        vectorValues = new ES920ByteQuantizedVectorsWriter.NormalizedByteVectorValues(vectorValues);
                     }
                     KnnVectorValues.DocIndexIterator docIndexIterator = vectorValues.iterator();
 
@@ -333,7 +333,7 @@ public class ES920ByteBinaryQuantizedVectorsFormatTests extends BaseKnnVectorsFo
     private static KnnVectorsReader unwrapRawVectorReader(String fieldName, KnnVectorsReader knnReader) {
         if (knnReader instanceof PerFieldKnnVectorsFormat.FieldsReader perField) {
             return unwrapRawVectorReader(fieldName, perField.getFieldReader(fieldName));
-        } else if (knnReader instanceof ES920ByteBinaryQuantizedVectorsReader bbqReader) {
+        } else if (knnReader instanceof ES920ByteQuantizedVectorsReader bbqReader) {
             return unwrapRawVectorReader(fieldName, bbqReader.getRawVectorsReader());
         } else {
             return knnReader;
