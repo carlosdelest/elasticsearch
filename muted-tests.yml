@@ -229,9 +229,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {spatial_shapes.CartesianPointIntersectsPolygon ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4218
-- class: co.elastic.elasticsearch.stateless.StatelessReshardDisruptionIT
-  method: testReshardWithDisruption
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4209
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {knn-function.KnnWithPrefilter ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4230
