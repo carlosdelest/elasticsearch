@@ -235,3 +235,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {knn-function.KnnWithPrefilter ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4230
+- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
+  method: test {knn-function.KnnWithPrefilter SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4231
