@@ -119,6 +119,7 @@ distribution_archives {
                     // Serverless has its own version of dot-prefix validation
                     exclude("*/modules/dot-prefix-validation")
                     exclude("*/modules/test-multi-project")
+                    exclude("*/modules/x-pack-migrate")
                     includeEmptyDirs = false
                 }
                 into("elasticsearch") {
