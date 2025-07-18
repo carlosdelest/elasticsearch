@@ -18,6 +18,7 @@
 package co.elastic.elasticsearch.serverless.security.cloud;
 
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.common.settings.SecureString;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -81,11 +82,15 @@ public class CloudApiKeyAuthenticator implements CustomApiKeyAuthenticator, Clos
         }
 
         final CloudApiKey cloudApiKey = (CloudApiKey) authenticationToken;
+        threadPool.generic().execute(ActionRunnable.wrap(listener, l -> doAuthenticate(cloudApiKey, l)));
+    }
 
+    private void doAuthenticate(CloudApiKey cloudApiKey, ActionListener<AuthenticationResult<Authentication>> listener) {
         cloudApiKeyService.authenticate(
             cloudApiKey,
             listener.delegateFailureAndWrap((l, authentication) -> l.onResponse(AuthenticationResult.success(authentication)))
         );
+
     }
 
     @Override

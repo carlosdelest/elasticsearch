@@ -40,6 +40,7 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.rest.RestStatus;
+import org.elasticsearch.transport.Transports;
 import org.elasticsearch.xpack.security.authc.ApiKeyService;
 
 import java.io.Closeable;
@@ -103,6 +104,7 @@ public class UniversalIamClient implements Closeable {
      */
     public void authenticateProject(CloudApiKeyAuthenticationRequest request, ActionListener<CloudApiKeyAuthenticationResponse> listener) {
         assert request.projects().size() == 1 : "only authenticating a single project is supported";
+        assert Transports.assertNotTransportThread("UIAM network i/o should not happen on a transport thread");
         final SimpleHttpRequest httpPost = toHttpPost(authenticateProjectUri, request);
         logger.debug("Authenticating against universal IAM service [{}]", httpPost.getRequestUri());
         httpClient.execute(httpPost, new FutureCallback<>() {
