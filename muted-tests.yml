@@ -214,3 +214,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchSizeAffectsReplicasSPBetween100And250
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4237
+- class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
+  method: testAggGiantTextField
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4238
