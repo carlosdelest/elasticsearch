@@ -220,3 +220,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {eval.ProjectEval ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4239
+- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
+  method: test {yaml=update/35_if_seq_no/Update with if_seq_no}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4240
