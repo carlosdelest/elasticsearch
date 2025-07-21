@@ -178,9 +178,6 @@ tests:
 - class: "org.elasticsearch.xpack.esql.qa.single_node.EsqlPartitioningIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/4117"
   method: "test {[doc] FROM idx | WHERE ABS(a) == 1 -> \"DOC\"}"
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  method: test {yaml=delete/20_cas/Internal version}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4123
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testIndexSettingsUpdateDoesNotUnhollow
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4130
