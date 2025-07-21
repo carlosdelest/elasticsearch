@@ -223,3 +223,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
   method: test {yaml=update/35_if_seq_no/Update with if_seq_no}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4240
+- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
+  method: test {knn-function.KnnWithPrefilter ASYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4245
