@@ -205,9 +205,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
   method: test {knn-function.KnnWithPrefilter SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4231
-- class: co.elastic.elasticsearch.stateless.objectstore.S3MultiProjectObjectStoreIT
-  method: testMultiProjectSnapshots
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4236
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchSizeAffectsReplicasSPBetween100And250
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4237
