@@ -40,9 +40,6 @@ tests:
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test flamegraph from test-events}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2957
-- class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
-  method: testSortByManyLongsTooMuchMemoryAsync
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/2926
 - class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/3034"
   method: "testBackgroundMergeCanRetainDeletedGenerationalFile"
@@ -208,9 +205,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchSizeAffectsReplicasSPBetween100And250
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4237
-- class: org.elasticsearch.xpack.esql.heap_attack.HeapAttackIT
-  method: testAggGiantTextField
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4238
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {eval.ProjectEval ASYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4239
