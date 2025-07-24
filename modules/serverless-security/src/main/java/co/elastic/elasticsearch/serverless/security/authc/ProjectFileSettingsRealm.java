@@ -159,17 +159,18 @@ public class ProjectFileSettingsRealm extends Realm {
     public void usageStats(ActionListener<Map<String, Object>> listener) {
         super.usageStats(ActionListener.wrap(stats -> {
             if (slowToFastHashCache != null) {
+                Cache.Stats cacheStats = slowToFastHashCache.stats();
                 stats.put(
                     "cache",
                     Map.of(
                         "size",
                         slowToFastHashCache.count(),
                         "evictions",
-                        slowToFastHashCache.stats().getEvictions(),
+                        cacheStats.getEvictions(),
                         "hits",
-                        slowToFastHashCache.stats().getHits(),
+                        cacheStats.getHits(),
                         "misses",
-                        slowToFastHashCache.stats().getMisses()
+                        cacheStats.getMisses()
                     )
                 );
             }

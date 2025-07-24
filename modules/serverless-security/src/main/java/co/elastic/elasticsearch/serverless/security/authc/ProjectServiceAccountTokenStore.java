@@ -105,7 +105,7 @@ public class ProjectServiceAccountTokenStore implements ServiceAccountTokenStore
     }
 
     // Visible for testing
-    Cache.CacheStats cacheStats() {
+    Cache.Stats cacheStats() {
         return slowToFastHashCache.stats();
     }
 }
