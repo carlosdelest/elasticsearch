@@ -33,8 +33,8 @@ public final class UiamServiceTestContainer extends DockerEnvironmentAwareTestCo
      */
     public static final int UIAM_PORT = 8080;
 
-    private static final String UIAM_IMAGE = "docker.elastic.co/cloud-ci/uiam:git-454cb5b3b5be"
-        + "@sha256:f176500b9ce6f0208697ffad223e2d6f53022186d7d13fe2c5dedcff7d28f387";
+    private static final String UIAM_IMAGE = "docker.elastic.co/cloud-ci/uiam:git-636fabba8fcf"
+        + "@sha256:049a4cfce9a5c159dd1aefbb1c99796ebea5637c03ab3d439683c6ae97e4feb4";
     public static final String JWT_TOKENS_SIGNATURE_SECRET =
         "MnpT2a582F/LiRbocLHLnSF2SYElqTUdmQvBpVn+51Q=,FrsRWeRGTl761r2HihQE/JisZbnemGfR7fUjtUlSouM=";
     public static final String API_KEY_PREFIX = "essu_dev";

@@ -44,14 +44,14 @@ public record CloudCredentialsMetadata(String type, boolean internal, Instant cr
             a -> new CloudCredentialsMetadata(
                 (String) a[0],  // type
                 (boolean) a[1], // internal
-                Instant.ofEpochMilli((Long) a[2]), // creation
-                a[3] != null ? Instant.ofEpochMilli((Long) a[3]) : null // expiration
+                Instant.parse((String) a[2]), // creation
+                a[3] != null ? Instant.parse((String) a[3]) : null // expiration
             )
         );
         parser.declareString(constructorArg(), TYPE_FIELD);
         parser.declareBoolean(constructorArg(), INTERNAL_FIELD);
-        parser.declareLong(constructorArg(), CREATION_FIELD);
-        parser.declareLong(optionalConstructorArg(), EXPIRATION_FIELD);
+        parser.declareString(constructorArg(), CREATION_FIELD);
+        parser.declareString(optionalConstructorArg(), EXPIRATION_FIELD);
         return parser;
     }
 

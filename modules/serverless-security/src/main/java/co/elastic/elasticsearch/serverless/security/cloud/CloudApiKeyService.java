@@ -86,7 +86,7 @@ public class CloudApiKeyService implements Closeable {
                 assignedRoles,
                 null,
                 null,
-                buildUserMetadata(cloudApiKey, response),
+                buildUserMetadata(response),
                 true
             );
             final Authentication authentication = Authentication.newCloudApiKeyAuthentication(
@@ -124,14 +124,8 @@ public class CloudApiKeyService implements Closeable {
         );
     }
 
-    private static Map<String, Object> buildUserMetadata(final CloudApiKey cloudApiKey, final CloudApiKeyAuthenticationResponse response) {
-        // TODO: change this once we have credentials metadata received for all requests
-        final boolean internal;
-        if (response.credentialsMetadata() != null) {
-            internal = response.credentialsMetadata().internal();
-        } else {
-            internal = cloudApiKey.clientAuthenticationSharedSecret() != null;
-        }
+    private static Map<String, Object> buildUserMetadata(final CloudApiKeyAuthenticationResponse response) {
+        final boolean internal = response.credentialsMetadata().internal();
         if (response.apiKeyDescription() != null) {
             return Map.ofEntries(
                 Map.entry(AuthenticationField.API_KEY_INTERNAL_KEY, internal),

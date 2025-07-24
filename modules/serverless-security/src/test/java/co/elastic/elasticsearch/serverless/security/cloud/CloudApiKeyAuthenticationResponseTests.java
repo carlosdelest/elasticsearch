@@ -17,6 +17,7 @@
 
 package co.elastic.elasticsearch.serverless.security.cloud;
 
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.xcontent.XContentBuilder;
@@ -37,6 +38,8 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 
 public class CloudApiKeyAuthenticationResponseTests extends ESTestCase {
+
+    private static final String FORMATTED_TS = "2025-07-18T19:35:08.214Z";
 
     public void testParseValidResponse() throws Exception {
         final String apiKeyId = "cloud_api_key_id_" + randomAlphanumericOfLength(5);
@@ -73,8 +76,8 @@ public class CloudApiKeyAuthenticationResponseTests extends ESTestCase {
             "credentials",
             Map.ofEntries(
                 Map.entry("type", "api-key"),
-                Map.entry("creation", "1740107918000"),
-                Map.entry("expiration", "1740107918000"),
+                Map.entry("creation", FORMATTED_TS),
+                Map.entry("expiration", FORMATTED_TS),
                 Map.entry("internal", randomBoolean())
             )
         );
@@ -109,8 +112,8 @@ public class CloudApiKeyAuthenticationResponseTests extends ESTestCase {
             "credentials",
             Map.ofEntries(
                 Map.entry("type", "api-key"),
-                Map.entry("creation", "1740107918000"),
-                Map.entry("expiration", "1740107918000"),
+                Map.entry("creation", FORMATTED_TS),
+                Map.entry("expiration", FORMATTED_TS),
                 Map.entry("internal", randomBoolean())
             )
         );
@@ -202,7 +205,7 @@ public class CloudApiKeyAuthenticationResponseTests extends ESTestCase {
     }
 
     public void testParseWithMultipleContexts() throws IOException {
-        final String json = """
+        String json = """
             {
               "type": "api-key",
               "api_key_id": "V-04yYYB_35KQtWMCV5P",
@@ -227,13 +230,14 @@ public class CloudApiKeyAuthenticationResponseTests extends ESTestCase {
               ],
               "credentials": {
                 "type": "api-key",
-                "creation": 1740107918000,
-                "expiration": 1740107918000,
+                "creation": "%s",
+                "expiration": "%s",
                 "internal": true
               },
               "token": "<request-scoped token>"
             }
             """;
+        json = Strings.format(json, FORMATTED_TS, FORMATTED_TS);
         var result = CloudApiKeyAuthenticationResponse.parse(json.getBytes(StandardCharsets.UTF_8));
         assertThat(result.type(), containsString("api-key"));
         assertThat(result.apiKeyId(), containsString("V-04yYYB_35KQtWMCV5P"));
@@ -250,8 +254,8 @@ public class CloudApiKeyAuthenticationResponseTests extends ESTestCase {
         assertThat(result.contexts().get(1).applicationRoles(), is(empty()));
         assertThat(result.credentialsMetadata().type(), containsString("api-key"));
         assertThat(result.credentialsMetadata().internal(), equalTo(true));
-        assertThat(result.credentialsMetadata().creation(), equalTo(Instant.ofEpochMilli(1740107918000L)));
-        assertThat(result.credentialsMetadata().expiration(), equalTo(Instant.ofEpochMilli(1740107918000L)));
+        assertThat(result.credentialsMetadata().creation(), equalTo(Instant.parse(FORMATTED_TS)));
+        assertThat(result.credentialsMetadata().expiration(), equalTo(Instant.parse(FORMATTED_TS)));
     }
 
     public void testParseWithoutCredentialsMetadata() throws IOException {
