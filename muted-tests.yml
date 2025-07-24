@@ -181,9 +181,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchPowerAffectsReplica
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4192
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {floats.ScalbWithHugeConstantScaleFactor SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4199
 - class: co.elastic.elasticsearch.stateless.cache.StatelessOnlinePrewarmingIT
   method: testShardPrewarming
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4202
