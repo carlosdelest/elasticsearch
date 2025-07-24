@@ -211,3 +211,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {knn-function.KnnWithPrefilter SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4246
+- class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
+  method: test {spatial-grid.GridGeohexInStatsByBounds SYNC}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4266
