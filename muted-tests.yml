@@ -214,3 +214,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {spatial-grid.GridGeohexInStatsByBounds SYNC}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4266
+- class: co.elastic.elasticsearch.stateless.StatelessReshardDisruptionIT
+  method: testReshardWithDisruption
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4255
