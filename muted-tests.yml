@@ -181,9 +181,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchPowerAffectsReplica
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4192
-- class: co.elastic.elasticsearch.stateless.cache.StatelessOnlinePrewarmingIT
-  method: testShardPrewarming
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4202
 - class: co.elastic.elasticsearch.stateless.cache.SearchCommitPrefetcherIT
   method: testForceCommitPrefetch
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4205
