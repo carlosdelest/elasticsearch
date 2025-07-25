@@ -24,6 +24,7 @@ import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
+import org.elasticsearch.cluster.metadata.ReservedStateMetadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.core.FixForMultiProject;
@@ -54,6 +55,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static co.elastic.elasticsearch.serverless.multiproject.ServerlessMultiProjectPlugin.MULTI_PROJECT_ENABLED;
 import static org.elasticsearch.reservedstate.service.ReservedStateVersionCheck.HIGHER_OR_SAME_VERSION;
 import static org.elasticsearch.reservedstate.service.ReservedStateVersionCheck.HIGHER_VERSION_ONLY;
 import static org.elasticsearch.xcontent.XContentType.JSON;
@@ -73,6 +75,7 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
     private final Map<ProjectId, Path> projectFiles = new HashMap<>();
     private final Map<ProjectId, Path> secretsFiles = new HashMap<>();
     private final ReservedClusterStateService stateService;
+    private final boolean multiProjectEnabled;
 
     public MultiProjectFileSettingsService(
         ClusterService clusterService,
@@ -82,6 +85,7 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
     ) {
         super(clusterService, stateService, environment, healthTracker);
         this.stateService = stateService;
+        this.multiProjectEnabled = MULTI_PROJECT_ENABLED.get(clusterService.getSettings());
     }
 
     @Override
@@ -220,10 +224,20 @@ public class MultiProjectFileSettingsService extends FileSettingsService {
     }
 
     @Override
-    public void handleSnapshotRestore(ClusterState clusterState, Metadata.Builder mdBuilder) {
-        assert clusterState.metadata().projects().size() == 1
-            : "Cluster snapshot restore not supported for multiple projects " + clusterState.metadata().projects().keySet();
-        super.handleSnapshotRestore(clusterState, mdBuilder);
+    public void handleSnapshotRestore(ClusterState clusterState, Metadata.Builder mdBuilder, ProjectId projectId) {
+        assert clusterState.nodes().isLocalNodeElectedMaster();
+        if (multiProjectEnabled == false) {
+            assert ProjectId.DEFAULT.equals(projectId) : projectId;
+            super.handleSnapshotRestore(clusterState, mdBuilder, projectId);
+        } else {
+            final var projectFileSettingsMetadata = clusterState.metadata().getProject(projectId).reservedStateMetadata().get(NAMESPACE);
+            assert watching() : "multi-project file settings service should be watching for changes";
+            assert registeredProjects.contains(projectId) : "project [" + projectId + "] should be registered before restore";
+
+            if (projectFileSettingsMetadata != null) {
+                mdBuilder.getProject(projectId).put(new ReservedStateMetadata.Builder(projectFileSettingsMetadata).version(0L).build());
+            }
+        }
     }
 
     @Override

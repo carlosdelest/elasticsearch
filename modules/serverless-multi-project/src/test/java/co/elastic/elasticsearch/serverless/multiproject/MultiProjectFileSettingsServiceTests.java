@@ -22,7 +22,10 @@ import org.elasticsearch.cluster.ClusterChangedEvent;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.NodeConnectionsService;
+import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
+import org.elasticsearch.cluster.metadata.ProjectMetadata;
+import org.elasticsearch.cluster.metadata.ReservedStateMetadata;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodeUtils;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
@@ -72,11 +75,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import static co.elastic.elasticsearch.serverless.multiproject.ServerlessMultiProjectPlugin.MULTI_PROJECT_ENABLED;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static org.elasticsearch.health.HealthStatus.GREEN;
 import static org.elasticsearch.health.HealthStatus.YELLOW;
 import static org.elasticsearch.node.Node.NODE_NAME_SETTING;
+import static org.elasticsearch.reservedstate.service.FileSettingsService.NAMESPACE;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
@@ -100,6 +105,7 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
     private MultiProjectFileSettingsService fileSettingsService;
     private FileSettingsHealthTracker healthTracker;
     private Path settingsFile;
+    private boolean multiProjectEnabled;
 
     @Before
     public void setUp() throws Exception {
@@ -107,8 +113,9 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
 
         threadpool = new TestThreadPool("multi_project_file_settings_service_tests");
 
+        multiProjectEnabled = randomBoolean();
         clusterService = new ClusterService(
-            Settings.builder().put(NODE_NAME_SETTING.getKey(), "test").build(),
+            Settings.builder().put(NODE_NAME_SETTING.getKey(), "test").put(MULTI_PROJECT_ENABLED.getKey(), multiProjectEnabled).build(),
             new ClusterSettings(Settings.EMPTY, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS),
             threadpool,
             new TaskManager(Settings.EMPTY, threadpool, Set.of())
@@ -410,6 +417,109 @@ public class MultiProjectFileSettingsServiceTests extends ESTestCase {
         verify(fileSettingsService, times(1)).processFile(eq(projectFile), eq(false));
         // Process once per project
         verify(controller, times(1)).process(any(), any(), anyList(), eq(ReservedStateVersionCheck.HIGHER_VERSION_ONLY), any());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testHandleSnapshotRestoreResetsReservedMetadata() throws IOException {
+        // Start watching
+        Files.createDirectories(fileSettingsService.watchedFileDir());
+        writeTestFile(settingsFile, settingsFileForProjects(0));
+        fileSettingsService.start();
+        fileSettingsService.clusterChanged(new ClusterChangedEvent("test", clusterService.state(), ClusterState.EMPTY_STATE));
+
+        doAnswer(i -> {
+            ((Consumer<Exception>) i.getArgument(3)).accept(null);
+            return null;
+        }).when(controller).process(any(), any(XContentParser.class), any(), any());
+
+        final BlockingQueue<ProjectId> processProjects = new ArrayBlockingQueue<>(5);
+        doAnswer(i -> {
+            ((Consumer<Exception>) i.getArgument(4)).accept(null);
+            processProjects.add(i.getArgument(0));
+            return null;
+        }).when(controller).process(any(), any(), anyList(), any(), any());
+
+        final long initialVersion = randomLongBetween(1, 42);
+        doAnswer(i -> new ReservedStateChunk(Map.of(), new ReservedStateVersion(initialVersion, BuildVersion.current()))).when(controller)
+            .parse(any(), any(), any());
+
+        if (multiProjectEnabled) {
+            // register project 0
+            final ProjectId projectId0 = ProjectId.fromId("0");
+            writeTestFile(projectFile("0"), "{}");
+            writeTestFile(projectSecretsFile("0"), "{}");
+            writeTestFile(settingsFile, settingsFileForProjects(1));
+            assertThat(longPoll(processProjects), equalTo(projectId0));
+
+            // Register project 1
+            final ProjectId projectId1 = ProjectId.fromId("1");
+            writeTestFile(projectFile("1"), "{}");
+            writeTestFile(projectSecretsFile("1"), "{}");
+            writeTestFile(settingsFile, settingsFileForProjects(2));
+            assertThat(longPoll(processProjects), equalTo(projectId1));
+
+            final ClusterState state = ClusterState.builder(clusterService.state())
+                .metadata(
+                    Metadata.builder(clusterService.state().metadata())
+                        .put(new ReservedStateMetadata(NAMESPACE, initialVersion, Map.of(), null))
+                        .build()
+                )
+                .putProjectMetadata(
+                    ProjectMetadata.builder(projectId0).put(new ReservedStateMetadata(NAMESPACE, initialVersion, Map.of(), null)).build()
+                )
+                .putProjectMetadata(
+                    ProjectMetadata.builder(projectId1).put(new ReservedStateMetadata(NAMESPACE, initialVersion, Map.of(), null)).build()
+                )
+                .build();
+
+            final Metadata.Builder metadataBuilder = Metadata.builder(state.metadata());
+            // Simulate a snapshot restore for project 1
+            fileSettingsService.handleSnapshotRestore(state, metadataBuilder, projectId1);
+
+            final Metadata metadata = metadataBuilder.build();
+            // No change to project 0
+            assertThat(
+                metadata.getProject(projectId0).reservedStateMetadata().get(NAMESPACE),
+                equalTo(state.metadata().getProject(projectId0).reservedStateMetadata().get(NAMESPACE))
+            );
+            // Version for the project 1's reserved state metadata is reset
+            assertThat(
+                metadata.getProject(projectId1).reservedStateMetadata().get(NAMESPACE),
+                equalTo(new ReservedStateMetadata(NAMESPACE, 0L, Map.of(), null))
+            );
+            // No change to the version of the cluster level reserved state metadata
+            assertThat(
+                metadata.reservedStateMetadata().get(NAMESPACE),
+                equalTo(new ReservedStateMetadata(NAMESPACE, initialVersion, Map.of(), null))
+            );
+        } else {
+            final ClusterState state = ClusterState.builder(clusterService.state())
+                .metadata(
+                    Metadata.builder(clusterService.state().metadata())
+                        .put(new ReservedStateMetadata(NAMESPACE, initialVersion, Map.of(), null))
+                        .build()
+                )
+                // There is no usage of project level reserved state metadata in non-MP. This is added to ensure it does not get mutated.
+                .putProjectMetadata(
+                    ProjectMetadata.builder(ProjectId.DEFAULT)
+                        .put(new ReservedStateMetadata(NAMESPACE, initialVersion, Map.of(), null))
+                        .build()
+                )
+                .build();
+
+            final Metadata.Builder metadataBuilder = Metadata.builder(state.metadata());
+            fileSettingsService.handleSnapshotRestore(state, metadataBuilder, ProjectId.DEFAULT);
+            final Metadata metadata = metadataBuilder.build();
+
+            // Version of the cluster level reserved state metadata is reset
+            assertThat(metadata.reservedStateMetadata().get(NAMESPACE), equalTo(new ReservedStateMetadata(NAMESPACE, 0L, Map.of(), null)));
+
+            // No change to the version of the project reserved state metadata
+            assertThat(
+                metadata.getProject(ProjectId.DEFAULT).reservedStateMetadata().get(NAMESPACE),
+                equalTo(new ReservedStateMetadata(NAMESPACE, initialVersion, Map.of(), null))
+            );
+        }
     }
 
     private static Answer<?> countDownOnInvoke(CountDownLatch latch) {

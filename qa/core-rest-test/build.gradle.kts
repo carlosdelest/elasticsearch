@@ -247,7 +247,6 @@ tasks {
             /* These tests don't work on multi-project yet - we need to go through each of them and make them work */
             "^cat.aliases/10_basic/*",
             "^cat.indices/*/*",
-            "^cat.recovery/*/*",
             "^cat.segments/*/*",
             "^cluster.allocation_explain/10_basic/Cluster shard allocation explanation test with a closed index", // closed ind",
             "^cluster.desired_balance/10_basic/*",
@@ -270,7 +269,6 @@ tasks {
             "^indices.open/*/*",
             "^indices.open/*/*/*",
             "^indices.put_settings/*/*",
-            "^indices.recovery/*/*",
             "^indices.resolve_cluster/*/*",
             "^indices.resolve_cluster/*/*/*",
             "^indices.resolve_index/*/*",
@@ -300,10 +298,8 @@ tasks {
             "^search.vectors/70_dense_vector_telemetry/*",
             "^search.vectors/180_update_dense_vector_type/*",
             "^simulate.ingest/*/*",
-            "^snapshot.restore/*/*",
             "^synonyms/*/*",
             "^tsdb/10_settings/*",
-            "^tsdb/30_snapshot/*",
             "^tsdb/80_index_resize/*",
         )
         blacklistMultiProject.addAll(blacklist)
