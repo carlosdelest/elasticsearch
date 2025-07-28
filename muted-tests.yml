@@ -214,3 +214,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessReshardDisruptionIT
   method: testReshardWithDisruption
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4255
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testRecoverUnhollowedShardFromTranslog
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4274
