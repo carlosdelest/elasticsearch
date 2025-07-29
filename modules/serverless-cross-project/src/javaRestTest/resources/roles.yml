@@ -1,0 +1,8 @@
+read_linked_shared_metrics:
+  indices:
+    - names: [ "shared-metrics" ]
+      privileges: ["read"]
+linked_search:
+  indices:
+    - names: ["origin_index", "index1", "not_found_index"]
+      privileges: ["read"]
