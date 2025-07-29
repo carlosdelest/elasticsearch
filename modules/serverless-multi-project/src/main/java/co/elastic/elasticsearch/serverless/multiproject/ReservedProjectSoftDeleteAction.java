@@ -32,6 +32,9 @@ public class ReservedProjectSoftDeleteAction implements ReservedProjectStateHand
 
     @Override
     public TransformState transform(ProjectId projectId, Boolean markedForDeletion, TransformState prevState) {
+        if (projectId.equals(ProjectId.DEFAULT)) {
+            throw new IllegalArgumentException("Default project cannot be marked for deletion");
+        }
         ClusterState previousClusterState = prevState.state();
         ProjectStateRegistry previousProjectStateRegistry = previousClusterState.custom(ProjectStateRegistry.TYPE);
         if (markedForDeletion == false) {

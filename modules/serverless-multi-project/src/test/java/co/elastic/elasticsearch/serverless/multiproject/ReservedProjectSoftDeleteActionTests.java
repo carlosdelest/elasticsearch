@@ -97,6 +97,23 @@ public class ReservedProjectSoftDeleteActionTests extends ESTestCase {
         assertThat(exception.getMessage(), is("Cannot mark projects for deletion that are not in the registry: [" + projectId + "]"));
     }
 
+    public void testMarkDefaultProjectForDeletion() {
+        TransformState prevState = new TransformState(
+            createClusterStateWithRegistry(ProjectId.DEFAULT, ProjectStateRegistry.builder().build()),
+            Collections.emptySet()
+        );
+
+        ReservedProjectSoftDeleteAction action = new ReservedProjectSoftDeleteAction();
+        String json = "true";
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> processJSON(ProjectId.DEFAULT, action, prevState, json)
+        );
+
+        assertThat(exception.getMessage(), is("Default project cannot be marked for deletion"));
+    }
+
     public void testProjectAlreadyMarkedForDeletion() throws Exception {
         ProjectId projectId = randomUniqueProjectId();
 
