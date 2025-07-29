@@ -30,6 +30,7 @@ import org.elasticsearch.cluster.ClusterStateTaskExecutor;
 import org.elasticsearch.cluster.ClusterStateTaskListener;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
+import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.Metadata;
 import org.elasticsearch.cluster.metadata.ProjectId;
 import org.elasticsearch.cluster.routing.GlobalRoutingTable;
@@ -118,6 +119,7 @@ public class DeleteProjectAction extends ActionType<AcknowledgedResponse> {
         public ClusterState execute(BatchExecutionContext<DeleteProjectTask> batchExecutionContext) throws Exception {
             var metadataBuilder = Metadata.builder(batchExecutionContext.initialState().metadata());
             var routingTableBuilder = GlobalRoutingTable.builder(batchExecutionContext.initialState().globalRoutingTable());
+            var clusterBlocksBuilder = ClusterBlocks.builder(batchExecutionContext.initialState().blocks());
             for (TaskContext<DeleteProjectTask> taskContext : batchExecutionContext.taskContexts()) {
                 try {
                     ProjectId projectId = taskContext.getTask().request().projectId;
@@ -127,6 +129,7 @@ public class DeleteProjectAction extends ActionType<AcknowledgedResponse> {
                     }
                     metadataBuilder.removeProject(projectId);
                     routingTableBuilder.removeProject(projectId);
+                    clusterBlocksBuilder.removeProject(projectId);
                     logger.info(
                         "Deleted project ["
                             + projectId
@@ -142,6 +145,7 @@ public class DeleteProjectAction extends ActionType<AcknowledgedResponse> {
             return ClusterState.builder(batchExecutionContext.initialState())
                 .metadata(metadataBuilder.build())
                 .routingTable(routingTableBuilder.build())
+                .blocks(clusterBlocksBuilder.build())
                 .build();
         }
     }

@@ -32,6 +32,7 @@ import org.elasticsearch.xcontent.XContentType;
 import java.util.Collections;
 import java.util.Set;
 
+import static org.elasticsearch.cluster.metadata.ProjectMetadata.PROJECT_UNDER_DELETION_BLOCK;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.is;
 
@@ -77,6 +78,8 @@ public class ReservedProjectSoftDeleteActionTests extends ESTestCase {
         Set<String> keys = transformedState.keys();
         assertThat(keys.size(), is(1));
         assertThat(keys, contains(ReservedProjectSoftDeleteAction.NAME));
+
+        assertThat(transformedState.state().blocks().hasGlobalBlock(projectId, PROJECT_UNDER_DELETION_BLOCK), is(true));
     }
 
     public void testMarkUnknownProjectForDeletion() throws Exception {
@@ -130,6 +133,7 @@ public class ReservedProjectSoftDeleteActionTests extends ESTestCase {
         String json = "true";
 
         TransformState transformedState = processJSON(projectId, action, prevState, json);
+        assertThat(transformedState.state().blocks().hasGlobalBlock(projectId, PROJECT_UNDER_DELETION_BLOCK), is(true));
 
         ProjectStateRegistry updatedRegistry = transformedState.state().custom(ProjectStateRegistry.TYPE);
         assertNotNull(updatedRegistry);
@@ -162,6 +166,8 @@ public class ReservedProjectSoftDeleteActionTests extends ESTestCase {
 
         Set<String> keys = transformedState.keys();
         assertTrue(keys.isEmpty());
+
+        assertThat(transformedState.state().blocks().hasGlobalBlock(projectId, PROJECT_UNDER_DELETION_BLOCK), is(false));
     }
 
     public void testMarkProjectForDeletionFalseWhileBeingDeleted() {

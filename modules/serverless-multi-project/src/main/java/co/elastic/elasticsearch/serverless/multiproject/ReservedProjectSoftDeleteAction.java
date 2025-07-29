@@ -18,7 +18,9 @@
 package co.elastic.elasticsearch.serverless.multiproject;
 
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.ProjectId;
+import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.cluster.project.ProjectStateRegistry;
 import org.elasticsearch.reservedstate.ReservedProjectStateHandler;
 import org.elasticsearch.reservedstate.TransformState;
@@ -50,7 +52,16 @@ public class ReservedProjectSoftDeleteAction implements ReservedProjectStateHand
             .markProjectForDeletion(projectId)
             .build();
         return new TransformState(
-            ClusterState.builder(previousClusterState).putCustom(ProjectStateRegistry.TYPE, updatedStateRegistry).build(),
+            ClusterState.builder(previousClusterState)
+                .putCustom(ProjectStateRegistry.TYPE, updatedStateRegistry)
+                // in the same cluster state that we mark the project for deletion, we also add a block to prevent
+                // any further changes to the project data and metadata
+                .blocks(
+                    ClusterBlocks.builder(previousClusterState.blocks())
+                        .addProjectGlobalBlock(projectId, ProjectMetadata.PROJECT_UNDER_DELETION_BLOCK)
+                        .build()
+                )
+                .build(),
             Collections.singleton(NAME)
         );
     }
