@@ -232,3 +232,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceTests
   method: testHandleSnapshotRestoreResetsReservedMetadata
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4292
+- class: co.elastic.elasticsearch.stateless.recovery.RemedialAllocationSettingServiceTests
+  method: testRemediationOnUpdatedState
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4293
