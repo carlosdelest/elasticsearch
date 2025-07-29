@@ -223,3 +223,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.objectstore.S3MultiProjectObjectStoreIT
   method: testRestoreProjectMetadata
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4285
+- class: co.elastic.elasticsearch.stateless.objectstore.FsMultiProjectObjectStoreIT
+  method: testRestoreProjectMetadata
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4287
