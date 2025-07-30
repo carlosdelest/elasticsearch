@@ -20,8 +20,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.ElasticsearchSecurityException;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.core.Nullable;
-import org.elasticsearch.core.Strings;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.xpack.core.security.authc.Authentication;
 import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
@@ -79,7 +79,15 @@ public class CloudApiKeyService implements Closeable {
                 listener.onFailure(createAuthenticationException(projectInfo.projectId()));
                 return;
             }
-            // TODO consider failing authentication if returned roles are empty (subject has not effective access to the project)
+            if (context.applicationRoles().isEmpty() || context.applicationRoles().stream().allMatch(Strings::isNullOrBlank)) {
+                logger.debug(
+                    "Authorization failed for for cloud api key [{}]. No roles assigned to project [{}]",
+                    response.apiKeyId(),
+                    projectInfo
+                );
+                listener.onFailure(createAuthorizationException(projectInfo.projectId()));
+                return;
+            }
             final String[] assignedRoles = context.applicationRoles().toArray(new String[0]);
             final User user = new User(
                 response.apiKeyId(), // username == cloud API key ID
@@ -147,6 +155,21 @@ public class CloudApiKeyService implements Closeable {
         return new ElasticsearchSecurityException(
             Strings.format("failed to authenticate cloud API key for project [%s]", projectId),
             RestStatus.UNAUTHORIZED,
+            ex
+        );
+    }
+
+    private static ElasticsearchSecurityException createAuthorizationException(String projectId) {
+        return createAuthorizationException(projectId, null);
+    }
+
+    private static ElasticsearchSecurityException createAuthorizationException(
+        String projectId,
+        @Nullable ElasticsearchSecurityException ex
+    ) {
+        return new ElasticsearchSecurityException(
+            Strings.format("failed to authorize cloud API key for project [%s]", projectId),
+            RestStatus.FORBIDDEN,
             ex
         );
     }

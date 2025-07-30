@@ -30,6 +30,7 @@ import org.elasticsearch.xpack.core.security.authc.AuthenticationField;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -107,6 +108,20 @@ public class CloudApiKeyServiceTests extends ESTestCase {
         ElasticsearchSecurityException ese = expectThrows(ElasticsearchSecurityException.class, future::actionGet);
         assertThat(ese.getMessage(), equalTo("failed to authenticate cloud API key for project [" + PROJECT_ID + "]"));
         assertThat(ese.status(), equalTo(RestStatus.UNAUTHORIZED));
+    }
+
+    public void testNoRolesAfterSuccessfulAuthentication() {
+        final SecureString sharedSecret = randomBoolean() ? new SecureString("shared-secret".toCharArray()) : null;
+        final boolean internal = sharedSecret != null;
+        final UniversalIamClient client = mockUniversalIamClient(Collections.emptyList(), internal);
+        final PlainActionFuture<Authentication> future = new PlainActionFuture<>();
+        final CloudApiKeyService cloudApiKeyService = new CloudApiKeyService(NODE_ID, client, projectInfoSupplier);
+
+        cloudApiKeyService.authenticate(new CloudApiKey(new SecureString("essu_test-api-key".toCharArray()), sharedSecret), future);
+
+        ElasticsearchSecurityException ese = expectThrows(ElasticsearchSecurityException.class, future::actionGet);
+        assertThat(ese.getMessage(), equalTo("failed to authorize cloud API key for project [" + PROJECT_ID + "]"));
+        assertThat(ese.status(), equalTo(RestStatus.FORBIDDEN));
     }
 
     @SuppressWarnings("unchecked")
