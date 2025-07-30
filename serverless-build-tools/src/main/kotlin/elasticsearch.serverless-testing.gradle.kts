@@ -47,6 +47,8 @@ allprojects {
     pluginManager.withPlugin("elasticsearch.java-base") {
         dependencies {
             add("nativeLibs", "org.elasticsearch:native-libraries")
+            add("entitlementAgent", "org.elasticsearch:agent")
+            add("entitlementBridge", "org.elasticsearch:bridge")
         }
     }
     pluginManager.withPlugin("elasticsearch.build") {
