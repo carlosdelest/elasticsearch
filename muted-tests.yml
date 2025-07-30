@@ -235,3 +235,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessSearchSkipBlockIT
   method: testSearchWhenIndexSearchShardsAreNotUp
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4304
+- class: co.elastic.elasticsearch.stateless.multiproject.ProjectLifeCycleIT
+  method: testReleasingLeaseWorksDuringMasterFailOver
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4308
