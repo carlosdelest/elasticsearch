@@ -240,10 +240,10 @@ public class RawStorageMeteringIT extends AbstractMeteringIntegTestCase {
                 hollowShardsService,
                 sharedBlobCacheWarmingService,
                 refreshThrottlerFactory,
-                statelessCommitService.getIndexEngineLocalReaderListenerForShard(engineConfig.getShardId()),
                 statelessCommitService.getCommitBCCResolverForShard(engineConfig.getShardId()),
                 documentParsingProvider,
-                engineMetrics
+                engineMetrics,
+                statelessCommitService.getShardLocalCommitsTracker(engineConfig.getShardId()).shardLocalReadersTracker()
             ) {
                 @Override
                 protected IndexWriter createWriter(Directory directory, IndexWriterConfig iwc) throws IOException {
