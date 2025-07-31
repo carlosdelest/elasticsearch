@@ -140,29 +140,20 @@ tests:
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/4024"
   method: "testSearchNodeMetrics"
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {fork.ForkAfterCompletion ASYNC}
+  method: test {csv-spec:fork.ForkAfterCompletion}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {fork.ForkBeforeCompletion ASYNC}
+  method: test {csv-spec:fork.ForkBeforeCompletion}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {fork.ForkAfterCompletion SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {fork.ForkBeforeCompletion SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {fork.ForkBranchWithCompletion ASYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {fork.ForkBranchWithCompletion SYNC}
+  method: test {csv-spec:fork.ForkBranchWithCompletion}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
 - class: "org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/4060"
-  method: "test {knn-function.KnnSearchWithKOption SYNC}"
+  method: "test {csv-spec:knn-function.KnnSearchWithKOption}"
 - class: "org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/4061"
-  method: "test {knn-function.KnnSearchWithKOption ASYNC}"
+  method: "test {cvs-spec:knn-function.KnnSearchWithKOption}"
 - class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
   method: test {p0=esql/220_explain/explainDownstream}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4100
@@ -182,28 +173,22 @@ tests:
   method: testForceCommitPrefetch
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4205
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {spatial_shapes.CartesianPointIntersectsPolygon ASYNC}
+  method: test {csv-spec:spatial_shapes.CartesianPointIntersectsPolygon}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4218
 - class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {knn-function.KnnWithPrefilter ASYNC}
+  method: test {csv-spec:knn-function.KnnWithPrefilter}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4230
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {knn-function.KnnWithPrefilter SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4231
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchSizeAffectsReplicasSPBetween100And250
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4237
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {eval.ProjectEval ASYNC}
+  method: test {csv-spec:eval.ProjectEval}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4239
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {knn-function.KnnWithPrefilter ASYNC}
+  method: test {csv-spec:knn-function.KnnWithPrefilter}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4245
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {knn-function.KnnWithPrefilter SYNC}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4246
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
-  method: test {spatial-grid.GridGeohexInStatsByBounds SYNC}
+  method: test {csv-spec:spatial-grid.GridGeohexInStatsByBounds}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4266
 - class: co.elastic.elasticsearch.stateless.StatelessReshardDisruptionIT
   method: testReshardWithDisruption
