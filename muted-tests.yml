@@ -220,15 +220,15 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.memory.AutoscalingMemoryMetricsIT
   method: testShardMemoryMetricsForHollowEngine
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4284
-- class: "co.elastic.elasticsearch.stateless.recovery.RemedialAllocationSettingServiceTests"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/4290"
-  method: "testRemediation"
+- class: co.elastic.elasticsearch.stateless.objectstore.S3MultiProjectObjectStoreIT
+  method: testRestoreProjectMetadata
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4285
+- class: co.elastic.elasticsearch.stateless.objectstore.FsMultiProjectObjectStoreIT
+  method: testRestoreProjectMetadata
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4287
 - class: co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceTests
   method: testHandleSnapshotRestoreResetsReservedMetadata
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4292
-- class: co.elastic.elasticsearch.stateless.recovery.RemedialAllocationSettingServiceTests
-  method: testRemediationOnUpdatedState
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4293
 - class: co.elastic.elasticsearch.stateless.multiproject.ProjectLifeCycleIT
   method: testLease
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4302
