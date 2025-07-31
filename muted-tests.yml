@@ -241,3 +241,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testUnhollowOnUpdates
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4310
+- class: co.elastic.elasticsearch.stateless.multiproject.ProjectLifeCycleIT
+  method: testReleasingLeaseRetries
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4314
