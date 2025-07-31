@@ -115,9 +115,6 @@ tests:
 - class: co.elastic.elasticsearch.serverless.ml.ClassificationIT
   method: testClassification
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3783
-- class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
-  method: testRandomActivities
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3786
 - class: co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceIT
   method: testSettingsChange
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3902
