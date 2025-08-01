@@ -223,3 +223,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.multiproject.ProjectLifeCycleIT
   method: testReleasingLeaseRetries
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4314
+- class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
+  method: testRelocatingIndexShards
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4320
