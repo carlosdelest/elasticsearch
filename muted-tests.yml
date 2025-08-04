@@ -238,3 +238,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.objectstore.FsMultiProjectObjectStoreIT
   method: testBackupRepositories
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4330
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testRelocateHollowShards
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4331
