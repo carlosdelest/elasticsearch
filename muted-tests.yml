@@ -199,30 +199,15 @@ tests:
 - class: co.elastic.elasticsearch.stateless.autoscaling.memory.AutoscalingMemoryMetricsIT
   method: testShardMemoryMetricsForHollowEngine
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4284
-- class: co.elastic.elasticsearch.stateless.objectstore.S3MultiProjectObjectStoreIT
-  method: testRestoreProjectMetadata
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4285
-- class: co.elastic.elasticsearch.stateless.objectstore.FsMultiProjectObjectStoreIT
-  method: testRestoreProjectMetadata
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4287
 - class: co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceTests
   method: testHandleSnapshotRestoreResetsReservedMetadata
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4292
-- class: co.elastic.elasticsearch.stateless.multiproject.ProjectLifeCycleIT
-  method: testLease
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4302
 - class: co.elastic.elasticsearch.stateless.StatelessSearchSkipBlockIT
   method: testSearchWhenIndexSearchShardsAreNotUp
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4304
-- class: co.elastic.elasticsearch.stateless.multiproject.ProjectLifeCycleIT
-  method: testReleasingLeaseWorksDuringMasterFailOver
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4308
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testUnhollowOnUpdates
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4310
-- class: co.elastic.elasticsearch.stateless.multiproject.ProjectLifeCycleIT
-  method: testReleasingLeaseRetries
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4314
 - class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
   method: testRelocatingIndexShards
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4320
@@ -235,9 +220,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.engine.SearchEngineTests
   method: testLatestUploadedTermAndGenUpdatedOnCommitNotification
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4328
-- class: co.elastic.elasticsearch.stateless.objectstore.FsMultiProjectObjectStoreIT
-  method: testBackupRepositories
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4330
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testRelocateHollowShards
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4331
