@@ -235,3 +235,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.engine.SearchEngineTests
   method: testLatestUploadedTermAndGenUpdatedOnCommitNotification
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4328
+- class: co.elastic.elasticsearch.stateless.objectstore.FsMultiProjectObjectStoreIT
+  method: testBackupRepositories
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4330
