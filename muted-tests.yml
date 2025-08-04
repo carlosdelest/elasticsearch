@@ -223,3 +223,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testRelocateHollowShards
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4331
+- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
+  method: test {csv-spec:knn-function.KnnWithPrefilter}
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4332
