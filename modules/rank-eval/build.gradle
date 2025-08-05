@@ -22,5 +22,10 @@ restResources {
 }
 
 dependencies {
+  testImplementation project(':modules:lang-painless')
+  testImplementation project(':modules:lang-mustache')
+  testImplementation project(':modules:lang-painless:spi')
   clusterModules project(':modules:lang-mustache')
+  clusterModules project(':modules:lang-painless')
+  clusterModules project(':modules:lang-painless:spi')
 }

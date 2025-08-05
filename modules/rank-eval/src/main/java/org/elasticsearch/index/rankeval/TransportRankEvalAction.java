@@ -17,6 +17,7 @@ import org.elasticsearch.action.search.MultiSearchResponse.Item;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.action.support.RefCountingRunnable;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.service.ClusterService;
@@ -24,6 +25,7 @@ import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.util.Maps;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.xcontent.LoggingDeprecationHandler;
+import org.elasticsearch.core.Releasable;
 import org.elasticsearch.features.FeatureService;
 import org.elasticsearch.features.NodeFeature;
 import org.elasticsearch.injection.guice.Inject;
@@ -102,10 +104,121 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
             scriptsWithoutParams.put(entry.getKey(), scriptService.compile(entry.getValue(), TemplateScript.CONTEXT));
         }
 
+        // --- Begin RatingsProvider logic ---
+        List<RatedRequest> resolvedRatedRequests = new ArrayList<>(ratedRequests.size());
+        ActionListener<RankEvalResponse> finalListener = listener;
+
+        // Helper to continue with main logic after all ratings providers are resolved
+        Runnable compareResults = () -> {
+            compareResults(request, evaluationSpecification, resolvedRatedRequests, scriptsWithoutParams, errors, metric, finalListener);
+        };
+
+        // Check if any requests have a RatingsProvider
+        try (RefCountingRunnable refCounter = new RefCountingRunnable(compareResults)) {
+            for (RatedRequest ratedRequest : ratedRequests) {
+                RatedRequest.RatingsProvider provider = ratedRequest.getRatingsProvider();
+                if (provider == null) {
+                    resolvedRatedRequests.add(ratedRequest);
+                    continue;
+                }
+                retrieveRatedDocs(
+                    ratedRequest,
+                    request,
+                    provider,
+                    scriptsWithoutParams,
+                    resolvedRatedRequests,
+                    refCounter.acquire(),
+                    errors
+                );
+
+            }
+        }
+    }
+
+    private void retrieveRatedDocs(
+        RatedRequest ratedRequest,
+        RankEvalRequest request,
+        RatedRequest.RatingsProvider provider,
+        Map<String, TemplateScript.Factory> scriptsWithoutParams,
+        List<RatedRequest> resolvedRatedRequests,
+        Releasable onFinish,
+        Map<String, Exception> errors
+    ) {
+        // Build the provider's query from template
+        TemplateScript.Factory providerScript = scriptsWithoutParams.get(provider.getTemplateId());
+        if (providerScript == null) {
+            errors.put(
+                ratedRequest.getId(),
+                new IllegalArgumentException("Unknown ratings_provider template_id: " + provider.getTemplateId())
+            );
+            resolvedRatedRequests.add(ratedRequest);
+            onFinish.close();
+            return;
+        }
+        String providerRequest = providerScript.newInstance(provider.getParams()).execute();
+        SearchSourceBuilder providerSource = null;
+        try (
+            XContentParser providerParser = createParser(
+                namedXContentRegistry,
+                LoggingDeprecationHandler.INSTANCE,
+                new BytesArray(providerRequest),
+                XContentType.JSON
+            )
+        ) {
+            providerSource = new SearchSourceBuilder().parseXContent(providerParser, false, clusterSupportsFeature);
+        } catch (IOException e) {
+            errors.put(ratedRequest.getId(), e);
+            resolvedRatedRequests.add(ratedRequest);
+            onFinish.close();
+            return;
+        }
+
+        SearchRequest providerSearchRequest = new SearchRequest(request.indices(), providerSource);
+        providerSearchRequest.indicesOptions(request.indicesOptions());
+        providerSearchRequest.searchType(request.searchType());
+
+        client.search(providerSearchRequest, ActionListener.wrap(
+            providerResponse -> {
+                try (onFinish) {
+                    List<RatedDocument> docs = new ArrayList<>();
+                    for (SearchHit hit : providerResponse.getHits().getHits()) {
+                        docs.add(new RatedDocument(hit.getIndex(), hit.getId(), 1));
+                    }
+                    // Build a new RatedRequest with these docs, but keep all other fields
+                    RatedRequest resolved = new RatedRequest(
+                        ratedRequest.getId(),
+                        docs,
+                        ratedRequest.getEvaluationRequest(),
+                        ratedRequest.getParams(),
+                        ratedRequest.getTemplateId(),
+                        null // ratingsProvider already resolved
+                    );
+                    resolved.addSummaryFields(ratedRequest.getSummaryFields());
+                    resolvedRatedRequests.add(resolved);
+                }
+            },
+            ex -> {
+                try (onFinish) {
+                    errors.put(ratedRequest.getId(), ex);
+                    resolvedRatedRequests.add(ratedRequest);
+                }
+            }
+        ));
+    }
+
+    private void compareResults(
+        RankEvalRequest request,
+        RankEvalSpec evaluationSpecification,
+        List<RatedRequest> resolvedRatedRequests,
+        Map<String, TemplateScript.Factory> scriptsWithoutParams,
+        Map<String, Exception> errors,
+        EvaluationMetric metric,
+        ActionListener<RankEvalResponse> finalListener
+    ) {
         MultiSearchRequest msearchRequest = new MultiSearchRequest();
         msearchRequest.maxConcurrentSearchRequests(evaluationSpecification.getMaxConcurrentSearches());
         List<RatedRequest> ratedRequestsInSearch = new ArrayList<>();
-        for (RatedRequest ratedRequest : ratedRequests) {
+        for (RatedRequest ratedRequest : resolvedRatedRequests) {
             SearchSourceBuilder evaluationRequest = ratedRequest.getEvaluationRequest();
             if (evaluationRequest == null) {
                 Map<String, Object> params = ratedRequest.getParams();
@@ -150,7 +263,7 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
         client.multiSearch(
             msearchRequest,
             new RankEvalActionListener(
-                listener,
+                finalListener,
                 metric,
                 ratedRequestsInSearch.toArray(new RatedRequest[ratedRequestsInSearch.size()]),
                 errors

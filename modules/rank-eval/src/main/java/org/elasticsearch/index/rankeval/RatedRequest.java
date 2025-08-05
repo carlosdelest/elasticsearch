@@ -22,6 +22,7 @@ import org.elasticsearch.xcontent.ParseField;
 import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentParser;
+import org.elasticsearch.xcontent.XContentParser.Token;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -79,6 +80,8 @@ public class RatedRequest implements Writeable, ToXContentObject {
     private final Map<String, Object> params;
     @Nullable
     private String templateId;
+    @Nullable
+    private final RatingsProvider ratingsProvider;
 
     /**
      * Create a rated request with template ids and parameters.
@@ -89,7 +92,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
      * @param templateId a templare id
      */
     public RatedRequest(String id, List<RatedDocument> ratedDocs, Map<String, Object> params, String templateId) {
-        this(id, ratedDocs, null, params, templateId);
+        this(id, ratedDocs, null, params, templateId, null);
     }
 
     /**
@@ -101,15 +104,16 @@ public class RatedRequest implements Writeable, ToXContentObject {
      * @param evaluatedQuery the query that is evaluated
      */
     public RatedRequest(String id, List<RatedDocument> ratedDocs, SearchSourceBuilder evaluatedQuery) {
-        this(id, ratedDocs, evaluatedQuery, new HashMap<>(), null);
+        this(id, ratedDocs, evaluatedQuery, new HashMap<>(), null, null);
     }
 
-    private RatedRequest(
+    public RatedRequest(
         String id,
         List<RatedDocument> ratedDocs,
         SearchSourceBuilder evaluatedQuery,
         Map<String, Object> params,
-        String templateId
+        String templateId,
+        RatingsProvider ratingsProvider
     ) {
         if (params != null && (params.size() > 0 && evaluatedQuery != null)) {
             throw new IllegalArgumentException(
@@ -150,6 +154,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
         }
         this.templateId = templateId;
         this.summaryFields = new ArrayList<>();
+        this.ratingsProvider = ratingsProvider;
     }
 
     static void validateEvaluatedQuery(SearchSourceBuilder evaluationRequest) {
@@ -189,6 +194,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
             this.summaryFields.add(in.readString());
         }
         this.templateId = in.readOptionalString();
+        this.ratingsProvider = in.readOptionalWriteable(RatingsProvider::new);
     }
 
     @Override
@@ -206,6 +212,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
             out.writeString(fieldName);
         }
         out.writeOptionalString(this.templateId);
+        out.writeOptionalWriteable(this.ratingsProvider);
     }
 
     public SearchSourceBuilder getEvaluationRequest() {
@@ -241,12 +248,19 @@ public class RatedRequest implements Writeable, ToXContentObject {
         this.summaryFields.addAll(Objects.requireNonNull(summaryFieldsToAdd, "no summary fields supplied"));
     }
 
+    /** return the ratings provider if present, otherwise null. */
+    @Nullable
+    public RatingsProvider getRatingsProvider() {
+        return ratingsProvider;
+    }
+
     private static final ParseField ID_FIELD = new ParseField("id");
     private static final ParseField REQUEST_FIELD = new ParseField("request");
     private static final ParseField RATINGS_FIELD = new ParseField("ratings");
     private static final ParseField PARAMS_FIELD = new ParseField("params");
     private static final ParseField FIELDS_FIELD = new ParseField("summary_fields");
     private static final ParseField TEMPLATE_ID_FIELD = new ParseField("template_id");
+    private static final ParseField RATINGS_PROVIDER_FIELD = new ParseField("ratings_provider");
 
     @SuppressWarnings("unchecked")
     private static final ConstructingObjectParser<RatedRequest, Predicate<NodeFeature>> PARSER = new ConstructingObjectParser<>(
@@ -256,7 +270,8 @@ public class RatedRequest implements Writeable, ToXContentObject {
             (List<RatedDocument>) a[1],
             (SearchSourceBuilder) a[2],
             (Map<String, Object>) a[3],
-            (String) a[4]
+            (String) a[4],
+            (RatingsProvider) a[5]
         )
     );
 
@@ -271,6 +286,11 @@ public class RatedRequest implements Writeable, ToXContentObject {
         PARSER.declareObject(ConstructingObjectParser.optionalConstructorArg(), (p, c) -> p.map(), PARAMS_FIELD);
         PARSER.declareStringArray(RatedRequest::addSummaryFields, FIELDS_FIELD);
         PARSER.declareString(ConstructingObjectParser.optionalConstructorArg(), TEMPLATE_ID_FIELD);
+        PARSER.declareObject(
+            ConstructingObjectParser.optionalConstructorArg(),
+            (p, c) -> RatingsProvider.fromXContent(p),
+            RATINGS_PROVIDER_FIELD
+        );
     }
 
     /**
@@ -309,6 +329,9 @@ public class RatedRequest implements Writeable, ToXContentObject {
             }
             builder.endArray();
         }
+        if (this.ratingsProvider != null) {
+            builder.field(RATINGS_PROVIDER_FIELD.getPreferredName(), this.ratingsProvider);
+        }
         builder.endObject();
         return builder;
     }
@@ -334,11 +357,92 @@ public class RatedRequest implements Writeable, ToXContentObject {
             && Objects.equals(summaryFields, other.summaryFields)
             && Objects.equals(ratedDocs, other.ratedDocs)
             && Objects.equals(params, other.params)
-            && Objects.equals(templateId, other.templateId);
+            && Objects.equals(templateId, other.templateId)
+            && Objects.equals(ratingsProvider, other.ratingsProvider);
     }
 
     @Override
     public final int hashCode() {
-        return Objects.hash(id, evaluationRequest, summaryFields, ratedDocs, params, templateId);
+        return Objects.hash(id, evaluationRequest, summaryFields, ratedDocs, params, templateId, ratingsProvider);
+    }
+
+    /**
+     * RatingsProvider: describes how to generate ratings for this request.
+     */
+    public static class RatingsProvider implements Writeable, ToXContentObject {
+        private final String templateId;
+        private final Map<String, Object> params;
+
+        public RatingsProvider(String templateId, Map<String, Object> params) {
+            this.templateId = templateId;
+            this.params = params == null ? Collections.emptyMap() : new HashMap<>(params);
+        }
+
+        public RatingsProvider(StreamInput in) throws IOException {
+            this.templateId = in.readString();
+            this.params = in.readGenericMap();
+        }
+
+        public String getTemplateId() {
+            return templateId;
+        }
+
+        public Map<String, Object> getParams() {
+            return Collections.unmodifiableMap(params);
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeString(templateId);
+            out.writeGenericMap(params);
+        }
+
+        public static RatingsProvider fromXContent(XContentParser parser) throws IOException {
+            String templateId = null;
+            Map<String, Object> params = null;
+            if (parser.currentToken() == null) {
+                parser.nextToken();
+            }
+            XContentParser.Token token = parser.currentToken();
+            if (token != Token.START_OBJECT) {
+                throw new IllegalArgumentException("Expected START_OBJECT for ratings_provider");
+            }
+            while ((token = parser.nextToken()) != Token.END_OBJECT) {
+                if (token == Token.FIELD_NAME) {
+                    String fieldName = parser.currentName();
+                    parser.nextToken();
+                    if ("template_id".equals(fieldName)) {
+                        templateId = parser.text();
+                    } else if ("params".equals(fieldName)) {
+                        params = parser.map();
+                    } else {
+                        parser.skipChildren();
+                    }
+                }
+            }
+            return new RatingsProvider(templateId, params);
+        }
+
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            builder.startObject();
+            builder.field("template_id", templateId);
+            builder.field("params", this.params);
+            builder.endObject();
+            return builder;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            RatingsProvider that = (RatingsProvider) o;
+            return Objects.equals(templateId, that.templateId) && Objects.equals(params, that.params);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(templateId, params);
+        }
     }
 }
