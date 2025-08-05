@@ -211,9 +211,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
   method: testRelocatingIndexShards
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4320
-- class: co.elastic.elasticsearch.stateless.multiproject.ProjectSealingIT
-  method: testFlushProject
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4321
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testUnhollowOnIndexing
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4325
