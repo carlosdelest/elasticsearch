@@ -232,3 +232,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.objectstore.GcsMultiProjectObjectStoreIT
   method: testBackupRepositories
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4337
+- class: co.elastic.elasticsearch.stateless.objectstore.GcsMultiProjectObjectStoreIT
+  method: testObjectStoreSeparation
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4338
