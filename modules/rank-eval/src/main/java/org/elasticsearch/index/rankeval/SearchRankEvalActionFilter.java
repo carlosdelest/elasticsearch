@@ -23,20 +23,30 @@ import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.vectors.ExactKnnQueryBuilder;
 import org.elasticsearch.search.vectors.KnnSearchBuilder;
-import org.elasticsearch.search.vectors.KnnVectorQueryBuilder;
 import org.elasticsearch.tasks.Task;
+import org.elasticsearch.telemetry.metric.DoubleHistogram;
+import org.elasticsearch.telemetry.metric.LongHistogram;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.util.List;
 
 public class SearchRankEvalActionFilter implements MappedActionFilter {
 
     private static final Logger logger = LogManager.getLogger(SearchRankEvalActionFilter.class);
+    private static final String RECALL_METRIC = "es.search.rankeval.recall.histogram";
 
     private final Client client;
+    private final DoubleHistogram recallMetric;
 
-    public SearchRankEvalActionFilter(Client client) {
+    public SearchRankEvalActionFilter(Client client, MeterRegistry meterRegistry) {
         this.client = client;
+        this.recallMetric = meterRegistry.registerDoubleHistogram(
+            RECALL_METRIC,
+            "Recall metric for rank evaluation, expressed as a histogram",
+            "recall"
+        );
     }
 
     @Override
@@ -74,23 +84,31 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
         RankEvalSpec rankEvalSpec = new RankEvalSpec(List.of(ratedRequest), new RecallAtK());
         RankEvalRequest rankEvalRequest = new RankEvalRequest(rankEvalSpec, request.indices());
 
-        client.execute(RankEvalPlugin.ACTION, rankEvalRequest, new ActionListener<RankEvalResponse>() {
-                @Override
-                public void onResponse(RankEvalResponse rankEvalResponse) {
-                    double metricScore = rankEvalResponse.getMetricScore();
-                    registerMetricScore(metricScore);
-                }
+        try {
+            client.execute(RankEvalPlugin.ACTION, rankEvalRequest, new ActionListener<RankEvalResponse>() {
+                    @Override
+                    public void onResponse(RankEvalResponse rankEvalResponse) {
+                        double metricScore = rankEvalResponse.getMetricScore();
+                        registerMetricScore(metricScore);
+                    }
 
-                @Override
-                public void onFailure(Exception e) {
-                    logger.error(e);
+                    @Override
+                    public void onFailure(Exception e) {
+                        logger.error("Error performing rank eval request", e);
+                    }
                 }
-            }
-        );
+            );
+        } catch (Exception e) {
+            logger.error("Error retrieving rank eval results", e);
+        }
     }
 
     private void registerMetricScore(double metricScore) {
-        logger.info("Metric score calculated: {}", metricScore);
+        logger.debug("Metric score calculated: {}", metricScore);
+        if (Double.isNaN(metricScore) == false) {
+            // Record recall as a long (rounded to nearest int for histogram)
+            recallMetric.record(metricScore);
+        }
     }
 
     private SearchSourceBuilder evalSourceBuilderFrom(SearchSourceBuilder source) {
@@ -101,12 +119,9 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
         BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
         for (KnnSearchBuilder knnSearchBuilder : knnSearchBuilders) {
             boolQueryBuilder.should(
-                new KnnVectorQueryBuilder(
-                    knnSearchBuilder.getField(),
+                new ExactKnnQueryBuilder(
                     knnSearchBuilder.getQueryVector(),
-                    knnSearchBuilder.k(),
-                    knnSearchBuilder.getNumCands(),
-                    knnSearchBuilder.getRescoreVectorBuilder(),
+                    knnSearchBuilder.getField(),
                     knnSearchBuilder.getSimilarity()
                 )
             );

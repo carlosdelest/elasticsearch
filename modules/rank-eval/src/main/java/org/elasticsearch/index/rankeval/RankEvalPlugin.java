@@ -24,6 +24,7 @@ import org.elasticsearch.plugins.ActionPlugin;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestHandler;
+import org.elasticsearch.telemetry.metric.MeterRegistry;
 import org.elasticsearch.xcontent.NamedXContentRegistry.Entry;
 
 import java.util.ArrayList;
@@ -93,9 +94,9 @@ public class RankEvalPlugin extends Plugin implements ActionPlugin {
 
     @Override
     public Collection<?> createComponents(PluginServices services) {
-        var actionFilter = new SearchRankEvalActionFilter(services.client());
+        MeterRegistry meterRegistry = services.telemetryProvider().getMeterRegistry();
+        var actionFilter = new SearchRankEvalActionFilter(services.client(), meterRegistry);
         searchRankEvalActionFilter.set(actionFilter);
-
         return List.of();
     }
 
