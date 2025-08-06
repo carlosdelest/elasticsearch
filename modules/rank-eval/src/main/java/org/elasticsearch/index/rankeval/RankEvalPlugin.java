@@ -9,7 +9,9 @@
 
 package org.elasticsearch.index.rankeval;
 
+import org.apache.lucene.util.SetOnce;
 import org.elasticsearch.action.ActionType;
+import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
@@ -26,14 +28,19 @@ import org.elasticsearch.xcontent.NamedXContentRegistry.Entry;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import static java.util.Collections.singletonList;
+
 public class RankEvalPlugin extends Plugin implements ActionPlugin {
 
     public static final ActionType<RankEvalResponse> ACTION = new ActionType<>("indices:data/read/rank_eval");
+
+    private final SetOnce<SearchRankEvalActionFilter> searchRankEvalActionFilter = new SetOnce<>();
 
     @Override
     public List<ActionHandler> getActions() {
@@ -82,5 +89,18 @@ public class RankEvalPlugin extends Plugin implements ActionPlugin {
     @Override
     public List<Entry> getNamedXContent() {
         return new RankEvalNamedXContentProvider().getNamedXContentParsers();
+    }
+
+    @Override
+    public Collection<?> createComponents(PluginServices services) {
+        var actionFilter = new SearchRankEvalActionFilter(services.client());
+        searchRankEvalActionFilter.set(actionFilter);
+
+        return List.of();
+    }
+
+    @Override
+    public Collection<MappedActionFilter> getMappedActionFilters() {
+        return singletonList(searchRankEvalActionFilter.get());
     }
 }

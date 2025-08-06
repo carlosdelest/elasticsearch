@@ -12,6 +12,8 @@ module org.elasticsearch.rankeval {
     requires org.elasticsearch.xcontent;
     requires org.elasticsearch.base;
     requires java.naming;
+    requires org.apache.lucene.core;
+    requires org.apache.logging.log4j;
 
     exports org.elasticsearch.index.rankeval;
 

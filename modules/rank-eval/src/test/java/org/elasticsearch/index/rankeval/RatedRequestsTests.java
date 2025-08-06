@@ -103,7 +103,7 @@ public class RatedRequestsTests extends ESTestCase {
             ratedRequest = new RatedRequest(requestId, ratedDocs, testRequest);
             ratedRequest.addSummaryFields(summaryFields);
         } else {
-            ratedRequest = new RatedRequest(requestId, ratedDocs, params, randomAlphaOfLength(5));
+            ratedRequest = new RatedRequest(requestId, ratedDocs, randomAlphaOfLength(5), params);
             ratedRequest.addSummaryFields(summaryFields);
         }
         return ratedRequest;
@@ -198,7 +198,7 @@ public class RatedRequestsTests extends ESTestCase {
 
         RatedRequest ratedRequest;
         if (evaluationRequest == null) {
-            ratedRequest = new RatedRequest(id, ratedDocs, params, templateId);
+            ratedRequest = new RatedRequest(id, ratedDocs, templateId, params);
         } else {
             ratedRequest = new RatedRequest(id, ratedDocs, evaluationRequest);
         }
@@ -217,7 +217,7 @@ public class RatedRequestsTests extends ESTestCase {
             Found duplicate rated document key [{"_index":"index1","_id":"id1"}] in evaluation request [test_query]""", ex.getMessage());
         Map<String, Object> params = new HashMap<>();
         params.put("key", "value");
-        ex = expectThrows(IllegalArgumentException.class, () -> new RatedRequest("test_query", ratedDocs, params, "templateId"));
+        ex = expectThrows(IllegalArgumentException.class, () -> new RatedRequest("test_query", ratedDocs, "templateId", params));
         assertEquals("""
             Found duplicate rated document key [{"_index":"index1","_id":"id1"}] in evaluation request [test_query]""", ex.getMessage());
     }
@@ -238,19 +238,19 @@ public class RatedRequestsTests extends ESTestCase {
     public void testSettingNeitherParamsNorRequestThrows() {
         List<RatedDocument> ratedDocs = Arrays.asList(new RatedDocument("index1", "id1", 1));
         expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, null, null));
-        expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, new HashMap<>(), "templateId"));
+        expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, "templateId", new HashMap<>()));
     }
 
     public void testSettingParamsWithoutTemplateIdThrows() {
         List<RatedDocument> ratedDocs = Arrays.asList(new RatedDocument("index1", "id1", 1));
         Map<String, Object> params = new HashMap<>();
         params.put("key", "value");
-        expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, params, null));
+        expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, null, params));
     }
 
     public void testSettingTemplateIdNoParamsThrows() {
         List<RatedDocument> ratedDocs = Arrays.asList(new RatedDocument("index1", "id1", 1));
-        expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, null, "templateId"));
+        expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, "templateId", null));
     }
 
     public void testAggsNotAllowed() {

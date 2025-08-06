@@ -86,13 +86,13 @@ public class RatedRequest implements Writeable, ToXContentObject {
     /**
      * Create a rated request with template ids and parameters.
      *
-     * @param id a unique name for this rated request
-     * @param ratedDocs a list of document ratings
-     * @param params template parameters
+     * @param id         a unique name for this rated request
+     * @param ratedDocs  a list of document ratings
      * @param templateId a templare id
+     * @param params     template parameters
      */
-    public RatedRequest(String id, List<RatedDocument> ratedDocs, Map<String, Object> params, String templateId) {
-        this(id, ratedDocs, null, params, templateId, null);
+    public RatedRequest(String id, List<RatedDocument> ratedDocs, String templateId, Map<String, Object> params) {
+        this(id, ratedDocs, null, templateId, params, null);
     }
 
     /**
@@ -104,15 +104,22 @@ public class RatedRequest implements Writeable, ToXContentObject {
      * @param evaluatedQuery the query that is evaluated
      */
     public RatedRequest(String id, List<RatedDocument> ratedDocs, SearchSourceBuilder evaluatedQuery) {
-        this(id, ratedDocs, evaluatedQuery, new HashMap<>(), null, null);
+        this(id, ratedDocs, evaluatedQuery, null, new HashMap<>(), null);
     }
 
     public RatedRequest(
         String id,
+        SearchSourceBuilder evaluatedQuery,
+        RatingsProvider ratingsProvider
+    ) {
+        this(id, List.of(), evaluatedQuery, null, null, ratingsProvider);
+    }
+
+    private RatedRequest(
+        String id,
         List<RatedDocument> ratedDocs,
         SearchSourceBuilder evaluatedQuery,
-        Map<String, Object> params,
-        String templateId,
+        String templateId, Map<String, Object> params,
         RatingsProvider ratingsProvider
     ) {
         if (params != null && (params.size() > 0 && evaluatedQuery != null)) {
@@ -269,8 +276,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
             (String) a[0],
             (List<RatedDocument>) a[1],
             (SearchSourceBuilder) a[2],
-            (Map<String, Object>) a[3],
-            (String) a[4],
+            (String) a[4], (Map<String, Object>) a[3],
             (RatingsProvider) a[5]
         )
     );
@@ -372,15 +378,31 @@ public class RatedRequest implements Writeable, ToXContentObject {
     public static class RatingsProvider implements Writeable, ToXContentObject {
         private final String templateId;
         private final Map<String, Object> params;
+        @Nullable
+        private final SearchSourceBuilder searchSourceBuilder;
 
         public RatingsProvider(String templateId, Map<String, Object> params) {
             this.templateId = templateId;
             this.params = params == null ? Collections.emptyMap() : new HashMap<>(params);
+            this.searchSourceBuilder = null;
+        }
+
+        public RatingsProvider(SearchSourceBuilder searchSourceBuilder) {
+            this.templateId = null;
+            this.params = Collections.emptyMap();
+            this.searchSourceBuilder = searchSourceBuilder;
         }
 
         public RatingsProvider(StreamInput in) throws IOException {
-            this.templateId = in.readString();
-            this.params = in.readGenericMap();
+            if (in.readBoolean()) {
+                this.templateId = in.readString();
+                this.params = in.readGenericMap();
+                this.searchSourceBuilder = null;
+            } else {
+                this.templateId = null;
+                this.params = Collections.emptyMap();
+                this.searchSourceBuilder = in.readOptionalWriteable(SearchSourceBuilder::new);
+            }
         }
 
         public String getTemplateId() {
@@ -391,15 +413,27 @@ public class RatedRequest implements Writeable, ToXContentObject {
             return Collections.unmodifiableMap(params);
         }
 
+        @Nullable
+        public SearchSourceBuilder getSearchSourceBuilder() {
+            return searchSourceBuilder;
+        }
+
         @Override
         public void writeTo(StreamOutput out) throws IOException {
-            out.writeString(templateId);
-            out.writeGenericMap(params);
+            boolean isTemplate = templateId != null;
+            out.writeBoolean(isTemplate);
+            if (isTemplate) {
+                out.writeString(templateId);
+                out.writeGenericMap(params);
+            } else {
+                out.writeOptionalWriteable(searchSourceBuilder);
+            }
         }
 
         public static RatingsProvider fromXContent(XContentParser parser) throws IOException {
             String templateId = null;
             Map<String, Object> params = null;
+            SearchSourceBuilder searchSourceBuilder = null;
             if (parser.currentToken() == null) {
                 parser.nextToken();
             }
@@ -415,19 +449,31 @@ public class RatedRequest implements Writeable, ToXContentObject {
                         templateId = parser.text();
                     } else if ("params".equals(fieldName)) {
                         params = parser.map();
+                    } else if ("request".equals(fieldName)) {
+                        searchSourceBuilder = new SearchSourceBuilder().parseXContent(parser, false, null);
                     } else {
                         parser.skipChildren();
                     }
                 }
             }
-            return new RatingsProvider(templateId, params);
+            if (templateId != null) {
+                return new RatingsProvider(templateId, params);
+            } else if (searchSourceBuilder != null) {
+                return new RatingsProvider(searchSourceBuilder);
+            } else {
+                throw new IllegalArgumentException("ratings_provider must specify either template_id or request");
+            }
         }
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
             builder.startObject();
-            builder.field("template_id", templateId);
-            builder.field("params", this.params);
+            if (templateId != null) {
+                builder.field("template_id", templateId);
+                builder.field("params", this.params);
+            } else if (searchSourceBuilder != null) {
+                builder.field("request", searchSourceBuilder);
+            }
             builder.endObject();
             return builder;
         }
@@ -437,12 +483,14 @@ public class RatedRequest implements Writeable, ToXContentObject {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             RatingsProvider that = (RatingsProvider) o;
-            return Objects.equals(templateId, that.templateId) && Objects.equals(params, that.params);
+            return Objects.equals(templateId, that.templateId)
+                && Objects.equals(params, that.params)
+                && Objects.equals(searchSourceBuilder, that.searchSourceBuilder);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(templateId, params);
+            return Objects.hash(templateId, params, searchSourceBuilder);
         }
     }
 }

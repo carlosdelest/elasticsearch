@@ -144,30 +144,41 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
         Releasable onFinish,
         Map<String, Exception> errors
     ) {
-        // Build the provider's query from template
-        TemplateScript.Factory providerScript = scriptsWithoutParams.get(provider.getTemplateId());
-        if (providerScript == null) {
+        SearchSourceBuilder providerSource = null;
+        if (provider.getSearchSourceBuilder() != null) {
+            providerSource = provider.getSearchSourceBuilder();
+        } else if (provider.getTemplateId() != null) {
+            TemplateScript.Factory providerScript = scriptsWithoutParams.get(provider.getTemplateId());
+            if (providerScript == null) {
+                errors.put(
+                    ratedRequest.getId(),
+                    new IllegalArgumentException("Unknown ratings_provider template_id: " + provider.getTemplateId())
+                );
+                resolvedRatedRequests.add(ratedRequest);
+                onFinish.close();
+                return;
+            }
+            String providerRequest = providerScript.newInstance(provider.getParams()).execute();
+            try (
+                XContentParser providerParser = createParser(
+                    namedXContentRegistry,
+                    LoggingDeprecationHandler.INSTANCE,
+                    new BytesArray(providerRequest),
+                    XContentType.JSON
+                )
+            ) {
+                providerSource = new SearchSourceBuilder().parseXContent(providerParser, false, clusterSupportsFeature);
+            } catch (IOException e) {
+                errors.put(ratedRequest.getId(), e);
+                resolvedRatedRequests.add(ratedRequest);
+                onFinish.close();
+                return;
+            }
+        } else {
             errors.put(
                 ratedRequest.getId(),
-                new IllegalArgumentException("Unknown ratings_provider template_id: " + provider.getTemplateId())
+                new IllegalArgumentException("RatingsProvider must specify either template_id or request")
             );
-            resolvedRatedRequests.add(ratedRequest);
-            onFinish.close();
-            return;
-        }
-        String providerRequest = providerScript.newInstance(provider.getParams()).execute();
-        SearchSourceBuilder providerSource = null;
-        try (
-            XContentParser providerParser = createParser(
-                namedXContentRegistry,
-                LoggingDeprecationHandler.INSTANCE,
-                new BytesArray(providerRequest),
-                XContentType.JSON
-            )
-        ) {
-            providerSource = new SearchSourceBuilder().parseXContent(providerParser, false, clusterSupportsFeature);
-        } catch (IOException e) {
-            errors.put(ratedRequest.getId(), e);
             resolvedRatedRequests.add(ratedRequest);
             onFinish.close();
             return;
@@ -184,15 +195,21 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
                     for (SearchHit hit : providerResponse.getHits().getHits()) {
                         docs.add(new RatedDocument(hit.getIndex(), hit.getId(), 1));
                     }
-                    // Build a new RatedRequest with these docs, but keep all other fields
-                    RatedRequest resolved = new RatedRequest(
-                        ratedRequest.getId(),
-                        docs,
-                        ratedRequest.getEvaluationRequest(),
-                        ratedRequest.getParams(),
-                        ratedRequest.getTemplateId(),
-                        null // ratingsProvider already resolved
-                    );
+                    final RatedRequest resolved;
+                    if (ratedRequest.getTemplateId() != null) {
+                        resolved = new RatedRequest(
+                            ratedRequest.getId(),
+                            docs,
+                            ratedRequest.getTemplateId(),
+                            ratedRequest.getParams()
+                        );
+                    } else {
+                        resolved = new RatedRequest(
+                            ratedRequest.getId(),
+                            docs,
+                            ratedRequest.getEvaluationRequest()
+                        );
+                    }
                     resolved.addSummaryFields(ratedRequest.getSummaryFields());
                     resolvedRatedRequests.add(resolved);
                 }

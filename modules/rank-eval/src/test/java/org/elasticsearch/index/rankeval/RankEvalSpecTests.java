@@ -94,8 +94,7 @@ public class RankEvalSpecTests extends ESTestCase {
             RatedRequest ratedRequest = new RatedRequest(
                 "id",
                 Arrays.asList(RatedDocumentTests.createRatedDocument()),
-                templateParams,
-                "templateId"
+                "templateId", templateParams
             );
             ratedRequests = Arrays.asList(ratedRequest);
         } else {
@@ -210,7 +209,7 @@ public class RankEvalSpecTests extends ESTestCase {
         List<RatedDocument> ratedDocs = Arrays.asList(new RatedDocument("index1", "id1", 1));
         Map<String, Object> params = new HashMap<>();
         params.put("key", "value");
-        RatedRequest request = new RatedRequest("id", ratedDocs, params, "templateId");
+        RatedRequest request = new RatedRequest("id", ratedDocs, "templateId", params);
         List<RatedRequest> ratedRequests = Arrays.asList(request);
         expectThrows(IllegalStateException.class, () -> new RankEvalSpec(ratedRequests, new PrecisionAtK()));
     }
