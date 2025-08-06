@@ -14,6 +14,7 @@ apply plugin: 'elasticsearch.internal-cluster-test'
 esplugin {
   description = 'The Rank Eval module adds APIs to evaluate ranking quality.'
   classname = 'org.elasticsearch.index.rankeval.RankEvalPlugin'
+  extendedPlugins = ['lang-painless']
 }
 
 restResources {
@@ -25,8 +26,6 @@ restResources {
 dependencies {
   testImplementation project(':modules:lang-painless')
   testImplementation project(':modules:lang-mustache')
-  testImplementation project(':modules:lang-painless:spi')
+  compileOnly project(':modules:lang-painless:spi')
   clusterModules project(':modules:lang-mustache')
-  clusterModules project(':modules:lang-painless')
-  clusterModules project(':modules:lang-painless:spi')
 }
