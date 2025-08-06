@@ -223,15 +223,3 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
   method: test {csv-spec:knn-function.KnnWithPrefilter}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4332
-- class: co.elastic.elasticsearch.stateless.objectstore.GcsMultiProjectObjectStoreIT
-  method: testReservedBackupRepositories
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4335
-- class: co.elastic.elasticsearch.stateless.objectstore.GcsMultiProjectObjectStoreIT
-  method: testBackupRepositories
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4337
-- class: co.elastic.elasticsearch.stateless.objectstore.GcsMultiProjectObjectStoreIT
-  method: testObjectStoreSeparation
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4338
-- class: co.elastic.elasticsearch.stateless.multiproject.ProjectSealingIT
-  method: testFlushProject
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4321
