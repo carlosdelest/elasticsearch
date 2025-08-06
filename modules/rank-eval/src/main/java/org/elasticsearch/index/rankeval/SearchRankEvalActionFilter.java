@@ -27,7 +27,6 @@ import org.elasticsearch.search.vectors.ExactKnnQueryBuilder;
 import org.elasticsearch.search.vectors.KnnSearchBuilder;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.telemetry.metric.DoubleHistogram;
-import org.elasticsearch.telemetry.metric.LongHistogram;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.util.List;
@@ -80,7 +79,7 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
     private void runRankEval(SearchRequest request, SearchResponse response) {
         // TODO set directly results instead of re-running search
         RatedRequest.RatingsProvider ratingsProvider = new RatedRequest.RatingsProvider(evalSourceBuilderFrom(request.source()));
-        RatedRequest ratedRequest = new RatedRequest(String.valueOf(request.getRequestId()), request.source(), ratingsProvider);
+        RatedRequest ratedRequest = new RatedRequest(String.valueOf(request.getRequestId()), ratingsProvider, response);
         RankEvalSpec rankEvalSpec = new RankEvalSpec(List.of(ratedRequest), new RecallAtK());
         RankEvalRequest rankEvalRequest = new RankEvalRequest(rankEvalSpec, request.indices());
 

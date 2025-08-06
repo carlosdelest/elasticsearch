@@ -131,9 +131,9 @@ public class RankEvalKnnRecallIT extends ESIntegTestCase {
 
         RatedRequest knnRequest = new RatedRequest(
             "recall_query",
-            List.of(), // ratedDocs will be filled by RatingsProvider
             "knn_query",
-            Map.of("query_vector", Arrays.toString(queryVector))
+            Map.of("query_vector", Arrays.toString(queryVector)),
+            ratingsProvider
         );
 
         RecallAtK metric = new RecallAtK(1, 10);

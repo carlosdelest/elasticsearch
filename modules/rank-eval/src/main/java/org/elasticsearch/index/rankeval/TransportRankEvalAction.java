@@ -235,46 +235,60 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
         MultiSearchRequest msearchRequest = new MultiSearchRequest();
         msearchRequest.maxConcurrentSearchRequests(evaluationSpecification.getMaxConcurrentSearches());
         List<RatedRequest> ratedRequestsInSearch = new ArrayList<>();
+        Map<String, EvalQueryQuality> responseDetails = Maps.newMapWithExpectedSize(resolvedRatedRequests.size());
+
+        // First, handle RatedRequests that already have a SearchResponse
         for (RatedRequest ratedRequest : resolvedRatedRequests) {
-            SearchSourceBuilder evaluationRequest = ratedRequest.getEvaluationRequest();
-            if (evaluationRequest == null) {
-                Map<String, Object> params = ratedRequest.getParams();
-                String templateId = ratedRequest.getTemplateId();
-                TemplateScript.Factory templateScript = scriptsWithoutParams.get(templateId);
-                String resolvedRequest = templateScript.newInstance(params).execute();
-                try (
-                    XContentParser subParser = createParser(
-                        namedXContentRegistry,
-                        LoggingDeprecationHandler.INSTANCE,
-                        new BytesArray(resolvedRequest),
-                        XContentType.JSON
-                    )
-                ) {
-                    evaluationRequest = new SearchSourceBuilder().parseXContent(subParser, false, clusterSupportsFeature);
-                    // check for parts that should not be part of a ranking evaluation request
-                    validateEvaluatedQuery(evaluationRequest);
-                } catch (IOException e) {
-                    // if we fail parsing, put the exception into the errors map and continue
-                    errors.put(ratedRequest.getId(), e);
-                    continue;
-                }
-            }
-
-            if (metric.forcedSearchSize().isPresent()) {
-                evaluationRequest.size(metric.forcedSearchSize().getAsInt());
-            }
-
-            ratedRequestsInSearch.add(ratedRequest);
-            List<String> summaryFields = ratedRequest.getSummaryFields();
-            if (summaryFields.isEmpty()) {
-                evaluationRequest.fetchSource(false);
+            if (ratedRequest.getSearchResponse() != null) {
+                SearchHit[] hits = ratedRequest.getSearchResponse().getHits().getHits();
+                EvalQueryQuality queryQuality = metric.evaluate(ratedRequest.getId(), hits, ratedRequest.getRatedDocs());
+                responseDetails.put(ratedRequest.getId(), queryQuality);
             } else {
-                evaluationRequest.fetchSource(summaryFields.toArray(new String[summaryFields.size()]), new String[0]);
+                SearchSourceBuilder evaluationRequest = ratedRequest.getEvaluationRequest();
+                if (evaluationRequest == null) {
+                    Map<String, Object> params = ratedRequest.getParams();
+                    String templateId = ratedRequest.getTemplateId();
+                    TemplateScript.Factory templateScript = scriptsWithoutParams.get(templateId);
+                    String resolvedRequest = templateScript.newInstance(params).execute();
+                    try (
+                        XContentParser subParser = createParser(
+                            namedXContentRegistry,
+                            LoggingDeprecationHandler.INSTANCE,
+                            new BytesArray(resolvedRequest),
+                            XContentType.JSON
+                        )
+                    ) {
+                        evaluationRequest = new SearchSourceBuilder().parseXContent(subParser, false, clusterSupportsFeature);
+                        // check for parts that should not be part of a ranking evaluation request
+                        validateEvaluatedQuery(evaluationRequest);
+                    } catch (IOException e) {
+                        // if we fail parsing, put the exception into the errors map and continue
+                        errors.put(ratedRequest.getId(), e);
+                        continue;
+                    }
+                }
+
+                if (metric.forcedSearchSize().isPresent()) {
+                    evaluationRequest.size(metric.forcedSearchSize().getAsInt());
+                }
+
+                ratedRequestsInSearch.add(ratedRequest);
+                List<String> summaryFields = ratedRequest.getSummaryFields();
+                if (summaryFields.isEmpty()) {
+                    evaluationRequest.fetchSource(false);
+                } else {
+                    evaluationRequest.fetchSource(summaryFields.toArray(new String[summaryFields.size()]), new String[0]);
+                }
+                SearchRequest searchRequest = new SearchRequest(request.indices(), evaluationRequest);
+                searchRequest.indicesOptions(request.indicesOptions());
+                searchRequest.searchType(request.searchType());
+                msearchRequest.add(searchRequest);
             }
-            SearchRequest searchRequest = new SearchRequest(request.indices(), evaluationRequest);
-            searchRequest.indicesOptions(request.indicesOptions());
-            searchRequest.searchType(request.searchType());
-            msearchRequest.add(searchRequest);
+        }
+        // If all requests had SearchResponse, return immediately
+        if (ratedRequestsInSearch.isEmpty()) {
+            finalListener.onResponse(new RankEvalResponse(metric.combine(responseDetails.values()), responseDetails, errors));
+            return;
         }
         assert ratedRequestsInSearch.size() == msearchRequest.requests().size();
         client.multiSearch(
@@ -282,8 +296,9 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
             new RankEvalActionListener(
                 finalListener,
                 metric,
-                ratedRequestsInSearch.toArray(new RatedRequest[ratedRequestsInSearch.size()]),
-                errors
+                ratedRequestsInSearch.toArray(new RatedRequest[0]),
+                errors,
+                responseDetails
             )
         );
     }
@@ -291,26 +306,27 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
     static class RankEvalActionListener extends DelegatingActionListener<MultiSearchResponse, RankEvalResponse> {
 
         private final RatedRequest[] specifications;
-
         private final Map<String, Exception> errors;
         private final EvaluationMetric metric;
+        private final Map<String, EvalQueryQuality> responseDetails;
 
         RankEvalActionListener(
             ActionListener<RankEvalResponse> listener,
             EvaluationMetric metric,
             RatedRequest[] specifications,
-            Map<String, Exception> errors
+            Map<String, Exception> errors,
+            Map<String, EvalQueryQuality> responseDetails
         ) {
             super(listener);
             this.metric = metric;
             this.errors = errors;
             this.specifications = specifications;
+            this.responseDetails = responseDetails;
         }
 
         @Override
         public void onResponse(MultiSearchResponse multiSearchResponse) {
             int responsePosition = 0;
-            Map<String, EvalQueryQuality> responseDetails = Maps.newMapWithExpectedSize(specifications.length);
             for (Item response : multiSearchResponse.getResponses()) {
                 RatedRequest specification = specifications[responsePosition];
                 if (response.isFailure() == false) {

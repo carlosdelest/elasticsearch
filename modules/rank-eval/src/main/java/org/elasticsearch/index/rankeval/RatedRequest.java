@@ -9,6 +9,7 @@
 
 package org.elasticsearch.index.rankeval;
 
+import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -82,6 +83,8 @@ public class RatedRequest implements Writeable, ToXContentObject {
     private String templateId;
     @Nullable
     private final RatingsProvider ratingsProvider;
+    @Nullable
+    private final SearchResponse searchResponse;
 
     /**
      * Create a rated request with template ids and parameters.
@@ -92,7 +95,11 @@ public class RatedRequest implements Writeable, ToXContentObject {
      * @param params     template parameters
      */
     public RatedRequest(String id, List<RatedDocument> ratedDocs, String templateId, Map<String, Object> params) {
-        this(id, ratedDocs, null, templateId, params, null);
+        this(id, ratedDocs, null, templateId, params, null, null);
+    }
+
+    public RatedRequest(String id, String templateId, Map<String, Object> params, RatingsProvider ratingsProvider) {
+        this(id, List.of(), null, templateId, params, ratingsProvider, null);
     }
 
     /**
@@ -104,7 +111,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
      * @param evaluatedQuery the query that is evaluated
      */
     public RatedRequest(String id, List<RatedDocument> ratedDocs, SearchSourceBuilder evaluatedQuery) {
-        this(id, ratedDocs, evaluatedQuery, null, new HashMap<>(), null);
+        this(id, ratedDocs, evaluatedQuery, null, new HashMap<>(), null, null);
     }
 
     public RatedRequest(
@@ -112,7 +119,18 @@ public class RatedRequest implements Writeable, ToXContentObject {
         SearchSourceBuilder evaluatedQuery,
         RatingsProvider ratingsProvider
     ) {
-        this(id, List.of(), evaluatedQuery, null, null, ratingsProvider);
+        this(id, List.of(), evaluatedQuery, null, null, ratingsProvider, null);
+    }
+
+    /**
+     * Create a rated request using direct search results instead of a query or template.
+     *
+     * @param id a unique name for this rated request
+     * @param ratingsProvider the ratings provider to use for this request
+     * @param searchResponse the search results to use directly
+     */
+    public RatedRequest(String id, RatingsProvider ratingsProvider, SearchResponse searchResponse) {
+        this(id, null, null, null, null, ratingsProvider, searchResponse);
     }
 
     private RatedRequest(
@@ -120,7 +138,8 @@ public class RatedRequest implements Writeable, ToXContentObject {
         List<RatedDocument> ratedDocs,
         SearchSourceBuilder evaluatedQuery,
         String templateId, Map<String, Object> params,
-        RatingsProvider ratingsProvider
+        RatingsProvider ratingsProvider,
+        SearchResponse searchResponse
     ) {
         if (params != null && (params.size() > 0 && evaluatedQuery != null)) {
             throw new IllegalArgumentException(
@@ -132,14 +151,15 @@ public class RatedRequest implements Writeable, ToXContentObject {
                 "Ambiguous rated request: Set both, verbatim test request and test request " + "template parameters."
             );
         }
-        if ((params == null || params.size() < 1) && evaluatedQuery == null) {
-            throw new IllegalArgumentException("Need to set at least test request or test request template parameters.");
+        if ((params == null || params.size() < 1) && evaluatedQuery == null && searchResponse == null) {
+            throw new IllegalArgumentException("Need to set at least test request, test request template parameters, or search results.");
         }
         if ((params != null && params.size() > 0) && templateId == null) {
             throw new IllegalArgumentException("If template parameters are supplied need to set id of template to apply " + "them to too.");
         }
-        validateEvaluatedQuery(evaluatedQuery);
-
+        if (searchResponse == null) {
+            validateEvaluatedQuery(evaluatedQuery);
+        }
         // check that not two documents with same _index/id are specified
         Set<DocumentKey> docKeys = new HashSet<>();
         for (RatedDocument doc : ratedDocs) {
@@ -150,7 +170,6 @@ public class RatedRequest implements Writeable, ToXContentObject {
                 );
             }
         }
-
         this.id = id;
         this.evaluationRequest = evaluatedQuery;
         this.ratedDocs = new ArrayList<>(ratedDocs);
@@ -162,6 +181,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
         this.templateId = templateId;
         this.summaryFields = new ArrayList<>();
         this.ratingsProvider = ratingsProvider;
+        this.searchResponse = searchResponse;
     }
 
     static void validateEvaluatedQuery(SearchSourceBuilder evaluationRequest) {
@@ -202,6 +222,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
         }
         this.templateId = in.readOptionalString();
         this.ratingsProvider = in.readOptionalWriteable(RatingsProvider::new);
+        this.searchResponse = in.readOptionalWriteable(SearchResponse::new);
     }
 
     @Override
@@ -220,6 +241,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
         }
         out.writeOptionalString(this.templateId);
         out.writeOptionalWriteable(this.ratingsProvider);
+        out.writeOptionalWriteable(this.searchResponse);
     }
 
     public SearchSourceBuilder getEvaluationRequest() {
@@ -261,6 +283,11 @@ public class RatedRequest implements Writeable, ToXContentObject {
         return ratingsProvider;
     }
 
+    @Nullable
+    public SearchResponse getSearchResponse() {
+        return searchResponse;
+    }
+
     private static final ParseField ID_FIELD = new ParseField("id");
     private static final ParseField REQUEST_FIELD = new ParseField("request");
     private static final ParseField RATINGS_FIELD = new ParseField("ratings");
@@ -277,7 +304,8 @@ public class RatedRequest implements Writeable, ToXContentObject {
             (List<RatedDocument>) a[1],
             (SearchSourceBuilder) a[2],
             (String) a[4], (Map<String, Object>) a[3],
-            (RatingsProvider) a[5]
+            (RatingsProvider) a[5],
+            null
         )
     );
 
