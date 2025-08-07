@@ -21,16 +21,19 @@ import org.elasticsearch.action.support.ActionFilterChain;
 import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.vectors.ExactKnnQueryBuilder;
 import org.elasticsearch.search.vectors.KnnSearchBuilder;
+import org.elasticsearch.search.vectors.KnnVectorQueryBuilder;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.telemetry.metric.DoubleHistogram;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SearchRankEvalActionFilter implements MappedActionFilter {
 
@@ -39,8 +42,10 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
 
     private final Client client;
     private final DoubleHistogram recallMetric;
+    private AtomicLong numQueries;
 
     public SearchRankEvalActionFilter(Client client, MeterRegistry meterRegistry) {
+        this.numQueries = new AtomicLong(0);
         this.client = client;
         this.recallMetric = meterRegistry.registerDoubleHistogram(
             RECALL_METRIC,
@@ -83,7 +88,24 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
     }
 
     private boolean shouldCalculateRecall(SearchRequest searchRequest) {
-        return searchRequest.hasKnnSearch();
+        boolean hasKnn = searchRequest.hasKnnSearch() || hasKnnQuery(searchRequest.source().query());
+        return hasKnn && numQueries.getAndIncrement() % 100 == 0;
+    }
+
+    private boolean hasKnnQuery(QueryBuilder query) {
+        if (query == null) {
+            return false;
+        }
+        if (query instanceof KnnVectorQueryBuilder) {
+            return true;
+        }
+        if (query instanceof BoolQueryBuilder boolQuery) {
+            return boolQuery.must().stream().anyMatch(this::hasKnnQuery)
+                || boolQuery.should().stream().anyMatch(this::hasKnnQuery)
+                || boolQuery.filter().stream().anyMatch(this::hasKnnQuery)
+                || boolQuery.mustNot().stream().anyMatch(this::hasKnnQuery);
+        }
+        return false;
     }
 
     private void runRankEval(SearchRequest request, SearchHits response) {
@@ -94,29 +116,50 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
             RankEvalRequest rankEvalRequest = new RankEvalRequest(rankEvalSpec, request.indices());
 
             client.execute(RankEvalPlugin.ACTION, rankEvalRequest, new ActionListener<RankEvalResponse>() {
-                    @Override
-                    public void onResponse(RankEvalResponse rankEvalResponse) {
-                        double metricScore = rankEvalResponse.getMetricScore();
-                        registerMetricScore(metricScore);
-                    }
-
-                    @Override
-                    public void onFailure(Exception e) {
-                        logger.error("Error performing rank eval request", e);
-                    }
+                @Override
+                public void onResponse(RankEvalResponse rankEvalResponse) {
+                    double metricScore = rankEvalResponse.getMetricScore();
+                    registerMetricScore(metricScore);
                 }
-            );
+
+                @Override
+                public void onFailure(Exception e) {
+                    logger.error("Error performing rank eval request", e);
+                }
+            });
         } catch (Exception e) {
             logger.error("Error retrieving rank eval results", e);
         }
     }
 
     private void registerMetricScore(double metricScore) {
-        logger.debug("Metric score calculated: {}", metricScore);
+        logger.info("Metric score calculated: {}", metricScore);
         if (Double.isNaN(metricScore) == false) {
-            // Record recall as a long (rounded to nearest int for histogram)
             recallMetric.record(metricScore);
         }
+    }
+
+    private QueryBuilder rewriteQuery(QueryBuilder query) {
+        if (query == null) {
+            return null;
+        }
+        if (query instanceof KnnVectorQueryBuilder knnQuery) {
+            return new ExactKnnQueryBuilder(knnQuery.queryVector(), knnQuery.getFieldName(), knnQuery.getVectorSimilarity());
+        }
+        if (query instanceof BoolQueryBuilder boolQuery) {
+            BoolQueryBuilder newBool = new BoolQueryBuilder();
+            boolQuery.must().stream().map(this::rewriteQuery).forEach(newBool::must);
+            boolQuery.should().stream().map(this::rewriteQuery).forEach(newBool::should);
+            boolQuery.filter().stream().map(this::rewriteQuery).forEach(newBool::filter);
+            boolQuery.mustNot().stream().map(this::rewriteQuery).forEach(newBool::mustNot);
+            newBool.boost(boolQuery.boost());
+            newBool.queryName(boolQuery.queryName());
+            if (boolQuery.minimumShouldMatch() != null) {
+                newBool.minimumShouldMatch(boolQuery.minimumShouldMatch());
+            }
+            return newBool;
+        }
+        return query;
     }
 
     private SearchSourceBuilder evalSourceBuilderFrom(SearchSourceBuilder source) {
@@ -136,7 +179,7 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
         }
         if (source.query() != null) {
             // If there is an existing query, combine it with a disjunction with the knn queries
-            boolQueryBuilder.should(source.query());
+            boolQueryBuilder.should(rewriteQuery(source.query()));
         }
 
         return result.query(boolQueryBuilder);
