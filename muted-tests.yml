@@ -157,9 +157,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testIndexSettingsUpdateDoesNotUnhollow
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4130
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/filter_crud/Test delete in-use filter}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4167
@@ -190,39 +187,18 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessReshardDisruptionIT
   method: testReshardWithDisruption
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4255
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testRecoverUnhollowedShardFromTranslog
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4274
-- class: co.elastic.elasticsearch.stateless.autoscaling.memory.AutoscalingMemoryMetricsIT
-  method: testShardMemoryMetricsForHollowEngine
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4284
 - class: co.elastic.elasticsearch.serverless.multiproject.MultiProjectFileSettingsServiceTests
   method: testHandleSnapshotRestoreResetsReservedMetadata
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4292
 - class: co.elastic.elasticsearch.stateless.StatelessSearchSkipBlockIT
   method: testSearchWhenIndexSearchShardsAreNotUp
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4304
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testUnhollowOnUpdates
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4310
-- class: co.elastic.elasticsearch.stateless.recovery.IndexingShardRelocationIT
-  method: testRelocatingIndexShards
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4320
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testUnhollowOnIndexing
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4325
 - class: co.elastic.elasticsearch.stateless.engine.SearchEngineTests
   method: testLatestUploadedTermAndGenUpdatedOnCommitNotification
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4328
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testRelocateHollowShards
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4331
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
   method: test {csv-spec:knn-function.KnnWithPrefilter}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4332
-- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
-  method: testUnhollowOnBulkUpdates
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4346
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testStressWithRelocationFailures
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4349
