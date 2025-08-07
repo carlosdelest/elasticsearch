@@ -36,8 +36,8 @@ public class ServerlessTransportVersions {
     public static final TransportVersion INDEXING_OPERATIONS_MEMORY_REQUIREMENTS = def(9_050_1_00);
     public static final TransportVersion AUTOSCALING_MERGE_MEMORY_ESTIMATE_SERVERLESS_VERSION = def(9_064_1_00);
     public static final TransportVersion METERING_CLUSTER_STATE_METADATA_INDEX_UUID_FLAG_CLEANUP = def(9_074_1_00);
-    public static final TransportVersion TRACK_POSTINGS_IN_MEMORY_BYTES = def(9_121_1_00);
     public static final TransportVersion STATELESS_LEASE_BLOB_V1_FORMAT = def(9_130_1_00);
+    public static final TransportVersion TRACK_LIVE_DOCS_IN_MEMORY_BYTES = def(9_133_1_00);
 
     /*
      * STOP! READ THIS FIRST! No, really,
