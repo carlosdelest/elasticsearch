@@ -9,7 +9,6 @@
 
 package org.elasticsearch.index.rankeval;
 
-import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -17,6 +16,7 @@ import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.features.NodeFeature;
 import org.elasticsearch.index.rankeval.RatedDocument.DocumentKey;
+import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
 import org.elasticsearch.xcontent.ParseField;
@@ -84,7 +84,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
     @Nullable
     private final RatingsProvider ratingsProvider;
     @Nullable
-    private final SearchResponse searchResponse;
+    private final SearchHits searchHits;
 
     /**
      * Create a rated request with template ids and parameters.
@@ -127,10 +127,10 @@ public class RatedRequest implements Writeable, ToXContentObject {
      *
      * @param id a unique name for this rated request
      * @param ratingsProvider the ratings provider to use for this request
-     * @param searchResponse the search results to use directly
+     * @param searchHits the search results to use directly
      */
-    public RatedRequest(String id, RatingsProvider ratingsProvider, SearchResponse searchResponse) {
-        this(id, null, null, null, null, ratingsProvider, searchResponse);
+    public RatedRequest(String id, List<RatedDocument> ratedDocs, RatingsProvider ratingsProvider, SearchHits searchHits) {
+        this(id, ratedDocs, null, null, null, ratingsProvider, searchHits);
     }
 
     private RatedRequest(
@@ -139,7 +139,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
         SearchSourceBuilder evaluatedQuery,
         String templateId, Map<String, Object> params,
         RatingsProvider ratingsProvider,
-        SearchResponse searchResponse
+        SearchHits searchHits
     ) {
         if (params != null && (params.size() > 0 && evaluatedQuery != null)) {
             throw new IllegalArgumentException(
@@ -151,13 +151,13 @@ public class RatedRequest implements Writeable, ToXContentObject {
                 "Ambiguous rated request: Set both, verbatim test request and test request " + "template parameters."
             );
         }
-        if ((params == null || params.size() < 1) && evaluatedQuery == null && searchResponse == null) {
+        if ((params == null || params.size() < 1) && evaluatedQuery == null && searchHits == null) {
             throw new IllegalArgumentException("Need to set at least test request, test request template parameters, or search results.");
         }
         if ((params != null && params.size() > 0) && templateId == null) {
             throw new IllegalArgumentException("If template parameters are supplied need to set id of template to apply " + "them to too.");
         }
-        if (searchResponse == null) {
+        if (searchHits == null) {
             validateEvaluatedQuery(evaluatedQuery);
         }
         // check that not two documents with same _index/id are specified
@@ -181,7 +181,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
         this.templateId = templateId;
         this.summaryFields = new ArrayList<>();
         this.ratingsProvider = ratingsProvider;
-        this.searchResponse = searchResponse;
+        this.searchHits = searchHits;
     }
 
     static void validateEvaluatedQuery(SearchSourceBuilder evaluationRequest) {
@@ -222,7 +222,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
         }
         this.templateId = in.readOptionalString();
         this.ratingsProvider = in.readOptionalWriteable(RatingsProvider::new);
-        this.searchResponse = in.readOptionalWriteable(SearchResponse::new);
+        this.searchHits = in.readOptionalWriteable(i -> SearchHits.readFrom(i, false));
     }
 
     @Override
@@ -241,7 +241,7 @@ public class RatedRequest implements Writeable, ToXContentObject {
         }
         out.writeOptionalString(this.templateId);
         out.writeOptionalWriteable(this.ratingsProvider);
-        out.writeOptionalWriteable(this.searchResponse);
+        out.writeOptionalWriteable(this.searchHits);
     }
 
     public SearchSourceBuilder getEvaluationRequest() {
@@ -284,8 +284,8 @@ public class RatedRequest implements Writeable, ToXContentObject {
     }
 
     @Nullable
-    public SearchResponse getSearchResponse() {
-        return searchResponse;
+    public SearchHits getSearchHits() {
+        return searchHits;
     }
 
     private static final ParseField ID_FIELD = new ParseField("id");

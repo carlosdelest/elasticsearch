@@ -203,11 +203,18 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
                             ratedRequest.getTemplateId(),
                             ratedRequest.getParams()
                         );
-                    } else {
+                    } else if (ratedRequest.getEvaluationRequest() != null) {
                         resolved = new RatedRequest(
                             ratedRequest.getId(),
                             docs,
                             ratedRequest.getEvaluationRequest()
+                        );
+                    } else {
+                        resolved = new RatedRequest(
+                            ratedRequest.getId(),
+                            docs,
+                            ratedRequest.getRatingsProvider(),
+                            ratedRequest.getSearchHits()
                         );
                     }
                     resolved.addSummaryFields(ratedRequest.getSummaryFields());
@@ -239,8 +246,8 @@ public class TransportRankEvalAction extends HandledTransportAction<RankEvalRequ
 
         // First, handle RatedRequests that already have a SearchResponse
         for (RatedRequest ratedRequest : resolvedRatedRequests) {
-            if (ratedRequest.getSearchResponse() != null) {
-                SearchHit[] hits = ratedRequest.getSearchResponse().getHits().getHits();
+            if (ratedRequest.getSearchHits() != null) {
+                SearchHit[] hits = ratedRequest.getSearchHits().getHits();
                 EvalQueryQuality queryQuality = metric.evaluate(ratedRequest.getId(), hits, ratedRequest.getRatedDocs());
                 responseDetails.put(ratedRequest.getId(), queryQuality);
             } else {

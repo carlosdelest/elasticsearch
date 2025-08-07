@@ -61,7 +61,7 @@ public class RankEvalSpec implements Writeable, ToXContentObject {
         this.ratedRequests = ratedRequests;
         if (templates == null || templates.isEmpty()) {
             for (RatedRequest request : ratedRequests) {
-                if (request.getEvaluationRequest() == null) {
+                if (request.getEvaluationRequest() == null && request.getSearchHits() == null) {
                     throw new IllegalStateException(
                         "Cannot evaluate ranking if neither template nor evaluation request is "
                             + "provided. Seen for request id: "

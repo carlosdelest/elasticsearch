@@ -237,7 +237,7 @@ public class RatedRequestsTests extends ESTestCase {
 
     public void testSettingNeitherParamsNorRequestThrows() {
         List<RatedDocument> ratedDocs = Arrays.asList(new RatedDocument("index1", "id1", 1));
-        expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, null, null));
+        expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, (SearchSourceBuilder) null));
         expectThrows(IllegalArgumentException.class, () -> new RatedRequest("id", ratedDocs, "templateId", new HashMap<>()));
     }
 

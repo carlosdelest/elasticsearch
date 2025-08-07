@@ -9,34 +9,37 @@
 
 package org.elasticsearch.index.rankeval;
 
-import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.search.SearchRequestBuilder;
+import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.vectors.KnnSearchBuilder;
+import org.elasticsearch.telemetry.Measurement;
+import org.elasticsearch.telemetry.TestTelemetryPlugin;
 import org.elasticsearch.test.ESIntegTestCase;
+import org.elasticsearch.test.ESSingleNodeTestCase;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentFactory;
 
 import java.util.Collection;
 import java.util.List;
 
-import static org.hamcrest.Matchers.notNullValue;
+import static org.elasticsearch.index.rankeval.SearchRankEvalActionFilter.RECALL_METRIC;
+import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailures;
 
 @ESIntegTestCase.ClusterScope(minNumDataNodes = 2)
-public class KnnSearchIT extends ESIntegTestCase {
+public class KnnSearchMetricsIT extends ESSingleNodeTestCase {
 
     private static final String INDEX_NAME = "test_knn_index";
     private static final String VECTOR_FIELD = "vector";
 
     @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return List.of(RankEvalPlugin.class);
+    protected Collection<Class<? extends Plugin>> getPlugins() {
+        return pluginList(TestTelemetryPlugin.class, RankEvalPlugin.class);
     }
-
 
     private XContentBuilder createKnnMapping() throws Exception {
         return XContentFactory.jsonBuilder()
@@ -58,7 +61,7 @@ public class KnnSearchIT extends ESIntegTestCase {
             .endObject();
     }
 
-    public void testKnnSearchWithScroll() throws Exception {
+    public void testKnnSearch() throws Exception {
         final int numShards = randomIntBetween(1, 3);
         Client client = client();
         client.admin()
@@ -77,42 +80,28 @@ public class KnnSearchIT extends ESIntegTestCase {
                 .endObject();
             client.prepareIndex(INDEX_NAME).setSource(source).get();
         }
-        refresh(INDEX_NAME);
+
+        indicesAdmin().prepareRefresh(INDEX_NAME)
+            .setIndicesOptions(IndicesOptions.STRICT_EXPAND_OPEN_HIDDEN_FORBID_CLOSED)
+            .get();
 
         final int k = randomIntBetween(11, 15);
         // test top level knn search
         {
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
             sourceBuilder.knnSearch(List.of(new KnnSearchBuilder(VECTOR_FIELD, new float[] { 0, 0 }, k, 100, null, null)));
-            executeScrollSearch(client, sourceBuilder, k);
+
+            SearchRequestBuilder requestBuilder = new SearchRequestBuilder(client()).setIndices(INDEX_NAME).setSource(sourceBuilder);
+            assertNoFailures(requestBuilder);
+
+            assertBusy(() -> {
+                List<Measurement> measurements = getTestTelemetryPlugin().getDoubleHistogramMeasurement(RECALL_METRIC);
+                assertFalse("No recall measurements found", measurements.isEmpty());
+            });
         }
     }
 
-    private static void executeScrollSearch(Client client, SearchSourceBuilder sourceBuilder, int expectedNumHits) {
-        SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
-        searchRequest.source(sourceBuilder).scroll(TimeValue.timeValueMinutes(1));
-
-        SearchResponse searchResponse = client.search(searchRequest).actionGet();
-        int hitsCollected = 0;
-        float prevScore = Float.POSITIVE_INFINITY;
-        try {
-            do {
-                assertThat(searchResponse.getScrollId(), notNullValue());
-                assertEquals(expectedNumHits, searchResponse.getHits().getTotalHits().value());
-                // assert correct order of returned hits
-                for (var searchHit : searchResponse.getHits()) {
-                    assert (searchHit.getScore() <= prevScore);
-                    prevScore = searchHit.getScore();
-                    hitsCollected += 1;
-                }
-                searchResponse.decRef();
-                searchResponse = client().prepareSearchScroll(searchResponse.getScrollId()).setScroll(TimeValue.timeValueMinutes(1)).get();
-            } while (searchResponse.getHits().getHits().length > 0);
-        } finally {
-            assertEquals(expectedNumHits, hitsCollected);
-            clearScroll(searchResponse.getScrollId());
-            searchResponse.decRef();
-        }
+    private TestTelemetryPlugin getTestTelemetryPlugin() {
+        return getInstanceFromNode(PluginsService.class).filterPlugins(TestTelemetryPlugin.class).toList().get(0);
     }
-
 }

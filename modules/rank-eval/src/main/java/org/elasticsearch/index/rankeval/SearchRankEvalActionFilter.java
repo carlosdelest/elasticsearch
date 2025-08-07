@@ -22,6 +22,7 @@ import org.elasticsearch.action.support.MappedActionFilter;
 import org.elasticsearch.client.internal.Client;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.vectors.ExactKnnQueryBuilder;
 import org.elasticsearch.search.vectors.KnnSearchBuilder;
@@ -34,7 +35,7 @@ import java.util.List;
 public class SearchRankEvalActionFilter implements MappedActionFilter {
 
     private static final Logger logger = LogManager.getLogger(SearchRankEvalActionFilter.class);
-    private static final String RECALL_METRIC = "es.search.rankeval.recall.histogram";
+    public static final String RECALL_METRIC = "es.search.rankeval.recall.histogram";
 
     private final Client client;
     private final DoubleHistogram recallMetric;
@@ -60,30 +61,38 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
         ActionListener<Response> listener,
         ActionFilterChain<Request, Response> chain
     ) {
-        chain.proceed(task, action, request, listener.delegateFailureAndWrap((l, response) -> {
-            l.onResponse(response);
-
-            if (TransportSearchAction.NAME.equals(action)) {
-                SearchRequest searchRequest = (SearchRequest) request;
-                if (shouldCalculateRecall(searchRequest)) {
-                    runRankEval(searchRequest, (SearchResponse) response);
+        chain.proceed(task, action, request, new ActionListener<Response>() {
+            @Override
+            public void onResponse(Response response) {
+                if (TransportSearchAction.NAME.equals(action)) {
+                    SearchRequest searchRequest = (SearchRequest) request;
+                    if (shouldCalculateRecall(searchRequest)) {
+                        SearchResponse searchResponse = (SearchResponse) response;
+                        SearchHits hits = searchResponse.getHits().asUnpooled();
+                        runRankEval(searchRequest, hits);
+                    }
                 }
+                listener.onResponse(response);
             }
-        }));
+
+            @Override
+            public void onFailure(Exception e) {
+                listener.onFailure(e);
+            }
+        });
     }
 
     private boolean shouldCalculateRecall(SearchRequest searchRequest) {
         return searchRequest.hasKnnSearch();
     }
 
-    private void runRankEval(SearchRequest request, SearchResponse response) {
-        // TODO set directly results instead of re-running search
-        RatedRequest.RatingsProvider ratingsProvider = new RatedRequest.RatingsProvider(evalSourceBuilderFrom(request.source()));
-        RatedRequest ratedRequest = new RatedRequest(String.valueOf(request.getRequestId()), ratingsProvider, response);
-        RankEvalSpec rankEvalSpec = new RankEvalSpec(List.of(ratedRequest), new RecallAtK());
-        RankEvalRequest rankEvalRequest = new RankEvalRequest(rankEvalSpec, request.indices());
-
+    private void runRankEval(SearchRequest request, SearchHits response) {
         try {
+            RatedRequest.RatingsProvider ratingsProvider = new RatedRequest.RatingsProvider(evalSourceBuilderFrom(request.source()));
+            RatedRequest ratedRequest = new RatedRequest(String.valueOf(request.getRequestId()), List.of(), ratingsProvider, response);
+            RankEvalSpec rankEvalSpec = new RankEvalSpec(List.of(ratedRequest), new RecallAtK());
+            RankEvalRequest rankEvalRequest = new RankEvalRequest(rankEvalSpec, request.indices());
+
             client.execute(RankEvalPlugin.ACTION, rankEvalRequest, new ActionListener<RankEvalResponse>() {
                     @Override
                     public void onResponse(RankEvalResponse rankEvalResponse) {
