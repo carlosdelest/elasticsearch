@@ -136,9 +136,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
-- class: "co.elastic.elasticsearch.stateless.cache.BlobCacheMetricsIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/4024"
-  method: "testSearchNodeMetrics"
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {csv-spec:fork.ForkAfterCompletion}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
