@@ -226,3 +226,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testStressWithRelocationFailures
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4349
+- class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
+  method: testRandomActivities
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4350
