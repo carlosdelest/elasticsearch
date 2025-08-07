@@ -21,6 +21,8 @@ import co.elastic.elasticsearch.serverless.crossproject.action.TransportGetProje
 import co.elastic.elasticsearch.serverless.crossproject.rest.action.RestGetProjectTagsAction;
 
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
+import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.cluster.node.DiscoveryNodeRole;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.ClusterSettings;
@@ -41,6 +43,8 @@ import java.util.List;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import static org.elasticsearch.transport.RemoteClusterPortSettings.REMOTE_CLUSTER_SERVER_ENABLED;
+
 public class ServerlessCrossProjectPlugin extends Plugin implements ActionPlugin {
 
     public static final Setting<Boolean> CROSS_PROJECT_ENABLED = Setting.boolSetting(
@@ -52,10 +56,12 @@ public class ServerlessCrossProjectPlugin extends Plugin implements ActionPlugin
     private static final Logger logger = LogManager.getLogger(ServerlessCrossProjectPlugin.class);
 
     private final boolean crossProjectEnabled;
+    private final boolean hasSearchRole;
 
     public ServerlessCrossProjectPlugin(Settings settings) {
         crossProjectEnabled = CROSS_PROJECT_ENABLED.get(settings);
         logger.info("cross-project is [{}]", crossProjectEnabled ? "enabled" : "disabled");
+        hasSearchRole = DiscoveryNode.hasRole(settings, DiscoveryNodeRole.SEARCH_ROLE);
     }
 
     public boolean isCrossProjectEnabled() {
@@ -65,6 +71,16 @@ public class ServerlessCrossProjectPlugin extends Plugin implements ActionPlugin
     @Override
     public List<Setting<?>> getSettings() {
         return List.of(CROSS_PROJECT_ENABLED);
+    }
+
+    @Override
+    public Settings additionalSettings() {
+        if (crossProjectEnabled == false || hasSearchRole == false) {
+            return Settings.EMPTY;
+        }
+
+        logger.info("hasSearchRole is [true], setting [{}] to [true] in additionalSettings()", REMOTE_CLUSTER_SERVER_ENABLED.getKey());
+        return Settings.builder().put(REMOTE_CLUSTER_SERVER_ENABLED.getKey(), true).build();
     }
 
     @Override
