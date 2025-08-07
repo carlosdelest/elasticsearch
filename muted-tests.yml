@@ -223,3 +223,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testUnhollowOnBulkUpdates
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4346
+- class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
+  method: testStressWithRelocationFailures
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4349
