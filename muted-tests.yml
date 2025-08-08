@@ -205,3 +205,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.commits.StatelessClusterIntegrityStressIT
   method: testRandomActivities
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4350
+- class: co.elastic.elasticsearch.stateless.multiproject.ProjectSealingIT
+  method: testFlushProject
+  issue: https://github.com/elastic/elasticsearch-serverless/issues/4354
