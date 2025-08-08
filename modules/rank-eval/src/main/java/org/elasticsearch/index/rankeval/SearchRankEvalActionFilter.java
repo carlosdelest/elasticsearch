@@ -30,6 +30,7 @@ import org.elasticsearch.search.vectors.KnnSearchBuilder;
 import org.elasticsearch.search.vectors.KnnVectorQueryBuilder;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.telemetry.metric.DoubleHistogram;
+import org.elasticsearch.telemetry.metric.LongHistogram;
 import org.elasticsearch.telemetry.metric.MeterRegistry;
 
 import java.util.List;
@@ -39,9 +40,11 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
 
     private static final Logger logger = LogManager.getLogger(SearchRankEvalActionFilter.class);
     public static final String RECALL_METRIC = "es.search.rankeval.recall.histogram";
+    public static final String RECALL_MEASURE_TIME_METRIC = "es.search.rankeval.recall.time.histogram";
 
     private final Client client;
     private final DoubleHistogram recallMetric;
+    private final LongHistogram recallMeasurementTimeMetric;
     private AtomicLong numQueries;
 
     public SearchRankEvalActionFilter(Client client, MeterRegistry meterRegistry) {
@@ -52,6 +55,7 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
             "Recall metric for rank evaluation, expressed as a histogram",
             "recall"
         );
+        recallMeasurementTimeMetric = meterRegistry.registerLongHistogram(RECALL_MEASURE_TIME_METRIC, "Time taken to measure recall", "ms");
     }
 
     @Override
@@ -110,6 +114,7 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
 
     private void runRankEval(SearchRequest request, SearchHits response) {
         try {
+            long start = System.currentTimeMillis();
             RatedRequest.RatingsProvider ratingsProvider = new RatedRequest.RatingsProvider(evalSourceBuilderFrom(request.source()));
             RatedRequest ratedRequest = new RatedRequest(String.valueOf(request.getRequestId()), List.of(), ratingsProvider, response);
             RankEvalSpec rankEvalSpec = new RankEvalSpec(List.of(ratedRequest), new RecallAtK());
@@ -119,7 +124,7 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
                 @Override
                 public void onResponse(RankEvalResponse rankEvalResponse) {
                     double metricScore = rankEvalResponse.getMetricScore();
-                    registerMetricScore(metricScore);
+                    registerMetricScore(metricScore, System.currentTimeMillis() - start);
                 }
 
                 @Override
@@ -132,11 +137,11 @@ public class SearchRankEvalActionFilter implements MappedActionFilter {
         }
     }
 
-    private void registerMetricScore(double metricScore) {
-        logger.info("Metric score calculated: {}", metricScore);
+    private void registerMetricScore(double metricScore, long measurementTime) {
         if (Double.isNaN(metricScore) == false) {
             recallMetric.record(metricScore);
         }
+        recallMeasurementTimeMetric.record(measurementTime);
     }
 
     private QueryBuilder rewriteQuery(QueryBuilder query) {
