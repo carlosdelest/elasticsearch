@@ -7,6 +7,8 @@ tasks {
             "data_stream/240_data_stream_settings/*" // the only allowed data stream settings are blocked on serverless
         ).joinToString(","))
         systemProperty("yaml.rest.tests.set_num_nodes", "false")
+        // The ILM plugin is not included in serverless, so disabling the ILM history store through a setting would cause an error.
+        systemProperty("yaml.rest.tests.disable_ilm_history", "false")
     }
     javaRestTest {
         exclude("**/DataStreamDeleteLifecycleWithPermissionsRestIT.class")
