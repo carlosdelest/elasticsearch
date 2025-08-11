@@ -107,6 +107,8 @@ tasks {
         // TODO: We would probably require a similar test to assert node counts for "index" and "search" roles.
         "cluster.stats/10_basic/cluster stats test",
         "cluster.stats/10_basic/get cluster stats returns cluster_uuid at the top level",
+        // CCS stats are not supported in stateless
+        "cluster.stats/30_ccs_stats/*",
 
         // Require the Node Stats API with index level metrics to correctly count mappings
         "nodes.stats/11_indices_metrics/indices mappings does not exist in shards level", // Failure at [nodes.stats/11_indices_metrics:540]: field [nodes.$node_id.indices.mappings.total_count] is not greater than or equal to [2]

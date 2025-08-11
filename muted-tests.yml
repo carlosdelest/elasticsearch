@@ -34,18 +34,12 @@ tests:
 - class: co.elastic.elasticsearch.serverless.datastream.ServerlessFactoryRetentionTests
   method: testInvalidCombination
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2563
-- class: "co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT"
-  method: "test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/2899"
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=profiling/10_basic/Test flamegraph from test-events}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/2957
 - class: "co.elastic.elasticsearch.stateless.lucene.GenerationalDocValuesIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/3034"
   method: "testBackgroundMergeCanRetainDeletedGenerationalFile"
-- class: co.elastic.elasticsearch.qa.rest.ServerlessClientYamlTestSuiteIT
-  method: test {yaml=cluster.stats/30_ccs_stats/cross-cluster search stats search}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/3079
 - class: co.elastic.elasticsearch.qa.rest.ServerlessXpackRestIT
   method: test {yaml=ml/inference_crud/Test delete given model referenced by pipeline}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3085
