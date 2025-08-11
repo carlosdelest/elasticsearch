@@ -78,16 +78,8 @@ public class TransportGetProjectTagsAction extends HandledTransportAction<
 
     @Override
     protected void doExecute(Task task, Request request, ActionListener<Response> listener) {
-        // TODO: this probably also needs checking in serverless
-        if (remoteClusterService.isEnabled() == false) {
-            // throw new IllegalArgumentException(
-            // "node ["
-            // + remoteClusterService.getLocalNode().getName()
-            // + "] does not have the ["
-            // + DiscoveryNodeRole.REMOTE_CLUSTER_CLIENT_ROLE.roleName()
-            // + "] role"
-            // );
-        }
+        // Verifies we are executing on a search node.
+        remoteClusterService.ensureClientIsEnabled();
 
         ProjectMetadata projectMetadata = projectResolver.getProjectMetadata(clusterService.state());
 
