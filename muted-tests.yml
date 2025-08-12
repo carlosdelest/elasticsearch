@@ -145,9 +145,6 @@ tests:
 - class: "org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT"
   issue: "https://github.com/elastic/elasticsearch-serverless/issues/4061"
   method: "test {cvs-spec:knn-function.KnnSearchWithKOption}"
-- class: org.elasticsearch.xpack.esql.qa.mixed.EsqlClientYamlIT
-  method: test {p0=esql/220_explain/explainDownstream}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4100
 - class: org.elasticsearch.xpack.esql.qa.multi_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
