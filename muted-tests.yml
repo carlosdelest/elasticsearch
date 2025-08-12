@@ -139,12 +139,6 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
   method: test {csv-spec:fork.ForkBranchWithCompletion}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4051
-- class: "org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/4060"
-  method: "test {csv-spec:knn-function.KnnSearchWithKOption}"
-- class: "org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT"
-  issue: "https://github.com/elastic/elasticsearch-serverless/issues/4061"
-  method: "test {cvs-spec:knn-function.KnnSearchWithKOption}"
 - class: org.elasticsearch.xpack.esql.qa.multi_node.GenerativeIT
   method: test
   issue: https://github.com/elastic/elasticsearch-serverless/issues/3710
@@ -160,18 +154,12 @@ tests:
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {csv-spec:spatial_shapes.CartesianPointIntersectsPolygon}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4218
-- class: org.elasticsearch.xpack.esql.qa.single_node.EsqlSpecIT
-  method: test {csv-spec:knn-function.KnnWithPrefilter}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4230
 - class: co.elastic.elasticsearch.stateless.autoscaling.search.AutoscalingReplicaIT
   method: testSearchSizeAffectsReplicasSPBetween100And250
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4237
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {csv-spec:eval.ProjectEval}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4239
-- class: org.elasticsearch.xpack.esql.qa.mixed.MixedClusterEsqlSpecIT
-  method: test {csv-spec:knn-function.KnnWithPrefilter}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4245
 - class: org.elasticsearch.xpack.esql.qa.multi_node.EsqlSpecIT
   method: test {csv-spec:spatial-grid.GridGeohexInStatsByBounds}
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4266
@@ -187,9 +175,6 @@ tests:
 - class: co.elastic.elasticsearch.stateless.engine.SearchEngineTests
   method: testLatestUploadedTermAndGenUpdatedOnCommitNotification
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4328
-- class: org.elasticsearch.xpack.esql.qa.single_node.GenerativeForkIT
-  method: test {csv-spec:knn-function.KnnWithPrefilter}
-  issue: https://github.com/elastic/elasticsearch-serverless/issues/4332
 - class: co.elastic.elasticsearch.stateless.StatelessHollowIndexShardsIT
   method: testStressWithRelocationFailures
   issue: https://github.com/elastic/elasticsearch-serverless/issues/4349
