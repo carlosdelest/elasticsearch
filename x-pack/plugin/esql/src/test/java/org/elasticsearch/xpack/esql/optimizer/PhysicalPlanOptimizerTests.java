@@ -246,6 +246,7 @@ public class PhysicalPlanOptimizerTests extends ESTestCase {
     private TestDataSource cartesianMultipolygonsNoDocValues; // cartesian_shape field tests but has no doc values
     private TestDataSource countriesBbox;       // geo_shape field tests
     private TestDataSource countriesBboxWeb;    // cartesian_shape field tests
+    private TestDataSource denseVectorData;
 
     private final Configuration config;
 
@@ -361,6 +362,18 @@ public class PhysicalPlanOptimizerTests extends ESTestCase {
             functionRegistry,
             enrichResolution
         );
+
+        Map<String, EsField> denseVectorMapping = new HashMap<>();
+        denseVectorMapping.put("vector", new EsField("vector", DataType.DENSE_VECTOR, Map.of(), true,
+            EsField.TimeSeriesFieldType.NONE));
+        EsIndex denseVectorIndex = new EsIndex("dense_vector_index", denseVectorMapping, Map.of("test", IndexMode.STANDARD));
+        IndexResolution denseVectorIndexResolution = IndexResolution.valid(denseVectorIndex);
+        Analyzer denseVectorAnalyzer = new Analyzer(
+            new AnalyzerContext(config, functionRegistry, denseVectorIndexResolution, defaultLookupResolution(), enrichResolution,
+                emptyInferenceResolution()),
+            TEST_VERIFIER
+        );
+        this.denseVectorData = new TestDataSource(denseVectorMapping, denseVectorIndex, denseVectorAnalyzer, TEST_SEARCH_STATS);
     }
 
     TestDataSource makeTestDataSource(
@@ -8427,6 +8440,22 @@ public class PhysicalPlanOptimizerTests extends ESTestCase {
         PhysicalPlanOptimizer customRulesPhysicalPlanOptimizer = getCustomRulesPhysicalPlanOptimizer(List.of(customRuleBatch));
         Exception e = expectThrows(VerificationException.class, () -> customRulesPhysicalPlanOptimizer.optimize(plan));
         assertThat(e.getMessage(), containsString("Output has changed from"));
+    }
+
+    public void testDenseVectorEstimatedSize() {
+        var plan = physicalPlan("""
+            from dense_vector_index
+            """, denseVectorData);
+
+        var optimized = optimizedPlan(plan);
+        var topLimit = as(optimized, LimitExec.class);
+        var exchange = asRemoteExchange(topLimit.child());
+        var project = as(exchange.child(), ProjectExec.class);
+        var fieldExtract = as(project.child(), FieldExtractExec.class);
+        var source = source(fieldExtract.child());
+
+        // Dense vector of 3,072 floats + Doc IDs (integer)
+        assertThat(source.estimatedRowSize(), equalTo(3072 * Float.BYTES + Integer.BYTES));
     }
 
     @Override
