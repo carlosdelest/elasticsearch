@@ -310,8 +310,9 @@ public enum DataType {
 
     /**
      * Fields with this type are dense vectors, represented as an array of double values.
+     * For a conservative size estimation, we assume 3072 dimensions (large text embedding models), with float as element type
      */
-    DENSE_VECTOR(builder().esType("dense_vector").unknownSize());
+    DENSE_VECTOR(builder().esType("dense_vector").estimatedSize(3072 * Float.BYTES).docValues());
 
     /**
      * Types that are actively being built. These types are
