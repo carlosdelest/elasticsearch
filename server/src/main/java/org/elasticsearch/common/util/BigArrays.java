@@ -426,6 +426,19 @@ public class BigArrays {
             assert index >= 0 && index < size();
             System.arraycopy(buf, offset << 2, array, (int) index << 2, len << 2);
         }
+
+        @Override
+        public void fillWith(StreamInput in) throws IOException {
+            int numBytes = in.readVInt();
+            in.readBytes(array, 0, numBytes);
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            int size = (int) size();
+            out.writeVInt(size * 8);
+            out.write(array, 0, size * Double.BYTES);
+        }
     }
 
     private static class ObjectArrayWrapper<T> extends AbstractArrayWrapper implements ObjectArray<T> {

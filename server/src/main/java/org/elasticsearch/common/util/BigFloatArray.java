@@ -9,10 +9,15 @@
 
 package org.elasticsearch.common.util;
 
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+
+import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 
+import static org.elasticsearch.common.util.BigLongArray.writePages;
 import static org.elasticsearch.common.util.PageCacheRecycler.FLOAT_PAGE_SIZE;
 
 /**
@@ -93,5 +98,15 @@ final class BigFloatArray extends AbstractBigByteArray implements FloatArray {
 
     private static int idxInPage(long index) {
         return (int) (index & FLOAT_PAGE_SIZE - 1);
+    }
+
+    @Override
+    public void fillWith(StreamInput in) throws IOException {
+        readPages(in);
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        writePages(out, size, pages, Float.BYTES);
     }
 }

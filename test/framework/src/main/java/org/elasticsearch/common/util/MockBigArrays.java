@@ -605,6 +605,11 @@ public class MockBigArrays extends BigArrays {
         }
 
         @Override
+        public void fillWith(StreamInput streamInput) throws IOException {
+            in.fillWith(streamInput);
+        }
+
+        @Override
         public void set(long index, byte[] buf, int offset, int len) {
             in.set(index, buf, offset, len);
         }
@@ -612,6 +617,11 @@ public class MockBigArrays extends BigArrays {
         @Override
         public Collection<Accountable> getChildResources() {
             return Collections.singleton(Accountables.namedAccountable("delegate", in));
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            in.writeTo(out);
         }
     }
 

@@ -554,6 +554,13 @@ public interface BlockLoader {
         IntBuilder appendInt(int value);
     }
 
+    interface DenseVectorBuilder extends Builder {
+        /**
+         * Appends a double to the current entry.
+         */
+        DenseVectorBuilder appendDenseVector(float[] value);
+    }
+
     /**
      * Specialized builder for collecting dense arrays of long values.
      */

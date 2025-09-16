@@ -9,18 +9,22 @@
 
 package org.elasticsearch.common.util;
 
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.Writeable;
+
+import java.io.IOException;
+
 /**
  * Abstraction of an array of double values.
  */
-public interface FloatArray extends BigArray {
-
+public interface FloatArray extends BigArray, Writeable {
     /**
      * Get an element given its index.
      */
     float get(long index);
 
     /**
-     * Set a value at the given index.
+     * Set a value at the given index
      */
     void set(long index, float value);
 
@@ -33,4 +37,6 @@ public interface FloatArray extends BigArray {
      * Bulk set.
      */
     void set(long index, byte[] buf, int offset, int len);
+
+    void fillWith(StreamInput in) throws IOException;
 }
