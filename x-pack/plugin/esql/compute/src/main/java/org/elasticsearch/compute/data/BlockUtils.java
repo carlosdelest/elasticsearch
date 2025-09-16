@@ -299,6 +299,7 @@ public final class BlockUtils {
                     aggBlock.countBlock().getInt(offset)
                 );
             }
+            case DENSE_VECTOR -> ((DenseVectorBlock) block).getDenseVector(offset);
             case UNKNOWN -> throw new IllegalArgumentException("can't read values from [" + block + "]");
         };
     }

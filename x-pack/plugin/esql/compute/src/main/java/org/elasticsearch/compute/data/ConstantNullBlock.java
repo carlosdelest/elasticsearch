@@ -26,7 +26,8 @@ public final class ConstantNullBlock extends AbstractNonThreadSafeRefCounted
         FloatBlock,
         DoubleBlock,
         BytesRefBlock,
-        AggregateMetricDoubleBlock {
+        AggregateMetricDoubleBlock,
+        DenseVectorBlock {
 
     private static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(ConstantNullBlock.class);
     private final int positionCount;
@@ -288,6 +289,12 @@ public final class ConstantNullBlock extends AbstractNonThreadSafeRefCounted
 
     @Override
     public long getLong(int valueIndex) {
+        assert false : "null block";
+        throw new UnsupportedOperationException("null block");
+    }
+
+    @Override
+    public float[] getDenseVector(int valueIndex) {
         assert false : "null block";
         throw new UnsupportedOperationException("null block");
     }

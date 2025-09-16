@@ -24,7 +24,8 @@ public final class ConstantNullVector extends AbstractVector
         DoubleVector,
         FloatVector,
         IntVector,
-        LongVector {
+        LongVector,
+        DenseVectorVector {
 
     private ConstantNullVector(int positionCount, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
@@ -67,6 +68,11 @@ public final class ConstantNullVector extends AbstractVector
     }
 
     @Override
+    public int dimensions() {
+        return 0;
+    }
+
+    @Override
     public ReleasableIterator<ConstantNullBlock> lookup(IntBlock positions, ByteSizeValue targetBlockSize) {
         assert false : "null vector";
         throw new UnsupportedOperationException("null vector");
@@ -104,6 +110,12 @@ public final class ConstantNullVector extends AbstractVector
 
     @Override
     public long getLong(int position) {
+        assert false : "null vector";
+        throw new UnsupportedOperationException("null vector");
+    }
+
+    @Override
+    public float[] getDenseVector(int position) {
         assert false : "null vector";
         throw new UnsupportedOperationException("null vector");
     }

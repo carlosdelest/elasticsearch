@@ -487,4 +487,78 @@ public class BlockFactory {
     public long maxPrimitiveArrayBytes() {
         return maxPrimitiveArrayBytes;
     }
+
+    public DenseVectorBlock.Builder newDenseVectorBlockBuilder(int estimatedSize) {
+        return new DenseVectorBlockBuilder(estimatedSize, this);
+    }
+
+    public final DenseVectorBlock newDenseVectorArrayBlock(
+        float[][] values,
+        int dimensions,
+        int positionCount,
+        int[] firstValueIndexes,
+        BitSet nulls,
+        MvOrdering mvOrdering
+    ) {
+        return newDenseVectorArrayBlock(values, dimensions, positionCount, firstValueIndexes, nulls, mvOrdering, 0L);
+    }
+
+    public DenseVectorBlock newDenseVectorArrayBlock(
+        float[][] values,
+        int dimensions,
+        int pc,
+        int[] fvi,
+        BitSet nulls,
+        MvOrdering mvOrdering,
+        long preAdjustedBytes
+    ) {
+        var b = new DenseVectorArrayBlock(values, pc, fvi, nulls, mvOrdering, this);
+        adjustBreaker(b.ramBytesUsed() - preAdjustedBytes);
+        return b;
+    }
+
+    public DenseVectorVector.Builder newDenseVectorVectorBuilder(int estimatedSize, int dimensions) {
+        return new DenseVectorVectorBuilder(dimensions, estimatedSize, this);
+    }
+
+    /**
+     * Build a {@link DenseVectorVector.FixedBuilder} that never grows.
+     */
+    public DenseVectorVector.FixedBuilder newDenseVectorVectorFixedBuilder(int dimensions, int size) {
+        return new DenseVectorVectorFixedBuilder(dimensions, size, this);
+    }
+
+    /**
+     * Creates a new Vector with the given values and positionCount, where the caller has already
+     * pre-adjusted a number of bytes with the factory's breaker.
+     *
+     * long preAdjustedBytes = blockFactory.preAdjustBreakerForDenseVector(positionCount);
+     * int[] values = new int[positionCount];
+     * for (int i = 0; i &lt; positionCount; i++) {
+     *   values[i] = doWhateverStuff
+     * }
+     * var vector = blockFactory.newDenseVectorArrayVector(values, positionCount, preAdjustedBytes);
+     */
+    public DenseVectorVector newDenseVectorArrayVector(float[][] values, int positionCount, long preAdjustedBytes) {
+        var b = new DenseVectorArrayVector(values, positionCount, this);
+        adjustBreaker(b.ramBytesUsed() - preAdjustedBytes);
+        return b;
+    }
+
+    public final DenseVectorBlock newConstantDenseVectorBlockWith(float[] value, int positions) {
+        return newConstantDenseVectorBlockWith(value, positions, 0L);
+    }
+
+    public DenseVectorBlock newConstantDenseVectorBlockWith(float[] value, int positions, long preAdjustedBytes) {
+        var b = new ConstantDenseVectorVector(value, positions, this).asBlock();
+        adjustBreaker(b.ramBytesUsed() - preAdjustedBytes);
+        return b;
+    }
+
+    public DenseVectorVector newConstantDenseVectorVector(float[] value, int positions) {
+        adjustBreaker(ConstantDenseVectorVector.RAM_BYTES_USED);
+        var v = new ConstantDenseVectorVector(value, positions, this);
+        assert v.ramBytesUsed() == ConstantDenseVectorVector.RAM_BYTES_USED;
+        return v;
+    }
 }
