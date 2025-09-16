@@ -19,6 +19,7 @@ import org.elasticsearch.common.geo.ShapeRelation;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BooleanBlock;
 import org.elasticsearch.compute.data.BytesRefBlock;
+import org.elasticsearch.compute.data.DenseVectorBlock;
 import org.elasticsearch.compute.data.DoubleBlock;
 import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.FloatBlock;
@@ -194,6 +195,10 @@ public abstract class QueryList implements LookupEnrichQueryGenerator {
             case DOC -> throw new IllegalArgumentException("can't read values from [doc] block");
             case COMPOSITE -> throw new IllegalArgumentException("can't read values from [composite] block");
             case AGGREGATE_METRIC_DOUBLE -> throw new IllegalArgumentException("can't read values from [aggregate metric double] block");
+            case DENSE_VECTOR -> {
+                DenseVectorBlock intBlock = (DenseVectorBlock) block;
+                yield intBlock::getDenseVector;
+            }
             case UNKNOWN -> throw new IllegalArgumentException("can't read values from [" + block + "]");
         };
         return new TermQueryList(field, searchExecutionContext, aliasFilter, block, null, blockToJavaObject);

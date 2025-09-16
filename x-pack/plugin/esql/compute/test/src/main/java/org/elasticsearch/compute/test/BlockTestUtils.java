@@ -35,6 +35,7 @@ import java.util.Map;
 
 import static org.elasticsearch.compute.data.BlockUtils.toJavaObject;
 import static org.elasticsearch.test.ESTestCase.between;
+import static org.elasticsearch.test.ESTestCase.randomArray;
 import static org.elasticsearch.test.ESTestCase.randomBoolean;
 import static org.elasticsearch.test.ESTestCase.randomDouble;
 import static org.elasticsearch.test.ESTestCase.randomFloat;
@@ -71,6 +72,7 @@ public class BlockTestUtils {
             );
             case NULL -> null;
             case COMPOSITE -> throw new IllegalArgumentException("can't make random values for composite");
+            case DENSE_VECTOR -> randomArray(10, 10, Float[]::new, () -> randomFloat());
             case UNKNOWN -> throw new IllegalArgumentException("can't make random values for [" + e + "]");
         };
     }
