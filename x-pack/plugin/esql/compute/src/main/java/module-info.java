@@ -21,6 +21,7 @@ module org.elasticsearch.compute {
     requires org.elasticsearch.geo;
     requires org.elasticsearch.xcore;
     requires hppc;
+    requires unboundid.ldapsdk;
 
     exports org.elasticsearch.compute;
     exports org.elasticsearch.compute.aggregation;

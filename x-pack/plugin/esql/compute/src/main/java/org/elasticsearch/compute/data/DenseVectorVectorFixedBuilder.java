@@ -19,6 +19,7 @@ public final class DenseVectorVectorFixedBuilder implements DenseVectorVector.Fi
     private final BlockFactory blockFactory;
     private final float[][] values;
     private final long preAdjustedBytes;
+    private int dimensions;
     /**
      * The next value to write into. {@code -1} means the vector has already
      * been built.
@@ -28,7 +29,7 @@ public final class DenseVectorVectorFixedBuilder implements DenseVectorVector.Fi
     private boolean closed;
 
     DenseVectorVectorFixedBuilder(int size, int dimensions, BlockFactory blockFactory) {
-        preAdjustedBytes = ramBytesUsed(size);
+        preAdjustedBytes = ramBytesUsed(size, dimensions);
         blockFactory.adjustBreaker(preAdjustedBytes);
         this.blockFactory = blockFactory;
         this.values = new float[size][dimensions];
@@ -36,27 +37,36 @@ public final class DenseVectorVectorFixedBuilder implements DenseVectorVector.Fi
 
     @Override
     public DenseVectorVectorFixedBuilder appendDenseVector(float[] value) {
+        assertDimensions(value);
         values[nextIndex++] = value;
         return this;
     }
 
     @Override
     public DenseVectorVectorFixedBuilder appendDenseVector(int idx, float[] value) {
+        assertDimensions(value);
         values[idx] = value;
         return this;
     }
 
-    private static long ramBytesUsed(int size) {
-        return size == 1
-            ? ConstantDenseVectorVector.RAM_BYTES_USED
-            : DenseVectorArrayVector.BASE_RAM_BYTES_USED + RamUsageEstimator.alignObjectSize(
-                (long) RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + size * Float.BYTES * 3096
+    private void assertDimensions(float[] value) {
+        assert dimensions == 0 || value.length == dimensions : "expected ["
+            + dimensions
+            + "] but was ["
+            + value.length
+            + "]";
+        dimensions = value.length;
+    }
+
+    private long ramBytesUsed(int size, int dimensions) {
+        return DenseVectorArrayVector.BASE_RAM_BYTES_USED + RamUsageEstimator.alignObjectSize(
+                (long) RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + (long) size * Float.BYTES * dimensions
             );
     }
 
     @Override
     public long estimatedBytes() {
-        return ramBytesUsed(values.length);
+        return ramBytesUsed(values.length, dimensions);
     }
 
     @Override
@@ -69,7 +79,7 @@ public final class DenseVectorVectorFixedBuilder implements DenseVectorVector.Fi
         if (values.length == 1) {
             vector = blockFactory.newConstantDenseVectorBlockWith(values[0], 1, preAdjustedBytes).asVector();
         } else {
-            vector = blockFactory.newDenseVectorArrayVector(values, values.length, preAdjustedBytes);
+            vector = blockFactory.newDenseVectorArrayVector(values, values.length, dimensions, preAdjustedBytes);
         }
         assert vector.ramBytesUsed() == preAdjustedBytes : "fixed Builders should estimate the exact ram bytes used";
         return vector;

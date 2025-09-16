@@ -27,18 +27,26 @@ public final class DenseVectorArrayBlock extends AbstractArrayBlock implements D
     static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(DenseVectorArrayBlock.class);
 
     private final DenseVectorArrayVector vector;
+    private final int dimensions;
 
     DenseVectorArrayBlock(
         float[][] values,
         int positionCount,
+        int dimensions,
         int[] firstValueIndexes,
         BitSet nulls,
         MvOrdering mvOrdering,
         BlockFactory blockFactory
     ) {
         this(
-            new DenseVectorArrayVector(values, firstValueIndexes == null ? positionCount : firstValueIndexes[positionCount], blockFactory),
+            new DenseVectorArrayVector(
+                values,
+                firstValueIndexes == null ? positionCount : firstValueIndexes[positionCount],
+                dimensions,
+                blockFactory
+            ),
             positionCount,
+            dimensions,
             firstValueIndexes,
             nulls,
             mvOrdering
@@ -48,15 +56,22 @@ public final class DenseVectorArrayBlock extends AbstractArrayBlock implements D
     private DenseVectorArrayBlock(
         DenseVectorArrayVector vector, // stylecheck
         int positionCount,
+        int dimensions,
         int[] firstValueIndexes,
         BitSet nulls,
         MvOrdering mvOrdering
     ) {
         super(positionCount, firstValueIndexes, nulls, mvOrdering);
         this.vector = vector;
+        this.dimensions = dimensions;
         assert firstValueIndexes == null
             ? vector.getPositionCount() == getPositionCount()
             : firstValueIndexes[getPositionCount()] == vector.getPositionCount();
+    }
+
+    @Override
+    public int dimensions() {
+        return dimensions;
     }
 
     static DenseVectorArrayBlock readArrayBlock(BlockFactory blockFactory, BlockStreamInput in) throws IOException {
@@ -66,7 +81,14 @@ public final class DenseVectorArrayBlock extends AbstractArrayBlock implements D
         boolean success = false;
         try {
             vector = DenseVectorArrayVector.readArrayVector(sub.vectorPositions(), dimensions, in, blockFactory);
-            var block = new DenseVectorArrayBlock(vector, sub.positionCount, sub.firstValueIndexes, sub.nullsMask, sub.mvOrdering);
+            var block = new DenseVectorArrayBlock(
+                vector,
+                sub.positionCount,
+                dimensions,
+                sub.firstValueIndexes,
+                sub.nullsMask,
+                sub.mvOrdering
+            );
             blockFactory.adjustBreaker(block.ramBytesUsed() - vector.ramBytesUsed() - sub.bytesReserved);
             success = true;
             return block;
@@ -96,7 +118,7 @@ public final class DenseVectorArrayBlock extends AbstractArrayBlock implements D
 
     @Override
     public DenseVectorBlock filter(int... positions) {
-        try (var builder = blockFactory().newDenseVectorBlockBuilder(positions.length)) {
+        try (var builder = blockFactory().newDenseVectorBlockBuilder(positions.length, dimensions)) {
             for (int pos : positions) {
                 if (isNull(pos)) {
                     builder.appendNull();
@@ -131,7 +153,7 @@ public final class DenseVectorArrayBlock extends AbstractArrayBlock implements D
             }
             return (DenseVectorBlock) blockFactory().newConstantNullBlock(getPositionCount());
         }
-        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount())) {
+        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount(), dimensions)) {
             // TODO if X-ArrayBlock used BooleanVector for it's null mask then we could shuffle references here.
             for (int p = 0; p < getPositionCount(); p++) {
                 if (false == mask.getBoolean(p)) {
@@ -188,6 +210,7 @@ public final class DenseVectorArrayBlock extends AbstractArrayBlock implements D
         DenseVectorArrayBlock expanded = new DenseVectorArrayBlock(
             vector,
             expandedPositionCount,
+            dimensions,
             null,
             shiftNullsToExpandedPositions(),
             MvOrdering.DEDUPLICATED_AND_SORTED_ASCENDING

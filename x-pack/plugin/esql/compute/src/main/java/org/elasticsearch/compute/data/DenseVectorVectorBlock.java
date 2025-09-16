@@ -39,6 +39,11 @@ public final class DenseVectorVectorBlock extends AbstractVectorBlock implements
     }
 
     @Override
+    public int dimensions() {
+        return vector.dimensions();
+    }
+
+    @Override
     public int getPositionCount() {
         return vector.getPositionCount();
     }

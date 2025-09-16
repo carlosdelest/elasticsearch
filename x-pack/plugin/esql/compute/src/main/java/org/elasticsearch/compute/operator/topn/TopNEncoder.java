@@ -70,6 +70,10 @@ public interface TopNEncoder {
 
     BytesRef decodeBytesRef(BytesRef bytes, BytesRef scratch);
 
+    void encodeDenseVector(float[] value, BreakingBytesRefBuilder bytesRefBuilder);
+
+    float[] decodeDenseVector(BytesRef bytes, float[] scratch);
+
     /**
      * Get a version of this encoder that encodes values such that sorting
      * the encoded bytes sorts by the values.

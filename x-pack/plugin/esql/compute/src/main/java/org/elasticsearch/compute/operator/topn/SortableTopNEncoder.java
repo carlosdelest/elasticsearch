@@ -70,6 +70,28 @@ public abstract class SortableTopNEncoder implements TopNEncoder {
     }
 
     @Override
+    public void encodeDenseVector(float[] value, BreakingBytesRefBuilder bytesRefBuilder) {
+        encodeInt(value.length, bytesRefBuilder);
+        for (float v : value) {
+            encodeFloat(v, bytesRefBuilder);
+        }
+    }
+
+    @Override
+    public float[] decodeDenseVector(BytesRef bytes, float[] scratch) {
+        int dimensions = decodeInt(bytes);
+        if (scratch == null) {
+            scratch = new float[dimensions];
+        } else {
+            assert scratch.length == dimensions : "scratch length [" + scratch.length + "] < dimensions [" + dimensions + "]";
+        }
+        for (int i = 0; i < dimensions; i++) {
+            scratch[i] = decodeFloat(bytes);
+        }
+        return scratch;
+    }
+
+    @Override
     public final void encodeDouble(double value, BreakingBytesRefBuilder bytesRefBuilder) {
         bytesRefBuilder.grow(bytesRefBuilder.length() + Long.BYTES);
         NumericUtils.longToSortableBytes(NumericUtils.doubleToSortableLong(value), bytesRefBuilder.bytes(), bytesRefBuilder.length());

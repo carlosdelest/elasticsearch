@@ -569,7 +569,7 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
         @Override
         public BlockLoader.Block read(BlockFactory factory, Docs docs, int offset, boolean nullsFiltered) throws IOException {
             // Doubles from doc values ensures that the values are in order
-            try (BlockLoader.FloatBuilder builder = factory.denseVectors(docs.count() - offset, dimensions)) {
+            try (BlockLoader.DenseVectorBuilder builder = factory.denseVectors(docs.count() - offset, dimensions)) {
                 for (int i = offset; i < docs.count(); i++) {
                     read(docs.get(i), builder);
                 }
@@ -579,24 +579,22 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
 
         @Override
         public void read(int docId, BlockLoader.StoredFields storedFields, Builder builder) throws IOException {
-            read(docId, (BlockLoader.FloatBuilder) builder);
+            read(docId, (BlockLoader.DenseVectorBuilder) builder);
         }
 
-        private void read(int doc, BlockLoader.FloatBuilder builder) throws IOException {
+        private void read(int doc, BlockLoader.DenseVectorBuilder builder) throws IOException {
             assertDimensions();
 
             if (iterator.docID() > doc) {
                 builder.appendNull();
             } else if (iterator.docID() == doc || iterator.advance(doc) == doc) {
-                builder.beginPositionEntry();
                 appendDoc(builder);
-                builder.endPositionEntry();
             } else {
                 builder.appendNull();
             }
         }
 
-        protected abstract void appendDoc(BlockLoader.FloatBuilder builder) throws IOException;
+        protected abstract void appendDoc(BlockLoader.DenseVectorBuilder builder) throws IOException;
 
         @Override
         public int docId() {
@@ -615,11 +613,9 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
             super(floatVectorValues, dimensions);
         }
 
-        protected void appendDoc(BlockLoader.FloatBuilder builder) throws IOException {
+        protected void appendDoc(BlockLoader.DenseVectorBuilder builder) throws IOException {
             float[] floats = vectorValues.vectorValue(iterator.index());
-            for (float aFloat : floats) {
-                builder.appendFloat(aFloat);
-            }
+            builder.appendDenseVector(floats);
         }
 
         @Override
@@ -641,7 +637,7 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
         }
 
         @Override
-        protected void appendDoc(BlockLoader.FloatBuilder builder) throws IOException {
+        protected void appendDoc(BlockLoader.DenseVectorBuilder builder) throws IOException {
             float magnitude = 1.0f;
             // If all vectors are normalized, no doc values will be present. The vector may be normalized already, so we may not have a
             // stored magnitude for all docs
@@ -649,9 +645,7 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
                 magnitude = Float.intBitsToFloat((int) magnitudeDocValues.longValue());
             }
             float[] floats = vectorValues.vectorValue(iterator.index());
-            for (float aFloat : floats) {
-                builder.appendFloat(aFloat * magnitude);
-            }
+            builder.appendDenseVector(floats);
         }
 
         @Override
@@ -665,11 +659,14 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
             super(floatVectorValues, dimensions);
         }
 
-        protected void appendDoc(BlockLoader.FloatBuilder builder) throws IOException {
+        protected void appendDoc(BlockLoader.DenseVectorBuilder builder) throws IOException {
             byte[] bytes = vectorValues.vectorValue(iterator.index());
-            for (byte aFloat : bytes) {
-                builder.appendFloat(aFloat);
+            float[] floats = new float[bytes.length];
+            for (int i = 0; i < bytes.length; i++) {
+                floats[i] = bytes[i];
             }
+
+            builder.appendDenseVector(floats);
         }
 
         @Override
@@ -1068,12 +1065,12 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
 
         @Override
         public void read(int docId, BlockLoader.StoredFields storedFields, Builder builder) throws IOException {
-            read(docId, (BlockLoader.FloatBuilder) builder);
+            read(docId, (BlockLoader.DenseVectorBuilder) builder);
         }
 
         @Override
         public BlockLoader.Block read(BlockFactory factory, Docs docs, int offset, boolean nullsFiltered) throws IOException {
-            try (BlockLoader.FloatBuilder builder = factory.denseVectors(docs.count() - offset, dimensions)) {
+            try (BlockLoader.DenseVectorBuilder builder = factory.denseVectors(docs.count() - offset, dimensions)) {
                 for (int i = offset; i < docs.count(); i++) {
                     int doc = docs.get(i);
                     read(doc, builder);
@@ -1082,7 +1079,7 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
             }
         }
 
-        private void read(int doc, BlockLoader.FloatBuilder builder) throws IOException {
+        private void read(int doc, BlockLoader.DenseVectorBuilder builder) throws IOException {
             if (docValues.advanceExact(doc) == false) {
                 builder.appendNull();
                 return;
@@ -1090,15 +1087,12 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
             BytesRef bytesRef = docValues.binaryValue();
             assert bytesRef.length > 0;
             decodeDenseVector(bytesRef, scratch);
-
-            builder.beginPositionEntry();
             writeScratchToBuilder(scratch, builder);
-            builder.endPositionEntry();
         }
 
         protected abstract void decodeDenseVector(BytesRef bytesRef, T scratch);
 
-        protected abstract void writeScratchToBuilder(T scratch, BlockLoader.FloatBuilder builder);
+        protected abstract void writeScratchToBuilder(T scratch, BlockLoader.DenseVectorBuilder builder);
     }
 
     private static class FloatDenseVectorFromBinary extends AbstractDenseVectorFromBinary<float[]> {
@@ -1107,10 +1101,8 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
         }
 
         @Override
-        protected void writeScratchToBuilder(float[] scratch, BlockLoader.FloatBuilder builder) {
-            for (float value : scratch) {
-                builder.appendFloat(value);
-            }
+        protected void writeScratchToBuilder(float[] scratch, BlockLoader.DenseVectorBuilder builder) {
+            builder.appendDenseVector(scratch.clone());
         }
 
         @Override
@@ -1138,10 +1130,12 @@ public abstract class BlockDocValuesReader implements BlockLoader.AllReader {
             return "ByteDenseVectorFromBinary.Bytes";
         }
 
-        protected void writeScratchToBuilder(byte[] scratch, BlockLoader.FloatBuilder builder) {
-            for (byte value : scratch) {
-                builder.appendFloat(value);
+        protected void writeScratchToBuilder(byte[] scratch, BlockLoader.DenseVectorBuilder builder) {
+            float[] vector = new float[scratch.length];
+            for (int i = 0; i < scratch.length; i++) {
+                vector[i] = scratch[i];
             }
+            builder.appendDenseVector(vector);
         }
 
         protected void decodeDenseVector(BytesRef bytesRef, byte[] scratch) {

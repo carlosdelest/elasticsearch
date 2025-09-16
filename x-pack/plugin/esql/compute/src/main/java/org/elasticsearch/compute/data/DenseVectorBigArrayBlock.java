@@ -7,6 +7,8 @@
 
 package org.elasticsearch.compute.data;
 
+import com.unboundid.ldif.LDIFModify;
+
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
@@ -21,6 +23,7 @@ public final class DenseVectorBigArrayBlock extends AbstractArrayBlock implement
 
     private static final long BASE_RAM_BYTES_USED = 0; // TODO: fix this
     private final DenseVectorBigArrayVector vector;
+    private final int dimensions;
 
     public DenseVectorBigArrayBlock(
         FloatArray values,
@@ -39,6 +42,7 @@ public final class DenseVectorBigArrayBlock extends AbstractArrayBlock implement
                 blockFactory
             ),
             positionCount,
+            dimensions,
             firstValueIndexes,
             nulls,
             mvOrdering
@@ -48,6 +52,7 @@ public final class DenseVectorBigArrayBlock extends AbstractArrayBlock implement
     private DenseVectorBigArrayBlock(
         DenseVectorBigArrayVector vector, // stylecheck
         int positionCount,
+        int dimensions,
         int[] firstValueIndexes,
         BitSet nulls,
         MvOrdering mvOrdering
@@ -57,6 +62,7 @@ public final class DenseVectorBigArrayBlock extends AbstractArrayBlock implement
         assert firstValueIndexes == null
             ? vector.getPositionCount() == getPositionCount()
             : firstValueIndexes[getPositionCount()] == vector.getPositionCount();
+        this.dimensions = dimensions;
     }
 
     static DenseVectorBigArrayBlock readArrayBlock(BlockFactory blockFactory, BlockStreamInput in) throws IOException {
@@ -66,7 +72,14 @@ public final class DenseVectorBigArrayBlock extends AbstractArrayBlock implement
         boolean success = false;
         try {
             vector = DenseVectorBigArrayVector.readArrayVector(sub.vectorPositions(), dimensions, in, blockFactory);
-            var block = new DenseVectorBigArrayBlock(vector, sub.positionCount, sub.firstValueIndexes, sub.nullsMask, sub.mvOrdering);
+            var block = new DenseVectorBigArrayBlock(
+                vector,
+                sub.positionCount,
+                dimensions,
+                sub.firstValueIndexes,
+                sub.nullsMask,
+                sub.mvOrdering
+            );
             blockFactory.adjustBreaker(block.ramBytesUsed() - vector.ramBytesUsed() - sub.bytesReserved);
             success = true;
             return block;
@@ -95,8 +108,13 @@ public final class DenseVectorBigArrayBlock extends AbstractArrayBlock implement
     }
 
     @Override
+    public int dimensions() {
+        return dimensions;
+    }
+
+    @Override
     public DenseVectorBlock filter(int... positions) {
-        try (var builder = blockFactory().newDenseVectorBlockBuilder(positions.length)) {
+        try (var builder = blockFactory().newDenseVectorBlockBuilder(positions.length, dimensions)) {
             for (int pos : positions) {
                 if (isNull(pos)) {
                     builder.appendNull();
@@ -131,7 +149,7 @@ public final class DenseVectorBigArrayBlock extends AbstractArrayBlock implement
             }
             return (DenseVectorBlock) blockFactory().newConstantNullBlock(getPositionCount());
         }
-        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount())) {
+        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount(), dimensions)) {
             // TODO if X-ArrayBlock used BooleanVector for it's null mask then we could shuffle references here.
             for (int p = 0; p < getPositionCount(); p++) {
                 if (false == mask.getBoolean(p)) {
@@ -188,6 +206,7 @@ public final class DenseVectorBigArrayBlock extends AbstractArrayBlock implement
         DenseVectorBigArrayBlock expanded = new DenseVectorBigArrayBlock(
             vector,
             expandedPositionCount,
+            dimensions,
             null,
             shiftNullsToExpandedPositions(),
             MvOrdering.DEDUPLICATED_AND_SORTED_ASCENDING

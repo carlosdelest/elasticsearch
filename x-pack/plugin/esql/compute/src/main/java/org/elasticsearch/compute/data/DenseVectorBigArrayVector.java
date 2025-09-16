@@ -115,7 +115,7 @@ public final class DenseVectorBigArrayVector extends AbstractVector implements D
             }
             return (DenseVectorBlock) blockFactory().newConstantNullBlock(getPositionCount());
         }
-        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount())) {
+        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount(), dimensions())) {
             // TODO if X-ArrayBlock used BooleanVector for it's null mask then we could shuffle references here.
             for (int p = 0; p < getPositionCount(); p++) {
                 if (mask.getBoolean(p)) {

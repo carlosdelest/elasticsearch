@@ -15,6 +15,7 @@ import org.elasticsearch.compute.data.AggregateMetricDoubleBlock;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BooleanBlock;
 import org.elasticsearch.compute.data.BytesRefBlock;
+import org.elasticsearch.compute.data.DenseVectorBlock;
 import org.elasticsearch.compute.data.DoubleBlock;
 import org.elasticsearch.compute.data.FloatBlock;
 import org.elasticsearch.compute.data.IntBlock;
@@ -28,8 +29,11 @@ import org.elasticsearch.xpack.esql.core.type.DataType;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.elasticsearch.xpack.esql.core.util.NumericUtils.unsignedLongAsNumber;
 import static org.elasticsearch.xpack.esql.type.EsqlDataTypeConverter.aggregateMetricDoubleBlockToString;
@@ -150,7 +154,14 @@ public final class ResponseValueUtils {
                     throw new UncheckedIOException(e);
                 }
             }
-            case DENSE_VECTOR -> ((FloatBlock) block).getFloat(offset);
+            case DENSE_VECTOR -> {
+                float[] denseVector = ((DenseVectorBlock) block).getDenseVector(offset);
+                if (denseVector == null) {
+                    yield null;
+                } else {
+                    yield IntStream.range(0, denseVector.length).mapToObj(i -> denseVector[i]).collect(Collectors.toList());
+                }
+            }
             case SHORT, BYTE, FLOAT, HALF_FLOAT, SCALED_FLOAT, OBJECT, DATE_PERIOD, TIME_DURATION, DOC_DATA_TYPE, TSID_DATA_TYPE, NULL,
                 PARTIAL_AGG -> throw EsqlIllegalArgumentException.illegalDataType(dataType);
         };

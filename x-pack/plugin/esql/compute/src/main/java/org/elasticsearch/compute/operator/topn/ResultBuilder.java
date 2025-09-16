@@ -63,6 +63,7 @@ interface ResultBuilder extends Releasable {
             case NULL -> new ResultBuilderForNull(blockFactory);
             case DOC -> new ResultBuilderForDoc(blockFactory, positions);
             case AGGREGATE_METRIC_DOUBLE -> new ResultBuilderForAggregateMetricDouble(blockFactory, positions);
+            case DENSE_VECTOR -> new ResultBuilderForDenseVector(blockFactory, encoder, inKey, positions);
             default -> {
                 assert false : "Result builder for [" + elementType + "]";
                 throw new UnsupportedOperationException("Result builder for [" + elementType + "]");

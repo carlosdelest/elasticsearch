@@ -492,15 +492,8 @@ public class BlockFactory {
         return new DenseVectorBlockBuilder(estimatedSize, this);
     }
 
-    public final DenseVectorBlock newDenseVectorArrayBlock(
-        float[][] values,
-        int dimensions,
-        int positionCount,
-        int[] firstValueIndexes,
-        BitSet nulls,
-        MvOrdering mvOrdering
-    ) {
-        return newDenseVectorArrayBlock(values, dimensions, positionCount, firstValueIndexes, nulls, mvOrdering, 0L);
+    public DenseVectorBlock.Builder newDenseVectorBlockBuilder(int estimatedSize, int dimensions) {
+        return new DenseVectorBlockBuilder(estimatedSize, this);
     }
 
     public DenseVectorBlock newDenseVectorArrayBlock(
@@ -512,20 +505,20 @@ public class BlockFactory {
         MvOrdering mvOrdering,
         long preAdjustedBytes
     ) {
-        var b = new DenseVectorArrayBlock(values, pc, fvi, nulls, mvOrdering, this);
+        var b = new DenseVectorArrayBlock(values, pc, dimensions, fvi, nulls, mvOrdering, this);
         adjustBreaker(b.ramBytesUsed() - preAdjustedBytes);
         return b;
     }
 
     public DenseVectorVector.Builder newDenseVectorVectorBuilder(int estimatedSize, int dimensions) {
-        return new DenseVectorVectorBuilder(dimensions, estimatedSize, this);
+        return new DenseVectorVectorBuilder(estimatedSize, dimensions, this);
     }
 
     /**
      * Build a {@link DenseVectorVector.FixedBuilder} that never grows.
      */
     public DenseVectorVector.FixedBuilder newDenseVectorVectorFixedBuilder(int dimensions, int size) {
-        return new DenseVectorVectorFixedBuilder(dimensions, size, this);
+        return new DenseVectorVectorFixedBuilder(size, dimensions, this);
     }
 
     /**
@@ -539,8 +532,8 @@ public class BlockFactory {
      * }
      * var vector = blockFactory.newDenseVectorArrayVector(values, positionCount, preAdjustedBytes);
      */
-    public DenseVectorVector newDenseVectorArrayVector(float[][] values, int positionCount, long preAdjustedBytes) {
-        var b = new DenseVectorArrayVector(values, positionCount, this);
+    public DenseVectorVector newDenseVectorArrayVector(float[][] values, int positionCount, int dimensions, long preAdjustedBytes) {
+        var b = new DenseVectorArrayVector(values, positionCount, dimensions,this);
         adjustBreaker(b.ramBytesUsed() - preAdjustedBytes);
         return b;
     }
@@ -556,9 +549,8 @@ public class BlockFactory {
     }
 
     public DenseVectorVector newConstantDenseVectorVector(float[] value, int positions) {
-        adjustBreaker(ConstantDenseVectorVector.RAM_BYTES_USED);
         var v = new ConstantDenseVectorVector(value, positions, this);
-        assert v.ramBytesUsed() == ConstantDenseVectorVector.RAM_BYTES_USED;
+        adjustBreaker(v.ramBytesUsed());
         return v;
     }
 }

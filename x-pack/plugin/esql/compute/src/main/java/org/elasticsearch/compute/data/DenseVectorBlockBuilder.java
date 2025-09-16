@@ -24,6 +24,13 @@ import java.util.Arrays;
 final class DenseVectorBlockBuilder extends AbstractBlockBuilder implements DenseVectorBlock.Builder {
 
     private float[][] values;
+    private int dimensions;
+
+
+    DenseVectorBlockBuilder(int estimatedSize, BlockFactory blockFactory, int dimensions) {
+        this(estimatedSize, blockFactory);
+        this.dimensions = dimensions;
+    }
 
     DenseVectorBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
         super(blockFactory);
@@ -34,6 +41,7 @@ final class DenseVectorBlockBuilder extends AbstractBlockBuilder implements Dens
 
     @Override
     public DenseVectorBlockBuilder appendDenseVector(float[] value) {
+        checkDimensions(value);
         ensureCapacity();
         values[valueCount] = value;
         hasNonNullValue = true;
@@ -42,9 +50,18 @@ final class DenseVectorBlockBuilder extends AbstractBlockBuilder implements Dens
         return this;
     }
 
+    private void checkDimensions(float[] value) {
+        assert dimensions == 0 || value.length == dimensions : "expected ["
+            + dimensions
+            + "] but was ["
+            + value.length
+            + "]";
+        dimensions = value.length;
+    }
+
     @Override
     protected int elementSize() {
-        return Float.BYTES * 3096;
+        return Float.BYTES * dimensions == 0 ? 3096 : dimensions;
     }
 
     @Override
@@ -65,14 +82,12 @@ final class DenseVectorBlockBuilder extends AbstractBlockBuilder implements Dens
 
     @Override
     public DenseVectorBlockBuilder beginPositionEntry() {
-        super.beginPositionEntry();
-        return this;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public DenseVectorBlockBuilder endPositionEntry() {
-        super.endPositionEntry();
-        return this;
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -158,15 +173,18 @@ final class DenseVectorBlockBuilder extends AbstractBlockBuilder implements Dens
 
     private DenseVectorBlock buildBigArraysBlock() {
         final DenseVectorBlock theBlock;
+        int dimensions = valueCount == 0 || values[0] == null ? 0 : values[0].length;
+        final FloatArray array = blockFactory.bigArrays().newFloatArray((long) valueCount * dimensions, false);
 
-        final FloatArray array = blockFactory.bigArrays().newFloatArray(valueCount, false);
-
+        int pos = 0;
         for (int i = 0; i < valueCount; i++) {
+            if (values[i] == null) {
+                continue;
+            }
             for (int j = 0; j < values[i].length; j++) {
-                array.set((long) i * values[i].length + j, values[i][j]);
+                array.set(pos++, values[i][j]);
             }
         }
-        int dimensions = valueCount == 0 || values[0] == null ? 0 : values[0].length;
         if (isDense() && singleValued()) {
             theBlock = new DenseVectorBigArrayVector(array, positionCount, dimensions, blockFactory).asBlock();
         } else {
@@ -197,14 +215,14 @@ final class DenseVectorBlockBuilder extends AbstractBlockBuilder implements Dens
         try {
             finish();
             DenseVectorBlock theBlock;
+            int dimensions = valueCount == 0 || values[0] == null ? 0 : values[0].length;
             if (hasNonNullValue && positionCount == 1 && valueCount == 1) {
                 theBlock = blockFactory.newConstantDenseVectorBlockWith(values[0], 1, estimatedBytes);
             } else if (estimatedBytes > blockFactory.maxPrimitiveArrayBytes()) {
                 theBlock = buildBigArraysBlock();
             } else if (isDense() && singleValued()) {
-                theBlock = blockFactory.newDenseVectorArrayVector(values, positionCount, estimatedBytes).asBlock();
+                theBlock = blockFactory.newDenseVectorArrayVector(values, positionCount, dimensions, estimatedBytes).asBlock();
             } else {
-                int dimensions = valueCount == 0 || values[0] == null ? 0 : values[0].length;
                 theBlock = blockFactory.newDenseVectorArrayBlock(
                     values, // stylecheck
                     dimensions,

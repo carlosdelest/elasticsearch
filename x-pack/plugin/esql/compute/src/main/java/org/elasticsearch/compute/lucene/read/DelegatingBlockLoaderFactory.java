@@ -79,8 +79,8 @@ public abstract class DelegatingBlockLoaderFactory implements BlockLoader.BlockF
     }
 
     @Override
-    public BlockLoader.FloatBuilder denseVectors(int expectedVectorsCount, int dimensions) {
-        return factory.newFloatBlockBuilder(expectedVectorsCount * dimensions);
+    public BlockLoader.DenseVectorBuilder denseVectors(int expectedVectorsCount, int dimensions) {
+        return factory.newDenseVectorBlockBuilder(expectedVectorsCount, dimensions);
     }
 
     @Override

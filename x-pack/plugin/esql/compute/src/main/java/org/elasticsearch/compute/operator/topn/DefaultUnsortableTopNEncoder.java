@@ -193,6 +193,28 @@ public final class DefaultUnsortableTopNEncoder implements TopNEncoder {
     }
 
     @Override
+    public void encodeDenseVector(float[] value, BreakingBytesRefBuilder bytesRefBuilder) {
+        encodeInt(value.length, bytesRefBuilder);
+        for (float v : value) {
+            encodeFloat(v, bytesRefBuilder);
+        }
+    }
+
+    @Override
+    public float[] decodeDenseVector(BytesRef bytes, float[] scratch) {
+        int dimensions = decodeInt(bytes);
+        if (scratch == null) {
+            scratch = new float[dimensions];
+        } else {
+            assert scratch.length == dimensions : "expected [" + dimensions + "] but was [" + scratch.length + "]";
+        }
+        for (int i = 0; i < dimensions; i++) {
+            scratch[i] = decodeFloat(bytes);
+        }
+        return scratch;
+    }
+
+    @Override
     public TopNEncoder toSortable() {
         return TopNEncoder.DEFAULT_SORTABLE;
     }

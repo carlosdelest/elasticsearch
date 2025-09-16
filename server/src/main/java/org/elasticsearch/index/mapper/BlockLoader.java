@@ -410,7 +410,7 @@ public interface BlockLoader {
         /**
          * Build a builder to load dense vectors without any loading constraints.
          */
-        FloatBuilder denseVectors(int expectedVectorsCount, int dimensions);
+        DenseVectorBuilder denseVectors(int expectedVectorsCount, int dimensions);
 
         /**
          * Build a builder to load ints as loaded from doc values.

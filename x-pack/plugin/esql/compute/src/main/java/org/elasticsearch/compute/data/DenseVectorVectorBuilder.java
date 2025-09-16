@@ -16,16 +16,23 @@ import java.util.Arrays;
 final class DenseVectorVectorBuilder extends AbstractVectorBuilder implements DenseVectorVector.Builder {
 
     private float[][] values;
+    private final int dimensions;
 
     DenseVectorVectorBuilder(int estimatedSize, int dimensions, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2) * dimensions;
         adjustBreaker(initialSize);
         values = new float[Math.max(estimatedSize, 2)][dimensions];
+        this.dimensions = dimensions;
     }
 
     @Override
     public DenseVectorVectorBuilder appendDenseVector(float[] value) {
+        assert value.length == dimensions : "expected ["
+            + dimensions
+            + "] but was ["
+            + value.length
+            + "]";
         ensureCapacity();
         values[valueCount] = value;
         valueCount++;
@@ -58,7 +65,7 @@ final class DenseVectorVectorBuilder extends AbstractVectorBuilder implements De
             if (values.length - valueCount > 1024 || valueCount < (values.length / 2)) {
                 values = Arrays.copyOf(values, valueCount);
             }
-            vector = blockFactory.newDenseVectorArrayVector(values, valueCount, estimatedBytes);
+            vector = blockFactory.newDenseVectorArrayVector(values, valueCount, dimensions, estimatedBytes);
         }
         built();
         return vector;

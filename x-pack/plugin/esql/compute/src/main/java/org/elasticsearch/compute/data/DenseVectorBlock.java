@@ -35,6 +35,8 @@ public sealed interface DenseVectorBlock extends Block permits ConstantNullBlock
      */
     float[] getDenseVector(int valueIndex);
 
+    int dimensions();
+
     @Override
     DenseVectorVector asVector();
 
@@ -47,7 +49,7 @@ public sealed interface DenseVectorBlock extends Block permits ConstantNullBlock
      */
     @Override
     default DenseVectorBlock deepCopy(BlockFactory blockFactory) {
-        try (Builder builder = blockFactory.newDenseVectorBlockBuilder(getPositionCount())) {
+        try (Builder builder = blockFactory.newDenseVectorBlockBuilder(getPositionCount(), asVector().dimensions())) {
             builder.copyFrom(this, 0, getPositionCount());
             builder.mvOrdering(mvOrdering());
             return builder.build();
@@ -79,7 +81,8 @@ public sealed interface DenseVectorBlock extends Block permits ConstantNullBlock
 
     private static DenseVectorBlock readValues(BlockStreamInput in) throws IOException {
         final int positions = in.readVInt();
-        try (Builder builder = in.blockFactory().newDenseVectorBlockBuilder(positions)) {
+        final int dimensions = in.readInt();
+        try (Builder builder = in.blockFactory().newDenseVectorBlockBuilder(positions, dimensions)) {
             for (int i = 0; i < positions; i++) {
                 if (in.readBoolean()) {
                     builder.appendNull();
@@ -99,6 +102,7 @@ public sealed interface DenseVectorBlock extends Block permits ConstantNullBlock
     @Override
     default void writeTo(StreamOutput out) throws IOException {
         DenseVectorVector vector = asVector();
+        // TODO Remove unnecessary serialization formats in 9.0.0
         final var version = out.getTransportVersion();
         if (vector != null) {
             out.writeByte(SERIALIZE_BLOCK_VECTOR);
@@ -118,17 +122,14 @@ public sealed interface DenseVectorBlock extends Block permits ConstantNullBlock
     private static void writeValues(DenseVectorBlock block, StreamOutput out) throws IOException {
         final int positions = block.getPositionCount();
         out.writeVInt(positions);
-        out.writeVInt(block.asVector().dimensions());
+        int dimensions = block.asVector().dimensions();
+        out.writeInt(dimensions);
         for (int pos = 0; pos < positions; pos++) {
             if (block.isNull(pos)) {
                 out.writeBoolean(true);
             } else {
                 out.writeBoolean(false);
-                final int valueCount = block.getValueCount(pos);
-                out.writeVInt(valueCount);
-                for (int valueIndex = 0; valueIndex < valueCount; valueIndex++) {
-                    out.writeFloatArray(block.getDenseVector(block.getFirstValueIndex(pos) + valueIndex));
-                }
+                out.writeFloatArray(block.getDenseVector(pos));
             }
         }
     }

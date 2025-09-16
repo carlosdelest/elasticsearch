@@ -41,7 +41,7 @@ public sealed interface DenseVectorVector extends Vector permits ConstantDenseVe
      */
     @Override
     default DenseVectorVector deepCopy(BlockFactory blockFactory) {
-        try (DenseVectorBlock.Builder builder = blockFactory.newDenseVectorBlockBuilder(getPositionCount())) {
+        try (DenseVectorBlock.Builder builder = blockFactory.newDenseVectorBlockBuilder(getPositionCount(), dimensions())) {
             builder.copyFrom(asBlock(), 0, getPositionCount());
             builder.mvOrdering(Block.MvOrdering.DEDUPLICATED_AND_SORTED_ASCENDING);
             return builder.build().asVector();

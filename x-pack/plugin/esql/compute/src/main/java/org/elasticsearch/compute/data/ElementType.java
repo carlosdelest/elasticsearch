@@ -65,7 +65,7 @@ public enum ElementType {
         BlockFactory::newAggregateMetricDoubleBlockBuilder,
         AggregateMetricDoubleArrayBlock::readFrom
     ),
-    DENSE_VECTOR(11, "DenseVector", BlockFactory::newAggregateMetricDoubleBlockBuilder, AggregateMetricDoubleArrayBlock::readFrom);
+    DENSE_VECTOR(11, "DenseVector", BlockFactory::newDenseVectorBlockBuilder, DenseVectorBlock::readFrom);
 
     private interface BuilderSupplier {
         Block.Builder newBlockBuilder(BlockFactory blockFactory, int estimatedSize);

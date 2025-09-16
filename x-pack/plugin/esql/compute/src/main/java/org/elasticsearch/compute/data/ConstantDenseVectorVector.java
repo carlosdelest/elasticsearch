@@ -19,8 +19,6 @@ import org.elasticsearch.core.ReleasableIterator;
  */
 final class ConstantDenseVectorVector extends AbstractVector implements DenseVectorVector {
 
-    static final long RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(ConstantDenseVectorVector.class);
-
     private final float[] value;
 
     ConstantDenseVectorVector(float[] value, int positionCount, BlockFactory blockFactory) {
@@ -56,7 +54,7 @@ final class ConstantDenseVectorVector extends AbstractVector implements DenseVec
             }
             return (DenseVectorBlock) blockFactory().newConstantNullBlock(getPositionCount());
         }
-        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount())) {
+        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount(), value.length)) {
             // TODO if X-ArrayBlock used BooleanVector for it's null mask then we could shuffle references here.
             for (int p = 0; p < getPositionCount(); p++) {
                 if (mask.getBoolean(p)) {
@@ -110,7 +108,7 @@ final class ConstantDenseVectorVector extends AbstractVector implements DenseVec
 
     @Override
     public long ramBytesUsed() {
-        return RAM_BYTES_USED;
+        return RamUsageEstimator.sizeOf(value);
     }
 
     @Override

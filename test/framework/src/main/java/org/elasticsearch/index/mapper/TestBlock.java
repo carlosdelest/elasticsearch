@@ -121,19 +121,12 @@ public class TestBlock implements BlockLoader.Block {
             }
 
             @Override
-            public BlockLoader.FloatBuilder denseVectors(int expectedCount, int dimensions) {
-                class FloatsBuilder extends TestBlock.Builder implements BlockLoader.FloatBuilder {
+            public BlockLoader.DenseVectorBuilder denseVectors(int expectedCount, int dimensions) {
+                class DenseBuilder extends TestBlock.Builder implements BlockLoader.DenseVectorBuilder {
                     int numElements = 0;
 
-                    private FloatsBuilder() {
+                    private DenseBuilder() {
                         super(expectedCount);
-                    }
-
-                    @Override
-                    public BlockLoader.FloatBuilder appendFloat(float value) {
-                        add(value);
-                        numElements++;
-                        return this;
                     }
 
                     @Override
@@ -143,9 +136,12 @@ public class TestBlock implements BlockLoader.Block {
 
                     @Override
                     public Builder endPositionEntry() {
-                        assert numElements == dimensions : "expected " + dimensions + " dimensions, but got " + numElements;
-                        numElements = 0;
-                        return super.endPositionEntry();
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public Builder beginPositionEntry() {
+                        throw new UnsupportedOperationException();
                     }
 
                     @Override
@@ -153,8 +149,15 @@ public class TestBlock implements BlockLoader.Block {
                         assert numElements == 0 : "endPositionEntry() was not called for the last entry";
                         return super.build();
                     }
+
+                    @Override
+                    public BlockLoader.DenseVectorBuilder appendDenseVector(float[] value) {
+                        add(value);
+                        numElements++;
+                        return this;
+                    }
                 }
-                return new FloatsBuilder();
+                return new DenseBuilder();
             }
 
             @Override

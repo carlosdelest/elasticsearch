@@ -17,6 +17,8 @@ import org.elasticsearch.core.ReleasableIterator;
 import java.io.IOException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import static org.apache.lucene.util.RamUsageEstimator.NUM_BYTES_ARRAY_HEADER;
 // end generated imports
 
 /**
@@ -34,23 +36,23 @@ final class DenseVectorArrayVector extends AbstractVector implements DenseVector
     private final float[][] values;
     private final int dimensions;
 
-    DenseVectorArrayVector(float[][] values, int positionCount, BlockFactory blockFactory) {
+    DenseVectorArrayVector(float[][] values, int positionCount, int dimensions, BlockFactory blockFactory) {
         super(positionCount, blockFactory);
-        this.dimensions = values.length > 0 ? values[0].length : 0;
+        this.dimensions = dimensions;
         this.values = values;
     }
 
     static DenseVectorArrayVector readArrayVector(int positions, int dimensions, StreamInput in, BlockFactory blockFactory)
         throws IOException {
-        final long preAdjustedBytes = RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + (long) positions * Float.BYTES * dimensions;
+        final long preAdjustedBytes = NUM_BYTES_ARRAY_HEADER + (long) positions * Float.BYTES * dimensions;
         blockFactory.adjustBreaker(preAdjustedBytes);
         boolean success = false;
         try {
             float[][] values = new float[positions][dimensions];
             for (int i = 0; i < positions; i++) {
-                values[i] = in.readFloatArray();
+                values[i] = in.readOptionalFloatArray();
             }
-            final var block = new DenseVectorArrayVector(values, positions, blockFactory);
+            final var block = new DenseVectorArrayVector(values, positions, dimensions, blockFactory);
             blockFactory.adjustBreaker(block.ramBytesUsed() - preAdjustedBytes);
             success = true;
             return block;
@@ -63,12 +65,12 @@ final class DenseVectorArrayVector extends AbstractVector implements DenseVector
 
     @Override
     public int dimensions() {
-        return values != null && values.length > 0 ? values[0].length : 0;
+        return dimensions;
     }
 
     void writeArrayVector(int positions, StreamOutput out) throws IOException {
         for (int i = 0; i < positions; i++) {
-            out.writeFloatArray(values[i]);
+            out.writeOptionalFloatArray(values[i]);
         }
     }
 
@@ -115,7 +117,7 @@ final class DenseVectorArrayVector extends AbstractVector implements DenseVector
             }
             return (DenseVectorBlock) blockFactory().newConstantNullBlock(getPositionCount());
         }
-        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount())) {
+        try (DenseVectorBlock.Builder builder = blockFactory().newDenseVectorBlockBuilder(getPositionCount(), dimensions())) {
             // TODO if X-ArrayBlock used BooleanVector for it's null mask then we could shuffle references here.
             for (int p = 0; p < getPositionCount(); p++) {
                 if (mask.getBoolean(p)) {
@@ -133,8 +135,8 @@ final class DenseVectorArrayVector extends AbstractVector implements DenseVector
         throw new UnsupportedOperationException();
     }
 
-    public static long ramBytesEstimated(float[][] values) {
-        return BASE_RAM_BYTES_USED + ((values != null && values.length > 0) ? RamUsageEstimator.sizeOf(values[0]) * values.length : 0);
+    private long ramBytesEstimated(float[][] values) {
+        return BASE_RAM_BYTES_USED + (NUM_BYTES_ARRAY_HEADER + (long) Float.BYTES * dimensions) * values.length;
     }
 
     @Override
