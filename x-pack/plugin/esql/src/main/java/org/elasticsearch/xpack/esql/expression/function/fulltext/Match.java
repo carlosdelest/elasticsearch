@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.esql.expression.function.fulltext;
 
 import org.apache.lucene.util.BytesRef;
+import org.elasticsearch.TransportVersion;
 import org.elasticsearch.TransportVersions;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -86,7 +87,7 @@ import static org.elasticsearch.xpack.esql.expression.predicate.operator.compari
 /**
  * Full text function that performs a {@link org.elasticsearch.xpack.esql.querydsl.query.MatchQuery} .
  */
-public class Match extends FullTextFunction implements OptionalArgument, PostAnalysisPlanVerificationAware {
+public class Match extends PrefilteredFullTextFunction implements OptionalArgument, PostAnalysisPlanVerificationAware {
 
     public static final NamedWriteableRegistry.Entry ENTRY = new NamedWriteableRegistry.Entry(Expression.class, "Match", Match::readFrom);
     public static final Set<DataType> FIELD_DATA_TYPES = Set.of(
@@ -114,6 +115,7 @@ public class Match extends FullTextFunction implements OptionalArgument, PostAna
         UNSIGNED_LONG,
         VERSION
     );
+    public static final TransportVersion MATCH_WITH_PREFILTERS = TransportVersion.fromName("match_with_prefilters");
 
     protected final Expression field;
 
@@ -262,11 +264,24 @@ public class Match extends FullTextFunction implements OptionalArgument, PostAna
             optional = true
         ) Expression options
     ) {
-        this(source, field, matchQuery, options, null);
+        this(source, field, matchQuery, options, null, List.of());
     }
 
-    public Match(Source source, Expression field, Expression matchQuery, Expression options, QueryBuilder queryBuilder) {
-        super(source, matchQuery, options == null ? List.of(field, matchQuery) : List.of(field, matchQuery, options), queryBuilder);
+    public Match(
+        Source source,
+        Expression field,
+        Expression matchQuery,
+        Expression options,
+        QueryBuilder queryBuilder,
+        List<Expression> prefilters
+    ) {
+        super(
+            source,
+            matchQuery,
+            options == null ? List.of(field, matchQuery) : List.of(field, matchQuery, options),
+            queryBuilder,
+            prefilters
+        );
         this.field = field;
         this.options = options;
     }
@@ -284,7 +299,11 @@ public class Match extends FullTextFunction implements OptionalArgument, PostAna
         if (in.getTransportVersion().onOrAfter(TransportVersions.ESQL_QUERY_BUILDER_IN_SEARCH_FUNCTIONS)) {
             queryBuilder = in.readOptionalNamedWriteable(QueryBuilder.class);
         }
-        return new Match(source, field, query, null, queryBuilder);
+        List <Expression> prefilters = List.of();
+        if (in.getTransportVersion().supports(MATCH_WITH_PREFILTERS)) {
+            prefilters = in.readNamedWriteableCollectionAsList(Expression.class);
+        }
+        return new Match(source, field, query, null, queryBuilder, prefilters);
     }
 
     // This is not meant to be overriden by MatchOperator - MatchOperator should be serialized to Match
@@ -377,7 +396,7 @@ public class Match extends FullTextFunction implements OptionalArgument, PostAna
 
     @Override
     protected NodeInfo<? extends Expression> info() {
-        return NodeInfo.create(this, Match::new, field(), query(), options(), queryBuilder());
+        return NodeInfo.create(this, Match::new, field(), query(), options(), queryBuilder(), prefilterExpressions());
     }
 
     @Override
@@ -387,13 +406,19 @@ public class Match extends FullTextFunction implements OptionalArgument, PostAna
             newChildren.get(0),
             newChildren.get(1),
             newChildren.size() > 2 ? newChildren.get(2) : null,
-            queryBuilder()
+            queryBuilder(),
+            prefilterExpressions()
         );
     }
 
     @Override
-    public Expression replaceQueryBuilder(QueryBuilder queryBuilder) {
-        return new Match(source(), field, query(), options(), queryBuilder);
+    public Expression withPrefilters(List<Expression> filterExpressions) {
+        return new Match(source(), field(), query(), options(), queryBuilder(), filterExpressions);
+    }
+
+    @Override
+    protected Expression replaceFilteredQueryBuilder(QueryBuilder queryBuilder) {
+        return new Match(source(), field, query(), options(), queryBuilder, prefilterExpressions());
     }
 
     @Override

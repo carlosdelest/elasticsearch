@@ -7,25 +7,16 @@
 
 package org.elasticsearch.xpack.esql.capabilities;
 
-import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
+
+import java.io.IOException;
 
 /**
  * Defines objects that need to go through the rewrite phase.
  */
 public interface RewriteableAware extends TranslationAware {
 
-    /**
-     * @return The current active query builder.
-     */
-    QueryBuilder queryBuilder();
-
-    /**
-     * Replaces the current query builder with a rewritten iteration. This happens multiple times through the rewrite phase until
-     * the final iteration of the query builder is stored.
-     * @param queryBuilder QueryBuilder
-     * @return Expression defining the active QueryBuilder
-     */
-    Expression replaceQueryBuilder(QueryBuilder queryBuilder);
+    Expression rewrite(QueryRewriteContext ctx) throws IOException;
 
 }

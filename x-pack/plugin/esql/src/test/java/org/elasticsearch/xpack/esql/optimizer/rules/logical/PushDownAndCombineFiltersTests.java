@@ -295,7 +295,8 @@ public class PushDownAndCombineFiltersTests extends AbstractLogicalPlanOptimizer
             completion.targetField(),
             randomLiteral(DataType.TEXT),
             mock(Expression.class),
-            mock(QueryBuilder.class)
+            mock(QueryBuilder.class),
+            List.of()
         );
         Filter filterB = new Filter(EMPTY, completion, new And(EMPTY, conditionB, conditionCompletion));
 

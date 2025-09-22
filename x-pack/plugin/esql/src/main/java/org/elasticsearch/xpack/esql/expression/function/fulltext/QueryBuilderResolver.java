@@ -17,10 +17,8 @@ import org.elasticsearch.transport.RemoteClusterAware;
 import org.elasticsearch.xpack.esql.capabilities.RewriteableAware;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.util.Holder;
-import org.elasticsearch.xpack.esql.optimizer.rules.physical.local.LucenePushdownPredicates;
 import org.elasticsearch.xpack.esql.plan.logical.EsRelation;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
-import org.elasticsearch.xpack.esql.planner.TranslatorHandler;
 import org.elasticsearch.xpack.esql.plugin.TransportActionServices;
 import org.elasticsearch.xpack.esql.session.IndexResolver;
 
@@ -97,18 +95,15 @@ public final class QueryBuilderResolver {
             LogicalPlan newPlan = plan.transformExpressionsDown(Expression.class, expr -> {
                 Expression finalExpression = expr;
                 if (expr instanceof RewriteableAware rewriteableAware) {
-                    QueryBuilder builder = rewriteableAware.queryBuilder(), initial = builder;
-                    builder = builder == null
-                        ? rewriteableAware.asQuery(LucenePushdownPredicates.DEFAULT, TranslatorHandler.TRANSLATOR_HANDLER).toQueryBuilder()
-                        : builder;
+                    Expression initial = expr;
                     try {
-                        builder = builder.rewrite(ctx);
+                        finalExpression = rewriteableAware.rewrite(ctx);
+                        if (finalExpression != initial) {
+                            updated.set(true);
+                        }
                     } catch (IOException e) {
                         exceptionHolder.setIfAbsent(e);
                     }
-                    var rewritten = builder != initial;
-                    updated.set(updated.get() || rewritten);
-                    finalExpression = rewritten ? rewriteableAware.replaceQueryBuilder(builder) : finalExpression;
                 }
                 return finalExpression;
             });

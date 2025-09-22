@@ -58,11 +58,17 @@ public class MatchOperator extends Match {
             description = "Value to find in the provided field."
         ) Expression matchQuery
     ) {
-        super(source, field, matchQuery, null, null);
+        super(source, field, matchQuery, null, null, List.of());
     }
 
-    private MatchOperator(Source source, Expression field, Expression matchQuery, QueryBuilder queryBuilder) {
-        super(source, field, matchQuery, null, queryBuilder);
+    private MatchOperator(
+        Source source,
+        Expression field,
+        Expression matchQuery,
+        QueryBuilder queryBuilder,
+        List<Expression> prefilterExpressions
+    ) {
+        super(source, field, matchQuery, null, queryBuilder, prefilterExpressions);
     }
 
     @Override
@@ -82,11 +88,11 @@ public class MatchOperator extends Match {
 
     @Override
     public Expression replaceChildren(List<Expression> newChildren) {
-        return new MatchOperator(source(), newChildren.get(0), newChildren.get(1), queryBuilder());
+        return new MatchOperator(source(), newChildren.get(0), newChildren.get(1), queryBuilder(), prefilterExpressions());
     }
 
     @Override
-    public Expression replaceQueryBuilder(QueryBuilder queryBuilder) {
-        return new MatchOperator(source(), field, query(), queryBuilder);
+    public Expression replaceFilteredQueryBuilder(QueryBuilder queryBuilder) {
+        return new MatchOperator(source(), field, query(), queryBuilder, prefilterExpressions());
     }
 }

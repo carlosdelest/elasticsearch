@@ -12,6 +12,7 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.vectors.ExactKnnQueryBuilder;
+import org.elasticsearch.search.vectors.FilteredQueryBuilder;
 import org.elasticsearch.search.vectors.VectorData;
 import org.elasticsearch.xpack.esql.EsqlIllegalArgumentException;
 import org.elasticsearch.xpack.esql.capabilities.PostAnalysisPlanVerificationAware;
@@ -39,6 +40,7 @@ import org.elasticsearch.xpack.esql.expression.function.Options;
 import org.elasticsearch.xpack.esql.expression.function.Param;
 import org.elasticsearch.xpack.esql.expression.function.fulltext.FullTextFunction;
 import org.elasticsearch.xpack.esql.expression.function.fulltext.Match;
+import org.elasticsearch.xpack.esql.expression.function.fulltext.PrefilteredFullTextFunction;
 import org.elasticsearch.xpack.esql.io.stream.PlanStreamInput;
 import org.elasticsearch.xpack.esql.optimizer.rules.physical.local.LucenePushdownPredicates;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
@@ -70,7 +72,7 @@ import static org.elasticsearch.xpack.esql.core.type.DataType.TEXT;
 import static org.elasticsearch.xpack.esql.expression.Foldables.TypeResolutionValidator.forPreOptimizationValidation;
 import static org.elasticsearch.xpack.esql.expression.Foldables.resolveTypeQuery;
 
-public class Knn extends FullTextFunction
+public class Knn extends PrefilteredFullTextFunction
     implements
         OptionalArgument,
         VectorFunction,
@@ -85,8 +87,6 @@ public class Knn extends FullTextFunction
     // k is not serialized as it's already included in the query builder on the rewrite step before being sent to data nodes
     private final transient Integer k;
     private final Expression options;
-    // Expressions to be used as prefilters in knn query
-    private final List<Expression> filterExpressions;
 
     public static final String MIN_CANDIDATES_OPTION = "min_candidates";
 
@@ -169,11 +169,10 @@ public class Knn extends FullTextFunction
         QueryBuilder queryBuilder,
         List<Expression> filterExpressions
     ) {
-        super(source, query, expressionList(field, query, options), queryBuilder);
+        super(source, query, expressionList(field, query, options), queryBuilder, filterExpressions);
         this.field = field;
         this.k = k;
         this.options = options;
-        this.filterExpressions = filterExpressions;
     }
 
     private static List<Expression> expressionList(Expression field, Expression query, Expression options) {
@@ -196,10 +195,6 @@ public class Knn extends FullTextFunction
 
     public Expression options() {
         return options;
-    }
-
-    public List<Expression> filterExpressions() {
-        return filterExpressions;
     }
 
     @Override
@@ -236,7 +231,7 @@ public class Knn extends FullTextFunction
 
     public Knn replaceK(Integer k) {
         Check.notNull(k, "k must not be null");
-        return new Knn(source(), field(), query(), options(), k, queryBuilder(), filterExpressions());
+        return new Knn(source(), field(), query(), options(), k, queryBuilder(), prefilterExpressions());
     }
 
     public List<Number> queryAsObject() {
@@ -251,15 +246,33 @@ public class Knn extends FullTextFunction
     }
 
     @Override
-    public Expression replaceQueryBuilder(QueryBuilder queryBuilder) {
-        return new Knn(source(), field(), query(), options(), k(), queryBuilder, filterExpressions());
+    protected Expression replaceFilteredQueryBuilder(QueryBuilder queryBuilder) {
+        return new Knn(source(), field(), query(), options(), k(), queryBuilder, prefilterExpressions());
+    }
+
+    private List<QueryBuilder> prefilterQueryBuilders() {
+        List<QueryBuilder> filterQueries = new ArrayList<>();
+        for (Expression filterExpression : prefilterExpressions()) {
+            if (filterExpression instanceof TranslationAware translationAware) {
+                // We can only translate filter expressions that are translatable. In case any is not translatable,
+                // Knn won't be pushed down so it's safe not to translate all filters and check them when creating an evaluator
+                // for the non-pushed down query
+                if (translationAware.translatable(LucenePushdownPredicates.DEFAULT) == Translatable.YES) {
+                    filterQueries.add(
+                        TranslatorHandler.TRANSLATOR_HANDLER.asQuery(LucenePushdownPredicates.DEFAULT, filterExpression).toQueryBuilder()
+                    );
+                }
+            }
+        }
+
+        return filterQueries;
     }
 
     @Override
     public Translatable translatable(LucenePushdownPredicates pushdownPredicates) {
         Translatable translatable = super.translatable(pushdownPredicates);
         // We need to check whether filter expressions are translatable as well
-        for (Expression filterExpression : filterExpressions()) {
+        for (Expression filterExpression : prefilterExpressions()) {
             translatable = translatable.merge(TranslationAware.translatable(filterExpression, pushdownPredicates));
         }
 
@@ -275,20 +288,10 @@ public class Knn extends FullTextFunction
         String fieldName = getNameFromFieldAttribute(fieldAttribute);
         float[] queryAsFloats = queryAsFloats();
 
-        List<QueryBuilder> filterQueries = new ArrayList<>();
-        for (Expression filterExpression : filterExpressions()) {
-            if (filterExpression instanceof TranslationAware translationAware) {
-                // We can only translate filter expressions that are translatable. In case any is not translatable,
-                // Knn won't be pushed down so it's safe not to translate all filters and check them when creating an evaluator
-                // for the non-pushed down query
-                if (translationAware.translatable(pushdownPredicates) == Translatable.YES) {
-                    filterQueries.add(handler.asQuery(pushdownPredicates, filterExpression).toQueryBuilder());
-                }
-            }
-        }
-
-        return new KnnQuery(source(), fieldName, queryAsFloats, k(), queryOptions(), filterQueries);
+        return new KnnQuery(source(), fieldName, queryAsFloats, k(), queryOptions());
     }
+
+
 
     private float[] queryAsFloats() {
         List<Number> queryFolded = queryAsObject();
@@ -299,7 +302,7 @@ public class Knn extends FullTextFunction
         return queryAsFloats;
     }
 
-    public Expression withFilters(List<Expression> filterExpressions) {
+    public Knn withPrefilters(List<Expression> filterExpressions) {
         return new Knn(source(), field(), query(), options(), k(), queryBuilder(), filterExpressions);
     }
 
@@ -349,13 +352,13 @@ public class Knn extends FullTextFunction
             newChildren.size() > 2 ? newChildren.get(2) : null,
             k(),
             queryBuilder(),
-            filterExpressions()
+            prefilterExpressions()
         );
     }
 
     @Override
     protected NodeInfo<? extends Expression> info() {
-        return NodeInfo.create(this, Knn::new, field(), query(), options(), k(), queryBuilder(), filterExpressions());
+        return NodeInfo.create(this, Knn::new, field(), query(), options(), k(), queryBuilder(), prefilterExpressions());
     }
 
     @Override
@@ -378,7 +381,7 @@ public class Knn extends FullTextFunction
         out.writeNamedWriteable(field());
         out.writeNamedWriteable(query());
         out.writeOptionalNamedWriteable(queryBuilder());
-        out.writeNamedWriteableCollection(filterExpressions());
+        out.writeNamedWriteableCollection(prefilterExpressions());
     }
 
     @Override
@@ -391,12 +394,12 @@ public class Knn extends FullTextFunction
             && Objects.equals(query(), knn.query())
             && Objects.equals(queryBuilder(), knn.queryBuilder())
             && Objects.equals(k(), knn.k())
-            && Objects.equals(filterExpressions(), knn.filterExpressions());
+            && Objects.equals(prefilterExpressions(), knn.prefilterExpressions());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(field(), query(), queryBuilder(), k(), filterExpressions());
+        return Objects.hash(field(), query(), queryBuilder(), k(), prefilterExpressions());
     }
 
 }

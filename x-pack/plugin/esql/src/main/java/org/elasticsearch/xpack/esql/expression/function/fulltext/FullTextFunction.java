@@ -14,6 +14,7 @@ import org.elasticsearch.compute.operator.EvalOperator;
 import org.elasticsearch.compute.operator.ScoreOperator;
 import org.elasticsearch.index.IndexMode;
 import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.xpack.esql.action.EsqlCapabilities;
 import org.elasticsearch.xpack.esql.capabilities.PostAnalysisPlanVerificationAware;
 import org.elasticsearch.xpack.esql.capabilities.PostOptimizationVerificationAware;
@@ -46,6 +47,7 @@ import org.elasticsearch.xpack.esql.planner.TranslatorHandler;
 import org.elasticsearch.xpack.esql.querydsl.query.TranslationAwareExpressionQuery;
 import org.elasticsearch.xpack.esql.score.ExpressionScoreMapper;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -164,11 +166,6 @@ public abstract class FullTextFunction extends Function
     @Override
     public Query asQuery(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
         return queryBuilder != null ? new TranslationAwareExpressionQuery(source(), queryBuilder) : translate(pushdownPredicates, handler);
-    }
-
-    @Override
-    public QueryBuilder queryBuilder() {
-        return queryBuilder;
     }
 
     protected abstract Query translate(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler);
@@ -377,6 +374,24 @@ public abstract class FullTextFunction extends Function
             });
         }
     }
+
+    protected QueryBuilder queryBuilder() {
+        return queryBuilder;
+    }
+
+    public Expression rewrite(QueryRewriteContext ctx) throws IOException {
+        QueryBuilder builder = queryBuilder(), initial = builder;
+        builder = builder == null
+            ? asQuery(LucenePushdownPredicates.DEFAULT, TranslatorHandler.TRANSLATOR_HANDLER).toQueryBuilder()
+            : builder;
+            builder = builder.rewrite(ctx);
+        if (builder != initial) {
+            return replaceQueryBuilder(builder);
+        }
+        return this;
+    }
+
+    protected abstract Expression replaceQueryBuilder(QueryBuilder queryBuilder);
 
     @Override
     public EvalOperator.ExpressionEvaluator.Factory toEvaluator(ToEvaluator toEvaluator) {

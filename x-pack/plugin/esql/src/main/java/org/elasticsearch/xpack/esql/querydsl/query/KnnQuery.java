@@ -14,9 +14,7 @@ import org.elasticsearch.xpack.esql.core.querydsl.query.Query;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.expression.function.vector.Knn;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -28,12 +26,11 @@ public class KnnQuery extends Query {
     private final String field;
     private final float[] query;
     private final Map<String, Object> options;
-    private final List<QueryBuilder> filterQueries;
 
     public static final String RESCORE_OVERSAMPLE_FIELD = "rescore_oversample";
     private final Integer k;
 
-    public KnnQuery(Source source, String field, float[] query, Integer k, Map<String, Object> options, List<QueryBuilder> filterQueries) {
+    public KnnQuery(Source source, String field, float[] query, Integer k, Map<String, Object> options) {
         super(source);
         assert k != null && k > 0 : "k must be a positive integer, but was: " + k;
         this.k = k;
@@ -41,7 +38,6 @@ public class KnnQuery extends Query {
         this.field = field;
         this.query = query;
         this.options = options;
-        this.filterQueries = new ArrayList<>(filterQueries);
     }
 
     @Override
@@ -66,9 +62,6 @@ public class KnnQuery extends Query {
             rescoreVectorBuilder,
             vectorSimilarity
         );
-        for (QueryBuilder filter : filterQueries) {
-            queryBuilder.addFilterQuery(filter);
-        }
         Number boost = (Number) options.get(BOOST_FIELD.getPreferredName());
         if (boost != null) {
             queryBuilder.boost(boost.floatValue());
@@ -89,13 +82,12 @@ public class KnnQuery extends Query {
         KnnQuery knnQuery = (KnnQuery) o;
         return Objects.equals(field, knnQuery.field)
             && Objects.deepEquals(query, knnQuery.query)
-            && Objects.equals(options, knnQuery.options)
-            && Objects.equals(filterQueries, knnQuery.filterQueries);
+            && Objects.equals(options, knnQuery.options);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), field, Arrays.hashCode(query), options, filterQueries);
+        return Objects.hash(super.hashCode(), field, Arrays.hashCode(query), options);
     }
 
     @Override
@@ -106,9 +98,5 @@ public class KnnQuery extends Query {
     @Override
     public boolean containsPlan() {
         return false;
-    }
-
-    public List<QueryBuilder> filterQueries() {
-        return filterQueries;
     }
 }

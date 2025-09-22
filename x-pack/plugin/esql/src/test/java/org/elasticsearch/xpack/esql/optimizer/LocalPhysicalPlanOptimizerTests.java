@@ -2107,8 +2107,8 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         var filter = as(secondLimit.child(), FilterExec.class);
         var and = as(filter.condition(), And.class);
         var knn = as(and.left(), Knn.class);
-        assertEquals("(keyword == \"test\") or length(text) > 10", knn.filterExpressions().get(0).toString());
-        assertEquals("integer > 10", knn.filterExpressions().get(1).toString());
+        assertEquals("(keyword == \"test\") or length(text) > 10", knn.prefilterExpressions().get(0).toString());
+        assertEquals("integer > 10", knn.prefilterExpressions().get(1).toString());
 
         var fieldExtract = as(filter.child(), FieldExtractExec.class);
         var queryExec = as(fieldExtract.child(), EsQueryExec.class);

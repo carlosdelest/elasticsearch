@@ -8626,7 +8626,7 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         var filter = as(limit.child(), Filter.class);
         var and = as(filter.condition(), And.class);
         var knn = as(and.left(), Knn.class);
-        List<Expression> filterExpressions = knn.filterExpressions();
+        List<Expression> filterExpressions = knn.prefilterExpressions();
         assertThat(filterExpressions.size(), equalTo(1));
         var prefilter = as(filterExpressions.get(0), GreaterThan.class);
         assertThat(and.right(), equalTo(prefilter));
@@ -8651,7 +8651,7 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         var prefilterAnd = as(firstAnd.right(), And.class);
         as(prefilterAnd.left(), GreaterThan.class);
         as(prefilterAnd.right(), Equals.class);
-        List<Expression> filterExpressions = knn.filterExpressions();
+        List<Expression> filterExpressions = knn.prefilterExpressions();
         assertThat(filterExpressions.size(), equalTo(1));
         assertThat(prefilterAnd, equalTo(filterExpressions.get(0)));
     }
@@ -8669,7 +8669,7 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         var filter = as(limit.child(), Filter.class);
         var or = as(filter.condition(), Or.class);
         var knn = as(or.left(), Knn.class);
-        List<Expression> filterExpressions = knn.filterExpressions();
+        List<Expression> filterExpressions = knn.prefilterExpressions();
         assertThat(filterExpressions.size(), equalTo(0));
     }
 
@@ -8702,9 +8702,9 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         var rightOr = as(and.right(), Or.class);
         var leftOr = as(leftAnd.left(), Or.class);
         var knn = as(leftOr.left(), Knn.class);
-        var rightOrPrefilter = as(knn.filterExpressions().get(0), Or.class);
+        var rightOrPrefilter = as(knn.prefilterExpressions().get(0), Or.class);
         assertThat(rightOr, equalTo(rightOrPrefilter));
-        var leftAndPrefilter = as(knn.filterExpressions().get(1), Equals.class);
+        var leftAndPrefilter = as(knn.prefilterExpressions().get(1), Equals.class);
         assertThat(leftAnd.right(), equalTo(leftAndPrefilter));
     }
 
@@ -8736,7 +8736,7 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         var leftOr = as(or.left(), Or.class);
         var leftAnd = as(leftOr.left(), And.class);
         var knn = as(leftAnd.left(), Knn.class);
-        var rightAndPrefilter = as(knn.filterExpressions().get(0), GreaterThan.class);
+        var rightAndPrefilter = as(knn.prefilterExpressions().get(0), GreaterThan.class);
         assertThat(leftAnd.right(), equalTo(rightAndPrefilter));
     }
 
@@ -8773,12 +8773,12 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         var secondKnn = as(secondOr.right(), Knn.class);
 
         // First KNN should have the second OR as its filter
-        List<Expression> firstKnnFilters = firstKnn.filterExpressions();
+        List<Expression> firstKnnFilters = firstKnn.prefilterExpressions();
         assertThat(firstKnnFilters.size(), equalTo(1));
         assertTrue(firstKnnFilters.contains(secondOr.left()));
 
         // Second KNN should have the first OR as its filter
-        List<Expression> secondKnnFilters = secondKnn.filterExpressions();
+        List<Expression> secondKnnFilters = secondKnn.prefilterExpressions();
         assertThat(secondKnnFilters.size(), equalTo(1));
         assertTrue(secondKnnFilters.contains(firstOr.right()));
     }

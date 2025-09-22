@@ -13,7 +13,7 @@ import org.elasticsearch.index.query.QueryBuilder;
 
 import java.util.List;
 
-public interface FilteredQueryBuilder<T extends FilteredQueryBuilder> {
+public interface FilteredQueryBuilder<T extends FilteredQueryBuilder<?>> {
 
     T addFilterQueries(List<QueryBuilder> filterQueries);
 
