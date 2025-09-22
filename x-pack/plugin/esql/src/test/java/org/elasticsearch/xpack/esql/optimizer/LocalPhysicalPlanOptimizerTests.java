@@ -106,6 +106,7 @@ import org.elasticsearch.xpack.esql.stats.SearchContextStats;
 import org.elasticsearch.xpack.esql.stats.SearchStats;
 import org.elasticsearch.xpack.esql.telemetry.Metrics;
 import org.elasticsearch.xpack.esql.type.EsqlDataTypeConverter;
+import org.elasticsearch.xpack.inference.queries.SemanticQueryBuilder;
 import org.elasticsearch.xpack.kql.query.KqlQueryBuilder;
 import org.junit.Before;
 
@@ -1937,6 +1938,30 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             null
         ).addFilterQuery(expectedFilterQueryBuilder);
         var expectedQuery = boolQuery().must(expectedKnnQueryBuilder).must(expectedFilterQueryBuilder);
+        assertEquals(expectedQuery.toString(), queryExec.query().toString());
+    }
+
+    public void testMatchSemanticTextPrefilters() {
+        String query = """
+            from test
+            | where match(semantic_text, "hello world") and integer > 10
+            """;
+        var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
+
+        var limit = as(plan, LimitExec.class);
+        var exchange = as(limit.child(), ExchangeExec.class);
+        var project = as(exchange.child(), ProjectExec.class);
+        var field = as(project.child(), FieldExtractExec.class);
+        var queryExec = as(field.child(), EsQueryExec.class);
+        QueryBuilder expectedFilterQueryBuilder = wrapWithSingleQuery(
+            query,
+            unscore(rangeQuery("integer").gt(10)),
+            "integer",
+            new Source(2, 48, "integer > 10")
+        );
+        SemanticQueryBuilder expectedQueryBuilder = new SemanticQueryBuilder("semantic_text", "hello world")
+            .addFilterQueries(List.of(expectedFilterQueryBuilder));
+        var expectedQuery = boolQuery().must(expectedQueryBuilder).must(expectedFilterQueryBuilder);
         assertEquals(expectedQuery.toString(), queryExec.query().toString());
     }
 

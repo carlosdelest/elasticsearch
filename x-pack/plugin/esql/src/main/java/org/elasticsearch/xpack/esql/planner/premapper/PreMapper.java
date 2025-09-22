@@ -22,12 +22,16 @@ import java.util.concurrent.Executor;
  */
 public class PreMapper {
 
-    private final TransportActionServices services;
+    private final QueryBuilderResolver queryBuilderResolver;
     private final Executor searchExecutor;
 
     public PreMapper(TransportActionServices services) {
-        this.services = services;
-        this.searchExecutor = services.transportService().getThreadPool().executor(ThreadPool.Names.SEARCH);
+        this(new QueryBuilderResolver(services), services.transportService().getThreadPool().executor(ThreadPool.Names.SEARCH));
+    }
+
+    protected PreMapper(QueryBuilderResolver queryBuilderResolver, Executor searchExecutor) {
+        this.queryBuilderResolver = queryBuilderResolver;
+        this.searchExecutor = searchExecutor;
     }
 
     /**
@@ -43,7 +47,8 @@ public class PreMapper {
     private void queryRewrite(LogicalPlan plan, ActionListener<LogicalPlan> listener) {
         // see https://github.com/elastic/elasticsearch/issues/133312
         // ThreadedActionListener might be removed if above issue is resolved
-        SubscribableListener.<LogicalPlan>newForked(l -> QueryBuilderResolver.resolveQueryBuilders(plan, services, l))
+        SubscribableListener.<LogicalPlan>newForked(l -> queryBuilderResolver.resolveQueryBuilders(plan, l))
             .addListener(listener, searchExecutor, null);
     }
+
 }

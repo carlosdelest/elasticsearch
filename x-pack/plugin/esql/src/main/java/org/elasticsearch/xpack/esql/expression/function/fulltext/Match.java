@@ -413,7 +413,7 @@ public class Match extends PrefilteredFullTextFunction implements OptionalArgume
 
     @Override
     public Expression withPrefilters(List<Expression> filterExpressions) {
-        return new Match(source(), field(), query(), options(), queryBuilder(), filterExpressions);
+        return new Match(source(), field(), query(), options(), queryBuilder(), filterExpressions).replaceQueryBuilder(queryBuilder());
     }
 
     @Override

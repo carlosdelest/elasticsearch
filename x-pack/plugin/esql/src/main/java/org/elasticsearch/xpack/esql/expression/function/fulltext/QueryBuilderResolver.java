@@ -17,8 +17,10 @@ import org.elasticsearch.transport.RemoteClusterAware;
 import org.elasticsearch.xpack.esql.capabilities.RewriteableAware;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.util.Holder;
+import org.elasticsearch.xpack.esql.optimizer.rules.physical.local.LucenePushdownPredicates;
 import org.elasticsearch.xpack.esql.plan.logical.EsRelation;
 import org.elasticsearch.xpack.esql.plan.logical.LogicalPlan;
+import org.elasticsearch.xpack.esql.planner.TranslatorHandler;
 import org.elasticsearch.xpack.esql.plugin.TransportActionServices;
 import org.elasticsearch.xpack.esql.session.IndexResolver;
 
@@ -29,14 +31,18 @@ import java.util.Set;
 /**
  * Some {@link RewriteableAware} implementations such as {@link org.elasticsearch.xpack.esql.expression.function.fulltext.Match}
  * will be translated to a {@link QueryBuilder} that require a rewrite phase on the coordinator.
- * {@link QueryBuilderResolver#resolveQueryBuilders(LogicalPlan, TransportActionServices, ActionListener)} will rewrite the plan by
+ * {@link QueryBuilderResolver#resolveQueryBuilders(LogicalPlan, ActionListener)} will rewrite the plan by
  * replacing {@link RewriteableAware} expression with new ones that hold rewritten {@link QueryBuilder}s.
  */
-public final class QueryBuilderResolver {
+public class QueryBuilderResolver {
 
-    private QueryBuilderResolver() {}
+    private final TransportActionServices services;
 
-    public static void resolveQueryBuilders(LogicalPlan plan, TransportActionServices services, ActionListener<LogicalPlan> listener) {
+    public QueryBuilderResolver(TransportActionServices services) {
+        this.services = services;
+    }
+
+    public void resolveQueryBuilders(LogicalPlan plan, ActionListener<LogicalPlan> listener) {
         var hasRewriteableAwareFunctions = plan.anyMatch(p -> {
             Holder<Boolean> hasRewriteable = new Holder<>(false);
             p.forEachExpression(expr -> {
@@ -57,7 +63,7 @@ public final class QueryBuilderResolver {
         }
     }
 
-    private static QueryRewriteContext queryRewriteContext(TransportActionServices services, Set<String> indexNames) {
+    protected QueryRewriteContext queryRewriteContext(TransportActionServices services, Set<String> indexNames) {
         ClusterState clusterState = services.clusterService().state();
         ResolvedIndices resolvedIndices = ResolvedIndices.resolveWithIndexNamesAndOptions(
             indexNames.toArray(String[]::new),
@@ -87,7 +93,18 @@ public final class QueryBuilderResolver {
         return indexNames;
     }
 
-    private record FunctionsRewriteable(LogicalPlan plan) implements Rewriteable<FunctionsRewriteable> {
+    protected QueryBuilder rewriteQueryBuilder(QueryRewriteContext ctx, QueryBuilder builder) throws IOException {
+        return builder.rewrite(ctx);
+    }
+
+    private class FunctionsRewriteable implements Rewriteable<FunctionsRewriteable> {
+
+        private final LogicalPlan plan;
+
+        FunctionsRewriteable(LogicalPlan plan) {
+            this.plan = plan;
+        }
+
         @Override
         public FunctionsRewriteable rewrite(QueryRewriteContext ctx) throws IOException {
             Holder<IOException> exceptionHolder = new Holder<>();
@@ -95,15 +112,18 @@ public final class QueryBuilderResolver {
             LogicalPlan newPlan = plan.transformExpressionsDown(Expression.class, expr -> {
                 Expression finalExpression = expr;
                 if (expr instanceof RewriteableAware rewriteableAware) {
-                    Expression initial = expr;
+                    QueryBuilder builder = rewriteableAware.queryBuilder(), initial = builder;
+                    builder = builder == null
+                        ? rewriteableAware.asQuery(LucenePushdownPredicates.DEFAULT, TranslatorHandler.TRANSLATOR_HANDLER).toQueryBuilder()
+                        : builder;
                     try {
-                        finalExpression = rewriteableAware.rewrite(ctx);
-                        if (finalExpression != initial) {
-                            updated.set(true);
-                        }
+                        builder = rewriteQueryBuilder(ctx, builder);
                     } catch (IOException e) {
                         exceptionHolder.setIfAbsent(e);
                     }
+                    var rewritten = builder != initial;
+                    updated.set(updated.get() || rewritten);
+                    finalExpression = rewritten ? rewriteableAware.replaceQueryBuilder(builder) : finalExpression;
                 }
                 return finalExpression;
             });
@@ -113,4 +133,5 @@ public final class QueryBuilderResolver {
             return updated.get() ? new FunctionsRewriteable(newPlan) : this;
         }
     }
+
 }

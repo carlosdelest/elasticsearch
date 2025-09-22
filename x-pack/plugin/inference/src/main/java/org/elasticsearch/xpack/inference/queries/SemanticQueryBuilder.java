@@ -83,7 +83,7 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
         false,
         args -> new SemanticQueryBuilder((String) args[0], (String) args[1], (Boolean) args[2])
     );
-    public static final TransportVersion SEMANTIC_QUERY_FILTER_QUERIES_TRANSPORT_VERSION = TransportVersion.fromString(
+    public static final TransportVersion SEMANTIC_QUERY_FILTER_QUERIES_TRANSPORT_VERSION = TransportVersion.fromName(
         "semantic_query_filter_queries"
     );
 

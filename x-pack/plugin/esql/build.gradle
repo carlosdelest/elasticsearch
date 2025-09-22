@@ -66,6 +66,7 @@ dependencies {
   testImplementation project(path: ':modules:legacy-geo')
   testImplementation project(path: ':modules:data-streams')
   testImplementation project(path: ':modules:mapper-extras')
+  testImplementation project(xpackModule('inference'))
   testImplementation project(xpackModule('esql:compute:test'))
   testImplementation('net.nextencia:rrdiagram:0.9.4')
   testImplementation('org.webjars.npm:fontsource__roboto-mono:4.5.7')

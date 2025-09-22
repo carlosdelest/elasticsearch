@@ -12,6 +12,7 @@ import org.elasticsearch.search.vectors.FilteredQueryBuilder;
 import org.elasticsearch.xpack.esql.capabilities.TranslationAware;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
 import org.elasticsearch.xpack.esql.core.tree.Source;
+import org.elasticsearch.xpack.esql.optimizer.rules.physical.local.LucenePushdownPredicates;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,20 +37,19 @@ public abstract class PrefilteredFullTextFunction extends FullTextFunction {
         this.filterExpressions = filterExpressions;
     }
 
-    private List<QueryBuilder> prefilterQueryBuilders() {
-        List<QueryBuilder> filterQueries = new ArrayList<>();
+    @Override
+    public Translatable translatable(LucenePushdownPredicates pushdownPredicates) {
+        Translatable translatable = super.translatable(pushdownPredicates);
+        if (queryBuilder() instanceof FilteredQueryBuilder<?> == false) {
+            // We don't have prefilters in the query builder, so no need to check further
+            return translatable;
+        }
+        // We need to check whether filter expressions are translatable as well
         for (Expression filterExpression : prefilterExpressions()) {
-            if (filterExpression instanceof TranslationAware translationAware) {
-                // We can only translate filter expressions that are translatable. In case any is not translatable,
-                // Knn won't be pushed down so it's safe not to translate all filters and check them when creating an evaluator
-                // for the non-pushed down query
-                if (translationAware.translatable(DEFAULT) == Translatable.YES) {
-                    filterQueries.add(TRANSLATOR_HANDLER.asQuery(DEFAULT, filterExpression).toQueryBuilder());
-                }
-            }
+            translatable = translatable.merge(TranslationAware.translatable(filterExpression, pushdownPredicates));
         }
 
-        return filterQueries;
+        return translatable;
     }
 
     public abstract Expression withPrefilters(List<Expression> filterExpressions);
@@ -64,6 +64,22 @@ public abstract class PrefilteredFullTextFunction extends FullTextFunction {
         }
 
         return replaceFilteredQueryBuilder(queryBuilder);
+    }
+
+    private List<QueryBuilder> prefilterQueryBuilders() {
+        List<QueryBuilder> filterQueries = new ArrayList<>();
+        for (Expression filterExpression : prefilterExpressions()) {
+            if (filterExpression instanceof TranslationAware translationAware) {
+                // We can only translate filter expressions that are translatable. In case any is not translatable,
+                // Knn won't be pushed down so it's safe not to translate all filters and check them when creating an evaluator
+                // for the non-pushed down query
+                if (translationAware.translatable(DEFAULT) == Translatable.YES) {
+                    filterQueries.add(TRANSLATOR_HANDLER.asQuery(DEFAULT, filterExpression).toQueryBuilder());
+                }
+            }
+        }
+
+        return filterQueries;
     }
 
     protected abstract Expression replaceFilteredQueryBuilder(QueryBuilder queryBuilder);

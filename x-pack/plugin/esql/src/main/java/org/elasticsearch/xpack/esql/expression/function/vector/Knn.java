@@ -12,12 +12,10 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.vectors.ExactKnnQueryBuilder;
-import org.elasticsearch.search.vectors.FilteredQueryBuilder;
 import org.elasticsearch.search.vectors.VectorData;
 import org.elasticsearch.xpack.esql.EsqlIllegalArgumentException;
 import org.elasticsearch.xpack.esql.capabilities.PostAnalysisPlanVerificationAware;
 import org.elasticsearch.xpack.esql.capabilities.PostOptimizationVerificationAware;
-import org.elasticsearch.xpack.esql.capabilities.TranslationAware;
 import org.elasticsearch.xpack.esql.common.Failure;
 import org.elasticsearch.xpack.esql.common.Failures;
 import org.elasticsearch.xpack.esql.core.InvalidArgumentException;
@@ -38,7 +36,6 @@ import org.elasticsearch.xpack.esql.expression.function.MapParam;
 import org.elasticsearch.xpack.esql.expression.function.OptionalArgument;
 import org.elasticsearch.xpack.esql.expression.function.Options;
 import org.elasticsearch.xpack.esql.expression.function.Param;
-import org.elasticsearch.xpack.esql.expression.function.fulltext.FullTextFunction;
 import org.elasticsearch.xpack.esql.expression.function.fulltext.Match;
 import org.elasticsearch.xpack.esql.expression.function.fulltext.PrefilteredFullTextFunction;
 import org.elasticsearch.xpack.esql.io.stream.PlanStreamInput;
@@ -250,35 +247,6 @@ public class Knn extends PrefilteredFullTextFunction
         return new Knn(source(), field(), query(), options(), k(), queryBuilder, prefilterExpressions());
     }
 
-    private List<QueryBuilder> prefilterQueryBuilders() {
-        List<QueryBuilder> filterQueries = new ArrayList<>();
-        for (Expression filterExpression : prefilterExpressions()) {
-            if (filterExpression instanceof TranslationAware translationAware) {
-                // We can only translate filter expressions that are translatable. In case any is not translatable,
-                // Knn won't be pushed down so it's safe not to translate all filters and check them when creating an evaluator
-                // for the non-pushed down query
-                if (translationAware.translatable(LucenePushdownPredicates.DEFAULT) == Translatable.YES) {
-                    filterQueries.add(
-                        TranslatorHandler.TRANSLATOR_HANDLER.asQuery(LucenePushdownPredicates.DEFAULT, filterExpression).toQueryBuilder()
-                    );
-                }
-            }
-        }
-
-        return filterQueries;
-    }
-
-    @Override
-    public Translatable translatable(LucenePushdownPredicates pushdownPredicates) {
-        Translatable translatable = super.translatable(pushdownPredicates);
-        // We need to check whether filter expressions are translatable as well
-        for (Expression filterExpression : prefilterExpressions()) {
-            translatable = translatable.merge(TranslationAware.translatable(filterExpression, pushdownPredicates));
-        }
-
-        return translatable;
-    }
-
     @Override
     protected Query translate(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
         assert k() != null : "Knn function must have a k value set before translation";
@@ -291,8 +259,6 @@ public class Knn extends PrefilteredFullTextFunction
         return new KnnQuery(source(), fieldName, queryAsFloats, k(), queryOptions());
     }
 
-
-
     private float[] queryAsFloats() {
         List<Number> queryFolded = queryAsObject();
         float[] queryAsFloats = new float[queryFolded.size()];
@@ -302,8 +268,8 @@ public class Knn extends PrefilteredFullTextFunction
         return queryAsFloats;
     }
 
-    public Knn withPrefilters(List<Expression> filterExpressions) {
-        return new Knn(source(), field(), query(), options(), k(), queryBuilder(), filterExpressions);
+    public Expression withPrefilters(List<Expression> filterExpressions) {
+        return new Knn(source(), field(), query(), options(), k(), queryBuilder(), filterExpressions).replaceQueryBuilder(queryBuilder());
     }
 
     private Map<String, Object> queryOptions() throws InvalidArgumentException {

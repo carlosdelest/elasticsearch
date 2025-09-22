@@ -7,6 +7,11 @@
 
 package org.elasticsearch.xpack.esql.optimizer;
 
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.support.PlainActionFuture;
+import org.elasticsearch.index.query.MatchQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.xpack.esql.EsqlTestUtils;
 import org.elasticsearch.xpack.esql.analysis.Analyzer;
 import org.elasticsearch.xpack.esql.core.expression.FoldContext;
@@ -16,9 +21,16 @@ import org.elasticsearch.xpack.esql.plan.physical.EstimatesRowSize;
 import org.elasticsearch.xpack.esql.plan.physical.PhysicalPlan;
 import org.elasticsearch.xpack.esql.planner.PlannerUtils;
 import org.elasticsearch.xpack.esql.planner.mapper.Mapper;
+import org.elasticsearch.xpack.esql.planner.premapper.PreMapper;
+import org.elasticsearch.xpack.esql.expression.function.fulltext.QueryBuilderResolver;
 import org.elasticsearch.xpack.esql.plugin.EsqlFlags;
+import org.elasticsearch.xpack.esql.plugin.TransportActionServices;
 import org.elasticsearch.xpack.esql.session.Configuration;
 import org.elasticsearch.xpack.esql.stats.SearchStats;
+import org.elasticsearch.xpack.inference.queries.SemanticQueryBuilder;
+
+import java.io.IOException;
+import java.util.Set;
 
 public class TestPlannerOptimizer {
     private final EsqlParser parser;
@@ -26,6 +38,7 @@ public class TestPlannerOptimizer {
     private final LogicalPlanOptimizer logicalOptimizer;
     private final PhysicalPlanOptimizer physicalPlanOptimizer;
     private final Mapper mapper;
+    private final PreMapper preMapper;
     private final Configuration config;
 
     public TestPlannerOptimizer(Configuration config, Analyzer analyzer) {
@@ -40,7 +53,7 @@ public class TestPlannerOptimizer {
         parser = new EsqlParser();
         physicalPlanOptimizer = new PhysicalPlanOptimizer(new PhysicalOptimizerContext(config));
         mapper = new Mapper();
-
+        preMapper = new TestPreMapper();
     }
 
     public PhysicalPlan plan(String query) {
@@ -90,8 +103,36 @@ public class TestPlannerOptimizer {
 
     private PhysicalPlan physicalPlan(String query, Analyzer analyzer) {
         LogicalPlan logical = logicalOptimizer.optimize(analyzer.analyze(parser.createStatement(query, EsqlTestUtils.TEST_CFG)));
-        // System.out.println("Logical\n" + logical);
-        PhysicalPlan physical = mapper.map(logical);
-        return physical;
+        PlainActionFuture<LogicalPlan> preMapperFuture = new PlainActionFuture<>();
+        preMapper.preMapper(logical, preMapperFuture);
+        return mapper.map(preMapperFuture.actionGet());
+    }
+
+    private class TestQueryBuilderResolver extends QueryBuilderResolver {
+        TestQueryBuilderResolver() {
+            super(EsqlTestUtils.MOCK_TRANSPORT_ACTION_SERVICES);
+        }
+
+        @Override
+        protected QueryRewriteContext queryRewriteContext(TransportActionServices services, Set<String> indexNames) {
+            return new QueryRewriteContext(null, null, null);
+        }
+
+        @Override
+        protected QueryBuilder rewriteQueryBuilder(QueryRewriteContext ctx, QueryBuilder builder) throws IOException {
+            if (builder instanceof MatchQueryBuilder matchQueryBuilder) {
+                if (matchQueryBuilder.fieldName().equals("semantic_text")) {
+                    return new SemanticQueryBuilder(matchQueryBuilder.fieldName(), (String) matchQueryBuilder.value());
+                }
+            }
+
+            return builder;
+        }
+    }
+
+    private class TestPreMapper extends PreMapper {
+        TestPreMapper() {
+            super(new TestQueryBuilderResolver(), Runnable::run);
+        }
     }
 }

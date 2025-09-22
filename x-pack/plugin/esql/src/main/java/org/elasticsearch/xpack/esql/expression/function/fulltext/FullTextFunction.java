@@ -375,7 +375,8 @@ public abstract class FullTextFunction extends Function
         }
     }
 
-    protected QueryBuilder queryBuilder() {
+    @Override
+    public QueryBuilder queryBuilder() {
         return queryBuilder;
     }
 
@@ -390,8 +391,6 @@ public abstract class FullTextFunction extends Function
         }
         return this;
     }
-
-    protected abstract Expression replaceQueryBuilder(QueryBuilder queryBuilder);
 
     @Override
     public EvalOperator.ExpressionEvaluator.Factory toEvaluator(ToEvaluator toEvaluator) {
