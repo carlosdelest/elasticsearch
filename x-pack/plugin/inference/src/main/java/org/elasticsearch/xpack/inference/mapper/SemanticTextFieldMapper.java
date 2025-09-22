@@ -62,9 +62,11 @@ import org.elasticsearch.index.mapper.TextSearchInfo;
 import org.elasticsearch.index.mapper.ValueFetcher;
 import org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper;
 import org.elasticsearch.index.mapper.vectors.SparseVectorFieldMapper;
+import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.MatchNoneQueryBuilder;
 import org.elasticsearch.index.query.NestedQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.SearchExecutionContext;
 import org.elasticsearch.inference.ChunkingSettings;
 import org.elasticsearch.inference.InferenceResults;
@@ -919,7 +921,13 @@ public class SemanticTextFieldMapper extends FieldMapper implements InferenceFie
             return fieldInfos.fieldInfo(getEmbeddingsFieldName(name())) != null;
         }
 
-        public QueryBuilder semanticQuery(InferenceResults inferenceResults, Integer requestSize, float boost, String queryName) {
+        public QueryBuilder semanticQuery(
+            InferenceResults inferenceResults,
+            Integer requestSize,
+            float boost,
+            String queryName,
+            List<QueryBuilder> prefilters
+        ) {
             String nestedFieldPath = getChunksFieldName(name());
             String inferenceResultsFieldName = getEmbeddingsFieldName(name());
             QueryBuilder childQueryBuilder;
@@ -937,7 +945,7 @@ public class SemanticTextFieldMapper extends FieldMapper implements InferenceFie
                         }
 
                         TextExpansionResults textExpansionResults = (TextExpansionResults) inferenceResults;
-                        yield new SparseVectorQueryBuilder(
+                        QueryBuilder queryBuilder = new SparseVectorQueryBuilder(
                             inferenceResultsFieldName,
                             textExpansionResults.getWeightedTokens(),
                             null,
@@ -945,6 +953,12 @@ public class SemanticTextFieldMapper extends FieldMapper implements InferenceFie
                             null,
                             null
                         );
+                        if (prefilters.isEmpty() == false) {
+                            BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery().must(queryBuilder);
+                            prefilters.forEach(boolQueryBuilder::filter);
+                            queryBuilder = boolQueryBuilder;
+                        }
+                        yield queryBuilder;
                     }
                     case TEXT_EMBEDDING -> {
                         if (inferenceResults instanceof MlTextEmbeddingResults == false) {
@@ -970,7 +984,9 @@ public class SemanticTextFieldMapper extends FieldMapper implements InferenceFie
                             k = Math.max(k, DEFAULT_SIZE);
                         }
 
-                        yield new KnnVectorQueryBuilder(inferenceResultsFieldName, inference, k, null, null, null, null);
+                        KnnVectorQueryBuilder knnVectorQueryBuilder = new KnnVectorQueryBuilder(inferenceResultsFieldName, inference, k, null, null, null, null);
+                        knnVectorQueryBuilder.addFilterQueries(prefilters);
+                        yield knnVectorQueryBuilder;
                     }
                     default -> throw new IllegalStateException(
                         "Field ["

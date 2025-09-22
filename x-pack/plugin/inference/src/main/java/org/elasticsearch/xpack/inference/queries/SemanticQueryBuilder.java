@@ -27,6 +27,7 @@ import org.elasticsearch.inference.InferenceResults;
 import org.elasticsearch.inference.InferenceServiceResults;
 import org.elasticsearch.inference.InputType;
 import org.elasticsearch.inference.TaskType;
+import org.elasticsearch.search.vectors.FilteredQueryBuilder;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
 import org.elasticsearch.xcontent.ParseField;
 import org.elasticsearch.xcontent.XContentBuilder;
@@ -40,6 +41,7 @@ import org.elasticsearch.xpack.inference.InferenceException;
 import org.elasticsearch.xpack.inference.mapper.SemanticTextFieldMapper;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -57,7 +59,7 @@ import static org.elasticsearch.xcontent.ConstructingObjectParser.optionalConstr
 import static org.elasticsearch.xpack.core.ClientHelper.ML_ORIGIN;
 import static org.elasticsearch.xpack.core.ClientHelper.executeAsyncWithOrigin;
 
-public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuilder> {
+public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuilder> implements FilteredQueryBuilder<SemanticQueryBuilder> {
     public static final String NAME = "semantic";
 
     public static final NodeFeature SEMANTIC_QUERY_MULTIPLE_INFERENCE_IDS = new NodeFeature("semantic_query.multiple_inference_ids");
@@ -79,6 +81,9 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
         false,
         args -> new SemanticQueryBuilder((String) args[0], (String) args[1], (Boolean) args[2])
     );
+    public static final TransportVersion SEMANTIC_QUERY_FILTER_QUERIES_TRANSPORT_VERSION = TransportVersion.fromString(
+        "semantic_query_filter_queries"
+    );
 
     static {
         PARSER.declareString(constructorArg(), FIELD_FIELD);
@@ -91,6 +96,7 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
     private final String query;
     private final Map<FullyQualifiedInferenceId, InferenceResults> inferenceResultsMap;
     private final Boolean lenient;
+    private final List<QueryBuilder> filterQueries;
 
     public SemanticQueryBuilder(String fieldName, String query) {
         this(fieldName, query, null);
@@ -116,6 +122,7 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
         this.query = query;
         this.inferenceResultsMap = inferenceResultsMap != null ? Map.copyOf(inferenceResultsMap) : null;
         this.lenient = lenient;
+        this.filterQueries = new ArrayList<>();
     }
 
     public SemanticQueryBuilder(StreamInput in) throws IOException {
@@ -139,6 +146,11 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
             this.lenient = in.readOptionalBoolean();
         } else {
             this.lenient = null;
+        }
+        if (in.getTransportVersion().supports(SEMANTIC_QUERY_FILTER_QUERIES_TRANSPORT_VERSION)) {
+            this.filterQueries = in.readNamedWriteableCollectionAsList(QueryBuilder.class);
+        } else {
+            this.filterQueries = new ArrayList<>();
         }
     }
 
@@ -174,6 +186,9 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
         if (out.getTransportVersion().onOrAfter(TransportVersions.SEMANTIC_QUERY_LENIENT)) {
             out.writeOptionalBoolean(lenient);
         }
+        if (out.getTransportVersion().supports(SEMANTIC_QUERY_FILTER_QUERIES_TRANSPORT_VERSION)) {
+            out.writeNamedWriteableCollection(this.filterQueries);
+        }
     }
 
     private SemanticQueryBuilder(SemanticQueryBuilder other, Map<FullyQualifiedInferenceId, InferenceResults> inferenceResultsMap) {
@@ -184,6 +199,7 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
         // No need to copy the map here since this is only called internally. We can safely assume that the caller will not modify the map.
         this.inferenceResultsMap = inferenceResultsMap;
         this.lenient = other.lenient;
+        this.filterQueries = other.filterQueries;
     }
 
     @Override
@@ -392,7 +408,13 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
                 );
             }
 
-            return semanticTextFieldType.semanticQuery(inferenceResults, searchExecutionContext.requestSize(), boost(), queryName());
+            return semanticTextFieldType.semanticQuery(
+                inferenceResults,
+                searchExecutionContext.requestSize(),
+                boost(),
+                queryName(),
+                filterQueries
+            );
         } else if (lenient != null && lenient) {
             return new MatchNoneQueryBuilder();
         } else {
@@ -400,6 +422,12 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
                 "Field [" + fieldName + "] of type [" + fieldType.typeName() + "] does not support " + NAME + " queries"
             );
         }
+    }
+
+    @Override
+    public SemanticQueryBuilder addFilterQueries(List<QueryBuilder> filterQueries) {
+        this.filterQueries.addAll(filterQueries);
+        return this;
     }
 
     private SemanticQueryBuilder doRewriteGetInferenceResults(QueryRewriteContext queryRewriteContext) {

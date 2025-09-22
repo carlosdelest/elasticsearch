@@ -57,7 +57,10 @@ import static org.elasticsearch.xcontent.ConstructingObjectParser.optionalConstr
  * A query that performs kNN search using Lucene's {@link org.apache.lucene.search.KnnFloatVectorQuery} or
  * {@link org.apache.lucene.search.KnnByteVectorQuery}.
  */
-public class KnnVectorQueryBuilder extends AbstractQueryBuilder<KnnVectorQueryBuilder> {
+public class KnnVectorQueryBuilder extends AbstractQueryBuilder<KnnVectorQueryBuilder>
+    implements
+        FilteredQueryBuilder<KnnVectorQueryBuilder> {
+
     public static final String NAME = "knn";
     private static final int NUM_CANDS_LIMIT = 10_000;
     private static final float NUM_CANDS_MULTIPLICATIVE_FACTOR = 1.5f;
