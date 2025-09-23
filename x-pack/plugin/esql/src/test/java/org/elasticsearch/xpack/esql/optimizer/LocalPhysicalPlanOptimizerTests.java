@@ -1909,7 +1909,23 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         aggExec.forEachDown(EsQueryExec.class, esQueryExec -> { assertNull(esQueryExec.query()); });
     }
 
-    private void testPrefilters(
+    public void testKnnPrefilters() {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
+
+        checkFilteredFullTextFunctionWithPrefilter(
+            "knn(dense_vector, [0, 1, 2])",
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null)
+        );
+    }
+
+    public void testMatchSemanticTextPrefilters() {
+        checkFilteredFullTextFunctionWithPrefilter(
+            "match(semantic_text, \"hello world\")",
+             new SemanticQueryBuilder("semantic_text", "hello world")
+        );
+    }
+
+    private void checkFilteredFullTextFunctionWithPrefilter(
         String functionEsql,
         FilteredQueryBuilder<?> expectedQueryBuilder
     ) {
@@ -1935,22 +1951,6 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         QueryBuilder expectedMainQueryBuilder = expectedQueryBuilder.addFilterQueries(List.of(expectedFilterQueryBuilder));
         var expectedQuery = boolQuery().must(expectedMainQueryBuilder).must(expectedFilterQueryBuilder);
         assertEquals(expectedQuery.toString(), queryExec.query().toString());
-    }
-
-    public void testKnnPrefilters() {
-        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
-
-        testPrefilters(
-            "knn(dense_vector, [0, 1, 2])",
-            new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null)
-        );
-    }
-
-    public void testMatchSemanticTextPrefilters() {
-        testPrefilters(
-            "match(semantic_text, \"hello world\")",
-             new SemanticQueryBuilder("semantic_text", "hello world")
-        );
     }
 
     public void testKnnPrefiltersWithMultipleFilters() {
