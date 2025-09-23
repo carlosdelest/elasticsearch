@@ -27,6 +27,7 @@ import org.elasticsearch.index.query.QueryStringQueryBuilder;
 import org.elasticsearch.index.query.RangeQueryBuilder;
 import org.elasticsearch.index.query.SearchExecutionContext;
 import org.elasticsearch.license.XPackLicenseState;
+import org.elasticsearch.search.vectors.FilteredQueryBuilder;
 import org.elasticsearch.search.vectors.KnnVectorQueryBuilder;
 import org.elasticsearch.search.vectors.RescoreVectorBuilder;
 import org.elasticsearch.test.VersionUtils;
@@ -1908,13 +1909,15 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         aggExec.forEachDown(EsQueryExec.class, esQueryExec -> { assertNull(esQueryExec.query()); });
     }
 
-    public void testKnnPrefilters() {
-        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
-
+    private void testPrefilters(
+        String functionEsql,
+        FilteredQueryBuilder<?> expectedQueryBuilder
+    ) {
         String query = """
             from test
-            | where knn(dense_vector, [0, 1, 2]) and integer > 10
-            """;
+            | where %s
+                and integer > 10
+            """.formatted(functionEsql);
         var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
 
         var limit = as(plan, LimitExec.class);
@@ -1926,43 +1929,28 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             query,
             unscore(rangeQuery("integer").gt(10)),
             "integer",
-            new Source(2, 41, "integer > 10")
+            new Source(3, 8, "integer > 10")
         );
-        KnnVectorQueryBuilder expectedKnnQueryBuilder = new KnnVectorQueryBuilder(
-            "dense_vector",
-            new float[] { 0, 1, 2 },
-            1000,
-            null,
-            null,
-            null,
-            null
-        ).addFilterQuery(expectedFilterQueryBuilder);
-        var expectedQuery = boolQuery().must(expectedKnnQueryBuilder).must(expectedFilterQueryBuilder);
+
+        QueryBuilder expectedMainQueryBuilder = expectedQueryBuilder.addFilterQueries(List.of(expectedFilterQueryBuilder));
+        var expectedQuery = boolQuery().must(expectedMainQueryBuilder).must(expectedFilterQueryBuilder);
         assertEquals(expectedQuery.toString(), queryExec.query().toString());
     }
 
-    public void testMatchSemanticTextPrefilters() {
-        String query = """
-            from test
-            | where match(semantic_text, "hello world") and integer > 10
-            """;
-        var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
+    public void testKnnPrefilters() {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        var limit = as(plan, LimitExec.class);
-        var exchange = as(limit.child(), ExchangeExec.class);
-        var project = as(exchange.child(), ProjectExec.class);
-        var field = as(project.child(), FieldExtractExec.class);
-        var queryExec = as(field.child(), EsQueryExec.class);
-        QueryBuilder expectedFilterQueryBuilder = wrapWithSingleQuery(
-            query,
-            unscore(rangeQuery("integer").gt(10)),
-            "integer",
-            new Source(2, 48, "integer > 10")
+        testPrefilters(
+            "knn(dense_vector, [0, 1, 2])",
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null)
         );
-        SemanticQueryBuilder expectedQueryBuilder = new SemanticQueryBuilder("semantic_text", "hello world")
-            .addFilterQueries(List.of(expectedFilterQueryBuilder));
-        var expectedQuery = boolQuery().must(expectedQueryBuilder).must(expectedFilterQueryBuilder);
-        assertEquals(expectedQuery.toString(), queryExec.query().toString());
+    }
+
+    public void testMatchSemanticTextPrefilters() {
+        testPrefilters(
+            "match(semantic_text, \"hello world\")",
+             new SemanticQueryBuilder("semantic_text", "hello world")
+        );
     }
 
     public void testKnnPrefiltersWithMultipleFilters() {
