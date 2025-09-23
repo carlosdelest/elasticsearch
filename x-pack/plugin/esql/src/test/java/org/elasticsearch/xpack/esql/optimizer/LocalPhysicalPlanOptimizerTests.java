@@ -2165,8 +2165,6 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
 
     public void checkPushDownComplexNegationsToPrefilter(String esqlQuery1, String esqlQuery2,
                                                          FilteredQueryBuilder<?> expectedQueryBuilder1, FilteredQueryBuilder<?> expectedQueryBuilder2) {
-        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
-
         String query = String.format(Locale.ROOT, """
             from test
             | where ((%s
@@ -2215,10 +2213,35 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testMultipleKnnQueriesInPrefilters() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        String query = """
+        checkMultipleQueriesInPrefilters("knn(dense_vector, [0, 1, 2])", "knn(dense_vector, [4, 5, 6])",
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null),
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 4, 5, 6 }, 1000, null, null, null, null)
+        );
+    }
+
+    public void testMultipleMatchQueriesInPrefilters() {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
+
+        checkMultipleQueriesInPrefilters("match(semantic_text, \"hello world\")",
+            "match(semantic_text, \"hello, hello\")",
+            new SemanticQueryBuilder("semantic_text", "hello world"),
+            new SemanticQueryBuilder("semantic_text", "hello, hello")
+        );
+    }
+
+    public void checkMultipleQueriesInPrefilters(
+        String esqlQuery1,
+        String esqlQuery2,
+        FilteredQueryBuilder<?> expectedQueryBuilder1,
+        FilteredQueryBuilder<?> expectedQueryBuilder2
+    ) {
+        String query = String.format(Locale.ROOT, """
             from test
-            | where ((knn(dense_vector, [0, 1, 2]) or integer > 10) and ((keyword == "test") or knn(dense_vector, [4, 5, 6])))
-            """;
+            | where ((%s
+            or integer > 10) and ((keyword == "test") or
+            %s))
+            """, esqlQuery1, esqlQuery2);
+
         var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
 
         var limit = as(plan, LimitExec.class);
@@ -2227,32 +2250,13 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         var field = as(project.child(), FieldExtractExec.class);
         var queryExec = as(field.child(), EsQueryExec.class);
 
-        KnnVectorQueryBuilder firstKnnQuery = new KnnVectorQueryBuilder(
-            "dense_vector",
-            new float[] { 0, 1, 2 },
-            1000,
-            null,
-            null,
-            null,
-            null
-        );
+
         // Integer range query (right side of first OR)
         QueryBuilder integerRangeQuery = wrapWithSingleQuery(
             query,
             unscore(rangeQuery("integer").gt(10)),
             "integer",
-            new Source(2, 42, "integer > 10")
-        );
-
-        // Second KNN query (right side of second OR)
-        KnnVectorQueryBuilder secondKnnQuery = new KnnVectorQueryBuilder(
-            "dense_vector",
-            new float[] { 4, 5, 6 },
-            1000,
-            null,
-            null,
-            null,
-            null
+            new Source(3, 3, "integer > 10")
         );
 
         // Keyword term query (left side of second OR)
@@ -2260,15 +2264,15 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             query,
             unscore(termQuery("keyword", "test")),
             "keyword",
-            new Source(2, 62, "keyword == \"test\"")
+            new Source(3, 23, "keyword == \"test\"")
         );
 
         // First OR (knn1 OR integer > 10)
-        var firstOr = boolQuery().should(firstKnnQuery).should(integerRangeQuery);
+        var firstOr = boolQuery().should(expectedQueryBuilder1).should(integerRangeQuery);
         // Second OR (keyword == "test" OR knn2)
-        var secondOr = boolQuery().should(keywordQuery).should(secondKnnQuery);
-        firstKnnQuery.addFilterQuery(keywordQuery);
-        secondKnnQuery.addFilterQuery(integerRangeQuery);
+        var secondOr = boolQuery().should(keywordQuery).should(expectedQueryBuilder2);
+        expectedQueryBuilder1.addFilterQueries(List.of(keywordQuery));
+        expectedQueryBuilder2.addFilterQueries(List.of(integerRangeQuery));
 
         // Top-level AND combining both ORs
         var expectedQuery = boolQuery().must(firstOr).must(secondOr);
