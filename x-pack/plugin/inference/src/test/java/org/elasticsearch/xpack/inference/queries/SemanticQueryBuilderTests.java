@@ -46,6 +46,7 @@ import org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapper;
 import org.elasticsearch.index.mapper.vectors.DenseVectorFieldMapperTestUtils;
 import org.elasticsearch.index.query.MatchNoneQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.QueryRewriteContext;
 import org.elasticsearch.index.query.SearchExecutionContext;
 import org.elasticsearch.index.search.ESToParentBlockJoinQuery;
@@ -241,6 +242,15 @@ public class SemanticQueryBuilderTests extends AbstractQueryTestCase<SemanticQue
         if (randomBoolean()) {
             builder.queryName(randomAlphaOfLength(4));
         }
+        if (randomBoolean()) {
+            List<QueryBuilder> filters = new ArrayList<>();
+            int numFilters = randomIntBetween(1, 5);
+            for (int i = 0; i < numFilters; i++) {
+                String filterFieldName = randomBoolean() ? KEYWORD_FIELD_NAME : TEXT_FIELD_NAME;
+                filters.add(QueryBuilders.termQuery(filterFieldName, randomAlphaOfLength(10)));
+            }
+            builder.addFilterQueries(filters);
+        }
 
         return builder;
     }
@@ -256,13 +266,13 @@ public class SemanticQueryBuilderTests extends AbstractQueryTestCase<SemanticQue
 
         switch (inferenceResultType) {
             case NONE -> assertThat(nestedQuery.getChildQuery(), instanceOf(MatchNoDocsQuery.class));
-            case SPARSE_EMBEDDING -> assertSparseEmbeddingLuceneQuery(nestedQuery.getChildQuery());
-            case TEXT_EMBEDDING -> assertTextEmbeddingLuceneQuery(nestedQuery.getChildQuery());
+            case SPARSE_EMBEDDING -> assertSparseEmbeddingLuceneQuery(queryBuilder, nestedQuery.getChildQuery());
+            case TEXT_EMBEDDING -> assertTextEmbeddingLuceneQuery(queryBuilder, nestedQuery.getChildQuery());
         }
     }
 
-    private void assertSparseEmbeddingLuceneQuery(Query query) {
-        Query innerQuery = assertOuterBooleanQuery(query);
+    private void assertSparseEmbeddingLuceneQuery(SemanticQueryBuilder queryBuilder, Query query) {
+        Query innerQuery = assertOuterBooleanQuery(query, queryBuilder);
         assertThat(innerQuery, instanceOf(SparseVectorQueryWrapper.class));
         var sparseQuery = (SparseVectorQueryWrapper) innerQuery;
         assertThat(sparseQuery.getTermsQuery(), instanceOf(BooleanQuery.class));
@@ -272,8 +282,8 @@ public class SemanticQueryBuilderTests extends AbstractQueryTestCase<SemanticQue
         assertThat(innerBooleanQuery.clauses().size(), equalTo(0));
     }
 
-    private void assertTextEmbeddingLuceneQuery(Query query) {
-        Query innerQuery = assertOuterBooleanQuery(query);
+    private void assertTextEmbeddingLuceneQuery(SemanticQueryBuilder queryBuilder, Query query) {
+        Query innerQuery = assertOuterBooleanQuery(query, queryBuilder);
 
         Class<? extends Query> expectedKnnQueryClass = switch (denseVectorElementType) {
             case FLOAT -> KnnFloatVectorQuery.class;
@@ -282,12 +292,38 @@ public class SemanticQueryBuilderTests extends AbstractQueryTestCase<SemanticQue
         assertThat(innerQuery, instanceOf(expectedKnnQueryClass));
     }
 
-    private Query assertOuterBooleanQuery(Query query) {
+    private Query assertOuterBooleanQuery(Query query, SemanticQueryBuilder queryBuilder) {
         assertThat(query, instanceOf(BooleanQuery.class));
         BooleanQuery outerBooleanQuery = (BooleanQuery) query;
 
         List<BooleanClause> outerMustClauses = new ArrayList<>();
         List<BooleanClause> outerFilterClauses = new ArrayList<>();
+        retrieveMustAndFilterClauses(outerBooleanQuery, outerMustClauses, outerFilterClauses);
+
+        assertThat(outerMustClauses.size(), equalTo(1));
+
+        int expectedFilterClauses = 1;
+        if (inferenceResultType == InferenceResultType.SPARSE_EMBEDDING) {
+            // Outer must clause contains query builder filters and the must clause
+            outerBooleanQuery = (BooleanQuery) outerMustClauses.get(0).query();
+            outerMustClauses.clear();
+            outerFilterClauses.clear();
+
+            retrieveMustAndFilterClauses(outerBooleanQuery, outerMustClauses, outerFilterClauses);
+
+            assertThat(outerMustClauses.size(), equalTo(1));
+            expectedFilterClauses = queryBuilder.getFilterQueries().size();
+        }
+        assertThat(outerFilterClauses.size(), equalTo(expectedFilterClauses));
+
+        return outerMustClauses.get(0).query();
+    }
+
+    private static void retrieveMustAndFilterClauses(
+        BooleanQuery outerBooleanQuery,
+        List<BooleanClause> outerMustClauses,
+        List<BooleanClause> outerFilterClauses
+    ) {
         for (BooleanClause clause : outerBooleanQuery.clauses()) {
             BooleanClause.Occur occur = clause.occur();
             if (occur == MUST) {
@@ -298,11 +334,6 @@ public class SemanticQueryBuilderTests extends AbstractQueryTestCase<SemanticQue
                 fail("Unexpected boolean " + occur + " clause");
             }
         }
-
-        assertThat(outerMustClauses.size(), equalTo(1));
-        assertThat(outerFilterClauses.size(), equalTo(1));
-
-        return outerMustClauses.get(0).query();
     }
 
     @Override

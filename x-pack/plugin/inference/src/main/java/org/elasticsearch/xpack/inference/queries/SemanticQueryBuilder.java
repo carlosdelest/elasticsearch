@@ -29,6 +29,7 @@ import org.elasticsearch.inference.InputType;
 import org.elasticsearch.inference.TaskType;
 import org.elasticsearch.search.vectors.FilteredQueryBuilder;
 import org.elasticsearch.xcontent.ConstructingObjectParser;
+import org.elasticsearch.xcontent.ObjectParser;
 import org.elasticsearch.xcontent.ParseField;
 import org.elasticsearch.xcontent.XContentBuilder;
 import org.elasticsearch.xcontent.XContentParser;
@@ -77,6 +78,7 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
     private static final ParseField FIELD_FIELD = new ParseField("field");
     private static final ParseField QUERY_FIELD = new ParseField("query");
     private static final ParseField LENIENT_FIELD = new ParseField("lenient");
+    private static final ParseField FILTER_FIELD = new ParseField("filter");
 
     private static final ConstructingObjectParser<SemanticQueryBuilder, Void> PARSER = new ConstructingObjectParser<>(
         NAME,
@@ -92,6 +94,12 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
         PARSER.declareString(constructorArg(), QUERY_FIELD);
         PARSER.declareBoolean(optionalConstructorArg(), LENIENT_FIELD);
         declareStandardFields(PARSER);
+        PARSER.declareFieldArray(
+            SemanticQueryBuilder::addFilterQueries,
+            (p, c) -> AbstractQueryBuilder.parseTopLevelQuery(p),
+            FILTER_FIELD,
+            ObjectParser.ValueType.OBJECT_ARRAY
+        );
     }
 
     private final String fieldName;
@@ -359,6 +367,13 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
         if (lenient != null) {
             builder.field(LENIENT_FIELD.getPreferredName(), lenient);
         }
+        if (filterQueries.isEmpty() == false) {
+            builder.startArray(FILTER_FIELD.getPreferredName());
+            for (QueryBuilder filterQuery : filterQueries) {
+                filterQuery.toXContent(builder, params);
+            }
+            builder.endArray();
+        }
         boostAndQueryNameToXContent(builder);
         builder.endObject();
     }
@@ -432,6 +447,10 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
         return this;
     }
 
+    public List<QueryBuilder> getFilterQueries() {
+        return Collections.unmodifiableList(filterQueries);
+    }
+
     private SemanticQueryBuilder doRewriteGetInferenceResults(QueryRewriteContext queryRewriteContext) {
         ResolvedIndices resolvedIndices = queryRewriteContext.getResolvedIndices();
         if (resolvedIndices.getRemoteClusterIndices().isEmpty() == false) {
@@ -452,7 +471,7 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
                 // The inference results map is fully populated, so we can perform error checking
                 inferenceResultsErrorCheck(modifiedInferenceResultsMap);
             } else {
-                rewritten = new SemanticQueryBuilder(this, modifiedInferenceResultsMap).addFilterQueries(filterQueries);
+                rewritten = new SemanticQueryBuilder(this, modifiedInferenceResultsMap);
             }
         }
 

@@ -2167,8 +2167,8 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         String query = String.format(Locale.ROOT, """
             from test
             | where ((%s
-             or NOT integer > 10) and NOT ((keyword == "test")
-             or %s))
+                or NOT integer > 10) and NOT ((keyword == "test")
+                or %s))
             """, esqlQuery1, esqlQuery2);
         var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
 
@@ -2182,20 +2182,20 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             query,
             unscore(boolQuery().mustNot(unscore(termQuery("keyword", "test")))),
             "keyword",
-            new Source(3, 32, "keyword == \"test\"")
+            new Source(3, 35, "keyword == \"test\"")
         );
         QueryBuilder notKeywordFilter = wrapWithSingleQuery(
             query,
             unscore(boolQuery().mustNot(unscore(termQuery("keyword", "test")))),
             "keyword",
-            new Source(3, 26, "NOT ((keyword == \"test\")\n or " + esqlQuery1 + ")")
+            new Source(3, 29, "NOT ((keyword == \"test\")\n    or " + esqlQuery2 + ")")
         );
 
         QueryBuilder notIntegerGt10 = wrapWithSingleQuery(
             query,
             unscore(boolQuery().mustNot(unscore(rangeQuery("integer").gt(10)))),
             "integer",
-            new Source(3, 4, "NOT integer > 10")
+            new Source(3, 7, "NOT integer > 10")
         );
 
         expectedQueryBuilder1.addFilterQueries(List.of(notKeywordFilter));
