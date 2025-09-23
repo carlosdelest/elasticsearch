@@ -25,7 +25,6 @@ public abstract class PrefilteredFullTextFunction extends FullTextFunction {
     // Expressions to be used as prefilters in knn query
     private final List<Expression> filterExpressions;
 
-
     protected PrefilteredFullTextFunction(
         Source source,
         Expression query,

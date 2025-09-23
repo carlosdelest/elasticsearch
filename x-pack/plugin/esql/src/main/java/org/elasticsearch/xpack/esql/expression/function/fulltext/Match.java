@@ -299,7 +299,7 @@ public class Match extends PrefilteredFullTextFunction implements OptionalArgume
         if (in.getTransportVersion().onOrAfter(TransportVersions.ESQL_QUERY_BUILDER_IN_SEARCH_FUNCTIONS)) {
             queryBuilder = in.readOptionalNamedWriteable(QueryBuilder.class);
         }
-        List <Expression> prefilters = List.of();
+        List<Expression> prefilters = List.of();
         if (in.getTransportVersion().supports(MATCH_WITH_PREFILTERS)) {
             prefilters = in.readNamedWriteableCollectionAsList(Expression.class);
         }

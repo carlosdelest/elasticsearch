@@ -1924,14 +1924,11 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
 
         checkFilteredFullTextFunctionWithPrefilter(
             "match(semantic_text, \"hello world\")",
-             new SemanticQueryBuilder("semantic_text", "hello world")
+            new SemanticQueryBuilder("semantic_text", "hello world")
         );
     }
 
-    private void checkFilteredFullTextFunctionWithPrefilter(
-        String functionEsql,
-        FilteredQueryBuilder<?> expectedQueryBuilder
-    ) {
+    private void checkFilteredFullTextFunctionWithPrefilter(String functionEsql, FilteredQueryBuilder<?> expectedQueryBuilder) {
         String query = """
             from test
             | where %s
@@ -1959,7 +1956,8 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testKnnPrefiltersWithMultipleFilters() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        checkFilteredFullTextFunctionhMultipleFilters("knn(dense_vector, [0, 1, 2])",
+        checkFilteredFullTextFunctionhMultipleFilters(
+            "knn(dense_vector, [0, 1, 2])",
             new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null)
         );
     }
@@ -1967,7 +1965,8 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testMatchSemanticTextPrefiltersWithMultipleFilters() {
         assumeTrue("match with prefilters must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
 
-        checkFilteredFullTextFunctionhMultipleFilters("match(semantic_text, \"hello world\")",
+        checkFilteredFullTextFunctionhMultipleFilters(
+            "match(semantic_text, \"hello world\")",
             new SemanticQueryBuilder("semantic_text", "hello world")
         );
     }
@@ -1994,28 +1993,26 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             new Source(4, 8, "keyword == \"test\"")
         );
         QueryBuilder expectedFilterQueryBuilder = boolQuery().must(integerFilter).must(keywordFilter);
-        var expectedQuery = boolQuery().must(expectedQueryBuilder.addFilterQueries(List.of(expectedFilterQueryBuilder))).must(integerFilter).must(keywordFilter);
+        var expectedQuery = boolQuery().must(expectedQueryBuilder.addFilterQueries(List.of(expectedFilterQueryBuilder)))
+            .must(integerFilter)
+            .must(keywordFilter);
         assertEquals(expectedQuery.toString(), queryExec.query().toString());
     }
 
     public void testPushDownNegatedConjunctionsToKnnPrefilter() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        checkPushDownNegatedConjunctionsToPrefilter("knn(dense_vector, [0, 1, 2])", new KnnVectorQueryBuilder(
-            "dense_vector",
-            new float[]{0, 1, 2},
-            1000,
-            null,
-            null,
-            null,
-            null
-        ));
+        checkPushDownNegatedConjunctionsToPrefilter(
+            "knn(dense_vector, [0, 1, 2])",
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null)
+        );
     }
 
     public void testPushDownNegatedConjunctionsToMatchPrefilter() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
 
-        checkPushDownNegatedConjunctionsToPrefilter("match(semantic_text, \"hello world\")",
+        checkPushDownNegatedConjunctionsToPrefilter(
+            "match(semantic_text, \"hello world\")",
             new SemanticQueryBuilder("semantic_text", "hello world")
         );
     }
@@ -2052,21 +2049,17 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testNotPushDownDisjunctionsToPrefilterToKnnPrefilter() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        checkNotPushDownDisjunctionsToPrefilter("knn(dense_vector, [0, 1, 2])", new KnnVectorQueryBuilder(
-            "dense_vector",
-            new float[]{0, 1, 2},
-            1000,
-            null,
-            null,
-            null,
-            null
-        ));
+        checkNotPushDownDisjunctionsToPrefilter(
+            "knn(dense_vector, [0, 1, 2])",
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null)
+        );
     }
 
     public void testNotPushDownDisjunctionsToPrefilterToMatchPrefilter() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
 
-        checkNotPushDownDisjunctionsToPrefilter("match(semantic_text, \"hello world\")",
+        checkNotPushDownDisjunctionsToPrefilter(
+            "match(semantic_text, \"hello world\")",
             new SemanticQueryBuilder("semantic_text", "hello world")
         );
     }
@@ -2107,8 +2100,7 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testNotPushDownMatchWithNonPushablePrefilters() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
 
-        checkNotPushDownWithNonPushablePrefilters("match(semantic_text, \"hello world\")"
-        );
+        checkNotPushDownWithNonPushablePrefilters("match(semantic_text, \"hello world\")");
     }
 
     private void checkNotPushDownWithNonPushablePrefilters(String esqlQuery) {
@@ -2147,24 +2139,31 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testPushDownComplexNegationsToKnnPrefilter() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        checkPushDownComplexNegationsToPrefilter("knn(dense_vector, [0, 1, 2])", "knn(dense_vector, [4, 5, 6])",
+        checkPushDownComplexNegationsToPrefilter(
+            "knn(dense_vector, [0, 1, 2])",
+            "knn(dense_vector, [4, 5, 6])",
             new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null),
             new KnnVectorQueryBuilder("dense_vector", new float[] { 4, 5, 6 }, 1000, null, null, null, null)
-            );
+        );
     }
 
     public void testPushDownComplexNegationsToMatchPrefilter() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
 
-        checkPushDownComplexNegationsToPrefilter("match(semantic_text, \"hello world\")",
+        checkPushDownComplexNegationsToPrefilter(
+            "match(semantic_text, \"hello world\")",
             "match(semantic_text, \"hello, hello\")",
             new SemanticQueryBuilder("semantic_text", "hello world"),
             new SemanticQueryBuilder("semantic_text", "hello, hello")
         );
     }
 
-    public void checkPushDownComplexNegationsToPrefilter(String esqlQuery1, String esqlQuery2,
-                                                         FilteredQueryBuilder<?> expectedQueryBuilder1, FilteredQueryBuilder<?> expectedQueryBuilder2) {
+    public void checkPushDownComplexNegationsToPrefilter(
+        String esqlQuery1,
+        String esqlQuery2,
+        FilteredQueryBuilder<?> expectedQueryBuilder1,
+        FilteredQueryBuilder<?> expectedQueryBuilder2
+    ) {
         String query = String.format(Locale.ROOT, """
             from test
             | where ((%s
@@ -2213,7 +2212,9 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testMultipleKnnQueriesInPrefilters() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        checkMultipleQueriesInPrefilters("knn(dense_vector, [0, 1, 2])", "knn(dense_vector, [4, 5, 6])",
+        checkMultipleQueriesInPrefilters(
+            "knn(dense_vector, [0, 1, 2])",
+            "knn(dense_vector, [4, 5, 6])",
             new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null),
             new KnnVectorQueryBuilder("dense_vector", new float[] { 4, 5, 6 }, 1000, null, null, null, null)
         );
@@ -2222,7 +2223,8 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testMultipleMatchQueriesInPrefilters() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
 
-        checkMultipleQueriesInPrefilters("match(semantic_text, \"hello world\")",
+        checkMultipleQueriesInPrefilters(
+            "match(semantic_text, \"hello world\")",
             "match(semantic_text, \"hello, hello\")",
             new SemanticQueryBuilder("semantic_text", "hello world"),
             new SemanticQueryBuilder("semantic_text", "hello, hello")
@@ -2249,7 +2251,6 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         var project = as(exchange.child(), ProjectExec.class);
         var field = as(project.child(), FieldExtractExec.class);
         var queryExec = as(field.child(), EsQueryExec.class);
-
 
         // Integer range query (right side of first OR)
         QueryBuilder integerRangeQuery = wrapWithSingleQuery(

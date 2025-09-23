@@ -385,7 +385,7 @@ public abstract class FullTextFunction extends Function
         builder = builder == null
             ? asQuery(LucenePushdownPredicates.DEFAULT, TranslatorHandler.TRANSLATOR_HANDLER).toQueryBuilder()
             : builder;
-            builder = builder.rewrite(ctx);
+        builder = builder.rewrite(ctx);
         if (builder != initial) {
             return replaceQueryBuilder(builder);
         }
