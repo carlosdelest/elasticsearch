@@ -269,7 +269,7 @@ public class Knn extends PrefilteredFullTextFunction
     }
 
     public Expression withPrefilters(List<Expression> filterExpressions) {
-        return new Knn(source(), field(), query(), options(), k(), queryBuilder(), filterExpressions).replaceQueryBuilder(queryBuilder());
+        return new Knn(source(), field(), query(), options(), k(), queryBuilder(), filterExpressions);
     }
 
     private Map<String, Object> queryOptions() throws InvalidArgumentException {

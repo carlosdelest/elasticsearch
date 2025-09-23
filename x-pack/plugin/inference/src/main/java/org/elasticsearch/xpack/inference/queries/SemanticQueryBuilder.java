@@ -452,7 +452,7 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
                 // The inference results map is fully populated, so we can perform error checking
                 inferenceResultsErrorCheck(modifiedInferenceResultsMap);
             } else {
-                rewritten = new SemanticQueryBuilder(this, modifiedInferenceResultsMap);
+                rewritten = new SemanticQueryBuilder(this, modifiedInferenceResultsMap).addFilterQueries(filterQueries);
             }
         }
 
@@ -547,11 +547,12 @@ public class SemanticQueryBuilder extends AbstractQueryBuilder<SemanticQueryBuil
     protected boolean doEquals(SemanticQueryBuilder other) {
         return Objects.equals(fieldName, other.fieldName)
             && Objects.equals(query, other.query)
-            && Objects.equals(inferenceResultsMap, other.inferenceResultsMap);
+            && Objects.equals(inferenceResultsMap, other.inferenceResultsMap)
+            && Objects.equals(filterQueries, other.filterQueries);
     }
 
     @Override
     protected int doHashCode() {
-        return Objects.hash(fieldName, query, inferenceResultsMap);
+        return Objects.hash(fieldName, query, inferenceResultsMap, filterQueries);
     }
 }

@@ -60,7 +60,7 @@ public abstract class PrefilteredFullTextFunction extends FullTextFunction {
 
     public final Expression replaceQueryBuilder(QueryBuilder queryBuilder) {
         if (queryBuilder instanceof FilteredQueryBuilder<?> filteredQueryBuilder) {
-            filteredQueryBuilder.addFilterQueries(prefilterQueryBuilders());
+            queryBuilder = filteredQueryBuilder.addFilterQueries(prefilterQueryBuilders());
         }
 
         return replaceFilteredQueryBuilder(queryBuilder);

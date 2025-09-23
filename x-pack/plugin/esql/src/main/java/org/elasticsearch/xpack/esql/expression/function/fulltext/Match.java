@@ -413,7 +413,7 @@ public class Match extends PrefilteredFullTextFunction implements OptionalArgume
 
     @Override
     public Expression withPrefilters(List<Expression> filterExpressions) {
-        return new Match(source(), field(), query(), options(), queryBuilder(), filterExpressions).replaceQueryBuilder(queryBuilder());
+        return new Match(source(), field(), query(), options(), queryBuilder(), filterExpressions);
     }
 
     @Override
@@ -475,11 +475,12 @@ public class Match extends PrefilteredFullTextFunction implements OptionalArgume
         Match match = (Match) o;
         return Objects.equals(field(), match.field())
             && Objects.equals(query(), match.query())
-            && Objects.equals(queryBuilder(), match.queryBuilder());
+            && Objects.equals(queryBuilder(), match.queryBuilder())
+            && Objects.equals(prefilterExpressions(), match.prefilterExpressions());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(field(), query(), queryBuilder());
+        return Objects.hash(field(), query(), queryBuilder(), prefilterExpressions());
     }
 }
