@@ -1528,6 +1528,11 @@ public class EsqlCapabilities {
          */
         TS_COMMAND_V0(),
 
+        /**
+         * Support TS command in non-snapshot builds
+         */
+        MATCH_SEMANTIC_TEXT_PREFILTER(Build.current().isSnapshot()),
+
         ;
 
         private final boolean enabled;

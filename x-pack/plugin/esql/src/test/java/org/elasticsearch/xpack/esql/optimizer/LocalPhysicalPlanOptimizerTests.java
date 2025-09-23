@@ -64,6 +64,7 @@ import org.elasticsearch.xpack.esql.expression.function.fulltext.FullTextFunctio
 import org.elasticsearch.xpack.esql.expression.function.fulltext.Kql;
 import org.elasticsearch.xpack.esql.expression.function.fulltext.Match;
 import org.elasticsearch.xpack.esql.expression.function.fulltext.MatchOperator;
+import org.elasticsearch.xpack.esql.expression.function.fulltext.PrefilteredFullTextFunction;
 import org.elasticsearch.xpack.esql.expression.function.fulltext.QueryString;
 import org.elasticsearch.xpack.esql.expression.function.vector.Knn;
 import org.elasticsearch.xpack.esql.expression.predicate.logical.And;
@@ -1919,6 +1920,8 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     }
 
     public void testMatchSemanticTextPrefilters() {
+        assumeTrue("match with prefilters must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
+
         checkFilteredFullTextFunctionWithPrefilter(
             "match(semantic_text, \"hello world\")",
              new SemanticQueryBuilder("semantic_text", "hello world")
@@ -1956,12 +1959,26 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testKnnPrefiltersWithMultipleFilters() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        String query = """
+        checkFilteredFullTextFunctionhMultipleFilters("knn(dense_vector, [0, 1, 2])",
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null)
+        );
+    }
+
+    public void testMatchSemanticTextPrefiltersWithMultipleFilters() {
+        assumeTrue("match with prefilters must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
+
+        checkFilteredFullTextFunctionhMultipleFilters("match(semantic_text, \"hello world\")",
+            new SemanticQueryBuilder("semantic_text", "hello world")
+        );
+    }
+
+    public void checkFilteredFullTextFunctionhMultipleFilters(String esqlFunction, FilteredQueryBuilder<?> expectedQueryBuilder) {
+        String query = String.format(Locale.ROOT, """
             from test
-            | where knn(dense_vector, [0, 1, 2])
+            | where %s
             | where integer > 10
             | where keyword == "test"
-            """;
+            """, esqlFunction);
         var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
 
         var limit = as(plan, LimitExec.class);
@@ -1977,64 +1994,39 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             new Source(4, 8, "keyword == \"test\"")
         );
         QueryBuilder expectedFilterQueryBuilder = boolQuery().must(integerFilter).must(keywordFilter);
-        KnnVectorQueryBuilder expectedKnnQueryBuilder = new KnnVectorQueryBuilder(
-            "dense_vector",
-            new float[] { 0, 1, 2 },
-            1000,
-            null,
-            null,
-            null,
-            null
-        ).addFilterQuery(expectedFilterQueryBuilder);
-        var expectedQuery = boolQuery().must(expectedKnnQueryBuilder).must(integerFilter).must(keywordFilter);
-        assertEquals(expectedQuery.toString(), queryExec.query().toString());
-    }
-
-    public void testPushDownConjunctionsToKnnPrefilter() {
-        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
-
-        String query = """
-            from test
-            | where knn(dense_vector, [0, 1, 2]) and integer > 10
-            """;
-        var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
-
-        var limit = as(plan, LimitExec.class);
-        var exchange = as(limit.child(), ExchangeExec.class);
-        var project = as(exchange.child(), ProjectExec.class);
-        var field = as(project.child(), FieldExtractExec.class);
-        var queryExec = as(field.child(), EsQueryExec.class);
-
-        // The filter condition should be pushed down to both the KNN query and the main query
-        QueryBuilder expectedFilterQueryBuilder = wrapWithSingleQuery(
-            query,
-            unscore(rangeQuery("integer").gt(10)),
-            "integer",
-            new Source(2, 41, "integer > 10")
-        );
-
-        KnnVectorQueryBuilder expectedKnnQueryBuilder = new KnnVectorQueryBuilder(
-            "dense_vector",
-            new float[] { 0, 1, 2 },
-            1000,
-            null,
-            null,
-            null,
-            null
-        ).addFilterQuery(expectedFilterQueryBuilder);
-
-        var expectedQuery = boolQuery().must(expectedKnnQueryBuilder).must(expectedFilterQueryBuilder);
-
+        var expectedQuery = boolQuery().must(expectedQueryBuilder.addFilterQueries(List.of(expectedFilterQueryBuilder))).must(integerFilter).must(keywordFilter);
         assertEquals(expectedQuery.toString(), queryExec.query().toString());
     }
 
     public void testPushDownNegatedConjunctionsToKnnPrefilter() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        String query = """
+        checkPushDownNegatedConjunctionsToPrefilter("knn(dense_vector, [0, 1, 2])", new KnnVectorQueryBuilder(
+            "dense_vector",
+            new float[]{0, 1, 2},
+            1000,
+            null,
+            null,
+            null,
+            null
+        ));
+    }
+
+    public void testPushDownNegatedConjunctionsToMatchPrefilter() {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
+
+        checkPushDownNegatedConjunctionsToPrefilter("match(semantic_text, \"hello world\")",
+            new SemanticQueryBuilder("semantic_text", "hello world")
+        );
+    }
+
+    private void checkPushDownNegatedConjunctionsToPrefilter(String esqlQuery, FilteredQueryBuilder<?> expectedQueryBuilder) {
+
+        String query = String.format(Locale.ROOT, """
             from test
-            | where knn(dense_vector, [0, 1, 2]) and NOT integer > 10
-            """;
+            | where %s
+                and NOT integer > 10
+            """, esqlQuery);
         var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
 
         var limit = as(plan, LimitExec.class);
@@ -2048,31 +2040,43 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             query,
             unscore(boolQuery().mustNot(unscore(rangeQuery("integer").gt(10)))),
             "integer",
-            new Source(2, 41, "NOT integer > 10")
+            new Source(3, 8, "NOT integer > 10")
         );
 
-        KnnVectorQueryBuilder expectedKnnQueryBuilder = new KnnVectorQueryBuilder(
+        var expectedQuery = boolQuery().must(expectedQueryBuilder.addFilterQueries(List.of(expectedFilterQueryBuilder)))
+            .must(expectedFilterQueryBuilder);
+
+        assertEquals(expectedQuery.toString(), queryExec.query().toString());
+    }
+
+    public void testNotPushDownDisjunctionsToPrefilterToKnnPrefilter() {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
+
+        checkNotPushDownDisjunctionsToPrefilter("knn(dense_vector, [0, 1, 2])", new KnnVectorQueryBuilder(
             "dense_vector",
-            new float[] { 0, 1, 2 },
+            new float[]{0, 1, 2},
             1000,
             null,
             null,
             null,
             null
-        ).addFilterQuery(expectedFilterQueryBuilder);
-
-        var expectedQuery = boolQuery().must(expectedKnnQueryBuilder).must(expectedFilterQueryBuilder);
-
-        assertEquals(expectedQuery.toString(), queryExec.query().toString());
+        ));
     }
 
-    public void testNotPushDownDisjunctionsToKnnPrefilter() {
-        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
+    public void testNotPushDownDisjunctionsToPrefilterToMatchPrefilter() {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
 
-        String query = """
+        checkNotPushDownDisjunctionsToPrefilter("match(semantic_text, \"hello world\")",
+            new SemanticQueryBuilder("semantic_text", "hello world")
+        );
+    }
+
+    private void checkNotPushDownDisjunctionsToPrefilter(String esqlQuery, FilteredQueryBuilder<?> expectedQueryBuilder) {
+        String query = String.format(Locale.ROOT, """
             from test
-            | where knn(dense_vector, [0, 1, 2]) or integer > 10
-            """;
+            | where %s
+                or integer > 10
+            """, esqlQuery);
         var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
 
         var limit = as(plan, LimitExec.class);
@@ -2082,23 +2086,14 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         var queryExec = as(field.child(), EsQueryExec.class);
 
         // The disjunction should not be pushed down to the KNN query
-        KnnVectorQueryBuilder knnQueryBuilder = new KnnVectorQueryBuilder(
-            "dense_vector",
-            new float[] { 0, 1, 2 },
-            1000,
-            null,
-            null,
-            null,
-            null
-        );
         QueryBuilder rangeQueryBuilder = wrapWithSingleQuery(
             query,
             unscore(rangeQuery("integer").gt(10)),
             "integer",
-            new Source(2, 40, "integer > 10")
+            new Source(3, 7, "integer > 10")
         );
 
-        var expectedQuery = boolQuery().should(knnQueryBuilder).should(rangeQueryBuilder);
+        var expectedQuery = boolQuery().should(expectedQueryBuilder).should(rangeQueryBuilder);
 
         assertEquals(expectedQuery.toString(), queryExec.query().toString());
     }
@@ -2106,10 +2101,22 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testNotPushDownKnnWithNonPushablePrefilters() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        String query = """
+        checkNotPushDownWithNonPushablePrefilters("knn(dense_vector, [0, 1, 2])");
+    }
+
+    public void testNotPushDownMatchWithNonPushablePrefilters() {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
+
+        checkNotPushDownWithNonPushablePrefilters("match(semantic_text, \"hello world\")"
+        );
+    }
+
+    private void checkNotPushDownWithNonPushablePrefilters(String esqlQuery) {
+        String query = String.format(Locale.ROOT, """
             from test
-            | where ((knn(dense_vector, [0, 1, 2]) AND integer > 10) and ((keyword == "test") or length(text) > 10))
-            """;
+            | where (%s
+                AND integer > 10) and (((keyword == "test") or length(text) > 10))
+            """, esqlQuery);
         var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
 
         var limit = as(plan, LimitExec.class);
@@ -2119,9 +2126,9 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
         var secondLimit = as(field.child(), LimitExec.class);
         var filter = as(secondLimit.child(), FilterExec.class);
         var and = as(filter.condition(), And.class);
-        var knn = as(and.left(), Knn.class);
-        assertEquals("(keyword == \"test\") or length(text) > 10", knn.prefilterExpressions().get(0).toString());
-        assertEquals("integer > 10", knn.prefilterExpressions().get(1).toString());
+        var filteredFullTextFunction = as(and.left(), PrefilteredFullTextFunction.class);
+        assertEquals("(keyword == \"test\") or length(text) > 10", filteredFullTextFunction.prefilterExpressions().get(0).toString());
+        assertEquals("integer > 10", filteredFullTextFunction.prefilterExpressions().get(1).toString());
 
         var fieldExtract = as(filter.child(), FieldExtractExec.class);
         var queryExec = as(fieldExtract.child(), EsQueryExec.class);
@@ -2131,7 +2138,7 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             query,
             unscore(rangeQuery("integer").gt(10)),
             "integer",
-            new Source(2, 43, "integer > 10")
+            new Source(3, 8, "integer > 10")
         );
 
         assertEquals(integerGtQuery.toString(), queryExec.query().toString());
@@ -2140,11 +2147,32 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
     public void testPushDownComplexNegationsToKnnPrefilter() {
         assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
 
-        String query = """
+        checkPushDownComplexNegationsToPrefilter("knn(dense_vector, [0, 1, 2])", "knn(dense_vector, [4, 5, 6])",
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null),
+            new KnnVectorQueryBuilder("dense_vector", new float[] { 4, 5, 6 }, 1000, null, null, null, null)
+            );
+    }
+
+    public void testPushDownComplexNegationsToMatchPrefilter() {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.MATCH_SEMANTIC_TEXT_PREFILTER.isEnabled());
+
+        checkPushDownComplexNegationsToPrefilter("match(semantic_text, \"hello world\")",
+            "match(semantic_text, \"hello, hello\")",
+            new SemanticQueryBuilder("semantic_text", "hello world"),
+            new SemanticQueryBuilder("semantic_text", "hello, hello")
+        );
+    }
+
+    public void checkPushDownComplexNegationsToPrefilter(String esqlQuery1, String esqlQuery2,
+                                                         FilteredQueryBuilder<?> expectedQueryBuilder1, FilteredQueryBuilder<?> expectedQueryBuilder2) {
+        assumeTrue("knn must be enabled", EsqlCapabilities.Cap.KNN_FUNCTION_V5.isEnabled());
+
+        String query = String.format(Locale.ROOT, """
             from test
-            | where ((knn(dense_vector, [0, 1, 2]) or NOT integer > 10)
-              and NOT ((keyword == "test") or knn(dense_vector, [4, 5, 6])))
-            """;
+            | where ((%s
+             or NOT integer > 10) and NOT ((keyword == "test")
+             or %s))
+            """, esqlQuery1, esqlQuery2);
         var plan = plannerOptimizer.plan(query, IS_SV_STATS, makeAnalyzer("mapping-all-types.json"));
 
         var limit = as(plan, LimitExec.class);
@@ -2157,32 +2185,29 @@ public class LocalPhysicalPlanOptimizerTests extends MapperServiceTestCase {
             query,
             unscore(boolQuery().mustNot(unscore(termQuery("keyword", "test")))),
             "keyword",
-            new Source(3, 12, "keyword == \"test\"")
+            new Source(3, 32, "keyword == \"test\"")
         );
         QueryBuilder notKeywordFilter = wrapWithSingleQuery(
             query,
             unscore(boolQuery().mustNot(unscore(termQuery("keyword", "test")))),
             "keyword",
-            new Source(3, 6, "NOT ((keyword == \"test\") or knn(dense_vector, [4, 5, 6]))")
+            new Source(3, 26, "NOT ((keyword == \"test\")\n or " + esqlQuery1 + ")")
         );
 
         QueryBuilder notIntegerGt10 = wrapWithSingleQuery(
             query,
             unscore(boolQuery().mustNot(unscore(rangeQuery("integer").gt(10)))),
             "integer",
-            new Source(2, 42, "NOT integer > 10")
+            new Source(3, 4, "NOT integer > 10")
         );
 
-        KnnVectorQueryBuilder firstKnn = new KnnVectorQueryBuilder("dense_vector", new float[] { 0, 1, 2 }, 1000, null, null, null, null);
-        KnnVectorQueryBuilder secondKnn = new KnnVectorQueryBuilder("dense_vector", new float[] { 4, 5, 6 }, 1000, null, null, null, null);
-
-        firstKnn.addFilterQuery(notKeywordFilter);
-        secondKnn.addFilterQuery(notIntegerGt10);
+        expectedQueryBuilder1.addFilterQueries(List.of(notKeywordFilter));
+        expectedQueryBuilder2.addFilterQueries(List.of(notIntegerGt10));
 
         // Build the main boolean query structure
         BoolQueryBuilder expectedQuery = boolQuery().must(notKeywordQuery)  // NOT (keyword == "test")
-            .must(unscore(boolQuery().mustNot(secondKnn)))
-            .must(boolQuery().should(firstKnn).should(notIntegerGt10));
+            .must(unscore(boolQuery().mustNot(expectedQueryBuilder2)))
+            .must(boolQuery().should(expectedQueryBuilder1).should(notIntegerGt10));
 
         assertEquals(expectedQuery.toString(), queryExec.query().toString());
     }
