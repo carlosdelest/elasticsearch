@@ -23,10 +23,10 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.DoubleStream;
@@ -148,33 +148,7 @@ public class IngestDocumentTests extends ESTestCase {
      * @throws Exception Any exception thrown from the provided consumer
      */
     private void doWithAccessPattern(IngestPipelineFieldAccessPattern accessPattern, Consumer<IngestDocument> action) throws Exception {
-        AtomicReference<Exception> exceptionAtomicReference = new AtomicReference<>(null);
-        document.executePipeline(
-            new Pipeline(
-                randomAlphanumericOfLength(10),
-                null,
-                null,
-                null,
-                new CompoundProcessor(new TestProcessor(action)),
-                accessPattern,
-                null,
-                null,
-                null
-            ),
-            (ignored, ex) -> {
-                if (ex != null) {
-                    if (ex instanceof IngestProcessorException ingestProcessorException) {
-                        exceptionAtomicReference.set((Exception) ingestProcessorException.getCause());
-                    } else {
-                        exceptionAtomicReference.set(ex);
-                    }
-                }
-            }
-        );
-        Exception exception = exceptionAtomicReference.get();
-        if (exception != null) {
-            throw exception;
-        }
+        IngestPipelineTestUtils.doWithAccessPattern(accessPattern, document, action);
     }
 
     /**
@@ -184,7 +158,7 @@ public class IngestDocumentTests extends ESTestCase {
      * @throws Exception Any exception thrown from the provided consumer
      */
     private void doWithRandomAccessPattern(Consumer<IngestDocument> action) throws Exception {
-        doWithAccessPattern(randomFrom(IngestPipelineFieldAccessPattern.values()), action);
+        IngestPipelineTestUtils.doWithRandomAccessPattern(document, action);
     }
 
     private void assertPathValid(IngestDocument doc, String path) {
@@ -2188,5 +2162,48 @@ public class IngestDocumentTests extends ESTestCase {
             }
         }
         logger.debug("LEVEL {}/{}: COMPLETE", level, maxCallDepth);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testGetUnmodifiableSourceAndMetadata() {
+        assertMutatingThrows(ctx -> ctx.remove("foo"));
+        assertMutatingThrows(ctx -> ctx.put("foo", "bar"));
+        assertMutatingThrows(ctx -> ((List<Object>) ctx.get("listField")).add("bar"));
+        assertMutatingThrows(ctx -> ((List<Object>) ctx.get("listField")).remove("bar"));
+        assertMutatingThrows(ctx -> ((Set<Object>) ctx.get("setField")).add("bar"));
+        assertMutatingThrows(ctx -> ((Set<Object>) ctx.get("setField")).remove("bar"));
+        assertMutatingThrows(ctx -> ((Map<String, Object>) ctx.get("mapField")).put("bar", "baz"));
+        assertMutatingThrows(ctx -> ((Map<?, ?>) ctx.get("mapField")).remove("bar"));
+        assertMutatingThrows(ctx -> ((List<Object>) ((Set<Object>) ctx.get("setField")).iterator().next()).add("bar"));
+        assertMutatingThrows(
+            ctx -> ((List<Object>) ((List<Object>) ((Set<Object>) ctx.get("setField")).iterator().next()).iterator().next()).add("bar")
+        );
+
+        /*
+         * The source can also have a byte array. But we do not throw an UnsupportedOperationException when a byte array is changed --
+         * we just ignore the change.
+         */
+        Map<String, Object> document = new HashMap<>();
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        ingestDocument.setFieldValue("byteArrayField", randomByteArrayOfLength(10));
+        Map<String, Object> unmodifiableDocument = ingestDocument.getUnmodifiableSourceAndMetadata();
+        byte originalByteValue = ((byte[]) unmodifiableDocument.get("byteArrayField"))[0];
+        ((byte[]) unmodifiableDocument.get("byteArrayField"))[0] = (byte) (originalByteValue + 1);
+        assertThat(((byte[]) unmodifiableDocument.get("byteArrayField"))[0], equalTo(originalByteValue));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void assertMutatingThrows(Consumer<Map<String, Object>> mutation) {
+        Map<String, Object> document = new HashMap<>();
+        IngestDocument ingestDocument = RandomDocumentPicks.randomIngestDocument(random(), document);
+        ingestDocument.setFieldValue("listField", new ArrayList<>());
+        ingestDocument.setFieldValue("mapField", new HashMap<>());
+        ingestDocument.setFieldValue("setField", new HashSet<>());
+        List<Object> listWithinSet = new ArrayList<>();
+        listWithinSet.add(new ArrayList<>());
+        ingestDocument.getFieldValue("setField", Set.class).add(listWithinSet);
+        Map<String, Object> unmodifiableDocument = ingestDocument.getUnmodifiableSourceAndMetadata();
+        assertThrows(UnsupportedOperationException.class, () -> mutation.accept(unmodifiableDocument));
+        mutation.accept(ingestDocument.getSourceAndMetadata()); // no exception expected
     }
 }
