@@ -195,11 +195,6 @@ public class Knn extends PrefilteredFullTextFunction
     }
 
     @Override
-    public DataType dataType() {
-        return DataType.BOOLEAN;
-    }
-
-    @Override
     protected TypeResolution resolveParams() {
         return resolveField().and(resolveQuery()).and(Options.resolve(options(), source(), THIRD, ALLOWED_OPTIONS));
     }
@@ -243,12 +238,12 @@ public class Knn extends PrefilteredFullTextFunction
     }
 
     @Override
-    protected Expression replaceFilteredQueryBuilder(QueryBuilder queryBuilder) {
+    public Expression replaceQueryBuilder(QueryBuilder queryBuilder) {
         return new Knn(source(), field(), query(), options(), k(), queryBuilder, prefilterExpressions());
     }
 
     @Override
-    protected Query translate(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
+    protected Query translateInnerQuery(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
         assert k() != null : "Knn function must have a k value set before translation";
         var fieldAttribute = Match.fieldAsFieldAttribute(field());
 

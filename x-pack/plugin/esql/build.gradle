@@ -53,6 +53,7 @@ dependencies {
     exclude(group: "org.elasticsearch.plugin", module: "esql")
   }
   testImplementation project(':test:framework')
+  testImplementation testArtifact(project(':server'))
   testImplementation(testArtifact(project(xpackModule('core'))))
   testImplementation project(path: xpackModule('enrich'))
   testImplementation project(path: xpackModule('spatial'))

@@ -11,14 +11,14 @@ import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.vectors.FilteredQueryBuilder;
 import org.elasticsearch.xpack.esql.capabilities.TranslationAware;
 import org.elasticsearch.xpack.esql.core.expression.Expression;
+import org.elasticsearch.xpack.esql.core.querydsl.query.Query;
 import org.elasticsearch.xpack.esql.core.tree.Source;
 import org.elasticsearch.xpack.esql.optimizer.rules.physical.local.LucenePushdownPredicates;
+import org.elasticsearch.xpack.esql.planner.TranslatorHandler;
+import org.elasticsearch.xpack.esql.querydsl.query.PrefilteredQuery;
 
-import java.util.ArrayList;
 import java.util.List;
-
-import static org.elasticsearch.xpack.esql.optimizer.rules.physical.local.LucenePushdownPredicates.DEFAULT;
-import static org.elasticsearch.xpack.esql.planner.TranslatorHandler.TRANSLATOR_HANDLER;
+import java.util.stream.Collectors;
 
 public abstract class PrefilteredFullTextFunction extends FullTextFunction {
 
@@ -57,29 +57,28 @@ public abstract class PrefilteredFullTextFunction extends FullTextFunction {
         return filterExpressions;
     }
 
-    public final Expression replaceQueryBuilder(QueryBuilder queryBuilder) {
-        if (queryBuilder instanceof FilteredQueryBuilder<?> filteredQueryBuilder) {
-            queryBuilder = filteredQueryBuilder.addFilterQueries(prefilterQueryBuilders());
-        }
+    @Override
+    public final Query translate(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
+        PrefilteredQuery prefilteredQuery = new PrefilteredQuery(
+            source(),
+            translateInnerQuery(pushdownPredicates, handler),
+            prefiltersAsQueries(pushdownPredicates, handler)
+        );
 
-        return replaceFilteredQueryBuilder(queryBuilder);
+        return prefilteredQuery;
     }
 
-    private List<QueryBuilder> prefilterQueryBuilders() {
-        List<QueryBuilder> filterQueries = new ArrayList<>();
-        for (Expression filterExpression : prefilterExpressions()) {
-            if (filterExpression instanceof TranslationAware translationAware) {
-                // We can only translate filter expressions that are translatable. In case any is not translatable,
-                // Knn won't be pushed down so it's safe not to translate all filters and check them when creating an evaluator
-                // for the non-pushed down query
-                if (translationAware.translatable(DEFAULT) == Translatable.YES) {
-                    filterQueries.add(TRANSLATOR_HANDLER.asQuery(DEFAULT, filterExpression).toQueryBuilder());
-                }
-            }
-        }
+    protected abstract Query translateInnerQuery(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler);
 
-        return filterQueries;
+    private List<Query> prefiltersAsQueries(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
+        return prefilterExpressions()
+            .stream()
+            // We can only translate filter expressions that are translatable. In case any is not translatable,
+            // Knn won't be pushed down so it's safe not to translate all filters and check them when creating an evaluator
+            // for the non-pushed down query
+            .filter(f -> f instanceof TranslationAware)
+            .map(TranslationAware.class::cast)
+            .map(ta -> ta.asQuery(pushdownPredicates, handler))
+            .collect(Collectors.toList());
     }
-
-    protected abstract Expression replaceFilteredQueryBuilder(QueryBuilder queryBuilder);
 }

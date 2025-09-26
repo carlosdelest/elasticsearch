@@ -417,11 +417,6 @@ public class Match extends PrefilteredFullTextFunction implements OptionalArgume
     }
 
     @Override
-    protected Expression replaceFilteredQueryBuilder(QueryBuilder queryBuilder) {
-        return new Match(source(), field, query(), options(), queryBuilder, prefilterExpressions());
-    }
-
-    @Override
     public BiConsumer<LogicalPlan, Failures> postAnalysisPlanVerification() {
         return (plan, failures) -> {
             super.postAnalysisPlanVerification().accept(plan, failures);
@@ -455,12 +450,18 @@ public class Match extends PrefilteredFullTextFunction implements OptionalArgume
     }
 
     @Override
-    protected Query translate(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
+    protected Query translateInnerQuery(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
         var fieldAttribute = fieldAsFieldAttribute();
         Check.notNull(fieldAttribute, "Match must have a field attribute as the first argument");
         String fieldName = getNameFromFieldAttribute(fieldAttribute);
         // Make query lenient so mixed field types can be queried when a field type is incompatible with the value provided
+
         return new MatchQuery(source(), fieldName, queryAsObject(), matchQueryOptions());
+    }
+
+    @Override
+    public Expression replaceQueryBuilder(QueryBuilder queryBuilder) {
+        return new Match(source(), field(), query(), options(), queryBuilder, prefilterExpressions());
     }
 
     private FieldAttribute fieldAsFieldAttribute() {

@@ -92,7 +92,7 @@ public class MatchOperator extends Match {
     }
 
     @Override
-    public Expression replaceFilteredQueryBuilder(QueryBuilder queryBuilder) {
+    public Expression replaceQueryBuilder(QueryBuilder queryBuilder) {
         return new MatchOperator(source(), field, query(), queryBuilder, prefilterExpressions());
     }
 }

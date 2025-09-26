@@ -164,7 +164,7 @@ public abstract class FullTextFunction extends Function
     }
 
     @Override
-    public Query asQuery(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
+    public final Query asQuery(LucenePushdownPredicates pushdownPredicates, TranslatorHandler handler) {
         return queryBuilder != null ? new TranslationAwareExpressionQuery(source(), queryBuilder) : translate(pushdownPredicates, handler);
     }
 

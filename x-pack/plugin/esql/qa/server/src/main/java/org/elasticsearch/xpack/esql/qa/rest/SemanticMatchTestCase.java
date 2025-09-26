@@ -92,6 +92,41 @@ public abstract class SemanticMatchTestCase extends ESRestTestCase {
         );
     }
 
+    public void testMatchWithAndPrefilter() throws IOException {
+        assumeTrue("semantic text capability not available", EsqlCapabilities.Cap.SEMANTIC_TEXT_FIELD_CAPS.isEnabled());
+
+        StringBuilder bulkRequestBody = new StringBuilder();
+        int specificValueCount = 0;
+        for (int i = 0; i < 100; i++) {
+            bulkRequestBody.append("{\"index\":{\"_index\":\"test-semantic-prefilter\"}}\n");
+            String prefilterValue = "other_value";
+            if (i % 10 == 0) {
+                prefilterValue = "specific_value";
+                specificValueCount++;
+            }
+            bulkRequestBody.append("{\"semantic_text_field\":\"inference test\", \"prefilter_field\":\"")
+                .append(prefilterValue)
+                .append("\"}\n");
+        }
+
+        Request bulkRequest = new Request("POST", "/_bulk");
+        bulkRequest.addParameter("refresh", "true");
+        bulkRequest.setJsonEntity(bulkRequestBody.toString());
+        assertEquals(200, adminClient().performRequest(bulkRequest).getStatusLine().getStatusCode());
+
+        String query = """
+            FROM test-semantic-prefilter
+            | WHERE MATCH(semantic_text_field, "something") AND prefilter_field == "specific_value"
+            | LIMIT 10
+            """;
+        Map<String, Object> result = runEsqlQuery(query);
+
+        @SuppressWarnings("unchecked")
+        List<List<Object>> values = (List<List<Object>>) result.get("values");
+        assertNotNull(values);
+        assertEquals(specificValueCount, values.size());
+    }
+
     @Before
     public void setUpIndices() throws IOException {
         var settings = Settings.builder().build();
@@ -139,6 +174,19 @@ public abstract class SemanticMatchTestCase extends ESRestTestCase {
                 }
             """;
         createIndex(adminClient(), "test-semantic4", settings, mapping4);
+
+        String mappingFilter = """
+                "properties": {
+                  "semantic_text_field": {
+                   "type": "semantic_text",
+                   "inference_id": "test_dense_inference"
+                  },
+                  "prefilter_field": {
+                    "type": "keyword"
+                  }
+                }
+            """;
+        createIndex(adminClient(), "test-semantic-prefilter", settings, mappingFilter);
     }
 
     @Before
