@@ -364,13 +364,18 @@ public class PhysicalPlanOptimizerTests extends ESTestCase {
         );
 
         Map<String, EsField> denseVectorMapping = new HashMap<>();
-        denseVectorMapping.put("vector", new EsField("vector", DataType.DENSE_VECTOR, Map.of(), true,
-            EsField.TimeSeriesFieldType.NONE));
+        denseVectorMapping.put("vector", new EsField("vector", DataType.DENSE_VECTOR, Map.of(), true, EsField.TimeSeriesFieldType.NONE));
         EsIndex denseVectorIndex = new EsIndex("dense_vector_index", denseVectorMapping, Map.of("test", IndexMode.STANDARD));
         IndexResolution denseVectorIndexResolution = IndexResolution.valid(denseVectorIndex);
         Analyzer denseVectorAnalyzer = new Analyzer(
-            new AnalyzerContext(config, functionRegistry, denseVectorIndexResolution, defaultLookupResolution(), enrichResolution,
-                emptyInferenceResolution()),
+            new AnalyzerContext(
+                config,
+                functionRegistry,
+                denseVectorIndexResolution,
+                defaultLookupResolution(),
+                enrichResolution,
+                emptyInferenceResolution()
+            ),
             TEST_VERIFIER
         );
         this.denseVectorData = new TestDataSource(denseVectorMapping, denseVectorIndex, denseVectorAnalyzer, TEST_SEARCH_STATS);
