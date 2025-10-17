@@ -72,7 +72,7 @@ public class BlockTestUtils {
             );
             case NULL -> null;
             case COMPOSITE -> throw new IllegalArgumentException("can't make random values for composite");
-            case DENSE_VECTOR -> randomArray(10, 10, Float[]::new, () -> randomFloat());
+            case DENSE_VECTOR -> randomArray(5, 5, Float[]::new, () -> randomFloat());
             case UNKNOWN -> throw new IllegalArgumentException("can't make random values for [" + e + "]");
         };
     }

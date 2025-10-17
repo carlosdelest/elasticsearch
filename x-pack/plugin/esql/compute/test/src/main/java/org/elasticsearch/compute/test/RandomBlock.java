@@ -13,6 +13,7 @@ import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockFactory;
 import org.elasticsearch.compute.data.BooleanBlock;
 import org.elasticsearch.compute.data.BytesRefBlock;
+import org.elasticsearch.compute.data.DenseVectorBlock;
 import org.elasticsearch.compute.data.DoubleBlock;
 import org.elasticsearch.compute.data.ElementType;
 import org.elasticsearch.compute.data.FloatBlock;
@@ -27,6 +28,9 @@ import org.elasticsearch.xpack.esql.core.util.SpatialCoordinateTypes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
+
+import static org.apache.lucene.tests.index.BaseKnnVectorsFormatTestCase.randomVector;
+import static org.elasticsearch.test.ESTestCase.randomIntBetween;
 
 /**
  * A block of random values.
@@ -154,6 +158,10 @@ public record RandomBlock(List<List<Object>> values, Block block) {
                             b.sum().appendDouble(sum);
                             b.count().appendInt(count);
                             valuesAtPosition.add(new AggregateMetricDoubleBlockBuilder.AggregateMetricDoubleLiteral(min, max, sum, count));
+                        }
+                        case DENSE_VECTOR -> {
+                            float[] denseVector = randomVector(5);
+                            ((DenseVectorBlock.Builder) builder).appendDenseVector(denseVector);
                         }
                         default -> throw new IllegalArgumentException("unsupported element type [" + elementType + "]");
                     }

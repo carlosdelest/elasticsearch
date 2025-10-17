@@ -21,7 +21,7 @@ final class DenseVectorVectorBuilder extends AbstractVectorBuilder implements De
     DenseVectorVectorBuilder(int estimatedSize, int dimensions, BlockFactory blockFactory) {
         super(blockFactory);
         int initialSize = Math.max(estimatedSize, 2) * dimensions;
-        adjustBreaker(initialSize);
+        adjustBreaker(initialSize * elementSize());
         values = new float[Math.max(estimatedSize, 2)][dimensions];
         this.dimensions = dimensions;
     }

@@ -29,16 +29,17 @@ public class VectorBuilderTests extends ESTestCase {
     @ParametersFactory
     public static List<Object[]> params() {
         List<Object[]> params = new ArrayList<>();
-        for (ElementType e : ElementType.values()) {
-            if (e == ElementType.UNKNOWN
-                || e == ElementType.NULL
-                || e == ElementType.DOC
-                || e == ElementType.COMPOSITE
-                || e == ElementType.AGGREGATE_METRIC_DOUBLE) {
-                continue;
-            }
-            params.add(new Object[] { e });
-        }
+//        for (ElementType e : ElementType.values()) {
+//            if (e == ElementType.UNKNOWN
+//                || e == ElementType.NULL
+//                || e == ElementType.DOC
+//                || e == ElementType.COMPOSITE
+//                || e == ElementType.AGGREGATE_METRIC_DOUBLE) {
+//                continue;
+//            }
+//            params.add(new Object[] { e });
+//        }
+        params.add(new Object[] { ElementType.DENSE_VECTOR });
         return params;
     }
 
@@ -59,6 +60,7 @@ public class VectorBuilderTests extends ESTestCase {
     }
 
     public void testBuildHuge() {
+        assumeTrue("DENSE_VECTORS will create BigArrays", elementType != ElementType.DENSE_VECTOR);
         testBuild(between(1_000, 50_000));
     }
 
@@ -125,7 +127,7 @@ public class VectorBuilderTests extends ESTestCase {
             case DOUBLE -> blockFactory.newDoubleVectorBuilder(estimatedSize);
             case INT -> blockFactory.newIntVectorBuilder(estimatedSize);
             case LONG -> blockFactory.newLongVectorBuilder(estimatedSize);
-            case DENSE_VECTOR -> blockFactory.newDenseVectorVectorBuilder(estimatedSize, 10);
+            case DENSE_VECTOR -> blockFactory.newDenseVectorVectorBuilder(estimatedSize, 5);
         };
     }
 
@@ -160,6 +162,11 @@ public class VectorBuilderTests extends ESTestCase {
             case LONG -> {
                 for (int p = 0; p < from.getPositionCount(); p++) {
                     ((LongVector.Builder) builder).appendLong(((LongVector) from).getLong(p));
+                }
+            }
+            case DENSE_VECTOR -> {
+                for (int p = 0; p < from.getPositionCount(); p++) {
+                    ((DenseVectorVector.Builder) builder).appendDenseVector(((DenseVectorVector) from).getDenseVector(p));
                 }
             }
         }

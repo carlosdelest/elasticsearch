@@ -28,15 +28,15 @@ final class DenseVectorBlockBuilder extends AbstractBlockBuilder implements Dens
 
 
     DenseVectorBlockBuilder(int estimatedSize, BlockFactory blockFactory, int dimensions) {
-        this(estimatedSize, blockFactory);
+        super(blockFactory);
+        int initialSize = Math.max(estimatedSize, 2);
+        adjustBreaker((RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + elementSize()) * initialSize);
+        values = new float[initialSize][];
         this.dimensions = dimensions;
     }
 
     DenseVectorBlockBuilder(int estimatedSize, BlockFactory blockFactory) {
-        super(blockFactory);
-        int initialSize = Math.max(estimatedSize, 2);
-        adjustBreaker(RamUsageEstimator.NUM_BYTES_ARRAY_HEADER + initialSize * elementSize());
-        values = new float[initialSize][];
+        this(estimatedSize, blockFactory, 0);
     }
 
     @Override
@@ -82,12 +82,14 @@ final class DenseVectorBlockBuilder extends AbstractBlockBuilder implements Dens
 
     @Override
     public DenseVectorBlockBuilder beginPositionEntry() {
-        throw new UnsupportedOperationException();
+        super.beginPositionEntry();
+        return this;
     }
 
     @Override
     public DenseVectorBlockBuilder endPositionEntry() {
-        throw new UnsupportedOperationException();
+        super.endPositionEntry();
+        return this;
     }
 
     @Override

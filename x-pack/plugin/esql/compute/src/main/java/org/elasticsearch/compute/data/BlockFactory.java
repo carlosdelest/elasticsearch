@@ -493,7 +493,7 @@ public class BlockFactory {
     }
 
     public DenseVectorBlock.Builder newDenseVectorBlockBuilder(int estimatedSize, int dimensions) {
-        return new DenseVectorBlockBuilder(estimatedSize, this);
+        return new DenseVectorBlockBuilder(estimatedSize, this, dimensions);
     }
 
     public DenseVectorBlock newDenseVectorArrayBlock(
