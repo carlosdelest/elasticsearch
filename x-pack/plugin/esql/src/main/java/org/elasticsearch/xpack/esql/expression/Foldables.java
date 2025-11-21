@@ -82,6 +82,13 @@ public abstract class Foldables {
         throw new QlIllegalArgumentException(message);
     }
 
+    public static Boolean booleanLiteralValueOf(Expression expression, String message) {
+        if (expression instanceof Literal literal && literal.value() instanceof Boolean bool) {
+            return bool;
+        }
+        throw new QlIllegalArgumentException(message);
+    }
+
     public static Object literalValueOf(Expression e) {
         if (e instanceof Literal literal) {
             return literal.value();

@@ -95,6 +95,17 @@ public class QuerySettingsTests extends ESTestCase {
         );
     }
 
+    public void testValidate_ExcludeVectors() {
+        var setting = QuerySettings.EXCLUDE_VECTORS;
+
+        assertDefault(setting, equalTo(true));
+
+        assertValid(setting, Literal.fromBoolean(Source.EMPTY, true), equalTo(true));
+        assertValid(setting, Literal.fromBoolean(Source.EMPTY, false), equalTo(false));
+
+        assertInvalid(setting.name(), Literal.integer(Source.EMPTY, 12), "Setting [" + setting.name() + "] must be of type BOOLEAN");
+    }
+
     private static <T> void assertValid(QuerySettings.QuerySettingDef<T> settingDef, Literal valueLiteral, Matcher<T> parsedValueMatcher) {
         assertValid(settingDef, valueLiteral, parsedValueMatcher, SNAPSHOT_CTX_WITH_CPS_ENABLED);
     }

@@ -53,7 +53,22 @@ public class QuerySettings {
         ZoneOffset.UTC
     );
 
-    public static final Map<String, QuerySettingDef<?>> SETTINGS_BY_NAME = Stream.of(PROJECT_ROUTING, TIME_ZONE)
+    public static final QuerySettingDef<Boolean> EXCLUDE_VECTORS = new QuerySettingDef<>(
+        "exclude_vectors",
+        DataType.BOOLEAN,
+        true,
+        true,
+        false,
+        "By default, dense_vector fields are not included in ES|QL responses. " +
+            "This helps reduce response size and improve performance, especially in scenarios where vectors are used solely for " +
+            "similarity scoring and not required in the output.",
+        // TODO enable this when CPS is ready and we move this to tech preview
+        // (value, ctx) -> ctx.crossProjectEnabled() ? null : "not enabled",
+        (value) -> Foldables.booleanLiteralValueOf(value, "Unexpected value"),
+        true
+    );
+
+    public static final Map<String, QuerySettingDef<?>> SETTINGS_BY_NAME = Stream.of(PROJECT_ROUTING, TIME_ZONE, EXCLUDE_VECTORS)
         .collect(Collectors.toMap(QuerySettingDef::name, Function.identity()));
 
     public static void validate(EsqlStatement statement, SettingsValidationContext ctx) {

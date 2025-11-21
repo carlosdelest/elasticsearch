@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.Objects;
 
+import static org.elasticsearch.xpack.esql.core.type.DataType.BOOLEAN;
 import static org.elasticsearch.xpack.esql.core.type.DataType.DOUBLE;
 import static org.elasticsearch.xpack.esql.core.type.DataType.GEO_POINT;
 import static org.elasticsearch.xpack.esql.core.type.DataType.INTEGER;
@@ -208,6 +209,10 @@ public class Literal extends LeafExpression implements Accountable {
 
     public static Literal keyword(Source source, String literal) {
         return new Literal(source, BytesRefs.toBytesRef(literal), KEYWORD);
+    }
+
+    public static Literal fromBoolean(Source source, boolean literal) {
+        return new Literal(source, literal, BOOLEAN);
     }
 
     public static Literal text(Source source, String literal) {
