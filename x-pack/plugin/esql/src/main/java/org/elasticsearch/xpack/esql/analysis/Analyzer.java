@@ -232,7 +232,14 @@ public class Analyzer extends ParameterizedRuleExecutor<LogicalPlan, AnalyzerCon
             new InsertFromAggregateMetricDouble(),
             new ResolveUnionTypesInUnionAll()
         ),
-        new Batch<>("Finish Analysis", Limiter.ONCE, new AddImplicitLimit(), new AddImplicitForkLimit(), new UnionTypesCleanup())
+        new Batch<>(
+            "Finish Analysis",
+            Limiter.ONCE,
+            new AddImplicitLimit(),
+            new AddImplicitForkLimit(),
+            new UnionTypesCleanup(),
+            new AddExcludeVectorsByDefault()
+        )
     );
     public static final TransportVersion ESQL_LOOKUP_JOIN_FULL_TEXT_FUNCTION = TransportVersion.fromName(
         "esql_lookup_join_full_text_function"
@@ -1611,6 +1618,13 @@ public class Analyzer extends ParameterizedRuleExecutor<LogicalPlan, AnalyzerCon
                 newSubPlans.add(addImplicitLimit.apply(subPlan, ctx));
             }
             return fork.replaceSubPlans(newSubPlans);
+        }
+    }
+
+    private static class AddExcludeVectorsByDefault extends ParameterizedRule<LogicalPlan, LogicalPlan, AnalyzerContext> {
+        @Override
+        public LogicalPlan apply(LogicalPlan logicalPlan, AnalyzerContext context) {
+            return logicalPlan;
         }
     }
 

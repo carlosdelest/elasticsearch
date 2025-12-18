@@ -81,7 +81,8 @@ public class ConfigurationTestUtils {
             false,
             tsTruncation,
             defaultTsTruncation,
-            null
+            null,
+            true
         );
     }
 

@@ -58,12 +58,10 @@ public class QuerySettings {
         DataType.BOOLEAN,
         true,
         true,
-        false,
+        true,
         "By default, dense_vector fields are not included in ES|QL responses. " +
             "This helps reduce response size and improve performance, especially in scenarios where vectors are used solely for " +
             "similarity scoring and not required in the output.",
-        // TODO enable this when CPS is ready and we move this to tech preview
-        // (value, ctx) -> ctx.crossProjectEnabled() ? null : "not enabled",
         (value) -> Foldables.booleanLiteralValueOf(value, "Unexpected value"),
         true
     );

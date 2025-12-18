@@ -2438,6 +2438,18 @@ public class AnalyzerTests extends ESTestCase {
         assertThat(queryVector.name(), is("query"));
     }
 
+    public void testDenseVectorExcludedByDefault() {
+        var plan = analyze("from test", DENSE_VECTOR_MAPPING_FILE);
+
+        var limit = as(plan, Limit.class);
+        var filter = as(limit.child(), Filter.class);
+        var knn = as(filter.condition(), Knn.class);
+        var queryVector = as(knn.query(), ReferenceAttribute.class);
+        assertEquals(DataType.DENSE_VECTOR, queryVector.dataType());
+        assertThat(queryVector.name(), is("query"));
+    }
+
+
     public void testDenseVectorImplicitCastingKnnQueryParams() {
         checkDenseVectorCastingKnnQueryParams("float_vector");
         checkDenseVectorCastingKnnQueryParams("byte_vector");

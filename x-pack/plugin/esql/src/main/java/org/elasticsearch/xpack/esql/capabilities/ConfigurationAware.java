@@ -34,7 +34,8 @@ public interface ConfigurationAware {
         false,
         0,
         0,
-        null
+        null,
+        true
     );
 
     Configuration configuration();

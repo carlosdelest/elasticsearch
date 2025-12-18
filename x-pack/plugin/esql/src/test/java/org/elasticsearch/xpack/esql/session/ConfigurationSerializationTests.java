@@ -52,8 +52,9 @@ public class ConfigurationSerializationTests extends AbstractWireSerializingTest
         int resultTruncationDefaultSize = in.resultTruncationDefaultSize(false);
         String query = in.query();
         boolean profile = in.profile();
+        boolean excludeVectors = in.excludeVectors();
         Map<String, Map<String, Column>> tables = in.tables();
-        switch (between(0, 9)) {
+        switch (between(0, 10)) {
             case 0 -> zoneId = randomValueOtherThan(zoneId, () -> randomZone().normalized());
             case 1 -> locale = randomValueOtherThan(in.locale(), () -> randomLocale(random()));
             case 2 -> username = randomAlphaOfLength(15);
@@ -89,6 +90,7 @@ public class ConfigurationSerializationTests extends AbstractWireSerializingTest
                     }
                 }
             }
+            case 10 -> excludeVectors = excludeVectors == false;
         }
         return new Configuration(
             zoneId,
@@ -105,7 +107,8 @@ public class ConfigurationSerializationTests extends AbstractWireSerializingTest
             randomBoolean(),
             in.resultTruncationMaxSize(true),
             in.resultTruncationDefaultSize(true),
-            null
+            null,
+            excludeVectors
         );
     }
 }

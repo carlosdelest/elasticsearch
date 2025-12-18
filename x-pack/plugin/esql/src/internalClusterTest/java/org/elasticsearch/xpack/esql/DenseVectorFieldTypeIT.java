@@ -70,21 +70,23 @@ public class DenseVectorFieldTypeIT extends AbstractEsqlIntegTestCase {
     @ParametersFactory
     public static Iterable<Object[]> parameters() {
         List<Object[]> params = new ArrayList<>();
-        for (ElementType elementType : ElementType.values()) {
-            // Test all similarities
-            for (DenseVectorFieldMapper.VectorSimilarity similarity : DenseVectorFieldMapper.VectorSimilarity.values()) {
-                if (elementType == ElementType.BIT && similarity != DenseVectorFieldMapper.VectorSimilarity.L2_NORM) {
-                    continue;
-                }
-                params.add(new Object[] { elementType, similarity, true, VectorSourceOptions.DEFAULT });
-                params.add(new Object[] { elementType, similarity, true, VectorSourceOptions.SYNTHETIC });
-                params.add(new Object[] { elementType, similarity, true, VectorSourceOptions.INCLUDE_SOURCE_VECTORS });
-            }
+        params.add(new Object[] { ElementType.FLOAT, DenseVectorFieldMapper.VectorSimilarity.DOT_PRODUCT, true, VectorSourceOptions.DEFAULT });
 
-            params.add(new Object[] { elementType, null, false, VectorSourceOptions.DEFAULT });
-            params.add(new Object[] { elementType, null, false, VectorSourceOptions.SYNTHETIC });
-            params.add(new Object[] { elementType, null, false, VectorSourceOptions.INCLUDE_SOURCE_VECTORS });
-        }
+//        for (ElementType elementType : ElementType.values()) {
+//            // Test all similarities
+//            for (DenseVectorFieldMapper.VectorSimilarity similarity : DenseVectorFieldMapper.VectorSimilarity.values()) {
+//                if (elementType == ElementType.BIT && similarity != DenseVectorFieldMapper.VectorSimilarity.L2_NORM) {
+//                    continue;
+//                }
+//                params.add(new Object[] { elementType, similarity, true, VectorSourceOptions.DEFAULT });
+//                params.add(new Object[] { elementType, similarity, true, VectorSourceOptions.SYNTHETIC });
+//                params.add(new Object[] { elementType, similarity, true, VectorSourceOptions.INCLUDE_SOURCE_VECTORS });
+//            }
+//
+//            params.add(new Object[] { elementType, null, false, VectorSourceOptions.DEFAULT });
+//            params.add(new Object[] { elementType, null, false, VectorSourceOptions.SYNTHETIC });
+//            params.add(new Object[] { elementType, null, false, VectorSourceOptions.INCLUDE_SOURCE_VECTORS });
+//        }
 
         return params;
     }

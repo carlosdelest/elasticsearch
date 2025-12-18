@@ -38,11 +38,13 @@ public class Configuration implements Writeable {
     private static final TransportVersion TIMESERIES_DEFAULT_LIMIT = TransportVersion.fromName("timeseries_default_limit");
 
     private static final TransportVersion ESQL_SUPPORT_PARTIAL_RESULTS = TransportVersion.fromName("esql_support_partial_results");
+    private static final TransportVersion ESQL_EXCLUDE_VECTORS_DEFAULT = TransportVersion.fromName("esql_exclude_vectors_default");
 
     private final String clusterName;
     private final String username;
     private final ZonedDateTime now;
     private final ZoneId zoneId;
+    private final boolean excludeVectors;
 
     private final QueryPragmas pragmas;
 
@@ -77,7 +79,8 @@ public class Configuration implements Writeable {
         boolean allowPartialResults,
         int resultTruncationMaxSizeTimeseries,
         int resultTruncationDefaultSizeTimeseries,
-        String projectRouting
+        String projectRouting,
+        boolean excludeVectors
     ) {
         this.zoneId = zi.normalized();
         this.now = ZonedDateTime.now(Clock.tick(Clock.system(zoneId), Duration.ofNanos(1)));
@@ -96,6 +99,7 @@ public class Configuration implements Writeable {
         this.queryStartTimeNanos = queryStartTimeNanos;
         this.allowPartialResults = allowPartialResults;
         this.projectRouting = projectRouting;
+        this.excludeVectors = excludeVectors;
     }
 
     public Configuration(BlockStreamInput in) throws IOException {
@@ -122,6 +126,11 @@ public class Configuration implements Writeable {
         } else {
             this.resultTruncationMaxSizeTimeseries = this.resultTruncationMaxSizeRegular;
             this.resultTruncationDefaultSizeTimeseries = this.resultTruncationDefaultSizeRegular;
+        }
+        if (in.getTransportVersion().supports(ESQL_EXCLUDE_VECTORS_DEFAULT)) {
+            this.excludeVectors = in.readBoolean();
+        } else {
+            this.excludeVectors = false;
         }
 
         // not needed on the data nodes for now
@@ -151,6 +160,9 @@ public class Configuration implements Writeable {
             out.writeVInt(resultTruncationMaxSizeTimeseries);
             out.writeVInt(resultTruncationDefaultSizeTimeseries);
         }
+        if (out.getTransportVersion().supports(ESQL_EXCLUDE_VECTORS_DEFAULT)) {
+            out.writeBoolean(excludeVectors);
+        }
     }
 
     public ZoneId zoneId() {
@@ -171,6 +183,10 @@ public class Configuration implements Writeable {
 
     public QueryPragmas pragmas() {
         return pragmas;
+    }
+
+    public boolean excludeVectors() {
+        return excludeVectors;
     }
 
     public int resultTruncationMaxSize(boolean isTimeseries) {
@@ -240,7 +256,8 @@ public class Configuration implements Writeable {
             allowPartialResults,
             resultTruncationMaxSizeTimeseries,
             resultTruncationDefaultSizeTimeseries,
-            projectRouting
+            projectRouting,
+            excludeVectors
         );
     }
 
@@ -302,7 +319,8 @@ public class Configuration implements Writeable {
             && Objects.equals(that.query, query)
             && profile == that.profile
             && tables.equals(that.tables)
-            && allowPartialResults == that.allowPartialResults;
+            && allowPartialResults == that.allowPartialResults
+            && excludeVectors == that.excludeVectors;
     }
 
     @Override
@@ -321,7 +339,8 @@ public class Configuration implements Writeable {
             tables,
             allowPartialResults,
             resultTruncationMaxSizeTimeseries,
-            resultTruncationDefaultSizeTimeseries
+            resultTruncationDefaultSizeTimeseries,
+            excludeVectors
         );
     }
 
@@ -355,6 +374,8 @@ public class Configuration implements Writeable {
             + tables
             + "allow_partial_result="
             + allowPartialResults
+            + "exclude_vectors="
+            + excludeVectors
             + '}';
     }
 

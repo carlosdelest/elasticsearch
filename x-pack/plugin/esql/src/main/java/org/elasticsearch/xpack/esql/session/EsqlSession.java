@@ -216,8 +216,10 @@ public class EsqlSession {
             request.allowPartialResults(),
             analyzerSettings.timeseriesResultTruncationMaxSize(),
             analyzerSettings.timeseriesResultTruncationDefaultSize(),
-            projectRouting(request, statement)
+            projectRouting(request, statement),
+            statement.setting(QuerySettings.EXCLUDE_VECTORS)
         );
+
         FoldContext foldContext = configuration.newFoldContext();
 
         LogicalPlan plan = statement.plan();

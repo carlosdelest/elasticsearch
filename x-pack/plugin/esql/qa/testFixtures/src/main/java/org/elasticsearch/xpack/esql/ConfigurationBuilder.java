@@ -42,6 +42,7 @@ public class ConfigurationBuilder {
 
     private Map<String, Map<String, Column>> tables;
     private long queryStartTimeNanos;
+    private boolean excludeVectors = true;
 
     private String projectRouting;
 
@@ -61,6 +62,7 @@ public class ConfigurationBuilder {
         tables = configuration.tables();
         queryStartTimeNanos = configuration.queryStartTimeNanos();
         projectRouting = configuration.projectRouting();
+        excludeVectors = configuration.excludeVectors();
     }
 
     public ConfigurationBuilder clusterName(String clusterName) {
@@ -138,6 +140,11 @@ public class ConfigurationBuilder {
         return this;
     }
 
+    public ConfigurationBuilder excludeVectors(boolean excludeVectors) {
+        this.excludeVectors = excludeVectors;
+        return this;
+    }
+
     public Configuration build() {
         return new Configuration(
             zoneId,
@@ -154,7 +161,8 @@ public class ConfigurationBuilder {
             allowPartialResults,
             resultTruncationMaxSizeTimeseries,
             resultTruncationDefaultSizeTimeseries,
-            projectRouting
+            projectRouting,
+            excludeVectors
         );
     }
 }
