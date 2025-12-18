@@ -171,6 +171,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
@@ -2441,14 +2442,19 @@ public class AnalyzerTests extends ESTestCase {
     public void testDenseVectorExcludedByDefault() {
         var plan = analyze("from test", DENSE_VECTOR_MAPPING_FILE);
 
-        var limit = as(plan, Limit.class);
-        var filter = as(limit.child(), Filter.class);
-        var knn = as(filter.condition(), Knn.class);
-        var queryVector = as(knn.query(), ReferenceAttribute.class);
-        assertEquals(DataType.DENSE_VECTOR, queryVector.dataType());
-        assertThat(queryVector.name(), is("query"));
-    }
+        var project = as(plan, EsqlProject.class);
+        List<String> projectedFields = project.projections().stream().map(p -> as(p, Attribute.class).name()).toList();
+        // Vector fields have been removed
+        assertThat(projectedFields, equalTo(List.of("id")));
 
+        var limit = as(project.child(), Limit.class);
+        var esRelation = as(limit.child(), EsRelation.class);
+        assertThat(esRelation.indexPattern(), equalTo("test"));
+
+        // Verify that the EsRelation still contains all vector fields
+        List<String> relationFields = esRelation.output().stream().map(Attribute::name).toList();
+        assertThat(relationFields, hasItems("id", "float_vector", "byte_vector", "bit_vector", "bfloat16_vector"));
+    }
 
     public void testDenseVectorImplicitCastingKnnQueryParams() {
         checkDenseVectorCastingKnnQueryParams("float_vector");

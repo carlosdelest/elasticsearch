@@ -107,6 +107,7 @@ public class DenseVectorFieldTypeIT extends AbstractEsqlIntegTestCase {
 
     public void testRetrieveFieldType() {
         var query = """
+            SET exclude_vectors=false;
             FROM test
             """;
 
@@ -116,9 +117,21 @@ public class DenseVectorFieldTypeIT extends AbstractEsqlIntegTestCase {
         }
     }
 
+    public void testRetrieveFieldTypeExcludingVectors() {
+        var query = """
+            FROM test
+            """;
+
+        try (var resp = run(query)) {
+            assertColumnNames(resp.columns(), List.of("id"));
+            assertColumnTypes(resp.columns(), List.of("integer"));
+        }
+    }
+
     @SuppressWarnings("unchecked")
     public void testRetrieveTopNDenseVectorFieldData() {
         var query = """
+                SET exclude_vectors=false;
                 FROM test
                 | KEEP id, vector
                 | SORT id ASC
@@ -148,6 +161,7 @@ public class DenseVectorFieldTypeIT extends AbstractEsqlIntegTestCase {
     @SuppressWarnings("unchecked")
     public void testRetrieveDenseVectorFieldData() {
         var query = """
+            SET exclude_vectors=false;
             FROM test
             | KEEP id, vector
             """;
@@ -219,6 +233,7 @@ public class DenseVectorFieldTypeIT extends AbstractEsqlIntegTestCase {
         indexRandom(true, docs);
 
         var query = """
+            SET exclude_vectors=false;
             FROM no_dense_vectors
             | KEEP id, vector
             """;

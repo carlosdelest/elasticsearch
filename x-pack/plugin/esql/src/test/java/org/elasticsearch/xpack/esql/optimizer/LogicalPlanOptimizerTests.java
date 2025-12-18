@@ -10670,4 +10670,25 @@ public class LogicalPlanOptimizerTests extends AbstractLogicalPlanOptimizerTests
         assertThat(mvAvgAlias.child(), instanceOf(MvAvg.class));
         as(leftEval.child(), EsRelation.class);
     }
+
+
+    public void testDenseVectorExcludedByDefaultMultipleProjections() {
+        var query = """
+            from types
+            | drop keyword
+            """;
+        var optimized = planTypes(query);
+
+        var project = as(optimized, EsqlProject.class);
+        List<? extends NamedExpression> projections = project.projections();
+
+        var limit = as(project.child(), Limit.class);
+        var esRelation = as(limit.child(), EsRelation.class);
+
+        // Verify that the EsRelation still contains all vector fields
+        List<Attribute> output = esRelation.output();
+
+        // Vector field and "keyword" have been removed from projections
+        assertThat(projections.size() + 2, equalTo(output.size()));
+    }
 }
