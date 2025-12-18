@@ -17,6 +17,7 @@ import org.elasticsearch.compute.data.Page;
 import org.elasticsearch.core.Strings;
 import org.elasticsearch.index.IndexMode;
 import org.elasticsearch.logging.Logger;
+import org.elasticsearch.script.field.Field;
 import org.elasticsearch.xpack.core.enrich.EnrichPolicy;
 import org.elasticsearch.xpack.esql.Column;
 import org.elasticsearch.xpack.esql.EsqlIllegalArgumentException;
@@ -1624,7 +1625,16 @@ public class Analyzer extends ParameterizedRuleExecutor<LogicalPlan, AnalyzerCon
     private static class AddExcludeVectorsByDefault extends ParameterizedRule<LogicalPlan, LogicalPlan, AnalyzerContext> {
         @Override
         public LogicalPlan apply(LogicalPlan logicalPlan, AnalyzerContext context) {
-            return logicalPlan;
+            if (context.configuration().excludeVectors() == false) {
+                return logicalPlan;
+            }
+
+            List<Attribute> nonDenseVectorAttrs = logicalPlan.output().stream().filter(a -> a.dataType() != DENSE_VECTOR).toList();
+            if (nonDenseVectorAttrs.size() == logicalPlan.output().size()) {
+                // No filtered attrs
+                return logicalPlan;
+            }
+            return new EsqlProject(logicalPlan.source(), logicalPlan, nonDenseVectorAttrs);
         }
     }
 
