@@ -10,6 +10,7 @@ package org.elasticsearch.xpack.esql.plugin;
 import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.cluster.routing.SplitShardCountSummary;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.telemetry.tracing.TraceParentContext;
 import org.elasticsearch.test.ESTestCase;
 
 import java.util.Collections;
@@ -49,7 +50,8 @@ public class DataNodeRequestTests extends ESTestCase {
             generateRandomStringArray(10, 10, false, false),
             IndicesOptions.fromOptions(randomBoolean(), randomBoolean(), randomBoolean(), randomBoolean()),
             randomBoolean(),
-            randomBoolean()
+            randomBoolean(),
+            TraceParentContext.NONE
         );
 
         assertThat(request.shards(), equalTo(shards));

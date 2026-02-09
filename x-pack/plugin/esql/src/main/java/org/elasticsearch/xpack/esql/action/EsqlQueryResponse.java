@@ -386,7 +386,7 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
             content.add(ChunkedToXContentHelper.endObject());
         }
         if (traceResults != null) {
-            content.add(ChunkedToXContentHelper.field("trace", traceResults, params));
+            content.add(Iterators.single((builder, p) -> builder.field("trace", traceResults, p)));
         }
         content.add(ChunkedToXContentHelper.endObject());
 

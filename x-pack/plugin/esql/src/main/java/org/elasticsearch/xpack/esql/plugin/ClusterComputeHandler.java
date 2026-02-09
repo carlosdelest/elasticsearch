@@ -21,6 +21,7 @@ import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskCancelledException;
+import org.elasticsearch.telemetry.tracing.RequestTracer;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.RemoteClusterService;
 import org.elasticsearch.transport.Transport;
@@ -317,6 +318,7 @@ final class ClusterComputeHandler implements TransportRequestHandler<ClusterComp
                     originalIndices,
                     exchangeSource,
                     cancelQueryOnFailure,
+                    RequestTracer.NOOP, // TODO: Add cross-cluster trace propagation
                     computeListener.acquireCompute().map(r -> {
                         finalResponse.set(r);
                         return r.getCompletionInfo();

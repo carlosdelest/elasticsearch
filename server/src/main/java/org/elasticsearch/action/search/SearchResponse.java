@@ -412,7 +412,9 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
             aggregations == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(aggregations),
             suggest == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(suggest),
             profileResults == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(profileResults),
-            traceResults == null ? Collections.emptyIterator() : ChunkedToXContentHelper.field("trace", traceResults, params),
+            traceResults == null
+                ? Collections.emptyIterator()
+                : Iterators.single((builder, p) -> builder.field("trace", traceResults, p)),
             wrapInObject ? ChunkedToXContentHelper.endObject() : Collections.emptyIterator()
         );
     }

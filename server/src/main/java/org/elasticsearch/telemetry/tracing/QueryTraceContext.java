@@ -78,6 +78,20 @@ public class QueryTraceContext {
     }
 
     /**
+     * Creates a child QueryTraceContext from a parent trace context.
+     * This is used on remote nodes to continue the trace under the parent span.
+     *
+     * @param parentContext the trace context from the parent node
+     * @return a new QueryTraceContext that continues the trace, or a new independent context if parent is null/disabled
+     */
+    public static QueryTraceContext fromParent(TraceParentContext parentContext) {
+        if (parentContext == null || !parentContext.isEnabled()) {
+            return new QueryTraceContext();
+        }
+        return new QueryTraceContext(parentContext.traceId(), System.nanoTime());
+    }
+
+    /**
      * Starts a new span with the given operation name and attributes.
      * If there is an active span on the stack, the new span becomes its child.
      *
@@ -236,6 +250,55 @@ public class QueryTraceContext {
     public QueryTraceResults buildResults() {
         long totalDuration = System.nanoTime() - startTimeNanos;
         return new QueryTraceResults(traceId, rootSpan, totalDuration);
+    }
+
+    /**
+     * Gets the current trace parent context for propagating to remote nodes.
+     * This should be called before sending a request to a remote node, and the
+     * returned context should be included in the request.
+     *
+     * @return the trace parent context with current trace ID and active span ID
+     */
+    public synchronized TraceParentContext getTraceParentContext() {
+        String currentSpanId = getCurrentSpanId();
+        return new TraceParentContext(traceId, currentSpanId);
+    }
+
+    /**
+     * Adds child spans from a remote node's trace results to the current active span.
+     * This is called when a response is received from a remote node that includes trace results.
+     *
+     * @param childResults the trace results from the remote node, may be null
+     */
+    public synchronized void addChildTraceResults(QueryTraceResults childResults) {
+        if (childResults == null || childResults.rootSpan() == null) {
+            return;
+        }
+
+        QueryTraceSpan currentSpan = spanStack.peek();
+        if (currentSpan != null) {
+            // Add the root span from the child results as a child of the current span
+            currentSpan.addChild(childResults.rootSpan());
+        } else if (rootSpan != null) {
+            // If no active span, add to root span
+            rootSpan.addChild(childResults.rootSpan());
+        }
+    }
+
+    /**
+     * Adds a child span directly to the specified parent span.
+     *
+     * @param parentSpanId the ID of the parent span
+     * @param childSpan the child span to add
+     */
+    public void addChildSpan(String parentSpanId, QueryTraceSpan childSpan) {
+        if (parentSpanId == null || childSpan == null) {
+            return;
+        }
+        QueryTraceSpan parent = spanMap.get(parentSpanId);
+        if (parent != null) {
+            parent.addChild(childSpan);
+        }
     }
 
     /**

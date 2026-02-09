@@ -34,6 +34,7 @@ import org.elasticsearch.xpack.esql.io.stream.PlanStreamOutput;
 import org.elasticsearch.xpack.esql.plan.physical.ExchangeSinkExec;
 import org.elasticsearch.xpack.esql.plan.physical.PhysicalPlan;
 import org.elasticsearch.xpack.esql.session.Configuration;
+import org.elasticsearch.telemetry.tracing.TraceParentContext;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -48,6 +49,7 @@ import static org.elasticsearch.xpack.core.security.authz.IndicesAndAliasesResol
 
 final class DataNodeRequest extends AbstractTransportRequest implements IndicesRequest.Replaceable {
     private static final TransportVersion REDUCE_LATE_MATERIALIZATION = TransportVersion.fromName("esql_reduce_late_materialization");
+    private static final TransportVersion TRACE_CONTEXT_VERSION = TransportVersion.fromName("esql_trace_context");
 
     private static final Logger logger = LogManager.getLogger(DataNodeRequest.class);
 
@@ -61,6 +63,7 @@ final class DataNodeRequest extends AbstractTransportRequest implements IndicesR
     private final IndicesOptions indicesOptions;
     private final boolean runNodeLevelReduction;
     private final boolean reductionLateMaterialization;
+    private final TraceParentContext traceParentContext;
 
     DataNodeRequest(
         String sessionId,
@@ -72,7 +75,8 @@ final class DataNodeRequest extends AbstractTransportRequest implements IndicesR
         String[] indices,
         IndicesOptions indicesOptions,
         boolean runNodeLevelReduction,
-        boolean reductionLateMaterialization
+        boolean reductionLateMaterialization,
+        TraceParentContext traceParentContext
     ) {
         this.sessionId = sessionId;
         this.configuration = configuration;
@@ -84,6 +88,7 @@ final class DataNodeRequest extends AbstractTransportRequest implements IndicesR
         this.indicesOptions = indicesOptions;
         this.runNodeLevelReduction = runNodeLevelReduction;
         this.reductionLateMaterialization = reductionLateMaterialization;
+        this.traceParentContext = traceParentContext != null ? traceParentContext : TraceParentContext.NONE;
     }
 
     DataNodeRequest(StreamInput in) throws IOException {
@@ -118,6 +123,11 @@ final class DataNodeRequest extends AbstractTransportRequest implements IndicesR
         } else {
             this.reductionLateMaterialization = false;
         }
+        if (in.getTransportVersion().supports(TRACE_CONTEXT_VERSION)) {
+            this.traceParentContext = new TraceParentContext(in);
+        } else {
+            this.traceParentContext = TraceParentContext.NONE;
+        }
     }
 
     @Override
@@ -138,6 +148,9 @@ final class DataNodeRequest extends AbstractTransportRequest implements IndicesR
         out.writeBoolean(runNodeLevelReduction);
         if (out.getTransportVersion().supports(REDUCE_LATE_MATERIALIZATION)) {
             out.writeBoolean(reductionLateMaterialization);
+        }
+        if (out.getTransportVersion().supports(TRACE_CONTEXT_VERSION)) {
+            traceParentContext.writeTo(out);
         }
     }
 
@@ -219,6 +232,10 @@ final class DataNodeRequest extends AbstractTransportRequest implements IndicesR
         return reductionLateMaterialization;
     }
 
+    TraceParentContext traceParentContext() {
+        return traceParentContext;
+    }
+
     @Override
     public String getDescription() {
         return "shards=" + shards + " plan=" + plan;
@@ -272,7 +289,8 @@ final class DataNodeRequest extends AbstractTransportRequest implements IndicesR
             indices,
             indicesOptions,
             runNodeLevelReduction,
-            reductionLateMaterialization
+            reductionLateMaterialization,
+            traceParentContext
         );
     }
 

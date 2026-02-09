@@ -66,6 +66,20 @@ public class RequestTracer implements Tracer {
         this.traceableToSpanId = new ConcurrentHashMap<>();
     }
 
+    /**
+     * Creates a child RequestTracer from a parent trace context.
+     * This is used on remote nodes to continue the trace under the parent span.
+     *
+     * @param parentContext the trace context from the parent node
+     * @return a new RequestTracer that continues the trace, or NOOP if parent is disabled
+     */
+    public static RequestTracer fromParent(TraceParentContext parentContext) {
+        if (parentContext == null || !parentContext.isEnabled()) {
+            return NOOP;
+        }
+        return new RequestTracer(QueryTraceContext.fromParent(parentContext));
+    }
+
     @Override
     public void startTrace(TraceContext traceContext, Traceable traceable, String name, Map<String, Object> attributes) {
         String spanId = this.traceContext.startSpan(name, attributes);
@@ -222,6 +236,27 @@ public class RequestTracer implements Tracer {
     }
 
     /**
+     * Gets the current trace parent context for propagating to remote nodes.
+     * This should be called before sending a request to a remote node, and the
+     * returned context should be included in the request.
+     *
+     * @return the trace parent context with current trace ID and active span ID
+     */
+    public TraceParentContext getTraceParentContext() {
+        return traceContext.getTraceParentContext();
+    }
+
+    /**
+     * Adds child spans from a remote node's trace results to the current active span.
+     * This is called when a response is received from a remote node that includes trace results.
+     *
+     * @param childResults the trace results from the remote node, may be null
+     */
+    public void addChildTraceResults(QueryTraceResults childResults) {
+        traceContext.addChildTraceResults(childResults);
+    }
+
+    /**
      * @return true if this tracer is actually collecting traces, false for NOOP
      */
     public boolean isEnabled() {
@@ -321,6 +356,16 @@ public class RequestTracer implements Tracer {
 
         @Override
         public void addCurrentError(Throwable throwable) {
+            // no-op
+        }
+
+        @Override
+        public TraceParentContext getTraceParentContext() {
+            return TraceParentContext.NONE;
+        }
+
+        @Override
+        public void addChildTraceResults(QueryTraceResults childResults) {
             // no-op
         }
 

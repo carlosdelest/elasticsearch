@@ -12,7 +12,9 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.compute.operator.DriverCompletionInfo;
 import org.elasticsearch.compute.operator.DriverProfile;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.transport.TransportResponse;
 
 import java.io.IOException;
@@ -27,28 +29,47 @@ final class DataNodeComputeResponse extends TransportResponse {
     private static final TransportVersion ESQL_DOCUMENTS_FOUND_AND_VALUES_LOADED = TransportVersion.fromName(
         "esql_documents_found_and_values_loaded"
     );
+    private static final TransportVersion TRACE_RESULTS_VERSION = TransportVersion.fromName("esql_trace_context");
 
     private final DriverCompletionInfo completionInfo;
     private final Map<ShardId, Exception> shardLevelFailures;
+    @Nullable
+    private final QueryTraceResults traceResults;
 
     DataNodeComputeResponse(DriverCompletionInfo completionInfo, Map<ShardId, Exception> shardLevelFailures) {
+        this(completionInfo, shardLevelFailures, null);
+    }
+
+    DataNodeComputeResponse(
+        DriverCompletionInfo completionInfo,
+        Map<ShardId, Exception> shardLevelFailures,
+        @Nullable QueryTraceResults traceResults
+    ) {
         this.completionInfo = completionInfo;
         this.shardLevelFailures = shardLevelFailures;
+        this.traceResults = traceResults;
     }
 
     DataNodeComputeResponse(StreamInput in) throws IOException {
         if (supportsCompletionInfo(in.getTransportVersion())) {
             this.completionInfo = DriverCompletionInfo.readFrom(in);
             this.shardLevelFailures = in.readMap(ShardId::new, StreamInput::readException);
+            if (in.getTransportVersion().supports(TRACE_RESULTS_VERSION)) {
+                this.traceResults = in.readOptionalWriteable(QueryTraceResults::new);
+            } else {
+                this.traceResults = null;
+            }
             return;
         }
         if (DataNodeComputeHandler.supportShardLevelRetryFailure(in.getTransportVersion())) {
             this.completionInfo = new DriverCompletionInfo(0, 0, in.readCollectionAsImmutableList(DriverProfile::readFrom), List.of());
             this.shardLevelFailures = in.readMap(ShardId::new, StreamInput::readException);
+            this.traceResults = null;
             return;
         }
         this.completionInfo = new ComputeResponse(in).getCompletionInfo();
         this.shardLevelFailures = Map.of();
+        this.traceResults = null;
     }
 
     @Override
@@ -56,6 +77,9 @@ final class DataNodeComputeResponse extends TransportResponse {
         if (supportsCompletionInfo(out.getTransportVersion())) {
             completionInfo.writeTo(out);
             out.writeMap(shardLevelFailures, (o, v) -> v.writeTo(o), StreamOutput::writeException);
+            if (out.getTransportVersion().supports(TRACE_RESULTS_VERSION)) {
+                out.writeOptionalWriteable(traceResults);
+            }
             return;
         }
         if (DataNodeComputeHandler.supportShardLevelRetryFailure(out.getTransportVersion())) {
@@ -79,5 +103,10 @@ final class DataNodeComputeResponse extends TransportResponse {
 
     Map<ShardId, Exception> shardLevelFailures() {
         return shardLevelFailures;
+    }
+
+    @Nullable
+    QueryTraceResults traceResults() {
+        return traceResults;
     }
 }

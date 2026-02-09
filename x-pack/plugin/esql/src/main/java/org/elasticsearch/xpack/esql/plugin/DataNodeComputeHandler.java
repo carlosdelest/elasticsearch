@@ -47,6 +47,8 @@ import org.elasticsearch.transport.TransportChannel;
 import org.elasticsearch.transport.TransportRequestHandler;
 import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
+import org.elasticsearch.telemetry.tracing.RequestTracer;
+import org.elasticsearch.telemetry.tracing.TraceParentContext;
 import org.elasticsearch.xpack.esql.action.EsqlCapabilities;
 import org.elasticsearch.xpack.esql.core.expression.FoldContext;
 import org.elasticsearch.xpack.esql.plan.physical.ExchangeSinkExec;
@@ -118,6 +120,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         OriginalIndices originalIndices,
         ExchangeSourceHandler exchangeSource,
         Runnable runOnTaskFailure,
+        RequestTracer tracer,
         ActionListener<ComputeResponse> outListener
     ) {
         Integer maxConcurrentNodesPerCluster = PlanConcurrencyCalculator.INSTANCE.calculateNodesConcurrency(dataNodePlan, configuration);
@@ -194,6 +197,11 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                                 .equals(connection.getNode().getId());
                             boolean enableReduceNodeLateMaterialization = EsqlCapabilities.Cap.ENABLE_REDUCE_NODE_LATE_MATERIALIZATION
                                 .isEnabled();
+                            // Start a span for this data node compute
+                            String dataNodeSpanId = tracer.startSpan(
+                                "esql.data_node_compute",
+                                Map.of("es.node", node.getName(), "es.shards", shards.size())
+                            );
                             var dataNodeRequest = new DataNodeRequest(
                                 childSessionId,
                                 configuration,
@@ -207,7 +215,8 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                                 // TopN late materialization, listed below), as the node-reduce driver would end up doing the exact same
                                 // work as the final driver.
                                 queryPragmas.nodeLevelReduction() && sameNodeAsCoordinator == false,
-                                queryPragmas.nodeLevelReduction() && enableReduceNodeLateMaterialization
+                                queryPragmas.nodeLevelReduction() && enableReduceNodeLateMaterialization,
+                                tracer.getTraceParentContext()
                             );
                             transportService.sendChildRequest(
                                 connection,
@@ -217,6 +226,9 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                                 TransportRequestOptions.EMPTY,
                                 new ActionListenerResponseHandler<>(computeListener.acquireCompute().map(r -> {
                                     nodeResponseRef.set(r);
+                                    // Merge child trace results and end the span
+                                    tracer.addChildTraceResults(r.traceResults());
+                                    tracer.endSpan(dataNodeSpanId);
                                     return r.completionInfo();
                                 }), DataNodeComputeResponse::new, esqlExecutor)
                             );
@@ -475,6 +487,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         boolean failFastOnShardFailure,
         AcquiredSearchContexts searchContexts,
         PlanTimeProfile planTimeProfile,
+        RequestTracer tracer,
         ActionListener<DataNodeComputeResponse> listener
     ) {
         final Map<ShardId, Exception> shardLevelFailures = new HashMap<>();
@@ -482,7 +495,15 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             ComputeListener computeListener = new ComputeListener(
                 transportService.getThreadPool(),
                 computeService.cancelQueryOnFailure(task),
-                listener.map(profiles -> new DataNodeComputeResponse(profiles, shardLevelFailures))
+                listener.map(profiles -> {
+                    // End the data node span and collect trace results
+                    tracer.endSpan(tracer.rootSpanId());
+                    return new DataNodeComputeResponse(
+                        profiles,
+                        shardLevelFailures,
+                        tracer.isEnabled() ? tracer.getResults() : null
+                    );
+                })
             )
         ) {
             var parentListener = computeListener.acquireAvoid();
@@ -580,6 +601,10 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             listener.onFailure(new IllegalStateException("expected exchange sink for a remote compute; got " + request.plan()));
             return;
         }
+        // Create child tracer from parent trace context
+        final RequestTracer tracer = RequestTracer.fromParent(request.traceParentContext());
+        tracer.startSpan("esql.data_node_execute", Map.of("es.shards", request.shards().size()));
+
         final String sessionId = request.sessionId();
         request = new DataNodeRequest(
             sessionId + "[n]", // internal session
@@ -591,7 +616,8 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             request.indices(),
             request.indicesOptions(),
             request.runNodeLevelReduction(),
-            request.reductionLateMaterialization()
+            request.reductionLateMaterialization(),
+            TraceParentContext.NONE // Internal request doesn't need trace propagation
         );
         // the sender doesn't support retry on shard failures, so we need to fail fast here.
         final boolean failFastOnShardFailures = supportShardLevelRetryFailure(channel.getVersion()) == false;
@@ -604,6 +630,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             failFastOnShardFailures,
             computeSearchContexts,
             planTimeProfile,
+            tracer,
             ActionListener.releaseAfter(listener, computeSearchContexts)
         );
     }

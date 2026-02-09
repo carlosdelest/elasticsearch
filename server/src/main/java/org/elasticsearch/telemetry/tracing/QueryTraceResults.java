@@ -126,6 +126,13 @@ public class QueryTraceResults implements Writeable, ToXContentObject {
     }
 
     /**
+     * @return the first root span, or null if no spans
+     */
+    public QueryTraceSpan rootSpan() {
+        return spans.isEmpty() ? null : spans.get(0);
+    }
+
+    /**
      * @return the total duration in nanoseconds
      */
     public long getTotalDurationNanos() {
