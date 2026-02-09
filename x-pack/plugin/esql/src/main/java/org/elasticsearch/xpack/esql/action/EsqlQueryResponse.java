@@ -26,6 +26,7 @@ import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.Releasables;
 import org.elasticsearch.xcontent.ToXContent;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.xpack.core.esql.action.EsqlResponse;
 import org.elasticsearch.xpack.esql.core.type.DataType;
 
@@ -73,6 +74,9 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
     private final long expirationTimeMillis;
 
     private final ZoneId zoneId;
+
+    // Transient field for trace results - not serialized across nodes
+    private transient QueryTraceResults traceResults;
 
     public EsqlQueryResponse(
         List<ColumnInfoImpl> columns,
@@ -283,6 +287,24 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
         return executionInfo;
     }
 
+    /**
+     * Sets the trace results for this response.
+     * This is a transient field that is not serialized across nodes.
+     *
+     * @param traceResults the trace results to include in the response
+     */
+    public void setTraceResults(QueryTraceResults traceResults) {
+        this.traceResults = traceResults;
+    }
+
+    /**
+     * @return the trace results, or null if tracing was not enabled
+     */
+    @Nullable
+    public QueryTraceResults getTraceResults() {
+        return traceResults;
+    }
+
     @Override
     @SuppressWarnings("unchecked")
     public Iterator<? extends ToXContent> toXContentChunked(ToXContent.Params params) {
@@ -362,6 +384,9 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
                 return b;
             }));
             content.add(ChunkedToXContentHelper.endObject());
+        }
+        if (traceResults != null) {
+            content.add(ChunkedToXContentHelper.field("trace", traceResults, params));
         }
         content.add(ChunkedToXContentHelper.endObject());
 

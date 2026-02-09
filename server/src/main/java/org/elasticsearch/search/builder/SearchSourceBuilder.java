@@ -122,6 +122,7 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
     public static final ParseField STATS_FIELD = new ParseField("stats");
     public static final ParseField EXT_FIELD = new ParseField("ext");
     public static final ParseField PROFILE_FIELD = new ParseField("profile");
+    public static final ParseField TRACE_FIELD = new ParseField("trace");
     public static final ParseField SEARCH_AFTER = new ParseField("search_after");
     public static final ParseField COLLAPSE = new ParseField("collapse");
     public static final ParseField SLICE = new ParseField("slice");
@@ -203,6 +204,8 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
     private List<SearchExtBuilder> extBuilders = Collections.emptyList();
 
     private boolean profile = false;
+
+    private boolean trace = false;
 
     private CollapseBuilder collapse = null;
 
@@ -816,6 +819,22 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
     }
 
     /**
+     * Should the query be traced. When enabled, timing spans for each query phase
+     * are collected and returned in the response. Defaults to {@code false}
+     */
+    public SearchSourceBuilder trace(boolean trace) {
+        this.trace = trace;
+        return this;
+    }
+
+    /**
+     * Return whether to trace query execution.
+     */
+    public boolean trace() {
+        return trace;
+    }
+
+    /**
      * Gets the bytes representing the rescore builders for this request.
      */
     @SuppressWarnings("rawtypes")
@@ -1255,6 +1274,7 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
         rewrittenBuilder.knnSearch = knnSearch;
         rewrittenBuilder.rankBuilder = rankBuilder;
         rewrittenBuilder.profile = profile;
+        rewrittenBuilder.trace = trace;
         rewrittenBuilder.subSearchSourceBuilders = subSearchSourceBuilders;
         rewrittenBuilder.rescoreBuilders = rescoreBuilders;
         rewrittenBuilder.scriptFields = scriptFields;
@@ -1430,6 +1450,8 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
                     searchUsage.trackSectionUsage(SORT_FIELD.getPreferredName(), sorts.getLast().name());
                 } else if (PROFILE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     profile = parser.booleanValue();
+                } else if (TRACE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    trace = parser.booleanValue();
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),

@@ -33,6 +33,7 @@ import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.aggregations.InternalAggregations;
 import org.elasticsearch.search.profile.SearchProfileResults;
 import org.elasticsearch.search.profile.SearchProfileShardResult;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.search.suggest.Suggest;
 import org.elasticsearch.transport.LeakTracker;
 import org.elasticsearch.transport.RemoteClusterAware;
@@ -89,6 +90,8 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
     private final long tookInMillis;
     // only used for telemetry purposes on the coordinating node, where the search response gets created
     private transient Long timeRangeFilterFromMillis;
+    // only used for request-level tracing on the coordinating node
+    private transient QueryTraceResults traceResults;
 
     private final RefCounted refCounted = LeakTracker.wrap(new SimpleRefCounted());
 
@@ -409,6 +412,7 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
             aggregations == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(aggregations),
             suggest == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(suggest),
             profileResults == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(profileResults),
+            traceResults == null ? Collections.emptyIterator() : ChunkedToXContentHelper.field("trace", traceResults, params),
             wrapInObject ? ChunkedToXContentHelper.endObject() : Collections.emptyIterator()
         );
     }
@@ -469,6 +473,24 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
 
     public Long getTimeRangeFilterFromMillis() {
         return timeRangeFilterFromMillis;
+    }
+
+    /**
+     * Sets the trace results for this response.
+     * This is a transient field that is not serialized across nodes.
+     *
+     * @param traceResults the trace results to include in the response
+     */
+    public void setTraceResults(QueryTraceResults traceResults) {
+        this.traceResults = traceResults;
+    }
+
+    /**
+     * @return the trace results, or null if tracing was not enabled
+     */
+    @Nullable
+    public QueryTraceResults getTraceResults() {
+        return traceResults;
     }
 
     @Override

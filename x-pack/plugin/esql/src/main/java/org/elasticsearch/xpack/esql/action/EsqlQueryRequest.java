@@ -64,6 +64,7 @@ public class EsqlQueryRequest extends org.elasticsearch.xpack.core.esql.action.E
     private boolean acceptedPragmaRisks = false;
     private Boolean allowPartialResults = null;
     private String projectRouting;
+    private boolean trace;
 
     /**
      * "Tables" provided in the request for use with things like {@code LOOKUP}.
@@ -168,6 +169,22 @@ public class EsqlQueryRequest extends org.elasticsearch.xpack.core.esql.action.E
      */
     public boolean profile() {
         return profile;
+    }
+
+    /**
+     * Enable tracing, collecting timing spans for each query phase
+     * and returning them in the response.
+     */
+    public EsqlQueryRequest trace(boolean trace) {
+        this.trace = trace;
+        return this;
+    }
+
+    /**
+     * Is tracing enabled?
+     */
+    public boolean trace() {
+        return trace;
     }
 
     public void timeZone(ZoneId timeZone) {

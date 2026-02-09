@@ -407,9 +407,10 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
                 result.minimumVersion()
             )
             : null;
+        EsqlQueryResponse response;
         if (task instanceof EsqlQueryTask asyncTask && request.keepOnCompletion()) {
             String asyncExecutionId = asyncTask.getExecutionId().getEncoded();
-            return new EsqlQueryResponse(
+            response = new EsqlQueryResponse(
                 columns,
                 innerResult.pages(),
                 innerResult.completionInfo().documentsFound(),
@@ -424,20 +425,28 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
                 ((EsqlQueryTask) task).getExpirationTimeMillis(),
                 innerResult.executionInfo()
             );
+        } else {
+            response = new EsqlQueryResponse(
+                columns,
+                innerResult.pages(),
+                innerResult.completionInfo().documentsFound(),
+                innerResult.completionInfo().valuesLoaded(),
+                profile,
+                request.columnar(),
+                request.async(),
+                result.inner().configuration().zoneId(),
+                task.getStartTime(),
+                threadPool.absoluteTimeInMillis() + request.keepAlive().millis(),
+                innerResult.executionInfo()
+            );
         }
-        return new EsqlQueryResponse(
-            columns,
-            innerResult.pages(),
-            innerResult.completionInfo().documentsFound(),
-            innerResult.completionInfo().valuesLoaded(),
-            profile,
-            request.columnar(),
-            request.async(),
-            result.inner().configuration().zoneId(),
-            task.getStartTime(),
-            threadPool.absoluteTimeInMillis() + request.keepAlive().millis(),
-            innerResult.executionInfo()
-        );
+
+        // Set trace results from executionInfo if tracing was enabled
+        if (innerResult.executionInfo() != null && innerResult.executionInfo().traceResults() != null) {
+            response.setTraceResults(innerResult.executionInfo().traceResults());
+        }
+
+        return response;
     }
 
     /**

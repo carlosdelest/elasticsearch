@@ -93,6 +93,7 @@ import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.profile.SearchProfileResults;
 import org.elasticsearch.search.profile.SearchProfileShardResult;
+import org.elasticsearch.telemetry.tracing.RequestTracer;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -366,6 +367,26 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
         Function<ActionListener<SearchResponse>, SearchPhaseProvider> searchPhaseProvider,
         boolean collectSearchTelemetry
     ) {
+        // Create tracer (real or noop)
+        final SearchSourceBuilder source = original.source();
+        final RequestTracer tracer = (source != null && source.trace()) ? new RequestTracer() : RequestTracer.NOOP;
+        tracer.startSpan("search.query", Map.of(
+            "es.indices", String.join(",", original.indices())
+        ));
+
+        // Wrap listener to capture trace results on completion
+        ActionListener<SearchResponse> tracingListener = ActionListener.wrap(response -> {
+            tracer.endSpan(tracer.rootSpanId());
+            if (tracer.isEnabled()) {
+                response.setTraceResults(tracer.getResults());
+            }
+            originalListener.onResponse(response);
+        }, e -> {
+            tracer.addCurrentError(e);
+            tracer.endSpan(tracer.rootSpanId());
+            originalListener.onFailure(e);
+        });
+
         boolean resolvesCrossProject = crossProjectModeDecider.resolvesCrossProject(original);
         final long relativeStartNanos = System.nanoTime();
         final SearchTimeProvider timeProvider = new SearchTimeProvider(
@@ -412,7 +433,6 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             frozenIndexCheck(resolvedIndices);
         }
 
-        final SearchSourceBuilder source = original.source();
         if (shouldOpenPIT(source)) {
             // disabling shard reordering for request
             original.setPreFilterShardSize(Integer.MAX_VALUE);
@@ -420,7 +440,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                 client,
                 original,
                 searchService.getDefaultKeepAliveInMillis(),
-                originalListener.delegateFailureAndWrap((delegate, resp) -> {
+                tracingListener.delegateFailureAndWrap((delegate, resp) -> {
                     // We set the keep alive to -1 to indicate that we don't need the pit id in the response.
                     // This is needed since we delete the pit prior to sending the response so the id doesn't exist anymore.
                     source.pointInTimeBuilder(new PointInTimeBuilder(resp.getPointInTimeId()).setKeepAlive(TimeValue.MINUS_ONE));
@@ -447,7 +467,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             return;
         }
 
-        ActionListener<SearchRequest> rewriteListener = originalListener.delegateFailureAndWrap((delegate, rewritten) -> {
+        ActionListener<SearchRequest> rewriteListener = tracingListener.delegateFailureAndWrap((delegate, rewritten) -> {
             if (ccsCheckCompatibility) {
                 checkCCSVersionCompatibility(rewritten);
             }

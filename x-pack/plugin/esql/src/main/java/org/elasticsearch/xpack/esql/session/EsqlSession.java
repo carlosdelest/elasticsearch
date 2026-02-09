@@ -26,6 +26,7 @@ import org.elasticsearch.compute.operator.DriverCompletionInfo;
 import org.elasticsearch.compute.operator.FailureCollector;
 import org.elasticsearch.compute.operator.PlanTimeProfile;
 import org.elasticsearch.core.Releasables;
+import org.elasticsearch.telemetry.tracing.RequestTracer;
 import org.elasticsearch.index.IndexMode;
 import org.elasticsearch.index.mapper.IndexModeFieldMapper;
 import org.elasticsearch.index.query.BoolQueryBuilder;
@@ -225,8 +226,33 @@ public class EsqlSession {
         assert ThreadPool.assertCurrentThreadPool(ThreadPool.Names.SEARCH);
         assert executionInfo != null : "Null EsqlExecutionInfo";
         LOGGER.debug("ESQL query:\n{}", request.query());
+
+        // Create tracer (real or noop) and store in executionInfo
+        final RequestTracer tracer = request.trace() ? new RequestTracer() : RequestTracer.NOOP;
+        executionInfo.setTracer(tracer);
+        tracer.startSpan("esql.query", Map.of("es.query", request.query()));
+
+        // Wrap listener to capture trace results on completion
+        ActionListener<Versioned<Result>> tracingListener = ActionListener.wrap(result -> {
+            tracer.endSpan(tracer.rootSpanId());
+            if (tracer.isEnabled()) {
+                executionInfo.setTraceResults(tracer.getResults());
+            }
+            listener.onResponse(result);
+        }, e -> {
+            tracer.addCurrentError(e);
+            tracer.endSpan(tracer.rootSpanId());
+            if (tracer.isEnabled()) {
+                executionInfo.setTraceResults(tracer.getResults());
+            }
+            listener.onFailure(e);
+        });
+
         TimeSpanMarker parsingProfile = executionInfo.queryProfile().parsing();
         parsingProfile.start();
+
+        // Trace parsing phase
+        String parseSpanId = tracer.startSpan("esql.parse", Map.of());
         EsqlStatement statement = parse(request);
         var viewResolution = viewResolver.replaceViews(
             statement.plan(),
@@ -239,6 +265,7 @@ public class EsqlSession {
                 viewName
             ).plan()
         );
+        tracer.endSpan(parseSpanId);
         parsingProfile.stop();
         PlanTimeProfile planTimeProfile = request.profile() ? new PlanTimeProfile() : null;
 
@@ -309,12 +336,14 @@ public class EsqlSession {
                             }
                             l.onResponse(p);
                         })
-                        .<LogicalPlan>andThen(
-                            (l, p) -> preMapper.preMapper(
-                                new Versioned<>(optimizedPlan(p, logicalPlanOptimizer, planTimeProfile), minimumVersion),
-                                l
-                            )
-                        )
+                        .<LogicalPlan>andThen((l, p) -> {
+                            // Trace logical_optimization phase
+                            RequestTracer optTracer = executionInfo.tracer();
+                            String logOptSpanId = optTracer.startSpan("esql.logical_optimization", Map.of());
+                            LogicalPlan optimized = optimizedPlan(p, logicalPlanOptimizer, planTimeProfile);
+                            optTracer.endSpan(logOptSpanId);
+                            preMapper.preMapper(new Versioned<>(optimized, minimumVersion), l);
+                        })
                         .<Result>andThen(
                             (l, p) -> executeOptimizedPlan(
                                 request,
@@ -462,9 +491,25 @@ public class EsqlSession {
                 planTimeProfile
             ).approximate(listener);
         } else {
+            // Trace physical_optimization phase
+            RequestTracer tracer = executionInfo.tracer();
+            String physOptSpanId = tracer.startSpan("esql.physical_optimization", Map.of());
             PhysicalPlan physicalPlan = logicalPlanToPhysicalPlan(optimizedPlan, request, physicalPlanOptimizer, planTimeProfile);
+            tracer.endSpan(physOptSpanId);
+
+            // Trace execution phase
+            String execSpanId = tracer.startSpan("esql.execution", Map.of());
+            ActionListener<Result> tracingListener = ActionListener.wrap(result -> {
+                tracer.endSpan(execSpanId);
+                listener.onResponse(result);
+            }, e -> {
+                tracer.addCurrentError(e);
+                tracer.endSpan(execSpanId);
+                listener.onFailure(e);
+            });
+
             // execute main plan
-            runner.run(physicalPlan, configuration, foldContext, planTimeProfile, listener);
+            runner.run(physicalPlan, configuration, foldContext, planTimeProfile, tracingListener);
         }
     }
 
@@ -665,7 +710,12 @@ public class EsqlSession {
 
         TimeSpanMarker preAnalysisProfile = executionInfo.queryProfile().preAnalysis();
         preAnalysisProfile.start();
+
+        // Trace pre_analysis phase
+        RequestTracer tracer = executionInfo.tracer();
+        String preAnalysisSpanId = tracer.startSpan("esql.pre_analysis", Map.of());
         PreAnalyzer.PreAnalysis preAnalysis = preAnalyzer.preAnalyze(parsed);
+        tracer.endSpan(preAnalysisSpanId);
         preAnalysisProfile.stop();
         // Initialize the PreAnalysisResult with the local cluster's minimum transport version, so our planning will be correct also in
         // case of ROW queries. ROW queries can still require inter-node communication (for ENRICH and LOOKUP JOIN execution) with an older
@@ -700,6 +750,11 @@ public class EsqlSession {
     ) {
         TimeSpanMarker dependencyResolutionProfile = executionInfo.queryProfile().dependencyResolution();
         dependencyResolutionProfile.start();
+
+        // Trace dependency_resolution phase
+        RequestTracer tracer = executionInfo.tracer();
+        final String depResSpanId = tracer.startSpan("esql.dependency_resolution", Map.of());
+
         SubscribableListener.<PreAnalysisResult>newForked(
             l -> preAnalyzeMainIndices(preAnalysis, configuration, executionInfo, result, requestFilter, l)
         ).andThenApply(r -> {
@@ -762,6 +817,8 @@ public class EsqlSession {
                 inferenceService.inferenceResolver(functionRegistry).resolveInferenceIds(parsed, l.map(r::withInferenceResolution));
             })
             .<Versioned<LogicalPlan>>andThen((l, r) -> {
+                // End dependency_resolution span
+                executionInfo.tracer().endSpan(depResSpanId);
                 dependencyResolutionProfile.stop();
                 analyzeWithRetry(parsed, unmappedResolution, configuration, executionInfo, description, requestFilter, preAnalysis, r, l);
             })
@@ -1157,7 +1214,12 @@ public class EsqlSession {
             }
             TimeSpanMarker analysisProfile = executionInfo.queryProfile().analysis();
             analysisProfile.start();
+
+            // Trace analysis phase
+            RequestTracer tracer = executionInfo.tracer();
+            String analysisSpanId = tracer.startSpan("esql.analysis", Map.of());
             LogicalPlan plan = analyzedPlan(parsed, unmappedResolution, configuration, result, executionInfo);
+            tracer.endSpan(analysisSpanId);
             analysisProfile.stop();
             LOGGER.debug("Analyzed plan ({}):\n{}", description, plan);
             // the analysis succeeded from the first attempt, irrespective if it had a filter or not, just continue with the planning

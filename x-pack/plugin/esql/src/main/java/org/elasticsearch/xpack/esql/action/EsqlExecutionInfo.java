@@ -19,6 +19,8 @@ import org.elasticsearch.common.xcontent.ChunkedToXContentObject;
 import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.Predicates;
 import org.elasticsearch.core.TimeValue;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
+import org.elasticsearch.telemetry.tracing.RequestTracer;
 import org.elasticsearch.rest.action.RestActions;
 import org.elasticsearch.transport.NoSuchRemoteClusterException;
 import org.elasticsearch.transport.RemoteClusterAware;
@@ -95,6 +97,8 @@ public class EsqlExecutionInfo implements ChunkedToXContentObject, Writeable {
     private final transient Predicate<String> skipOnFailurePredicate; // Predicate to determine if we should skip a cluster on failure
     private volatile boolean isPartial; // Does this request have partial results?
     private transient volatile boolean isStopped; // Have we received stop command?
+    private transient QueryTraceResults traceResults; // Trace results for query tracing
+    private transient RequestTracer tracer; // Tracer for collecting trace spans
 
     private final EsqlQueryProfile queryProfile;
 
@@ -186,6 +190,22 @@ public class EsqlExecutionInfo implements ChunkedToXContentObject, Writeable {
 
     public EsqlQueryProfile queryProfile() {
         return queryProfile;
+    }
+
+    public QueryTraceResults traceResults() {
+        return traceResults;
+    }
+
+    public void setTraceResults(QueryTraceResults traceResults) {
+        this.traceResults = traceResults;
+    }
+
+    public RequestTracer tracer() {
+        return tracer != null ? tracer : RequestTracer.NOOP;
+    }
+
+    public void setTracer(RequestTracer tracer) {
+        this.tracer = tracer;
     }
 
     /**
