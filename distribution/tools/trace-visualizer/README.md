@@ -9,13 +9,20 @@ Interactive timeline visualization tool for Elasticsearch query traces. Displays
 Run an ES|QL query with tracing enabled:
 
 ```bash
+# Save the entire response (recommended)
+curl -X POST "localhost:9200/_query?trace=true" \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "FROM logs | STATS count() BY status"}' \
+  > trace.json
+
+# Or extract just the trace field
 curl -X POST "localhost:9200/_query?trace=true" \
   -H 'Content-Type: application/json' \
   -d '{"query": "FROM logs | STATS count() BY status"}' \
   | jq '.trace' > trace.json
 ```
 
-The `trace` parameter enables request-level tracing and includes a `trace` field in the response containing the `QueryTraceResults` JSON.
+The `trace` parameter enables request-level tracing and includes a `trace` field in the response containing the `QueryTraceResults` JSON. The visualizer accepts both the full response format or just the extracted trace data.
 
 ### 2. Open the Visualizer
 
@@ -41,11 +48,19 @@ npx http-server
 
 ### 3. Load and Analyze
 
+**Option A: File Upload**
 1. Drag and drop your `trace.json` file onto the page, or click to browse
-2. View the waterfall timeline showing all spans
-3. Click on any span to see detailed information
-4. Use the expand/collapse controls to navigate deep traces
-5. Search for specific operations using the search box
+
+**Option B: Paste JSON**
+1. Copy the ES|QL response JSON (with `trace` field)
+2. Paste it into the text area on the page
+3. Click "Load Trace" (or press Ctrl/Cmd+Enter)
+
+**Analyze:**
+1. View the waterfall timeline showing all spans
+2. Click on any span to see detailed information
+3. Use the expand/collapse controls to navigate deep traces
+4. Search for specific operations using the search box
 
 ## Features
 
@@ -53,6 +68,8 @@ npx http-server
 - ✅ Single self-contained HTML file (no build step, no dependencies)
 - ✅ D3.js-powered waterfall visualization
 - ✅ Drag-and-drop file upload
+- ✅ Paste JSON directly into text area (with Ctrl/Cmd+Enter support)
+- ✅ Accepts both full ES|QL response or direct trace format
 - ✅ Hierarchical span tree with indentation
 - ✅ Span selection with detailed attribute viewer
 - ✅ Duration formatting (ns/μs/ms/s auto-scaling)
@@ -76,8 +93,22 @@ npx http-server
 
 ## Trace Data Format
 
-The visualizer accepts `QueryTraceResults` JSON format:
+The visualizer accepts both full ES|QL response format or direct trace data:
 
+**Full Response Format (recommended):**
+```json
+{
+  "columns": [...],
+  "values": [...],
+  "trace": {
+    "trace_id": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+    "total_duration_nanos": 150000000,
+    "spans": [...]
+  }
+}
+```
+
+**Direct Trace Format:**
 ```json
 {
   "trace_id": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",

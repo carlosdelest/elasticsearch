@@ -1,240 +1,281 @@
 {
-  "trace_id": "deadbeefcafebabe0123456789abcdef",
-  "total_duration_nanos": 187500000,
-  "spans": [
+  "columns": [
     {
-      "span_id": "aaaaaaaaaaaaaaaa",
-      "operation_name": "esql.query",
-      "start_time_nanos": 1704067200000000000,
-      "end_time_nanos": 1704067200187500000,
-      "duration_nanos": 187500000,
-      "attributes": {
-        "query": "FROM logs-* | WHERE status >= 400 | STATS count() BY status, host | SORT count DESC",
-        "index_pattern": "logs-*",
-        "matched_indices": 3
-      },
-      "children": [
-        {
-          "span_id": "bbbbbbbbbbbbbbbb",
-          "operation_name": "esql.parse",
-          "start_time_nanos": 1704067200000000000,
-          "end_time_nanos": 1704067200008000000,
-          "duration_nanos": 8000000,
-          "attributes": {
-            "parser": "esql_parser",
-            "ast_nodes": 15
-          },
-          "children": [
-            {
-              "span_id": "b1b1b1b1b1b1b1b1",
-              "operation_name": "esql.parse.tokenize",
-              "start_time_nanos": 1704067200000000000,
-              "end_time_nanos": 1704067200003000000,
-              "duration_nanos": 3000000,
-              "attributes": {
-                "token_count": 28
-              },
-              "children": []
-            },
-            {
-              "span_id": "b2b2b2b2b2b2b2b2",
-              "operation_name": "esql.parse.build_ast",
-              "start_time_nanos": 1704067200003000000,
-              "end_time_nanos": 1704067200008000000,
-              "duration_nanos": 5000000,
-              "attributes": {
-                "ast_depth": 4
-              },
-              "children": []
-            }
-          ]
-        },
-        {
-          "span_id": "cccccccccccccccc",
-          "operation_name": "esql.analyze",
-          "start_time_nanos": 1704067200008000000,
-          "end_time_nanos": 1704067200020000000,
-          "duration_nanos": 12000000,
-          "attributes": {
-            "analyzer": "semantic_analyzer",
-            "referenced_fields": 3
-          },
-          "children": [
-            {
-              "span_id": "c1c1c1c1c1c1c1c1",
-              "operation_name": "esql.analyze.resolve_fields",
-              "start_time_nanos": 1704067200008000000,
-              "end_time_nanos": 1704067200015000000,
-              "duration_nanos": 7000000,
-              "attributes": {
-                "fields": ["status", "host", "timestamp"]
-              },
-              "children": []
-            },
-            {
-              "span_id": "c2c2c2c2c2c2c2c2",
-              "operation_name": "esql.analyze.type_check",
-              "start_time_nanos": 1704067200015000000,
-              "end_time_nanos": 1704067200020000000,
-              "duration_nanos": 5000000,
-              "attributes": {
-                "type_errors": 0
-              },
-              "children": []
-            }
-          ]
-        },
-        {
-          "span_id": "dddddddddddddddd",
-          "operation_name": "esql.execute",
-          "start_time_nanos": 1704067200020000000,
-          "end_time_nanos": 1704067200187500000,
-          "duration_nanos": 167500000,
-          "attributes": {
-            "executor": "compute_engine",
-            "execution_mode": "distributed"
-          },
-          "children": [
-            {
-              "span_id": "d1d1d1d1d1d1d1d1",
-              "operation_name": "esql.plan",
-              "start_time_nanos": 1704067200020000000,
-              "end_time_nanos": 1704067200030000000,
-              "duration_nanos": 10000000,
-              "attributes": {
-                "planner": "logical_planner",
-                "plan_nodes": 8
-              },
-              "children": [
-                {
-                  "span_id": "d1a1d1a1d1a1d1a1",
-                  "operation_name": "esql.plan.optimize",
-                  "start_time_nanos": 1704067200025000000,
-                  "end_time_nanos": 1704067200030000000,
-                  "duration_nanos": 5000000,
-                  "attributes": {
-                    "optimizations_applied": 3
-                  },
-                  "children": []
-                }
-              ]
-            },
-            {
-              "span_id": "d2d2d2d2d2d2d2d2",
-              "operation_name": "esql.shard_query",
-              "start_time_nanos": 1704067200030000000,
-              "end_time_nanos": 1704067200175000000,
-              "duration_nanos": 145000000,
-              "attributes": {
-                "shard_count": 5,
-                "total_hits": 15420,
-                "indices": ["logs-2024.01", "logs-2024.02", "logs-2024.03"]
-              },
-              "children": [
-                {
-                  "span_id": "e1e1e1e1e1e1e1e1",
-                  "operation_name": "esql.shard_0",
-                  "start_time_nanos": 1704067200030000000,
-                  "end_time_nanos": 1704067200085000000,
-                  "duration_nanos": 55000000,
-                  "attributes": {
-                    "shard_id": "0",
-                    "node": "node-1",
-                    "index": "logs-2024.01",
-                    "hits": 3200,
-                    "segments_searched": 8
-                  },
-                  "children": []
-                },
-                {
-                  "span_id": "e2e2e2e2e2e2e2e2",
-                  "operation_name": "esql.shard_1",
-                  "start_time_nanos": 1704067200030000000,
-                  "end_time_nanos": 1704067200095000000,
-                  "duration_nanos": 65000000,
-                  "attributes": {
-                    "shard_id": "1",
-                    "node": "node-2",
-                    "index": "logs-2024.01",
-                    "hits": 4100,
-                    "segments_searched": 10
-                  },
-                  "children": []
-                },
-                {
-                  "span_id": "e3e3e3e3e3e3e3e3",
-                  "operation_name": "esql.shard_2",
-                  "start_time_nanos": 1704067200030000000,
-                  "end_time_nanos": 1704067200105000000,
-                  "duration_nanos": 75000000,
-                  "attributes": {
-                    "shard_id": "0",
-                    "node": "node-1",
-                    "index": "logs-2024.02",
-                    "hits": 2890,
-                    "segments_searched": 6
-                  },
-                  "children": []
-                },
-                {
-                  "span_id": "e4e4e4e4e4e4e4e4",
-                  "operation_name": "esql.shard_3",
-                  "start_time_nanos": 1704067200030000000,
-                  "end_time_nanos": 1704067200110000000,
-                  "duration_nanos": 80000000,
-                  "attributes": {
-                    "shard_id": "1",
-                    "node": "node-3",
-                    "index": "logs-2024.02",
-                    "hits": 3150,
-                    "segments_searched": 7
-                  },
-                  "children": []
-                },
-                {
-                  "span_id": "e5e5e5e5e5e5e5e5",
-                  "operation_name": "esql.shard_4",
-                  "start_time_nanos": 1704067200030000000,
-                  "end_time_nanos": 1704067200175000000,
-                  "duration_nanos": 145000000,
-                  "attributes": {
-                    "shard_id": "0",
-                    "node": "node-2",
-                    "index": "logs-2024.03",
-                    "hits": 2080,
-                    "segments_searched": 12
-                  },
-                  "children": []
-                }
-              ]
-            },
-            {
-              "span_id": "d3d3d3d3d3d3d3d3",
-              "operation_name": "esql.reduce",
-              "start_time_nanos": 1704067200175000000,
-              "end_time_nanos": 1704067200185000000,
-              "duration_nanos": 10000000,
-              "attributes": {
-                "reduce_type": "aggregation",
-                "groups": 45
-              },
-              "children": []
-            },
-            {
-              "span_id": "d4d4d4d4d4d4d4d4",
-              "operation_name": "esql.sort",
-              "start_time_nanos": 1704067200185000000,
-              "end_time_nanos": 1704067200187500000,
-              "duration_nanos": 2500000,
-              "attributes": {
-                "sort_field": "count",
-                "sort_order": "desc"
-              },
-              "children": []
-            }
-          ]
-        }
-      ]
+      "name": "status",
+      "type": "integer"
+    },
+    {
+      "name": "host",
+      "type": "keyword"
+    },
+    {
+      "name": "count",
+      "type": "long"
     }
-  ]
+  ],
+  "values": [
+    [
+      500,
+      "host-a",
+      127
+    ],
+    [
+      404,
+      "host-b",
+      89
+    ],
+    [
+      503,
+      "host-c",
+      43
+    ]
+  ],
+  "trace": {
+    "trace_id": "deadbeefcafebabe0123456789abcdef",
+    "total_duration_nanos": 187500000,
+    "spans": [
+      {
+        "span_id": "aaaaaaaaaaaaaaaa",
+        "operation_name": "esql.query",
+        "start_time_nanos": 1704067200000000000,
+        "end_time_nanos": 1704067200187500000,
+        "duration_nanos": 187500000,
+        "attributes": {
+          "query": "FROM logs-* | WHERE status >= 400 | STATS count() BY status, host | SORT count DESC",
+          "index_pattern": "logs-*",
+          "matched_indices": 3
+        },
+        "children": [
+          {
+            "span_id": "bbbbbbbbbbbbbbbb",
+            "operation_name": "esql.parse",
+            "start_time_nanos": 1704067200000000000,
+            "end_time_nanos": 1704067200008000000,
+            "duration_nanos": 8000000,
+            "attributes": {
+              "parser": "esql_parser",
+              "ast_nodes": 15
+            },
+            "children": [
+              {
+                "span_id": "b1b1b1b1b1b1b1b1",
+                "operation_name": "esql.parse.tokenize",
+                "start_time_nanos": 1704067200000000000,
+                "end_time_nanos": 1704067200003000000,
+                "duration_nanos": 3000000,
+                "attributes": {
+                  "token_count": 28
+                },
+                "children": []
+              },
+              {
+                "span_id": "b2b2b2b2b2b2b2b2",
+                "operation_name": "esql.parse.build_ast",
+                "start_time_nanos": 1704067200003000000,
+                "end_time_nanos": 1704067200008000000,
+                "duration_nanos": 5000000,
+                "attributes": {
+                  "ast_depth": 4
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "span_id": "cccccccccccccccc",
+            "operation_name": "esql.analyze",
+            "start_time_nanos": 1704067200008000000,
+            "end_time_nanos": 1704067200020000000,
+            "duration_nanos": 12000000,
+            "attributes": {
+              "analyzer": "semantic_analyzer",
+              "referenced_fields": 3
+            },
+            "children": [
+              {
+                "span_id": "c1c1c1c1c1c1c1c1",
+                "operation_name": "esql.analyze.resolve_fields",
+                "start_time_nanos": 1704067200008000000,
+                "end_time_nanos": 1704067200015000000,
+                "duration_nanos": 7000000,
+                "attributes": {
+                  "fields": [
+                    "status",
+                    "host",
+                    "timestamp"
+                  ]
+                },
+                "children": []
+              },
+              {
+                "span_id": "c2c2c2c2c2c2c2c2",
+                "operation_name": "esql.analyze.type_check",
+                "start_time_nanos": 1704067200015000000,
+                "end_time_nanos": 1704067200020000000,
+                "duration_nanos": 5000000,
+                "attributes": {
+                  "type_errors": 0
+                },
+                "children": []
+              }
+            ]
+          },
+          {
+            "span_id": "dddddddddddddddd",
+            "operation_name": "esql.execute",
+            "start_time_nanos": 1704067200020000000,
+            "end_time_nanos": 1704067200187500000,
+            "duration_nanos": 167500000,
+            "attributes": {
+              "executor": "compute_engine",
+              "execution_mode": "distributed"
+            },
+            "children": [
+              {
+                "span_id": "d1d1d1d1d1d1d1d1",
+                "operation_name": "esql.plan",
+                "start_time_nanos": 1704067200020000000,
+                "end_time_nanos": 1704067200030000000,
+                "duration_nanos": 10000000,
+                "attributes": {
+                  "planner": "logical_planner",
+                  "plan_nodes": 8
+                },
+                "children": [
+                  {
+                    "span_id": "d1a1d1a1d1a1d1a1",
+                    "operation_name": "esql.plan.optimize",
+                    "start_time_nanos": 1704067200025000000,
+                    "end_time_nanos": 1704067200030000000,
+                    "duration_nanos": 5000000,
+                    "attributes": {
+                      "optimizations_applied": 3
+                    },
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "span_id": "d2d2d2d2d2d2d2d2",
+                "operation_name": "esql.shard_query",
+                "start_time_nanos": 1704067200030000000,
+                "end_time_nanos": 1704067200175000000,
+                "duration_nanos": 145000000,
+                "attributes": {
+                  "shard_count": 5,
+                  "total_hits": 15420,
+                  "indices": [
+                    "logs-2024.01",
+                    "logs-2024.02",
+                    "logs-2024.03"
+                  ]
+                },
+                "children": [
+                  {
+                    "span_id": "e1e1e1e1e1e1e1e1",
+                    "operation_name": "esql.shard_0",
+                    "start_time_nanos": 1704067200030000000,
+                    "end_time_nanos": 1704067200085000000,
+                    "duration_nanos": 55000000,
+                    "attributes": {
+                      "shard_id": "0",
+                      "node": "node-1",
+                      "index": "logs-2024.01",
+                      "hits": 3200,
+                      "segments_searched": 8
+                    },
+                    "children": []
+                  },
+                  {
+                    "span_id": "e2e2e2e2e2e2e2e2",
+                    "operation_name": "esql.shard_1",
+                    "start_time_nanos": 1704067200030000000,
+                    "end_time_nanos": 1704067200095000000,
+                    "duration_nanos": 65000000,
+                    "attributes": {
+                      "shard_id": "1",
+                      "node": "node-2",
+                      "index": "logs-2024.01",
+                      "hits": 4100,
+                      "segments_searched": 10
+                    },
+                    "children": []
+                  },
+                  {
+                    "span_id": "e3e3e3e3e3e3e3e3",
+                    "operation_name": "esql.shard_2",
+                    "start_time_nanos": 1704067200030000000,
+                    "end_time_nanos": 1704067200105000000,
+                    "duration_nanos": 75000000,
+                    "attributes": {
+                      "shard_id": "0",
+                      "node": "node-1",
+                      "index": "logs-2024.02",
+                      "hits": 2890,
+                      "segments_searched": 6
+                    },
+                    "children": []
+                  },
+                  {
+                    "span_id": "e4e4e4e4e4e4e4e4",
+                    "operation_name": "esql.shard_3",
+                    "start_time_nanos": 1704067200030000000,
+                    "end_time_nanos": 1704067200110000000,
+                    "duration_nanos": 80000000,
+                    "attributes": {
+                      "shard_id": "1",
+                      "node": "node-3",
+                      "index": "logs-2024.02",
+                      "hits": 3150,
+                      "segments_searched": 7
+                    },
+                    "children": []
+                  },
+                  {
+                    "span_id": "e5e5e5e5e5e5e5e5",
+                    "operation_name": "esql.shard_4",
+                    "start_time_nanos": 1704067200030000000,
+                    "end_time_nanos": 1704067200175000000,
+                    "duration_nanos": 145000000,
+                    "attributes": {
+                      "shard_id": "0",
+                      "node": "node-2",
+                      "index": "logs-2024.03",
+                      "hits": 2080,
+                      "segments_searched": 12
+                    },
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "span_id": "d3d3d3d3d3d3d3d3",
+                "operation_name": "esql.reduce",
+                "start_time_nanos": 1704067200175000000,
+                "end_time_nanos": 1704067200185000000,
+                "duration_nanos": 10000000,
+                "attributes": {
+                  "reduce_type": "aggregation",
+                  "groups": 45
+                },
+                "children": []
+              },
+              {
+                "span_id": "d4d4d4d4d4d4d4d4",
+                "operation_name": "esql.sort",
+                "start_time_nanos": 1704067200185000000,
+                "end_time_nanos": 1704067200187500000,
+                "duration_nanos": 2500000,
+                "attributes": {
+                  "sort_field": "count",
+                  "sort_order": "desc"
+                },
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -1,90 +1,99 @@
 {
-  "trace_id": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-  "total_duration_nanos": 45000000,
-  "spans": [
-    {
-      "span_id": "1111111111111111",
-      "operation_name": "esql.query",
-      "start_time_nanos": 1704067200000000000,
-      "end_time_nanos": 1704067200045000000,
-      "duration_nanos": 45000000,
-      "attributes": {
-        "query": "FROM logs | LIMIT 10",
-        "index": "logs-2024"
-      },
-      "children": [
-        {
-          "span_id": "2222222222222222",
-          "operation_name": "esql.parse",
-          "start_time_nanos": 1704067200000000000,
-          "end_time_nanos": 1704067200005000000,
-          "duration_nanos": 5000000,
-          "attributes": {
-            "parser": "esql_parser"
-          },
-          "children": []
+  "columns": [
+    {"name": "column1", "type": "keyword"}
+  ],
+  "values": [
+    ["value1"],
+    ["value2"]
+  ],
+  "trace": {
+    "trace_id": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+    "total_duration_nanos": 45000000,
+    "spans": [
+      {
+        "span_id": "1111111111111111",
+        "operation_name": "esql.query",
+        "start_time_nanos": 1704067200000000000,
+        "end_time_nanos": 1704067200045000000,
+        "duration_nanos": 45000000,
+        "attributes": {
+          "query": "FROM logs | LIMIT 10",
+          "index": "logs-2024"
         },
-        {
-          "span_id": "3333333333333333",
-          "operation_name": "esql.analyze",
-          "start_time_nanos": 1704067200005000000,
-          "end_time_nanos": 1704067200010000000,
-          "duration_nanos": 5000000,
-          "attributes": {
-            "analyzer": "semantic_analyzer"
-          },
-          "children": []
-        },
-        {
-          "span_id": "4444444444444444",
-          "operation_name": "esql.execute",
-          "start_time_nanos": 1704067200010000000,
-          "end_time_nanos": 1704067200045000000,
-          "duration_nanos": 35000000,
-          "attributes": {
-            "executor": "compute_engine"
-          },
-          "children": [
-            {
-              "span_id": "5555555555555555",
-              "operation_name": "esql.plan",
-              "start_time_nanos": 1704067200010000000,
-              "end_time_nanos": 1704067200015000000,
-              "duration_nanos": 5000000,
-              "attributes": {
-                "planner": "logical_planner"
-              },
-              "children": []
+        "children": [
+          {
+            "span_id": "2222222222222222",
+            "operation_name": "esql.parse",
+            "start_time_nanos": 1704067200000000000,
+            "end_time_nanos": 1704067200005000000,
+            "duration_nanos": 5000000,
+            "attributes": {
+              "parser": "esql_parser"
             },
-            {
-              "span_id": "6666666666666666",
-              "operation_name": "esql.shard_query",
-              "start_time_nanos": 1704067200015000000,
-              "end_time_nanos": 1704067200045000000,
-              "duration_nanos": 30000000,
-              "attributes": {
-                "shard_count": 1,
-                "total_hits": 100
+            "children": []
+          },
+          {
+            "span_id": "3333333333333333",
+            "operation_name": "esql.analyze",
+            "start_time_nanos": 1704067200005000000,
+            "end_time_nanos": 1704067200010000000,
+            "duration_nanos": 5000000,
+            "attributes": {
+              "analyzer": "semantic_analyzer"
+            },
+            "children": []
+          },
+          {
+            "span_id": "4444444444444444",
+            "operation_name": "esql.execute",
+            "start_time_nanos": 1704067200010000000,
+            "end_time_nanos": 1704067200045000000,
+            "duration_nanos": 35000000,
+            "attributes": {
+              "executor": "compute_engine"
+            },
+            "children": [
+              {
+                "span_id": "5555555555555555",
+                "operation_name": "esql.plan",
+                "start_time_nanos": 1704067200010000000,
+                "end_time_nanos": 1704067200015000000,
+                "duration_nanos": 5000000,
+                "attributes": {
+                  "planner": "logical_planner"
+                },
+                "children": []
               },
-              "children": [
-                {
-                  "span_id": "7777777777777777",
-                  "operation_name": "esql.shard_0",
-                  "start_time_nanos": 1704067200015000000,
-                  "end_time_nanos": 1704067200045000000,
-                  "duration_nanos": 30000000,
-                  "attributes": {
-                    "shard_id": "0",
-                    "node": "node-1",
-                    "hits": 100
-                  },
-                  "children": []
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
+              {
+                "span_id": "6666666666666666",
+                "operation_name": "esql.shard_query",
+                "start_time_nanos": 1704067200015000000,
+                "end_time_nanos": 1704067200045000000,
+                "duration_nanos": 30000000,
+                "attributes": {
+                  "shard_count": 1,
+                  "total_hits": 100
+                },
+                "children": [
+                  {
+                    "span_id": "7777777777777777",
+                    "operation_name": "esql.shard_0",
+                    "start_time_nanos": 1704067200015000000,
+                    "end_time_nanos": 1704067200045000000,
+                    "duration_nanos": 30000000,
+                    "attributes": {
+                      "shard_id": "0",
+                      "node": "node-1",
+                      "hits": 100
+                    },
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

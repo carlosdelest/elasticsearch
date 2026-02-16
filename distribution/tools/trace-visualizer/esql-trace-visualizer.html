@@ -57,18 +57,23 @@
             border: 2px dashed #ccc;
             border-radius: 8px;
             padding: 40px;
-            text-align: center;
             margin-bottom: 20px;
-            cursor: pointer;
             transition: all 0.3s ease;
         }
 
-        .upload-area:hover {
-            border-color: #005571;
+        .upload-section {
+            text-align: center;
+            cursor: pointer;
+            padding: 20px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
             background-color: #f9f9f9;
         }
 
-        .upload-area.drag-over {
+        .upload-area.drag-over .upload-section {
             border-color: #00bfb3;
             background-color: #e8f9f8;
         }
@@ -86,6 +91,64 @@
         .upload-text {
             font-size: 16px;
             color: #666;
+        }
+
+        .divider {
+            text-align: center;
+            margin: 20px 0;
+            color: #999;
+            font-size: 14px;
+            position: relative;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background-color: #ddd;
+        }
+
+        .divider::before {
+            left: 0;
+        }
+
+        .divider::after {
+            right: 0;
+        }
+
+        .paste-section {
+            text-align: left;
+        }
+
+        .paste-label {
+            font-weight: 600;
+            color: #005571;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        #json-input {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            margin-bottom: 10px;
+        }
+
+        #json-input:focus {
+            outline: none;
+            border-color: #005571;
+        }
+
+        #load-json-btn {
+            width: 100%;
         }
 
         .main-content {
@@ -301,12 +364,30 @@
         <div class="error-message" id="error-message"></div>
 
         <div class="upload-area" id="upload-area">
-            <div class="upload-icon">📊</div>
-            <div class="upload-text">
-                <strong>Drop a trace JSON file here</strong> or click to browse<br>
-                <small>Accepts QueryTraceResults JSON format from ES|QL queries</small>
+            <div class="upload-section" id="upload-section">
+                <div class="upload-icon">📊</div>
+                <div class="upload-text">
+                    <strong>Drop a trace JSON file here</strong> or click to browse<br>
+                    <small>Accepts full ES|QL response or direct trace JSON</small>
+                </div>
+                <input type="file" id="file-input" accept=".json">
             </div>
-            <input type="file" id="file-input" accept=".json">
+
+            <div class="divider">OR</div>
+
+            <div class="paste-section">
+                <div class="paste-label">Paste trace JSON:</div>
+                <textarea id="json-input" placeholder='Paste your ES|QL response JSON here, e.g.:
+{
+  "columns": [...],
+  "values": [...],
+  "trace": {
+    "trace_id": "...",
+    "spans": [...]
+  }
+}'></textarea>
+                <button class="button" id="load-json-btn">Load Trace</button>
+            </div>
         </div>
 
         <div class="main-content" id="main-content">
@@ -360,7 +441,10 @@
 
         // DOM elements
         const uploadArea = document.getElementById('upload-area');
+        const uploadSection = document.getElementById('upload-section');
         const fileInput = document.getElementById('file-input');
+        const jsonInput = document.getElementById('json-input');
+        const loadJsonBtn = document.getElementById('load-json-btn');
         const mainContent = document.getElementById('main-content');
         const errorMessage = document.getElementById('error-message');
         const searchBox = document.getElementById('search-box');
@@ -660,18 +744,23 @@
         // Load trace data
         function loadTrace(data) {
             try {
+                // Handle both full response format and direct trace format
+                // Full response: { "trace": { "trace_id": ..., "spans": [...] }, ... }
+                // Direct trace: { "trace_id": ..., "spans": [...] }
+                let trace = data.trace ? data.trace : data;
+
                 // Validate structure
-                if (!data.trace_id || !data.spans) {
-                    throw new Error('Invalid trace format: missing trace_id or spans');
+                if (!trace.trace_id || !trace.spans) {
+                    throw new Error('Invalid trace format: missing trace_id or spans. Expected format: { "trace": { "trace_id": "...", "spans": [...] } }');
                 }
 
-                traceData = data;
-                flatSpans = flattenSpans(data.spans);
+                traceData = trace;
+                flatSpans = flattenSpans(trace.spans);
                 collapsedSpans.clear();
                 selectedSpan = null;
 
                 // Update UI
-                const stats = calculateStats(data);
+                const stats = calculateStats(trace);
                 updateStats(stats);
                 renderTimeline();
                 updateSpanDetails(null);
@@ -686,8 +775,11 @@
         }
 
         // File upload handlers
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
+        uploadSection.addEventListener('click', (e) => {
+            // Only trigger file input if clicking on the upload section, not the paste area
+            if (e.target !== jsonInput && e.target !== loadJsonBtn) {
+                fileInput.click();
+            }
         });
 
         uploadArea.addEventListener('dragover', (e) => {
@@ -736,6 +828,29 @@
             }
         });
 
+        // Paste JSON handler
+        loadJsonBtn.addEventListener('click', () => {
+            const jsonText = jsonInput.value.trim();
+            if (!jsonText) {
+                showError('Please paste JSON data into the text area');
+                return;
+            }
+
+            try {
+                const data = JSON.parse(jsonText);
+                loadTrace(data);
+            } catch (error) {
+                showError(`Invalid JSON: ${error.message}`);
+            }
+        });
+
+        // Allow Enter key with Ctrl/Cmd to load
+        jsonInput.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                loadJsonBtn.click();
+            }
+        });
+
         // Search functionality
         searchBox.addEventListener('input', (e) => {
             const query = e.target.value.toLowerCase();
@@ -776,6 +891,7 @@
             selectedSpan = null;
             collapsedSpans.clear();
             fileInput.value = '';
+            jsonInput.value = '';
         });
     </script>
 </body>
