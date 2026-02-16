@@ -138,8 +138,8 @@ public final class DriverProfileConverter {
         // Generate span ID
         String spanId = QueryTraceContext.generateSpanId();
 
-        // Convert timestamps: milliseconds to nanoseconds
-        long startTimeNanos = profile.startMillis() * 1_000_000L;
+        // TODO Timestamps in profiler are actually in nanoseconds already, we should change the name
+        long startTimeNanos = profile.startMillis();
         long endTimeNanos = startTimeNanos + profile.tookNanos();
 
         // Create driver span with operation name "driver.{description}"
