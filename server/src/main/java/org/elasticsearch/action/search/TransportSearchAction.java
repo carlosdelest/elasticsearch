@@ -96,7 +96,7 @@ import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.profile.SearchProfileResults;
 import org.elasticsearch.search.profile.SearchProfileShardResult;
-import org.elasticsearch.telemetry.tracing.RequestTracer;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -388,7 +388,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
     ) {
         // Create tracer (real or noop)
         final SearchSourceBuilder source = original.source();
-        final RequestTracer tracer = (source != null && source.trace()) ? new RequestTracer() : RequestTracer.NOOP;
+        final QueryTracer tracer = (source != null && source.trace()) ? new QueryTracer() : QueryTracer.NOOP;
         tracer.startSpan("search.query", Map.of(
             "es.indices", String.join(",", original.indices())
         ));

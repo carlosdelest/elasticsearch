@@ -20,7 +20,7 @@ import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.Predicates;
 import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.telemetry.tracing.QueryTraceResults;
-import org.elasticsearch.telemetry.tracing.RequestTracer;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.rest.action.RestActions;
 import org.elasticsearch.transport.NoSuchRemoteClusterException;
 import org.elasticsearch.transport.RemoteClusterAware;
@@ -98,7 +98,7 @@ public class EsqlExecutionInfo implements ChunkedToXContentObject, Writeable {
     private volatile boolean isPartial; // Does this request have partial results?
     private transient volatile boolean isStopped; // Have we received stop command?
     private transient QueryTraceResults traceResults; // Trace results for query tracing
-    private transient RequestTracer tracer; // Tracer for collecting trace spans
+    private transient QueryTracer tracer; // Tracer for collecting trace spans
 
     private final EsqlQueryProfile queryProfile;
 
@@ -200,11 +200,11 @@ public class EsqlExecutionInfo implements ChunkedToXContentObject, Writeable {
         this.traceResults = traceResults;
     }
 
-    public RequestTracer tracer() {
-        return tracer != null ? tracer : RequestTracer.NOOP;
+    public QueryTracer tracer() {
+        return tracer != null ? tracer : QueryTracer.NOOP;
     }
 
-    public void setTracer(RequestTracer tracer) {
+    public void setTracer(QueryTracer tracer) {
         this.tracer = tracer;
     }
 

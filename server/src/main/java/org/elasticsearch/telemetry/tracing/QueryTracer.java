@@ -38,12 +38,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * @see QueryTraceContext
  * @see QueryTraceResults
  */
-public class RequestTracer implements Tracer {
+public class QueryTracer implements Tracer {
 
     /**
      * A no-op tracer that does nothing. Use this when tracing is disabled to avoid null checks.
      */
-    public static final RequestTracer NOOP = new NoopRequestTracer();
+    public static final QueryTracer NOOP = new NoopRequestTracer();
 
     private final QueryTraceContext traceContext;
     private final Map<String, String> traceableToSpanId;
@@ -51,7 +51,7 @@ public class RequestTracer implements Tracer {
     /**
      * Creates a new RequestTracer with an auto-generated trace ID.
      */
-    public RequestTracer() {
+    public QueryTracer() {
         this.traceContext = new QueryTraceContext();
         this.traceableToSpanId = new ConcurrentHashMap<>();
     }
@@ -61,7 +61,7 @@ public class RequestTracer implements Tracer {
      *
      * @param traceContext the trace context to use for collecting spans
      */
-    public RequestTracer(QueryTraceContext traceContext) {
+    public QueryTracer(QueryTraceContext traceContext) {
         this.traceContext = traceContext;
         this.traceableToSpanId = new ConcurrentHashMap<>();
     }
@@ -73,11 +73,11 @@ public class RequestTracer implements Tracer {
      * @param parentContext the trace context from the parent node
      * @return a new RequestTracer that continues the trace, or NOOP if parent is disabled
      */
-    public static RequestTracer fromParent(TraceParentContext parentContext) {
+    public static QueryTracer fromParent(TraceParentContext parentContext) {
         if (parentContext == null || !parentContext.isEnabled()) {
             return NOOP;
         }
-        return new RequestTracer(QueryTraceContext.fromParent(parentContext));
+        return new QueryTracer(QueryTraceContext.fromParent(parentContext));
     }
 
     @Override
@@ -267,7 +267,7 @@ public class RequestTracer implements Tracer {
      * A no-op implementation of RequestTracer that does nothing.
      * All methods are no-ops and return dummy values where needed.
      */
-    private static class NoopRequestTracer extends RequestTracer {
+    private static class NoopRequestTracer extends QueryTracer {
         private static final String NOOP_SPAN_ID = "";
 
         NoopRequestTracer() {

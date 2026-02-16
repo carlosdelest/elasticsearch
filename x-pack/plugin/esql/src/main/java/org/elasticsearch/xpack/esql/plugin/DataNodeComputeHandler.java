@@ -47,7 +47,7 @@ import org.elasticsearch.transport.TransportChannel;
 import org.elasticsearch.transport.TransportRequestHandler;
 import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
-import org.elasticsearch.telemetry.tracing.RequestTracer;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.telemetry.tracing.TraceParentContext;
 import org.elasticsearch.xpack.esql.action.EsqlCapabilities;
 import org.elasticsearch.xpack.esql.core.expression.FoldContext;
@@ -121,7 +121,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         OriginalIndices originalIndices,
         ExchangeSourceHandler exchangeSource,
         Runnable runOnTaskFailure,
-        RequestTracer tracer,
+        QueryTracer tracer,
         ActionListener<ComputeResponse> outListener
     ) {
         Integer maxConcurrentNodesPerCluster = PlanConcurrencyCalculator.INSTANCE.calculateNodesConcurrency(dataNodePlan, configuration);
@@ -500,7 +500,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         AcquiredSearchContexts searchContexts,
         PlannerSettings plannerSettings,
         PlanTimeProfile planTimeProfile,
-        RequestTracer tracer,
+        QueryTracer tracer,
         ActionListener<DataNodeComputeResponse> listener
     ) {
         final Map<ShardId, Exception> shardLevelFailures = new HashMap<>();
@@ -617,7 +617,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             return;
         }
         // Create child tracer from parent trace context
-        final RequestTracer tracer = RequestTracer.fromParent(request.traceParentContext());
+        final QueryTracer tracer = QueryTracer.fromParent(request.traceParentContext());
         tracer.startSpan("esql.data_node_execute", Map.of("es.shards", request.shards().size()));
 
         final String sessionId = request.sessionId();
