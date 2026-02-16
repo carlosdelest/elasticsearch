@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<!--
+ Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ or more contributor license agreements. Licensed under the "Elastic License
+ 2.0", the "GNU Affero General Public License v3.0 only", and the "Server Side
+ Public License v 1"; you may not use this file except in compliance with, at
+ your election, the "Elastic License 2.0", the "GNU Affero General Public
+ License v3.0 only", or the "Server Side Public License, v 1".
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ES|QL Query Trace Visualizer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background-color: #fff;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #005571;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .upload-area {
+            background-color: #fff;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            border-color: #005571;
+            background-color: #f9f9f9;
+        }
+
+        .upload-area.drag-over {
+            border-color: #00bfb3;
+            background-color: #e8f9f8;
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: #ccc;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            font-size: 16px;
+            color: #666;
+        }
+
+        .main-content {
+            display: none;
+        }
+
+        .main-content.active {
+            display: flex;
+            gap: 20px;
+        }
+
+        .left-panel {
+            flex: 1;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        .right-panel {
+            width: 400px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        .stats-section {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .stats-section h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #005571;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 14px;
+        }
+
+        .stat-label {
+            color: #666;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        #timeline-container {
+            margin-top: 20px;
+            overflow-x: auto;
+            overflow-y: auto;
+            max-height: 800px;
+        }
+
+        .span-row {
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .span-row:hover {
+            background-color: #f5f5f5;
+        }
+
+        .span-row.selected {
+            background-color: #e8f9f8;
+        }
+
+        .span-bar {
+            fill: #00bfb3;
+            stroke: #00a99d;
+            stroke-width: 1;
+            rx: 2;
+        }
+
+        .span-bar:hover {
+            fill: #00a99d;
+        }
+
+        .span-name {
+            font-size: 12px;
+            fill: #333;
+            user-select: none;
+        }
+
+        .axis-text {
+            font-size: 11px;
+            fill: #666;
+        }
+
+        .axis line, .axis path {
+            stroke: #ddd;
+        }
+
+        .grid line {
+            stroke: #eee;
+            stroke-dasharray: 2,2;
+        }
+
+        .details-section {
+            margin-bottom: 20px;
+        }
+
+        .details-section h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #005571;
+        }
+
+        .detail-item {
+            padding: 8px 0;
+            font-size: 13px;
+            word-break: break-all;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            color: #333;
+            font-family: 'Courier New', monospace;
+        }
+
+        .attributes-tree {
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 20px;
+        }
+
+        .error-message {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .button {
+            background-color: #005571;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s ease;
+        }
+
+        .button:hover {
+            background-color: #004055;
+        }
+
+        .button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #005571;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>ES|QL Query Trace Visualizer</h1>
+            <p class="subtitle">Interactive timeline visualization for Elasticsearch query traces</p>
+        </header>
+
+        <div class="error-message" id="error-message"></div>
+
+        <div class="upload-area" id="upload-area">
+            <div class="upload-icon">📊</div>
+            <div class="upload-text">
+                <strong>Drop a trace JSON file here</strong> or click to browse<br>
+                <small>Accepts QueryTraceResults JSON format from ES|QL queries</small>
+            </div>
+            <input type="file" id="file-input" accept=".json">
+        </div>
+
+        <div class="main-content" id="main-content">
+            <div class="left-panel">
+                <div class="toolbar">
+                    <input type="text" id="search-box" class="search-box" placeholder="Search spans...">
+                    <button class="button" id="expand-all-btn">Expand All</button>
+                    <button class="button" id="collapse-all-btn">Collapse All</button>
+                    <button class="button" id="reset-btn">Reset</button>
+                </div>
+                <div id="timeline-container"></div>
+            </div>
+
+            <div class="right-panel">
+                <div class="stats-section">
+                    <h3>Trace Statistics</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Trace ID:</span>
+                        <span class="stat-value" id="stat-trace-id">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Duration:</span>
+                        <span class="stat-value" id="stat-total-duration">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Spans:</span>
+                        <span class="stat-value" id="stat-span-count">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Max Depth:</span>
+                        <span class="stat-value" id="stat-max-depth">-</span>
+                    </div>
+                </div>
+
+                <div class="details-section">
+                    <h3>Selected Span Details</h3>
+                    <div id="span-details">
+                        <div class="empty-state">Click a span to view details</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State management
+        let traceData = null;
+        let flatSpans = [];
+        let selectedSpan = null;
+        let collapsedSpans = new Set();
+
+        // DOM elements
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const mainContent = document.getElementById('main-content');
+        const errorMessage = document.getElementById('error-message');
+        const searchBox = document.getElementById('search-box');
+        const expandAllBtn = document.getElementById('expand-all-btn');
+        const collapseAllBtn = document.getElementById('collapse-all-btn');
+        const resetBtn = document.getElementById('reset-btn');
+
+        // Utility functions
+        function formatDuration(nanos) {
+            if (nanos < 1000) return `${nanos}ns`;
+            if (nanos < 1000000) return `${(nanos / 1000).toFixed(2)}μs`;
+            if (nanos < 1000000000) return `${(nanos / 1000000).toFixed(2)}ms`;
+            return `${(nanos / 1000000000).toFixed(2)}s`;
+        }
+
+        function formatTraceId(traceId) {
+            if (traceId.length > 16) {
+                return traceId.substring(0, 8) + '...' + traceId.substring(traceId.length - 8);
+            }
+            return traceId;
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+            setTimeout(() => {
+                errorMessage.classList.remove('active');
+            }, 5000);
+        }
+
+        // Flatten hierarchical span tree to array with depth information
+        function flattenSpans(spans, depth = 0, parentStart = 0) {
+            const result = [];
+            for (const span of spans) {
+                result.push({
+                    ...span,
+                    depth,
+                    parentStart,
+                    id: span.span_id
+                });
+                if (span.children && span.children.length > 0) {
+                    result.push(...flattenSpans(span.children, depth + 1, span.start_time_nanos));
+                }
+            }
+            return result;
+        }
+
+        // Calculate statistics
+        function calculateStats(trace) {
+            const maxDepth = Math.max(...flatSpans.map(s => s.depth));
+            return {
+                traceId: trace.trace_id,
+                totalDuration: trace.total_duration_nanos,
+                spanCount: flatSpans.length,
+                maxDepth: maxDepth + 1
+            };
+        }
+
+        // Update statistics panel
+        function updateStats(stats) {
+            document.getElementById('stat-trace-id').textContent = formatTraceId(stats.traceId);
+            document.getElementById('stat-total-duration').textContent = formatDuration(stats.totalDuration);
+            document.getElementById('stat-span-count').textContent = stats.spanCount;
+            document.getElementById('stat-max-depth').textContent = stats.maxDepth;
+        }
+
+        // Update span details panel
+        function updateSpanDetails(span) {
+            const detailsContainer = document.getElementById('span-details');
+
+            if (!span) {
+                detailsContainer.innerHTML = '<div class="empty-state">Click a span to view details</div>';
+                return;
+            }
+
+            const duration = span.duration_nanos || (span.end_time_nanos - span.start_time_nanos);
+            const hasAttributes = span.attributes && Object.keys(span.attributes).length > 0;
+
+            let attributesHtml = '';
+            if (hasAttributes) {
+                attributesHtml = '<div class="attributes-tree">' +
+                    JSON.stringify(span.attributes, null, 2) +
+                    '</div>';
+            } else {
+                attributesHtml = '<div class="empty-state">No attributes</div>';
+            }
+
+            detailsContainer.innerHTML = `
+                <div class="detail-item">
+                    <div class="detail-label">Operation Name</div>
+                    <div class="detail-value">${span.operation_name}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Span ID</div>
+                    <div class="detail-value">${span.span_id}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Duration</div>
+                    <div class="detail-value">${formatDuration(duration)}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Start Time</div>
+                    <div class="detail-value">${span.start_time_nanos}ns</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">End Time</div>
+                    <div class="detail-value">${span.end_time_nanos}ns</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Depth</div>
+                    <div class="detail-value">Level ${span.depth}</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">Attributes</div>
+                    ${attributesHtml}
+                </div>
+            `;
+        }
+
+        // Get visible spans (accounting for collapsed state)
+        function getVisibleSpans() {
+            const visible = [];
+            const collapsed = new Set();
+
+            for (const span of flatSpans) {
+                // Skip if any ancestor is collapsed
+                let isHidden = false;
+                for (const collapsedId of collapsedSpans) {
+                    const collapsedSpan = flatSpans.find(s => s.span_id === collapsedId);
+                    if (collapsedSpan && span.depth > collapsedSpan.depth) {
+                        // Check if this span is a descendant of collapsed span
+                        const spanIndex = flatSpans.indexOf(span);
+                        const collapsedIndex = flatSpans.indexOf(collapsedSpan);
+                        if (spanIndex > collapsedIndex) {
+                            // Simple check: if depth is greater and comes after, it's likely a descendant
+                            let isDescendant = true;
+                            for (let i = collapsedIndex + 1; i < spanIndex; i++) {
+                                if (flatSpans[i].depth <= collapsedSpan.depth) {
+                                    isDescendant = false;
+                                    break;
+                                }
+                            }
+                            if (isDescendant) {
+                                isHidden = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!isHidden) {
+                    visible.push(span);
+                }
+            }
+
+            return visible;
+        }
+
+        // Render timeline
+        function renderTimeline() {
+            const container = document.getElementById('timeline-container');
+            container.innerHTML = '';
+
+            const visibleSpans = getVisibleSpans();
+            if (visibleSpans.length === 0) return;
+
+            // Calculate dimensions
+            const margin = { top: 40, right: 100, bottom: 30, left: 300 };
+            const rowHeight = 25;
+            const height = visibleSpans.length * rowHeight + margin.top + margin.bottom;
+            const width = 1200;
+
+            // Find time range
+            const minTime = Math.min(...flatSpans.map(s => s.start_time_nanos));
+            const maxTime = Math.max(...flatSpans.map(s => s.end_time_nanos));
+            const timeRange = maxTime - minTime;
+
+            // Create SVG
+            const svg = d3.select(container)
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            // Create scales
+            const xScale = d3.scaleLinear()
+                .domain([0, timeRange])
+                .range([margin.left, width - margin.right]);
+
+            const yScale = d3.scaleBand()
+                .domain(visibleSpans.map((_, i) => i))
+                .range([margin.top, height - margin.bottom])
+                .padding(0.1);
+
+            // Add grid lines
+            const grid = svg.append('g')
+                .attr('class', 'grid');
+
+            const xTicks = xScale.ticks(10);
+            grid.selectAll('line')
+                .data(xTicks)
+                .enter()
+                .append('line')
+                .attr('x1', d => xScale(d))
+                .attr('x2', d => xScale(d))
+                .attr('y1', margin.top)
+                .attr('y2', height - margin.bottom)
+                .attr('stroke', '#eee')
+                .attr('stroke-dasharray', '2,2');
+
+            // Add x-axis
+            const xAxis = d3.axisTop(xScale)
+                .ticks(10)
+                .tickFormat(d => formatDuration(d));
+
+            svg.append('g')
+                .attr('class', 'axis')
+                .attr('transform', `translate(0,${margin.top})`)
+                .call(xAxis);
+
+            // Add span bars and labels
+            const spanGroups = svg.append('g')
+                .selectAll('g')
+                .data(visibleSpans)
+                .enter()
+                .append('g')
+                .attr('class', 'span-row')
+                .attr('data-span-id', d => d.span_id)
+                .on('click', (event, d) => {
+                    selectedSpan = d;
+                    updateSpanDetails(d);
+
+                    // Update selection styling
+                    svg.selectAll('.span-row').classed('selected', false);
+                    d3.select(event.currentTarget).classed('selected', true);
+                });
+
+            // Add span bars
+            spanGroups.append('rect')
+                .attr('class', 'span-bar')
+                .attr('x', d => xScale(d.start_time_nanos - minTime))
+                .attr('y', (d, i) => yScale(i))
+                .attr('width', d => {
+                    const duration = d.end_time_nanos - d.start_time_nanos;
+                    return Math.max(2, xScale(duration) - xScale(0));
+                })
+                .attr('height', yScale.bandwidth());
+
+            // Add span names with indentation
+            spanGroups.append('text')
+                .attr('class', 'span-name')
+                .attr('x', d => margin.left - 10 - (d.depth * 15))
+                .attr('y', (d, i) => yScale(i) + yScale.bandwidth() / 2)
+                .attr('dy', '0.35em')
+                .attr('text-anchor', 'end')
+                .text(d => {
+                    const hasChildren = flatSpans.some(s =>
+                        s.depth === d.depth + 1 &&
+                        flatSpans.indexOf(s) > flatSpans.indexOf(d) &&
+                        flatSpans.indexOf(s) < flatSpans.indexOf(d) + 100 // rough heuristic
+                    );
+                    const isCollapsed = collapsedSpans.has(d.span_id);
+                    const prefix = hasChildren ? (isCollapsed ? '▶ ' : '▼ ') : '  ';
+                    return prefix + d.operation_name;
+                })
+                .style('cursor', d => {
+                    const hasChildren = flatSpans.some(s => s.depth === d.depth + 1);
+                    return hasChildren ? 'pointer' : 'default';
+                })
+                .on('click', (event, d) => {
+                    event.stopPropagation();
+
+                    // Toggle collapse state
+                    if (collapsedSpans.has(d.span_id)) {
+                        collapsedSpans.delete(d.span_id);
+                    } else {
+                        collapsedSpans.add(d.span_id);
+                    }
+
+                    renderTimeline();
+                });
+
+            // Add duration labels
+            spanGroups.append('text')
+                .attr('class', 'span-name')
+                .attr('x', d => {
+                    const duration = d.end_time_nanos - d.start_time_nanos;
+                    const barEnd = xScale(d.start_time_nanos - minTime + duration);
+                    return barEnd + 5;
+                })
+                .attr('y', (d, i) => yScale(i) + yScale.bandwidth() / 2)
+                .attr('dy', '0.35em')
+                .style('font-size', '10px')
+                .style('fill', '#666')
+                .text(d => formatDuration(d.end_time_nanos - d.start_time_nanos));
+        }
+
+        // Load trace data
+        function loadTrace(data) {
+            try {
+                // Validate structure
+                if (!data.trace_id || !data.spans) {
+                    throw new Error('Invalid trace format: missing trace_id or spans');
+                }
+
+                traceData = data;
+                flatSpans = flattenSpans(data.spans);
+                collapsedSpans.clear();
+                selectedSpan = null;
+
+                // Update UI
+                const stats = calculateStats(data);
+                updateStats(stats);
+                renderTimeline();
+                updateSpanDetails(null);
+
+                // Show main content
+                uploadArea.style.display = 'none';
+                mainContent.classList.add('active');
+            } catch (error) {
+                showError(`Error loading trace: ${error.message}`);
+                console.error('Trace load error:', error);
+            }
+        }
+
+        // File upload handlers
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'application/json') {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        loadTrace(data);
+                    } catch (error) {
+                        showError('Invalid JSON file');
+                    }
+                };
+                reader.readAsText(file);
+            } else {
+                showError('Please drop a JSON file');
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        loadTrace(data);
+                    } catch (error) {
+                        showError('Invalid JSON file');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Search functionality
+        searchBox.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            if (!query) {
+                renderTimeline();
+                return;
+            }
+
+            // Filter spans
+            const filtered = flatSpans.filter(s =>
+                s.operation_name.toLowerCase().includes(query) ||
+                s.span_id.toLowerCase().includes(query)
+            );
+
+            // TODO: Implement search highlighting
+            console.log('Search results:', filtered.length);
+        });
+
+        // Expand/collapse controls
+        expandAllBtn.addEventListener('click', () => {
+            collapsedSpans.clear();
+            renderTimeline();
+        });
+
+        collapseAllBtn.addEventListener('click', () => {
+            // Collapse all root spans
+            flatSpans.filter(s => s.depth === 0).forEach(s => {
+                collapsedSpans.add(s.span_id);
+            });
+            renderTimeline();
+        });
+
+        resetBtn.addEventListener('click', () => {
+            uploadArea.style.display = 'block';
+            mainContent.classList.remove('active');
+            traceData = null;
+            flatSpans = [];
+            selectedSpan = null;
+            collapsedSpans.clear();
+            fileInput.value = '';
+        });
+    </script>
+</body>
+</html>
