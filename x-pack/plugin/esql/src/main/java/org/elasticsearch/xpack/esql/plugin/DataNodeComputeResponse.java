@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+import static org.elasticsearch.xpack.esql.action.EsqlQueryResponse.TRACE_RESULTS_VERSION;
+
 /**
  * The compute result of {@link DataNodeRequest}
  */
@@ -29,7 +31,6 @@ final class DataNodeComputeResponse extends TransportResponse {
     private static final TransportVersion ESQL_DOCUMENTS_FOUND_AND_VALUES_LOADED = TransportVersion.fromName(
         "esql_documents_found_and_values_loaded"
     );
-    private static final TransportVersion TRACE_RESULTS_VERSION = TransportVersion.fromName("esql_trace_context");
 
     private final DriverCompletionInfo completionInfo;
     private final Map<ShardId, Exception> shardLevelFailures;

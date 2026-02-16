@@ -172,7 +172,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
             ZoneOffset.UTC,
             startTimeMillis,
             expirationTimeMillis,
-            createExecutionInfo()
+            createExecutionInfo(),
         );
     }
 
@@ -479,7 +479,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
                 ZoneOffset.UTC,
                 0L,
                 0L,
-                executionInfo
+                executionInfo,
             );
         }
 
@@ -941,7 +941,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
                 randomZone(),
                 0L,
                 0L,
-                null
+                null,
             )
         ) {
             assertThat(Strings.toString(wrapAsToXContent(response), true, false), equalTo("""
@@ -983,7 +983,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
                 randomZone(),
                 0L,
                 0L,
-                null
+                null,
             )
         ) {
             assertThat(Strings.toString(wrapAsToXContent(response), true, false), equalTo("""
@@ -1027,7 +1027,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
                 randomZone(),
                 0L,
                 0L,
-                null
+                null,
             )
         ) {
             assertThat(
@@ -1092,7 +1092,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
                     randomZone(),
                     0L,
                     0L,
-                    null
+                    null,
                 )
             ) {
                 assertThat(
@@ -1267,7 +1267,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
         var longBlk2 = blockFactory.newLongArrayVector(new long[] { 300L, 400L, 500L }, 3).asBlock();
         var columnInfo = List.of(new ColumnInfoImpl("foo", "integer", null), new ColumnInfoImpl("bar", "long", null));
         var pages = List.of(new Page(intBlk1, longBlk1), new Page(intBlk2, longBlk2));
-        try (var response = new EsqlQueryResponse(columnInfo, pages, 0, 0, null, false, null, false, false, randomZone(), 0L, 0L, null)) {
+        try (var response = new EsqlQueryResponse(columnInfo, pages, 0, 0, null, , false, null, false, false, randomZone(), 0L, 0L, null, )) {
             assertThat(columnValues(response.column(0)), contains(10, 20, 30, 40, 50));
             assertThat(columnValues(response.column(1)), contains(100L, 200L, 300L, 400L, 500L));
             expectThrows(IllegalArgumentException.class, () -> response.column(-1));
@@ -1279,7 +1279,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
         var intBlk1 = blockFactory.newIntArrayVector(new int[] { 10 }, 1).asBlock();
         var columnInfo = List.of(new ColumnInfoImpl("foo", "integer", null));
         var pages = List.of(new Page(intBlk1));
-        try (var response = new EsqlQueryResponse(columnInfo, pages, 0, 0, null, false, null, false, false, randomZone(), 0L, 0L, null)) {
+        try (var response = new EsqlQueryResponse(columnInfo, pages, 0, 0, null, , false, null, false, false, randomZone(), 0L, 0L, null, )) {
             expectThrows(IllegalArgumentException.class, () -> response.column(-1));
             expectThrows(IllegalArgumentException.class, () -> response.column(1));
         }
@@ -1298,7 +1298,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
         }
         var columnInfo = List.of(new ColumnInfoImpl("foo", "integer", null));
         var pages = List.of(new Page(blk1), new Page(blk2), new Page(blk3));
-        try (var response = new EsqlQueryResponse(columnInfo, pages, 0, 0, null, false, null, false, false, randomZone(), 0L, 0L, null)) {
+        try (var response = new EsqlQueryResponse(columnInfo, pages, 0, 0, null, , false, null, false, false, randomZone(), 0L, 0L, null, )) {
             assertThat(columnValues(response.column(0)), contains(10, null, 30, null, null, 60, null, 80, 90, null));
             expectThrows(IllegalArgumentException.class, () -> response.column(-1));
             expectThrows(IllegalArgumentException.class, () -> response.column(2));
@@ -1318,7 +1318,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
         }
         var columnInfo = List.of(new ColumnInfoImpl("foo", "integer", null));
         var pages = List.of(new Page(blk1), new Page(blk2), new Page(blk3));
-        try (var response = new EsqlQueryResponse(columnInfo, pages, 0, 0, null, false, null, false, false, randomZone(), 0L, 0L, null)) {
+        try (var response = new EsqlQueryResponse(columnInfo, pages, 0, 0, null, , false, null, false, false, randomZone(), 0L, 0L, null, )) {
             assertThat(columnValues(response.column(0)), contains(List.of(10, 20), null, List.of(40, 50), null, 70, 80, null));
             expectThrows(IllegalArgumentException.class, () -> response.column(-1));
             expectThrows(IllegalArgumentException.class, () -> response.column(2));
@@ -1362,7 +1362,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
                 ZoneId.of("Europe/Paris"),
                 0L,
                 0L,
-                null
+                null,
             )
         ) {
             assertThat(
@@ -1402,7 +1402,7 @@ public class EsqlQueryResponseTests extends AbstractChunkedSerializingTestCase<E
             List<ColumnInfoImpl> columns = randomList(numColumns, numColumns, this::randomColumnInfo);
             int noPages = randomIntBetween(1, 20);
             List<Page> pages = randomList(noPages, noPages, () -> randomPage(columns));
-            try (var resp = new EsqlQueryResponse(columns, pages, 0, 0, null, false, "", false, false, ZoneOffset.UTC, 0L, 0L, null)) {
+            try (var resp = new EsqlQueryResponse(columns, pages, 0, 0, null, , false, "", false, false, ZoneOffset.UTC, 0L, 0L, null, )) {
                 var rowValues = getValuesList(resp.rows());
                 var valValues = getValuesList(resp.values());
                 for (int i = 0; i < rowValues.size(); i++) {

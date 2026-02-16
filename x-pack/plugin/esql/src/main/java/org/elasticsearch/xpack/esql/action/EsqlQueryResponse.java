@@ -55,6 +55,8 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
     private static final TransportVersion ESQL_PROFILE_INCLUDE_PLAN = TransportVersion.fromName("esql_profile_include_plan");
     private static final TransportVersion ESQL_TIMESTAMPS_INFO = TransportVersion.fromName("esql_timestamps_info");
     private static final TransportVersion ESQL_RESPONSE_TIMEZONE_FORMAT = TransportVersion.fromName("esql_response_timezone_format");
+    public static final TransportVersion TRACE_RESULTS_VERSION = TransportVersion.fromName("esql_trace_context");
+
 
     public static final String DROP_NULL_COLUMNS_OPTION = "drop_null_columns";
 
@@ -75,8 +77,7 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
 
     private final ZoneId zoneId;
 
-    // Transient field for trace results - not serialized across nodes
-    private transient QueryTraceResults traceResults;
+    private final QueryTraceResults traceResults;
 
     public EsqlQueryResponse(
         List<ColumnInfoImpl> columns,
@@ -84,7 +85,7 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
         long documentsFound,
         long valuesLoaded,
         @Nullable Profile profile,
-        boolean columnar,
+        QueryTraceResults traceResults, boolean columnar,
         @Nullable String asyncExecutionId,
         boolean isRunning,
         boolean isAsync,
@@ -106,6 +107,7 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
         this.startTimeMillis = startTimeMillis;
         this.expirationTimeMillis = expirationTimeMillis;
         this.executionInfo = executionInfo;
+        this.traceResults = traceResults;
     }
 
     public EsqlQueryResponse(
@@ -114,7 +116,7 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
         long documentsFound,
         long valuesLoaded,
         @Nullable Profile profile,
-        boolean columnar,
+        QueryTraceResults traceResults, boolean columnar,
         boolean isAsync,
         ZoneId zoneId,
         long startTimeMillis,
@@ -127,7 +129,7 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
             documentsFound,
             valuesLoaded,
             profile,
-            columnar,
+            traceResults, columnar,
             null,
             false,
             isAsync,
@@ -173,12 +175,19 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
         }
 
         EsqlExecutionInfo executionInfo = in.readOptionalWriteable(EsqlExecutionInfo::new);
+
+        QueryTraceResults traceResults = null;
+        if (in.getTransportVersion().supports(TRACE_RESULTS_VERSION)) {
+            traceResults = in.readOptionalWriteable(QueryTraceResults::new);
+        }
+
         return new EsqlQueryResponse(
             columns,
             pages,
             documentsFound,
             valuesLoaded,
             profile,
+            traceResults,
             columnar,
             asyncExecutionId,
             isRunning,
@@ -214,6 +223,11 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
         }
 
         out.writeOptionalWriteable(executionInfo);
+
+        if (out.getTransportVersion().supports(TRACE_RESULTS_VERSION)) {
+            out.writeOptionalWriteable(traceResults);
+        }
+
     }
 
     private static boolean supportsValuesLoaded(TransportVersion version) {
@@ -285,24 +299,6 @@ public class EsqlQueryResponse extends org.elasticsearch.xpack.core.esql.action.
 
     public EsqlExecutionInfo getExecutionInfo() {
         return executionInfo;
-    }
-
-    /**
-     * Sets the trace results for this response.
-     * This is a transient field that is not serialized across nodes.
-     *
-     * @param traceResults the trace results to include in the response
-     */
-    public void setTraceResults(QueryTraceResults traceResults) {
-        this.traceResults = traceResults;
-    }
-
-    /**
-     * @return the trace results, or null if tracing was not enabled
-     */
-    @Nullable
-    public QueryTraceResults getTraceResults() {
-        return traceResults;
     }
 
     @Override

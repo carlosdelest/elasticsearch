@@ -34,6 +34,7 @@ import org.elasticsearch.search.crossproject.CrossProjectModeDecider;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.RemoteClusterAware;
 import org.elasticsearch.transport.RemoteClusterService;
@@ -304,7 +305,7 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
             ActionListener.wrap(result -> {
                 recordCCSTelemetry(task, executionInfo, request, null);
                 planExecutor.metrics().recordTook(executionInfo.overallTook().millis());
-                var response = toResponse(task, request, request.profile(), result);
+                var response = toResponse(task, request, request.profile(), request.trace(), result);
                 assert response.isAsync() == request.async() : "The response must be async if the request was async";
 
                 if (response.isAsync()) {
@@ -409,7 +410,13 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
         );
     }
 
-    private EsqlQueryResponse toResponse(Task task, EsqlQueryRequest request, boolean profileEnabled, Versioned<Result> result) {
+    private EsqlQueryResponse toResponse(
+        Task task,
+        EsqlQueryRequest request,
+        boolean profileEnabled,
+        boolean traceEnabled,
+        Versioned<Result> result
+    ) {
         var innerResult = result.inner();
         List<ColumnInfoImpl> columns = innerResult.schema().stream().map(c -> {
             List<String> originalTypes;
@@ -429,6 +436,9 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
                 result.minimumVersion()
             )
             : null;
+        // Set trace results from executionInfo if tracing was enabled
+        QueryTraceResults queryTraceResults = traceEnabled ?
+            innerResult.executionInfo().traceResults() : null;
         EsqlQueryResponse response;
         if (task instanceof EsqlQueryTask asyncTask && request.keepOnCompletion()) {
             String asyncExecutionId = asyncTask.getExecutionId().getEncoded();
@@ -438,6 +448,7 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
                 innerResult.completionInfo().documentsFound(),
                 innerResult.completionInfo().valuesLoaded(),
                 profile,
+                queryTraceResults,
                 request.columnar(),
                 asyncExecutionId,
                 false,
@@ -454,6 +465,7 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
                 innerResult.completionInfo().documentsFound(),
                 innerResult.completionInfo().valuesLoaded(),
                 profile,
+                queryTraceResults,
                 request.columnar(),
                 request.async(),
                 result.inner().configuration().zoneId(),
@@ -461,11 +473,6 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
                 threadPool.absoluteTimeInMillis() + request.keepAlive().millis(),
                 innerResult.executionInfo()
             );
-        }
-
-        // Set trace results from executionInfo if tracing was enabled
-        if (innerResult.executionInfo() != null && innerResult.executionInfo().traceResults() != null) {
-            response.setTraceResults(innerResult.executionInfo().traceResults());
         }
 
         return response;
@@ -527,6 +534,7 @@ public class TransportEsqlQueryAction extends HandledTransportAction<EsqlQueryRe
             List.of(),
             0,
             0,
+            null,
             null,
             false,
             asyncExecutionId,

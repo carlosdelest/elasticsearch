@@ -26,7 +26,6 @@ import org.elasticsearch.compute.operator.DriverCompletionInfo;
 import org.elasticsearch.compute.operator.FailureCollector;
 import org.elasticsearch.compute.operator.PlanTimeProfile;
 import org.elasticsearch.core.Releasables;
-import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.index.IndexMode;
 import org.elasticsearch.index.mapper.IndexModeFieldMapper;
 import org.elasticsearch.index.query.BoolQueryBuilder;
@@ -38,6 +37,7 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.crossproject.CrossProjectModeDecider;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.RemoteClusterAware;
 import org.elasticsearch.transport.RemoteClusterService;
@@ -239,22 +239,6 @@ public class EsqlSession {
         executionInfo.setTracer(tracer);
         tracer.startSpan("esql.query", Map.of("es.query", request.query()));
 
-        // Wrap listener to capture trace results on completion
-        ActionListener<Versioned<Result>> tracingListener = ActionListener.wrap(result -> {
-            tracer.endSpan(tracer.rootSpanId());
-            if (tracer.isEnabled()) {
-                executionInfo.setTraceResults(tracer.getResults());
-            }
-            listener.onResponse(result);
-        }, e -> {
-            tracer.addCurrentError(e);
-            tracer.endSpan(tracer.rootSpanId());
-            if (tracer.isEnabled()) {
-                executionInfo.setTraceResults(tracer.getResults());
-            }
-            listener.onFailure(e);
-        });
-
         TimeSpanMarker parsingProfile = executionInfo.queryProfile().parsing();
         parsingProfile.start();
 
@@ -364,7 +348,14 @@ public class EsqlSession {
                                 l
                             )
                         )
-                        .<Versioned<Result>>andThen((l, r) -> l.onResponse(new Versioned<>(r, minimumVersion)))
+                        .<Versioned<Result>>andThen((l, r) -> {
+                            tracer.endSpan(tracer.rootSpanId());
+                            if (tracer.isEnabled()) {
+                                executionInfo.setTraceResults(tracer.getResults());
+                            }
+
+                            l.onResponse(new Versioned<>(r, minimumVersion));
+                        })
                         .addListener(listener);
                 }
             }

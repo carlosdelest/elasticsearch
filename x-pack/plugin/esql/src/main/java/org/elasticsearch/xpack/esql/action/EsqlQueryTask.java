@@ -52,6 +52,7 @@ public class EsqlQueryTask extends StoredAsyncTask<EsqlQueryResponse> {
             0,
             0,
             null,
+            null,
             false,
             getExecutionId().getEncoded(),
             true,
