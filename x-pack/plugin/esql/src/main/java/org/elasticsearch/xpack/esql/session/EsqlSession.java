@@ -37,6 +37,7 @@ import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.crossproject.CrossProjectModeDecider;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.RemoteClusterAware;
@@ -92,6 +93,7 @@ import org.elasticsearch.xpack.esql.planner.PlannerUtils;
 import org.elasticsearch.xpack.esql.planner.mapper.Mapper;
 import org.elasticsearch.xpack.esql.planner.premapper.PreMapper;
 import org.elasticsearch.xpack.esql.plugin.TransportActionServices;
+import org.elasticsearch.xpack.esql.telemetry.DriverProfileConverter;
 import org.elasticsearch.xpack.esql.telemetry.PlanTelemetry;
 import org.elasticsearch.xpack.esql.view.ViewResolver;
 
@@ -351,7 +353,16 @@ public class EsqlSession {
                         .<Versioned<Result>>andThen((l, r) -> {
                             tracer.endSpan(tracer.rootSpanId());
                             if (tracer.isEnabled()) {
-                                executionInfo.setTraceResults(tracer.getResults());
+                                QueryTraceResults planningTraces = tracer.getResults();
+
+                                // Merge driver profiles into trace results
+                                QueryTraceResults enrichedTraces = DriverProfileConverter.enrichWithDriverProfiles(
+                                    planningTraces,
+                                    r.completionInfo(),
+                                    tracer.getTraceId()
+                                );
+
+                                executionInfo.setTraceResults(enrichedTraces);
                             }
 
                             l.onResponse(new Versioned<>(r, minimumVersion));
