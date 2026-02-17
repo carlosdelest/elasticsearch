@@ -38,6 +38,7 @@ import org.elasticsearch.logging.Logger;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.crossproject.CrossProjectModeDecider;
 import org.elasticsearch.telemetry.tracing.QueryTraceResults;
+import org.elasticsearch.telemetry.tracing.QueryTraceSpan;
 import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.RemoteClusterAware;
@@ -245,7 +246,7 @@ public class EsqlSession {
         parsingProfile.start();
 
         // Trace parsing phase
-        String parseSpanId = tracer.startSpan("esql.parse", Map.of());
+        org.elasticsearch.telemetry.tracing.QueryTraceSpan span = tracer.startSpan("esql.parse", Map.of());
         EsqlStatement statement = parse(request);
         var viewResolution = viewResolver.replaceViews(
             statement.plan(),
@@ -258,7 +259,7 @@ public class EsqlSession {
                 viewName
             ).plan()
         );
-        tracer.endSpan(parseSpanId);
+        tracer.endSpan(span);
         parsingProfile.stop();
         PlanTimeProfile planTimeProfile = request.profile() ? new PlanTimeProfile() : null;
 
@@ -331,7 +332,7 @@ public class EsqlSession {
                         .<LogicalPlan>andThen((l, p) -> {
                             // Trace logical_optimization phase
                             QueryTracer optTracer = executionInfo.tracer();
-                            String logOptSpanId = optTracer.startSpan("esql.logical_optimization", Map.of());
+                            QueryTraceSpan logOptSpanId = optTracer.startSpan("esql.logical_optimization", Map.of());
                             LogicalPlan optimized = optimizedPlan(p, logicalPlanOptimizer, planTimeProfile);
                             optTracer.endSpan(logOptSpanId);
                             preMapper.preMapper(new Versioned<>(optimized, minimumVersion), l);
@@ -493,12 +494,12 @@ public class EsqlSession {
         } else {
             // Trace physical_optimization phase
             QueryTracer tracer = executionInfo.tracer();
-            String physOptSpanId = tracer.startSpan("esql.physical_optimization", Map.of());
+            QueryTraceSpan physOptSpanId = tracer.startSpan("esql.physical_optimization", Map.of());
             PhysicalPlan physicalPlan = logicalPlanToPhysicalPlan(optimizedPlan, request, physicalPlanOptimizer, planTimeProfile);
             tracer.endSpan(physOptSpanId);
 
             // Trace execution phase
-            String execSpanId = tracer.startSpan("esql.execution", Map.of());
+            QueryTraceSpan execSpanId = tracer.startSpan("esql.execution", Map.of());
             ActionListener<Result> tracingListener = ActionListener.wrap(result -> {
                 tracer.endSpan(execSpanId);
                 listener.onResponse(result);
@@ -716,7 +717,7 @@ public class EsqlSession {
 
         // Trace pre_analysis phase
         QueryTracer tracer = executionInfo.tracer();
-        String preAnalysisSpanId = tracer.startSpan("esql.pre_analysis", Map.of());
+        QueryTraceSpan preAnalysisSpanId = tracer.startSpan("esql.pre_analysis", Map.of());
         PreAnalyzer.PreAnalysis preAnalysis = preAnalyzer.preAnalyze(parsed);
         tracer.endSpan(preAnalysisSpanId);
         preAnalysisProfile.stop();
@@ -756,7 +757,7 @@ public class EsqlSession {
 
         // Trace dependency_resolution phase
         QueryTracer tracer = executionInfo.tracer();
-        final String depResSpanId = tracer.startSpan("esql.dependency_resolution", Map.of());
+        final QueryTraceSpan depResSpanId = tracer.startSpan("esql.dependency_resolution", Map.of());
 
         SubscribableListener.<PreAnalysisResult>newForked(
             l -> preAnalyzeMainIndices(preAnalysis, configuration, executionInfo, result, requestFilter, l)
@@ -1258,7 +1259,7 @@ public class EsqlSession {
 
             // Trace analysis phase
             QueryTracer tracer = executionInfo.tracer();
-            String analysisSpanId = tracer.startSpan("esql.analysis", Map.of());
+            QueryTraceSpan analysisSpanId = tracer.startSpan("esql.analysis", Map.of());
             LogicalPlan plan = analyzedPlan(parsed, unmappedResolution, configuration, result, executionInfo);
             tracer.endSpan(analysisSpanId);
             analysisProfile.stop();

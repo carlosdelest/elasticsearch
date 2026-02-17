@@ -41,6 +41,7 @@ import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskCancelledException;
+import org.elasticsearch.telemetry.tracing.QueryTraceSpan;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.Transport;
 import org.elasticsearch.transport.TransportChannel;
@@ -199,7 +200,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                             boolean enableReduceNodeLateMaterialization = EsqlCapabilities.Cap.ENABLE_REDUCE_NODE_LATE_MATERIALIZATION
                                 .isEnabled();
                             // Start a span for this data node compute
-                            String dataNodeSpanId = tracer.startSpan(
+                            QueryTraceSpan dataNodeSpanId = tracer.startSpan(
                                 "esql.data_node_compute",
                                 Map.of("es.node", node.getName(), "es.shards", shards.size())
                             );
