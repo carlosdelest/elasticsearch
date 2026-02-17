@@ -389,8 +389,9 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
         // Create tracer (real or noop)
         final SearchSourceBuilder source = original.source();
         final QueryTracer tracer = (source != null && source.trace()) ? new QueryTracer() : QueryTracer.NOOP;
-        tracer.startSpan("search.query", Map.of(
-            "es.indices", String.join(",", original.indices())
+        tracer.startSpan("search.coordinator", Map.of(
+            "indices", String.join(",", original.indices()),
+            "search_type", original.searchType() != null ? original.searchType().toString() : "QUERY_THEN_FETCH"
         ));
 
         // Wrap listener to capture trace results on completion
@@ -549,7 +550,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                     resolvedIndices,
                     projectState,
                     SearchResponse.Clusters.EMPTY,
-                    searchPhaseProvider.apply(searchResponseActionListener)
+                    searchPhaseProvider.apply(searchResponseActionListener),
+                    tracer
                 );
             } else {
                 final TaskId parentTaskId = task.taskInfo(clusterService.localNode().getId(), false).taskId();
@@ -572,7 +574,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                                     replacedIndices,
                                     projectState,
                                     SearchResponse.Clusters.EMPTY,
-                                    searchPhaseProvider.apply(searchResponseActionListener)
+                                    searchPhaseProvider.apply(searchResponseActionListener),
+                                    tracer
                                 );
                             } else {
                                 final var aggregationReduceContextBuilder = rewritten.source() != null
@@ -615,7 +618,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                                         replacedIndices,
                                         projectState,
                                         clusters,
-                                        searchPhaseProvider.apply(l)
+                                        searchPhaseProvider.apply(l),
+                                        tracer
                                     ),
                                     transportService,
                                     forceConnectTimeoutSecs
@@ -690,7 +694,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                                 projectState,
                                 remoteAliasFilters,
                                 participatingProjects,
-                                searchPhaseProvider.apply(finalDelegate)
+                                searchPhaseProvider.apply(finalDelegate),
+                                tracer
                             );
                         }),
                         forceConnectTimeoutSecs,
@@ -1584,7 +1589,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
         ResolvedIndices resolvedIndices,
         ProjectState projectState,
         SearchResponse.Clusters clusterInfo,
-        SearchPhaseProvider searchPhaseProvider
+        SearchPhaseProvider searchPhaseProvider,
+        QueryTracer tracer
     ) {
         executeSearch(
             (SearchTask) task,
@@ -1596,7 +1602,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             projectState,
             Collections.emptyMap(),
             clusterInfo,
-            searchPhaseProvider
+            searchPhaseProvider,
+            tracer
         );
     }
 
@@ -1766,7 +1773,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
         ProjectState projectState,
         Map<String, AliasFilter> remoteAliasMap,
         SearchResponse.Clusters clusters,
-        SearchPhaseProvider searchPhaseProvider
+        SearchPhaseProvider searchPhaseProvider,
+        QueryTracer tracer
     ) {
         if (searchRequest.allowPartialSearchResults() == null) {
             // No user preference defined in search request - apply cluster service default
@@ -1887,7 +1895,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             preFilterSearchShards,
             threadPool,
             clusters,
-            searchRequestAttributes
+            searchRequestAttributes,
+            tracer
         );
     }
 
@@ -2005,7 +2014,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             boolean preFilter,
             ThreadPool threadPool,
             SearchResponse.Clusters clusters,
-            Map<String, Object> searchRequestAttributes
+            Map<String, Object> searchRequestAttributes,
+            QueryTracer tracer
         );
     }
 
@@ -2030,7 +2040,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             boolean preFilter,
             ThreadPool threadPool,
             SearchResponse.Clusters clusters,
-            Map<String, Object> searchRequestAttributes
+            Map<String, Object> searchRequestAttributes,
+            QueryTracer tracer
         ) {
             if (preFilter) {
                 // only for aggs we need to contact shards even if there are no matches
@@ -2066,7 +2077,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                                 false,
                                 threadPool,
                                 clusters,
-                                searchRequestAttributes
+                                searchRequestAttributes,
+                                tracer
                             )
                         )
                     );
@@ -2113,7 +2125,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                         client,
                         searchResponseMetrics,
                         searchRequestAttributes,
-                        searchService.isPitRelocationEnabled()
+                        searchService.isPitRelocationEnabled(),
+                        tracer
                     );
                 } else {
                     assert searchRequest.searchType() == QUERY_THEN_FETCH : searchRequest.searchType();
@@ -2138,7 +2151,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                         searchService.batchQueryPhase(),
                         searchService.isPitRelocationEnabled(),
                         searchResponseMetrics,
-                        searchRequestAttributes
+                        searchRequestAttributes,
+                        tracer
                     );
                 }
                 success = true;

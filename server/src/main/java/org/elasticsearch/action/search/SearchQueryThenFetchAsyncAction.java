@@ -48,6 +48,7 @@ import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.search.query.QuerySearchResult;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskCancelledException;
@@ -121,7 +122,8 @@ public class SearchQueryThenFetchAsyncAction extends AbstractSearchAsyncAction<S
         boolean batchQueryPhase,
         boolean pitRelocationEnabled,
         SearchResponseMetrics searchResponseMetrics,
-        Map<String, Object> searchRequestAttributes
+        Map<String, Object> searchRequestAttributes,
+        QueryTracer tracer
     ) {
         super(
             "query",
@@ -144,7 +146,8 @@ public class SearchQueryThenFetchAsyncAction extends AbstractSearchAsyncAction<S
             clusters,
             searchResponseMetrics,
             searchRequestAttributes,
-            pitRelocationEnabled
+            pitRelocationEnabled,
+            tracer
         );
         this.topDocsSize = getTopDocsSize(request);
         this.trackTotalHitsUpTo = request.resolveTrackTotalHitsUpTo();

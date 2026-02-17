@@ -20,6 +20,7 @@ import org.elasticsearch.search.SearchPhaseResult;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.dfs.DfsSearchResult;
 import org.elasticsearch.search.internal.AliasFilter;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.transport.Transport;
 
 import java.util.List;
@@ -53,7 +54,8 @@ final class SearchDfsQueryThenFetchAsyncAction extends AbstractSearchAsyncAction
         Client client,
         SearchResponseMetrics searchResponseMetrics,
         Map<String, Object> searchRequestAttributes,
-        boolean pitRelocationEnabled
+        boolean pitRelocationEnabled,
+        QueryTracer tracer
     ) {
         super(
             "dfs",
@@ -76,7 +78,8 @@ final class SearchDfsQueryThenFetchAsyncAction extends AbstractSearchAsyncAction
             clusters,
             searchResponseMetrics,
             searchRequestAttributes,
-            pitRelocationEnabled
+            pitRelocationEnabled,
+            tracer
         );
         this.queryPhaseResultConsumer = queryPhaseResultConsumer;
         addReleasable(queryPhaseResultConsumer);

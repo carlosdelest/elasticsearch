@@ -348,6 +348,10 @@ public class RestSearchAction extends BaseRestHandler {
             }
         }
 
+        if (request.hasParam("trace")) {
+            searchSourceBuilder.trace(request.paramAsBoolean("trace", false));
+        }
+
         String sSorts = request.param("sort");
         if (sSorts != null) {
             String[] sorts = Strings.splitStringByCommaToArray(sSorts);

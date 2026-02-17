@@ -40,6 +40,7 @@ import org.elasticsearch.search.internal.AliasFilter;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.transport.Transport;
 
 import java.util.ArrayList;
@@ -108,6 +109,8 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
     protected final Map<String, Object> searchRequestAttributes;
     private final boolean isPitRelocationEnabled;
     protected long phaseStartTimeInNanos;
+    protected final QueryTracer tracer;
+    private volatile String currentPhaseSpanId;
 
     // protected for tests
     protected final SubscribableListener<Void> doneFuture = new SubscribableListener<>();
@@ -134,7 +137,8 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
         SearchResponse.Clusters clusters,
         SearchResponseMetrics searchResponseMetrics,
         Map<String, Object> searchRequestAttributes,
-        boolean pitRelocationEnabled
+        boolean pitRelocationEnabled,
+        QueryTracer tracer
     ) {
         super(name);
         this.namedWriteableRegistry = namedWriteableRegistry;
@@ -181,6 +185,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
         this.searchResponseMetrics = searchResponseMetrics;
         this.searchRequestAttributes = searchRequestAttributes;
         this.isPitRelocationEnabled = pitRelocationEnabled;
+        this.tracer = tracer;
     }
 
     protected void notifyListShards(
@@ -400,14 +405,17 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
     }
 
     private void executePhase(SearchPhase phase) {
+        currentPhaseSpanId = tracer.startSpan("search." + phase.getName().toLowerCase().replace(' ', '_'), Map.of());
         try {
             phase.run();
         } catch (RuntimeException e) {
+            tracer.addCurrentError(e);
             if (logger.isDebugEnabled()) {
                 logger.debug(() -> format("Failed to execute [%s] while moving to [%s] phase", request, phase.getName()), e);
             }
             onPhaseFailure(phase.getName(), "", e);
         }
+        // Note: Span will be ended in phase completion callback (onPhaseDone)
     }
 
     private ShardSearchFailure[] buildShardFailures() {
@@ -772,6 +780,10 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
      */
     private void onPhaseDone() {  // as a tribute to @kimchy aka. finishHim()
         searchResponseMetrics.recordSearchPhaseDuration(getName(), System.nanoTime() - phaseStartTimeInNanos, searchRequestAttributes);
+        if (currentPhaseSpanId != null) {
+            tracer.endSpan(currentPhaseSpanId);
+            currentPhaseSpanId = null;
+        }
         executeNextPhase(getName(), this::getNextPhase);
     }
 

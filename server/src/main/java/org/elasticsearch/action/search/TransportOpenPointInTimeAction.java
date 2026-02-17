@@ -45,6 +45,7 @@ import org.elasticsearch.search.crossproject.CrossProjectModeDecider;
 import org.elasticsearch.search.internal.AliasFilter;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.tasks.Task;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.AbstractTransportRequest;
 import org.elasticsearch.transport.RemoteClusterAware;
@@ -309,7 +310,8 @@ public class TransportOpenPointInTimeAction extends HandledTransportAction<OpenP
             boolean preFilter,
             ThreadPool threadPool,
             SearchResponse.Clusters clusters,
-            Map<String, Object> searchRequestAttributes
+            Map<String, Object> searchRequestAttributes,
+            QueryTracer tracer
         ) {
             // Note: remote shards are prefiltered via can match as part of search shards. They don't need additional pre-filtering and
             // that is signaled to the local can match through the SearchShardIterator#prefiltered flag. Local shards do need to go
@@ -402,7 +404,8 @@ public class TransportOpenPointInTimeAction extends HandledTransportAction<OpenP
                 clusters,
                 searchResponseMetrics,
                 searchRequestAttributes,
-                false
+                false,
+                QueryTracer.NOOP
             ) {
                 @Override
                 protected void executePhaseOnShard(

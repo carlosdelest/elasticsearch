@@ -276,6 +276,7 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
         knnSearch = in.readCollectionAsList(KnnSearchBuilder::new);
         rankBuilder = in.readOptionalNamedWriteable(RankBuilder.class);
         skipInnerHits = in.readBoolean();
+        trace = in.readBoolean();
     }
 
     @Override
@@ -339,6 +340,7 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
         out.writeCollection(knnSearch);
         out.writeOptionalNamedWriteable(rankBuilder);
         out.writeBoolean(skipInnerHits);
+        out.writeBoolean(trace);
     }
 
     /**
@@ -1797,6 +1799,10 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
             builder.field("profile", true);
         }
 
+        if (trace) {
+            builder.field(TRACE_FIELD.getPreferredName(), true);
+        }
+
         if (fetchSourceContext != null) {
             builder.field(_SOURCE_FIELD.getPreferredName(), fetchSourceContext);
         }
@@ -2182,7 +2188,8 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
             trackTotalHitsUpTo,
             pointInTimeBuilder,
             runtimeMappings,
-            skipInnerHits
+            skipInnerHits,
+            trace
         );
     }
 
@@ -2228,7 +2235,8 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
             && Objects.equals(trackTotalHitsUpTo, other.trackTotalHitsUpTo)
             && Objects.equals(pointInTimeBuilder, other.pointInTimeBuilder)
             && Objects.equals(runtimeMappings, other.runtimeMappings)
-            && Objects.equals(skipInnerHits, other.skipInnerHits);
+            && Objects.equals(skipInnerHits, other.skipInnerHits)
+            && Objects.equals(trace, other.trace);
     }
 
     @Override
