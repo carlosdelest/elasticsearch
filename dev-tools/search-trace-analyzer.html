@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Search Trace Analyzer</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --bg2: #16213e;
+  --bg3: #0f3460;
+  --text: #e0e0e0;
+  --text2: #a0a0b0;
+  --accent: #e94560;
+  --border: #2a2a4a;
+  --blue: #4a90d9;
+  --blue-light: #7ab3ef;
+  --orange: #e8a838;
+  --orange-light: #f0c878;
+  --purple: #9b59b6;
+  --purple-light: #c39bd3;
+  --green: #2ecc71;
+  --green-light: #82e0aa;
+  --red: #e74c3c;
+  --teal: #1abc9c;
+  --yellow: #f1c40f;
+  --card-bg: #1e1e3a;
+  --hover: #2a2a5a;
+  --selected: #2a2a6a;
+}
+.light {
+  --bg: #f5f5f5;
+  --bg2: #ffffff;
+  --bg3: #e8e8e8;
+  --text: #333333;
+  --text2: #666666;
+  --accent: #d63031;
+  --border: #cccccc;
+  --blue: #2980b9;
+  --blue-light: #85c1e9;
+  --orange: #d68910;
+  --orange-light: #f0c878;
+  --purple: #8e44ad;
+  --purple-light: #c39bd3;
+  --green: #27ae60;
+  --green-light: #82e0aa;
+  --red: #c0392b;
+  --teal: #16a085;
+  --yellow: #d4ac0d;
+  --card-bg: #ffffff;
+  --hover: #e8e8e8;
+  --selected: #d0d0f0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  font-size: 13px;
+}
+.container { max-width: 1400px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin-bottom: 16px; color: var(--accent); }
+h2 {
+  font-size: 15px; margin-bottom: 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  user-select: none;
+}
+h2 .toggle { font-size: 10px; transition: transform 0.2s; display: inline-block; }
+h2 .toggle.collapsed { transform: rotate(-90deg); }
+.section {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 16px; margin-bottom: 16px;
+}
+.section-body { overflow: hidden; }
+.section-body.collapsed { display: none; }
+.toolbar {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
+}
+button {
+  background: var(--bg3); color: var(--text); border: 1px solid var(--border);
+  padding: 6px 14px; border-radius: 4px; cursor: pointer;
+  font-family: inherit; font-size: 12px;
+}
+button:hover { background: var(--hover); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { opacity: 0.85; }
+textarea {
+  width: 100%; height: 200px; background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 10px;
+  font-family: inherit; font-size: 12px; resize: vertical;
+}
+input[type="file"] { display: none; }
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px; margin-bottom: 12px;
+}
+.stat-card {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px;
+}
+.stat-card .label { font-size: 10px; color: var(--text2); text-transform: uppercase; }
+.stat-card .value { font-size: 16px; font-weight: bold; margin-top: 2px; }
+.badge {
+  display: inline-block; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 12px; padding: 2px 10px; font-size: 11px; margin-left: 8px;
+}
+table {
+  width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px;
+}
+th, td {
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border);
+}
+th { color: var(--text2); font-size: 10px; text-transform: uppercase; }
+tr:hover { background: var(--hover); }
+.chart-container { width: 100%; overflow-x: auto; }
+svg text { font-family: inherit; }
+.tooltip {
+  position: absolute; background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px; font-size: 11px; pointer-events: none;
+  z-index: 100; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  color: var(--text);
+}
+.tooltip .tt-title { font-weight: bold; margin-bottom: 4px; }
+.tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+.tooltip .tt-label { color: var(--text2); }
+.hidden { display: none; }
+.error-msg { color: var(--red); padding: 10px; background: var(--card-bg); border-radius: 4px; margin-top: 8px; }
+#detail-section { border: 2px solid var(--accent); }
+.node-legend { display: flex; gap: 16px; margin: 4px 0 8px; font-size: 11px; align-items: center; flex-wrap: wrap; }
+.node-legend .swatch {
+  width: 14px; height: 8px; border-radius: 2px; display: inline-block;
+  margin-right: 4px; vertical-align: middle;
+}
+.span-row { cursor: pointer; }
+.span-row:hover rect.span-bar { opacity: 1; }
+.span-row.selected rect.span-bar { stroke-width: 2; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <h1>Search Trace Analyzer</h1>
+    <button id="theme-toggle" onclick="toggleTheme()">Light Theme</button>
+  </div>
+
+  <!-- Input Section -->
+  <div class="section" id="input-section">
+    <h2 onclick="toggleSection('input')"><span class="toggle" id="input-toggle">&#9660;</span> Input</h2>
+    <div class="section-body" id="input-body">
+      <textarea id="json-input" placeholder="Paste search trace JSON here (full _search response or just the trace object)..."></textarea>
+      <div class="toolbar">
+        <button class="primary" onclick="analyze()">Analyze</button>
+        <button onclick="loadExample()">Load Example</button>
+        <button onclick="document.getElementById('file-input').click()">Upload File</button>
+        <input type="file" id="file-input" accept=".json" onchange="handleFile(event)">
+        <button onclick="clearAll()">Clear</button>
+      </div>
+      <div id="error-container"></div>
+    </div>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="section hidden" id="summary-section">
+    <h2 onclick="toggleSection('summary')"><span class="toggle" id="summary-toggle">&#9660;</span> Summary</h2>
+    <div class="section-body" id="summary-body">
+      <div id="summary-stats" class="stats-grid"></div>
+      <div id="node-table-container"></div>
+    </div>
+  </div>
+
+  <!-- Gantt Timeline -->
+  <div class="section hidden" id="timeline-section">
+    <h2 onclick="toggleSection('timeline')"><span class="toggle" id="timeline-toggle">&#9660;</span> Span Timeline</h2>
+    <div class="section-body" id="timeline-body">
+      <div class="node-legend" id="timeline-legend"></div>
+      <div class="chart-container" id="timeline-chart"></div>
+    </div>
+  </div>
+
+  <!-- Span Detail -->
+  <div class="section hidden" id="detail-section">
+    <h2 onclick="toggleSection('detail')"><span class="toggle" id="detail-toggle">&#9660;</span> Span Detail</h2>
+    <div class="section-body" id="detail-body">
+      <div id="detail-stats" class="stats-grid"></div>
+      <div id="detail-children-container"></div>
+      <div id="detail-details-container"></div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip hidden" id="tooltip"></div>
+
+<script>
+/* ===== Formatting helpers ===== */
+function fmtNanos(n) {
+  if (n == null) return '-';
+  if (n < 0) return '-';
+  if (n < 1000) return n + 'ns';
+  if (n < 1e6) return (n / 1e3).toFixed(1) + 'us';
+  if (n < 1e9) return (n / 1e6).toFixed(2) + 'ms';
+  return (n / 1e9).toFixed(3) + 's';
+}
+function fmtMillis(ms) {
+  if (ms == null) return '-';
+  if (ms < 1000) return ms.toFixed(1) + 'ms';
+  return (ms / 1000).toFixed(3) + 's';
+}
+function fmtNum(n) {
+  if (n == null) return '-';
+  return n.toLocaleString();
+}
+function fmtPct(ratio) {
+  if (ratio == null || isNaN(ratio)) return '-';
+  return (ratio * 100).toFixed(1) + '%';
+}
+
+/* ===== Theme toggle ===== */
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  document.getElementById('theme-toggle').textContent =
+    document.body.classList.contains('light') ? 'Dark Theme' : 'Light Theme';
+}
+
+/* ===== Section collapse ===== */
+function toggleSection(name) {
+  var body = document.getElementById(name + '-body');
+  var toggle = document.getElementById(name + '-toggle');
+  body.classList.toggle('collapsed');
+  toggle.classList.toggle('collapsed');
+}
+
+/* ===== File upload ===== */
+function handleFile(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    document.getElementById('json-input').value = ev.target.result;
+    analyze();
+  };
+  reader.readAsText(file);
+}
+
+/* ===== Clear ===== */
+function clearAll() {
+  document.getElementById('json-input').value = '';
+  document.getElementById('error-container').innerHTML = '';
+  ['summary-section', 'timeline-section', 'detail-section'].forEach(function(id) {
+    document.getElementById(id).classList.add('hidden');
+  });
+}
+
+/* ===== Escape HTML ===== */
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ===== Tooltip ===== */
+var tooltipEl = document.getElementById('tooltip');
+function showTooltip(evt, html) {
+  tooltipEl.innerHTML = html;
+  tooltipEl.classList.remove('hidden');
+  var x = Math.min(evt.pageX + 12, window.innerWidth - 420);
+  var y = evt.pageY + 12;
+  tooltipEl.style.left = x + 'px';
+  tooltipEl.style.top = y + 'px';
+}
+function hideTooltip() { tooltipEl.classList.add('hidden'); }
+
+/* ===== Color palettes ===== */
+var spanColors = {
+  // Coordinator phases
+  search:               { fill: 'rgba(100,100,100,0.25)', stroke: '#888888', text: '#aaa' },
+  coordinator_rewrite:  { fill: 'rgba(241,196,15,0.8)',   stroke: '#f1c40f', text: '#333' },
+  query:                { fill: 'rgba(74,144,217,0.8)',    stroke: '#4a90d9', text: '#fff' },
+  fetch:                { fill: 'rgba(155,89,182,0.8)',    stroke: '#9b59b6', text: '#fff' },
+  reduce:               { fill: 'rgba(232,168,56,0.8)',    stroke: '#e8a838', text: '#fff' },
+  merge:                { fill: 'rgba(26,188,156,0.8)',    stroke: '#1abc9c', text: '#fff' },
+  dfs:                  { fill: 'rgba(233,69,96,0.8)',     stroke: '#e94560', text: '#fff' },
+  // Shard phases
+  shard_rewrite:        { fill: 'rgba(241,196,15,0.4)',    stroke: '#f1c40f', text: '#333' },
+  shard_query:          { fill: 'rgba(74,144,217,0.5)',    stroke: '#4a90d9', text: '#fff' },
+  shard_fetch:          { fill: 'rgba(155,89,182,0.5)',    stroke: '#9b59b6', text: '#fff' },
+  // Default
+  _default:             { fill: 'rgba(46,204,113,0.7)',    stroke: '#2ecc71', text: '#fff' }
+};
+
+function getSpanColor(name) {
+  if (spanColors[name]) return spanColors[name];
+  // Check prefix matches
+  if (name && name.indexOf('shard_') === 0) {
+    return { fill: 'rgba(46,204,113,0.5)', stroke: '#2ecc71', text: '#fff' };
+  }
+  return spanColors._default;
+}
+
+var nodeColorPalette = [
+  { fill: 'rgba(74,144,217,0.15)',  dot: '#4a90d9' },
+  { fill: 'rgba(232,168,56,0.15)',  dot: '#e8a838' },
+  { fill: 'rgba(155,89,182,0.15)',  dot: '#9b59b6' },
+  { fill: 'rgba(46,204,113,0.15)',  dot: '#2ecc71' },
+  { fill: 'rgba(233,69,96,0.15)',   dot: '#e94560' },
+  { fill: 'rgba(26,188,156,0.15)',  dot: '#1abc9c' },
+  { fill: 'rgba(241,196,15,0.15)',  dot: '#f1c40f' },
+  { fill: 'rgba(230,126,34,0.15)',  dot: '#e67e22' }
+];
+
+/* ===== Global state ===== */
+var traceData = null;       // parsed trace object { nodes, spans }
+var flatSpans = [];          // flattened span list for rendering
+var selectedSpanIdx = null;  // currently selected span index in flatSpans
+var nodeColorMap = {};       // nodeId -> color index
+
+/* ===== Flatten span tree ===== */
+function flattenSpans(span, depth, parentIdx) {
+  var idx = flatSpans.length;
+  var entry = {
+    idx: idx,
+    depth: depth,
+    parentIdx: parentIdx,
+    name: span.name,
+    nodeId: span.node_id || null,
+    shard: span.shard || null,
+    startNanos: span.start_offset_nanos || 0,
+    stopNanos: span.stop_offset_nanos || 0,
+    durationNanos: (span.stop_offset_nanos || 0) - (span.start_offset_nanos || 0),
+    details: span.details || {},
+    children: [],
+    childIndices: [],
+    raw: span
+  };
+  flatSpans.push(entry);
+  var childSpans = span.children || [];
+  for (var i = 0; i < childSpans.length; i++) {
+    var childIdx = flattenSpans(childSpans[i], depth + 1, idx);
+    entry.childIndices.push(childIdx);
+  }
+  return idx;
+}
+
+/* ===== Compute absolute times for multi-node alignment ===== */
+function computeAbsoluteTimes() {
+  var nodes = traceData.nodes || {};
+  for (var i = 0; i < flatSpans.length; i++) {
+    var span = flatSpans[i];
+    var anchor = 0;
+    if (span.nodeId && nodes[span.nodeId]) {
+      anchor = nodes[span.nodeId].wall_clock_anchor_millis || 0;
+    } else {
+      // Use first node anchor as fallback
+      var keys = Object.keys(nodes);
+      if (keys.length > 0) {
+        anchor = nodes[keys[0]].wall_clock_anchor_millis || 0;
+      }
+    }
+    span.absoluteStartMs = anchor + span.startNanos / 1e6;
+    span.absoluteStopMs = anchor + span.stopNanos / 1e6;
+  }
+}
+
+/* ===== Build node color map ===== */
+function buildNodeColorMap() {
+  nodeColorMap = {};
+  var nodes = traceData.nodes || {};
+  var keys = Object.keys(nodes);
+  for (var i = 0; i < keys.length; i++) {
+    nodeColorMap[keys[i]] = i % nodeColorPalette.length;
+  }
+}
+
+/* ===== Get node display name ===== */
+function getNodeName(nodeId) {
+  if (!nodeId) return '-';
+  var nodes = traceData.nodes || {};
+  if (nodes[nodeId] && nodes[nodeId].node_name) {
+    return nodes[nodeId].node_name;
+  }
+  return nodeId.substring(0, 8) + '...';
+}
+
+/* ===== Analyze ===== */
+function analyze() {
+  var raw = document.getElementById('json-input').value.trim();
+  var errEl = document.getElementById('error-container');
+  errEl.innerHTML = '';
+  if (!raw) return;
+  try {
+    var json = JSON.parse(raw);
+    // Accept full search response (has trace field) or just the trace object
+    if (json.trace) {
+      json = json.trace;
+    }
+    // Validate structure
+    if (!json.spans && !json.name) {
+      throw new Error('Expected a trace object with "spans" (root span) or a search response with "trace" field');
+    }
+    // Normalize: the root span is json.spans or json itself if it has "name"
+    var rootSpan;
+    if (json.spans) {
+      rootSpan = json.spans;
+      traceData = { nodes: json.nodes || {}, rootSpan: rootSpan };
+    } else {
+      rootSpan = json;
+      traceData = { nodes: json.nodes || {}, rootSpan: rootSpan };
+    }
+
+    flatSpans = [];
+    selectedSpanIdx = null;
+    flattenSpans(rootSpan, 0, -1);
+    buildNodeColorMap();
+    computeAbsoluteTimes();
+    renderAll();
+  } catch (e) {
+    ['summary-section', 'timeline-section', 'detail-section'].forEach(function(id) {
+      document.getElementById(id).classList.add('hidden');
+    });
+    errEl.innerHTML = '<div class="error-msg">Parse Error: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderAll() {
+  renderSummary();
+  renderTimeline();
+  document.getElementById('detail-section').classList.add('hidden');
+}
+
+/* ===== Summary Section ===== */
+function renderSummary() {
+  if (flatSpans.length === 0) {
+    document.getElementById('summary-section').classList.add('hidden');
+    return;
+  }
+  document.getElementById('summary-section').classList.remove('hidden');
+
+  var root = flatSpans[0];
+  var totalNanos = root.durationNanos;
+
+  // Find phase durations
+  var queryNanos = 0, fetchNanos = 0, reduceNanos = 0, mergeNanos = 0, dfsNanos = 0;
+  var shardQueryCount = 0, shardFetchCount = 0;
+  for (var i = 0; i < flatSpans.length; i++) {
+    var s = flatSpans[i];
+    if (s.depth === 1) {
+      if (s.name === 'query') queryNanos = s.durationNanos;
+      else if (s.name === 'fetch') fetchNanos = s.durationNanos;
+      else if (s.name === 'dfs') dfsNanos = s.durationNanos;
+    }
+    if (s.name === 'reduce') reduceNanos = s.durationNanos;
+    if (s.name === 'merge') mergeNanos = s.durationNanos;
+    if (s.name === 'shard_query') shardQueryCount++;
+    if (s.name === 'shard_fetch') shardFetchCount++;
+  }
+
+  var statsHtml =
+    '<div class="stat-card"><div class="label">Total Search</div><div class="value">' + fmtNanos(totalNanos) + '</div></div>';
+  if (dfsNanos > 0) {
+    statsHtml += '<div class="stat-card"><div class="label">DFS Phase</div><div class="value">' + fmtNanos(dfsNanos) + '</div></div>';
+  }
+  if (queryNanos > 0) {
+    statsHtml += '<div class="stat-card"><div class="label">Query Phase</div><div class="value">' + fmtNanos(queryNanos) + '</div></div>';
+  }
+  if (fetchNanos > 0) {
+    statsHtml += '<div class="stat-card"><div class="label">Fetch Phase</div><div class="value">' + fmtNanos(fetchNanos) + '</div></div>';
+  }
+  if (reduceNanos > 0) {
+    statsHtml += '<div class="stat-card"><div class="label">Reduce</div><div class="value">' + fmtNanos(reduceNanos) + '</div></div>';
+  }
+  if (mergeNanos > 0) {
+    statsHtml += '<div class="stat-card"><div class="label">Merge</div><div class="value">' + fmtNanos(mergeNanos) + '</div></div>';
+  }
+  statsHtml +=
+    '<div class="stat-card"><div class="label">Shard Queries</div><div class="value">' + shardQueryCount + '</div></div>' +
+    '<div class="stat-card"><div class="label">Shard Fetches</div><div class="value">' + shardFetchCount + '</div></div>' +
+    '<div class="stat-card"><div class="label">Total Spans</div><div class="value">' + flatSpans.length + '</div></div>';
+
+  document.getElementById('summary-stats').innerHTML = statsHtml;
+
+  // Node table
+  var nodes = traceData.nodes || {};
+  var nodeKeys = Object.keys(nodes);
+  if (nodeKeys.length > 0) {
+    var nodeHtml = '<table><thead><tr><th>Node ID</th><th>Node Name</th><th>Wall Clock Anchor</th><th>Spans</th></tr></thead><tbody>';
+    nodeKeys.forEach(function(nid) {
+      var node = nodes[nid];
+      var spanCount = 0;
+      for (var i = 0; i < flatSpans.length; i++) {
+        if (flatSpans[i].nodeId === nid) spanCount++;
+      }
+      var colorIdx = nodeColorMap[nid] != null ? nodeColorMap[nid] : 0;
+      var dot = '<span class="swatch" style="background:' + nodeColorPalette[colorIdx].dot + ';width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:middle;"></span>';
+      nodeHtml += '<tr>' +
+        '<td>' + dot + escapeHtml(nid) + '</td>' +
+        '<td>' + escapeHtml(node.node_name || '-') + '</td>' +
+        '<td>' + new Date(node.wall_clock_anchor_millis).toISOString().replace('T', ' ').replace('Z', '') + '</td>' +
+        '<td>' + spanCount + '</td>' +
+        '</tr>';
+    });
+    nodeHtml += '</tbody></table>';
+    document.getElementById('node-table-container').innerHTML = nodeHtml;
+  } else {
+    document.getElementById('node-table-container').innerHTML = '';
+  }
+}
+
+/* ===== Timeline / Gantt Chart ===== */
+function renderTimeline() {
+  if (flatSpans.length === 0) {
+    document.getElementById('timeline-section').classList.add('hidden');
+    return;
+  }
+  document.getElementById('timeline-section').classList.remove('hidden');
+
+  // Legend
+  var nodes = traceData.nodes || {};
+  var nodeKeys = Object.keys(nodes);
+  var legendHtml = '';
+  nodeKeys.forEach(function(nid) {
+    var colorIdx = nodeColorMap[nid] != null ? nodeColorMap[nid] : 0;
+    var col = nodeColorPalette[colorIdx];
+    legendHtml += '<span><span class="swatch" style="background:' + col.dot + ';"></span> ' +
+      escapeHtml(nodes[nid].node_name || nid.substring(0, 8)) + '</span>';
+  });
+  document.getElementById('timeline-legend').innerHTML = legendHtml;
+
+  var chartEl = document.getElementById('timeline-chart');
+  chartEl.innerHTML = '';
+
+  // Determine time domain from root span
+  var root = flatSpans[0];
+  var minNanos = root.startNanos;
+  var maxNanos = root.stopNanos;
+  // Ensure a non-zero range
+  if (maxNanos <= minNanos) maxNanos = minNanos + 1000000;
+
+  var indentSize = 18;
+  var margin = { top: 20, right: 30, bottom: 30, left: 240 };
+  var barH = 24;
+  var barGap = 4;
+  var width = Math.max(700, chartEl.clientWidth) - margin.left - margin.right;
+  var height = flatSpans.length * (barH + barGap) + margin.top + margin.bottom;
+
+  var svg = d3.select(chartEl).append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height);
+  var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+  var x = d3.scaleLinear().domain([minNanos, maxNanos]).range([0, width]);
+
+  // Draw grid lines
+  var ticks = x.ticks(8);
+  ticks.forEach(function(t) {
+    g.append('line')
+      .attr('x1', x(t)).attr('y1', 0)
+      .attr('x2', x(t)).attr('y2', flatSpans.length * (barH + barGap))
+      .attr('stroke', 'currentColor').attr('stroke-opacity', 0.1);
+  });
+
+  // Draw spans
+  flatSpans.forEach(function(span, i) {
+    var y = i * (barH + barGap);
+    var x0 = x(span.startNanos);
+    var x1 = x(span.stopNanos);
+    var w = Math.max(2, x1 - x0);
+    var col = getSpanColor(span.name);
+    var indent = span.depth * indentSize;
+
+    var rowGroup = g.append('g').attr('class', 'span-row').attr('data-idx', i);
+
+    // Node color background stripe (subtle)
+    if (span.nodeId && nodeColorMap[span.nodeId] != null) {
+      var nc = nodeColorPalette[nodeColorMap[span.nodeId]];
+      rowGroup.append('rect')
+        .attr('x', -margin.left).attr('y', y - 1)
+        .attr('width', width + margin.left + margin.right).attr('height', barH + 2)
+        .attr('fill', nc.fill).attr('opacity', 0.5);
+    }
+
+    // Span bar
+    rowGroup.append('rect')
+      .attr('class', 'span-bar')
+      .attr('x', x0).attr('y', y).attr('width', w).attr('height', barH)
+      .attr('fill', col.fill).attr('stroke', col.stroke).attr('stroke-width', 1).attr('rx', 3)
+      .attr('opacity', 0.85);
+
+    // Duration label on bar (if wide enough)
+    if (w > 60) {
+      rowGroup.append('text')
+        .attr('x', x0 + w / 2).attr('y', y + barH / 2)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .attr('fill', col.text).attr('font-size', 10)
+        .style('pointer-events', 'none')
+        .text(fmtNanos(span.durationNanos));
+    }
+
+    // Row label (indented)
+    var labelParts = [span.name];
+    if (span.shard) labelParts.push('[' + span.shard + ']');
+    else if (span.nodeId) labelParts.push('@ ' + getNodeName(span.nodeId));
+    var label = labelParts.join(' ');
+
+    // Tree connector lines
+    if (span.depth > 0) {
+      var connectorX = -margin.left + 8 + (span.depth - 1) * indentSize + indentSize / 2;
+      rowGroup.append('line')
+        .attr('x1', connectorX).attr('y1', y)
+        .attr('x2', connectorX).attr('y2', y + barH / 2)
+        .attr('stroke', 'currentColor').attr('stroke-opacity', 0.2);
+      rowGroup.append('line')
+        .attr('x1', connectorX).attr('y1', y + barH / 2)
+        .attr('x2', connectorX + indentSize / 2).attr('y2', y + barH / 2)
+        .attr('stroke', 'currentColor').attr('stroke-opacity', 0.2);
+    }
+
+    rowGroup.append('text')
+      .attr('x', -margin.left + 8 + indent).attr('y', y + barH / 2)
+      .attr('text-anchor', 'start').attr('dominant-baseline', 'middle')
+      .attr('fill', 'currentColor').attr('font-size', 11)
+      .style('cursor', 'pointer')
+      .text(label.length > 28 ? label.slice(0, 26) + '..' : label);
+
+    // Click handler
+    rowGroup.style('cursor', 'pointer')
+      .on('click', function() { selectSpan(i); })
+      .on('mousemove', function(evt) {
+        var detailKeys = Object.keys(span.details);
+        var detailHtml = '';
+        if (detailKeys.length > 0) {
+          detailHtml = '<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">';
+          detailKeys.forEach(function(k) {
+            detailHtml += '<div class="tt-row"><span class="tt-label">' + escapeHtml(k) + ':</span><span>' +
+              escapeHtml(String(span.details[k])) + '</span></div>';
+          });
+          detailHtml += '</div>';
+        }
+        showTooltip(evt,
+          '<div class="tt-title">' + escapeHtml(span.name) + '</div>' +
+          (span.shard ? '<div class="tt-row"><span class="tt-label">Shard:</span><span>' + escapeHtml(span.shard) + '</span></div>' : '') +
+          (span.nodeId ? '<div class="tt-row"><span class="tt-label">Node:</span><span>' + escapeHtml(getNodeName(span.nodeId)) + '</span></div>' : '') +
+          '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + fmtNanos(span.durationNanos) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtNanos(span.startNanos) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Stop:</span><span>' + fmtNanos(span.stopNanos) + '</span></div>' +
+          detailHtml
+        );
+      })
+      .on('mouseleave', hideTooltip);
+  });
+
+  // X axis
+  var xAxis = d3.axisBottom(x).ticks(8).tickFormat(function(d) { return fmtNanos(d - minNanos); });
+  g.append('g').attr('transform', 'translate(0,' + flatSpans.length * (barH + barGap) + ')')
+    .call(xAxis).selectAll('text').attr('fill', 'currentColor');
+  g.selectAll('.domain, .tick line').attr('stroke', 'currentColor');
+}
+
+/* ===== Select Span -> Detail ===== */
+function selectSpan(idx) {
+  selectedSpanIdx = idx;
+  var span = flatSpans[idx];
+  document.getElementById('detail-section').classList.remove('hidden');
+
+  // Highlight selected row
+  d3.selectAll('.span-row').classed('selected', false);
+  d3.select('.span-row[data-idx="' + idx + '"]').classed('selected', true);
+
+  // Stats cards
+  var pctOfTotal = flatSpans[0].durationNanos > 0
+    ? span.durationNanos / flatSpans[0].durationNanos : 0;
+
+  var statsHtml =
+    '<div class="stat-card"><div class="label">Span Name</div><div class="value" style="font-size:14px;">' + escapeHtml(span.name) + '</div></div>';
+  if (span.shard) {
+    statsHtml += '<div class="stat-card"><div class="label">Shard</div><div class="value" style="font-size:13px;">' + escapeHtml(span.shard) + '</div></div>';
+  }
+  if (span.nodeId) {
+    statsHtml += '<div class="stat-card"><div class="label">Node</div><div class="value" style="font-size:13px;">' + escapeHtml(getNodeName(span.nodeId)) + '</div></div>';
+  }
+  statsHtml +=
+    '<div class="stat-card"><div class="label">Duration</div><div class="value">' + fmtNanos(span.durationNanos) + '</div></div>' +
+    '<div class="stat-card"><div class="label">% of Total</div><div class="value">' + fmtPct(pctOfTotal) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Start Offset</div><div class="value" style="font-size:13px;">' + fmtNanos(span.startNanos) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Stop Offset</div><div class="value" style="font-size:13px;">' + fmtNanos(span.stopNanos) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Children</div><div class="value">' + span.childIndices.length + '</div></div>';
+
+  document.getElementById('detail-stats').innerHTML = statsHtml;
+
+  // Children table
+  var childrenHtml = '';
+  if (span.childIndices.length > 0) {
+    childrenHtml = '<h3 style="margin:12px 0 4px;font-size:13px;">Children</h3>';
+    childrenHtml += '<table><thead><tr><th>Name</th><th>Shard</th><th>Node</th><th>Duration</th><th>% of Parent</th><th>Start</th><th>Stop</th></tr></thead><tbody>';
+    span.childIndices.forEach(function(ci) {
+      var child = flatSpans[ci];
+      var childPct = span.durationNanos > 0 ? child.durationNanos / span.durationNanos : 0;
+      childrenHtml += '<tr style="cursor:pointer;" onclick="selectSpan(' + ci + ')">' +
+        '<td>' + escapeHtml(child.name) + '</td>' +
+        '<td>' + escapeHtml(child.shard || '-') + '</td>' +
+        '<td>' + escapeHtml(child.nodeId ? getNodeName(child.nodeId) : '-') + '</td>' +
+        '<td>' + fmtNanos(child.durationNanos) + '</td>' +
+        '<td>' + fmtPct(childPct) + '</td>' +
+        '<td>' + fmtNanos(child.startNanos) + '</td>' +
+        '<td>' + fmtNanos(child.stopNanos) + '</td>' +
+        '</tr>';
+    });
+    childrenHtml += '</tbody></table>';
+  }
+  document.getElementById('detail-children-container').innerHTML = childrenHtml;
+
+  // Details (arbitrary key-value map)
+  var detailKeys = Object.keys(span.details);
+  var detailsHtml = '';
+  if (detailKeys.length > 0) {
+    detailsHtml = '<h3 style="margin:12px 0 4px;font-size:13px;">Details</h3>';
+    detailsHtml += '<table><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody>';
+    detailKeys.forEach(function(k) {
+      var val = span.details[k];
+      var valStr;
+      if (typeof val === 'object') {
+        valStr = JSON.stringify(val, null, 2);
+      } else {
+        valStr = String(val);
+      }
+      detailsHtml += '<tr>' +
+        '<td style="white-space:nowrap;">' + escapeHtml(k) + '</td>' +
+        '<td style="max-width:600px;overflow:hidden;text-overflow:ellipsis;white-space:pre-wrap;word-break:break-all;font-size:11px;">' +
+          escapeHtml(valStr) + '</td>' +
+        '</tr>';
+    });
+    detailsHtml += '</tbody></table>';
+  }
+  document.getElementById('detail-details-container').innerHTML = detailsHtml;
+
+  document.getElementById('detail-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ===== Example Data ===== */
+function loadExample() {
+  var example = {
+    "trace": {
+      "nodes": {
+        "node_abc123": {
+          "node_name": "coordinator-1",
+          "wall_clock_anchor_millis": 1739836800000
+        },
+        "node_def456": {
+          "node_name": "data-1",
+          "wall_clock_anchor_millis": 1739836800001
+        },
+        "node_ghi789": {
+          "node_name": "data-2",
+          "wall_clock_anchor_millis": 1739836800002
+        }
+      },
+      "spans": {
+        "name": "search",
+        "node_id": "node_abc123",
+        "start_offset_nanos": 0,
+        "stop_offset_nanos": 42000000,
+        "children": [
+          {
+            "name": "coordinator_rewrite",
+            "node_id": "node_abc123",
+            "start_offset_nanos": 10000,
+            "stop_offset_nanos": 80000
+          },
+          {
+            "name": "query",
+            "node_id": "node_abc123",
+            "start_offset_nanos": 100000,
+            "stop_offset_nanos": 25000000,
+            "children": [
+              {
+                "name": "shard_rewrite",
+                "node_id": "node_def456",
+                "shard": "my-index[0]",
+                "start_offset_nanos": 200000,
+                "stop_offset_nanos": 450000
+              },
+              {
+                "name": "shard_query",
+                "node_id": "node_def456",
+                "shard": "my-index[0]",
+                "start_offset_nanos": 500000,
+                "stop_offset_nanos": 18000000,
+                "details": {
+                  "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
+                  "rewritten_query": "TermQuery(status:200)",
+                  "total_hits": 12847,
+                  "max_score": 1.0
+                }
+              },
+              {
+                "name": "shard_rewrite",
+                "node_id": "node_ghi789",
+                "shard": "my-index[1]",
+                "start_offset_nanos": 250000,
+                "stop_offset_nanos": 550000
+              },
+              {
+                "name": "shard_query",
+                "node_id": "node_ghi789",
+                "shard": "my-index[1]",
+                "start_offset_nanos": 600000,
+                "stop_offset_nanos": 20000000,
+                "details": {
+                  "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
+                  "rewritten_query": "TermQuery(status:200)",
+                  "total_hits": 9421,
+                  "max_score": 1.0
+                }
+              },
+              {
+                "name": "shard_rewrite",
+                "node_id": "node_def456",
+                "shard": "my-index[2]",
+                "start_offset_nanos": 300000,
+                "stop_offset_nanos": 650000
+              },
+              {
+                "name": "shard_query",
+                "node_id": "node_def456",
+                "shard": "my-index[2]",
+                "start_offset_nanos": 700000,
+                "stop_offset_nanos": 15000000,
+                "details": {
+                  "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
+                  "total_hits": 7832,
+                  "max_score": 1.0
+                }
+              }
+            ]
+          },
+          {
+            "name": "fetch",
+            "node_id": "node_abc123",
+            "start_offset_nanos": 25500000,
+            "stop_offset_nanos": 41000000,
+            "children": [
+              {
+                "name": "reduce",
+                "node_id": "node_abc123",
+                "start_offset_nanos": 25500000,
+                "stop_offset_nanos": 27000000
+              },
+              {
+                "name": "shard_rewrite",
+                "node_id": "node_def456",
+                "shard": "my-index[0]",
+                "start_offset_nanos": 27100000,
+                "stop_offset_nanos": 27400000
+              },
+              {
+                "name": "shard_fetch",
+                "node_id": "node_def456",
+                "shard": "my-index[0]",
+                "start_offset_nanos": 27500000,
+                "stop_offset_nanos": 34000000,
+                "details": {
+                  "fetched_docs": 5
+                }
+              },
+              {
+                "name": "shard_rewrite",
+                "node_id": "node_ghi789",
+                "shard": "my-index[1]",
+                "start_offset_nanos": 27150000,
+                "stop_offset_nanos": 27500000
+              },
+              {
+                "name": "shard_fetch",
+                "node_id": "node_ghi789",
+                "shard": "my-index[1]",
+                "start_offset_nanos": 27600000,
+                "stop_offset_nanos": 35500000,
+                "details": {
+                  "fetched_docs": 3
+                }
+              },
+              {
+                "name": "shard_rewrite",
+                "node_id": "node_def456",
+                "shard": "my-index[2]",
+                "start_offset_nanos": 27200000,
+                "stop_offset_nanos": 27600000
+              },
+              {
+                "name": "shard_fetch",
+                "node_id": "node_def456",
+                "shard": "my-index[2]",
+                "start_offset_nanos": 27700000,
+                "stop_offset_nanos": 33000000,
+                "details": {
+                  "fetched_docs": 2
+                }
+              },
+              {
+                "name": "merge",
+                "node_id": "node_abc123",
+                "start_offset_nanos": 36000000,
+                "stop_offset_nanos": 40500000
+              }
+            ]
+          }
+        ]
+      }
+    }
+  };
+  document.getElementById('json-input').value = JSON.stringify(example, null, 2);
+  analyze();
+}
+</script>
+</body>
+</html>
