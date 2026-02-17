@@ -55,6 +55,7 @@ import java.io.IOException;
 import java.util.Map;
 
 import static java.util.Collections.emptyMap;
+import static org.elasticsearch.action.search.SearchRequest.SEARCH_TRACE;
 import static org.elasticsearch.search.internal.SearchContext.TRACK_TOTAL_HITS_DISABLED;
 
 /**
@@ -100,6 +101,11 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
      * Additional metadata specific to the resharding feature. See {@link org.elasticsearch.cluster.routing.SplitShardCountSummary}.
      */
     private final SplitShardCountSummary splitShardCountSummary;
+
+    /**
+     * Whether to capture detailed timing trace spans for this shard search request.
+     */
+    private final boolean trace;
 
     public static final TransportVersion SHARD_SEARCH_REQUEST_RESHARD_SHARD_COUNT_SUMMARY = TransportVersion.fromName(
         "shard_search_request_reshard_shard_count_summary"
@@ -166,7 +172,8 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
             computeWaitForCheckpoint(searchRequest.getWaitForCheckpoints(), shardId, shardRequestIndex),
             searchRequest.getWaitForCheckpointsTimeout(),
             searchRequest.isForceSyntheticSource(),
-            splitShardCountSummary
+            splitShardCountSummary,
+            searchRequest.isTrace()
         );
         // If allowPartialSearchResults is unset (ie null), the cluster-level default should have been substituted
         // at this stage. Any NPEs in the above are therefore an error in request preparation logic.
@@ -221,7 +228,8 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
             SequenceNumbers.UNASSIGNED_SEQ_NO,
             SearchService.NO_TIMEOUT,
             false,
-            splitShardCountSummary
+            splitShardCountSummary,
+            false
         );
     }
 
@@ -245,7 +253,8 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         long waitForCheckpoint,
         TimeValue waitForCheckpointsTimeout,
         boolean forceSyntheticSource,
-        SplitShardCountSummary splitShardCountSummary
+        SplitShardCountSummary splitShardCountSummary,
+        boolean trace
     ) {
         this.shardId = shardId;
         this.shardRequestIndex = shardRequestIndex;
@@ -268,6 +277,7 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         this.waitForCheckpointsTimeout = waitForCheckpointsTimeout;
         this.forceSyntheticSource = forceSyntheticSource;
         this.splitShardCountSummary = splitShardCountSummary;
+        this.trace = trace;
     }
 
     @SuppressWarnings("this-escape")
@@ -294,6 +304,7 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         this.waitForCheckpointsTimeout = clone.waitForCheckpointsTimeout;
         this.forceSyntheticSource = clone.forceSyntheticSource;
         this.splitShardCountSummary = clone.splitShardCountSummary;
+        this.trace = clone.trace;
     }
 
     public ShardSearchRequest(StreamInput in) throws IOException {
@@ -323,6 +334,12 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
             splitShardCountSummary = new SplitShardCountSummary(in);
         } else {
             splitShardCountSummary = SplitShardCountSummary.UNSET;
+        }
+
+        if (in.getTransportVersion().supports(SEARCH_TRACE)) {
+            trace = in.readBoolean();
+        } else {
+            trace = false;
         }
 
         originalIndices = OriginalIndices.readOriginalIndices(in);
@@ -364,6 +381,9 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         out.writeBoolean(forceSyntheticSource);
         if (out.getTransportVersion().supports(SHARD_SEARCH_REQUEST_RESHARD_SHARD_COUNT_SUMMARY)) {
             splitShardCountSummary.writeTo(out);
+        }
+        if (out.getTransportVersion().supports(SEARCH_TRACE)) {
+            out.writeBoolean(trace);
         }
     }
 
@@ -663,5 +683,12 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
      */
     public boolean isForceSyntheticSource() {
         return forceSyntheticSource;
+    }
+
+    /**
+     * Whether to capture detailed timing trace spans for this shard search request.
+     */
+    public boolean isTrace() {
+        return trace;
     }
 }

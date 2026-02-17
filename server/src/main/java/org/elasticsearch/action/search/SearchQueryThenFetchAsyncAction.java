@@ -121,7 +121,8 @@ public class SearchQueryThenFetchAsyncAction extends AbstractSearchAsyncAction<S
         boolean batchQueryPhase,
         boolean pitRelocationEnabled,
         SearchResponseMetrics searchResponseMetrics,
-        Map<String, Object> searchRequestAttributes
+        Map<String, Object> searchRequestAttributes,
+        SearchTracer tracer
     ) {
         super(
             "query",
@@ -144,7 +145,8 @@ public class SearchQueryThenFetchAsyncAction extends AbstractSearchAsyncAction<S
             clusters,
             searchResponseMetrics,
             searchRequestAttributes,
-            pitRelocationEnabled
+            pitRelocationEnabled,
+            tracer
         );
         this.topDocsSize = getTopDocsSize(request);
         this.trackTotalHitsUpTo = request.resolveTrackTotalHitsUpTo();

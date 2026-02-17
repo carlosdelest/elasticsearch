@@ -71,11 +71,16 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
     public static final ParseField TIMED_OUT = new ParseField("timed_out");
     public static final ParseField TERMINATED_EARLY = new ParseField("terminated_early");
     public static final ParseField NUM_REDUCE_PHASES = new ParseField("num_reduce_phases");
+    public static final ParseField TRACE_FIELD = new ParseField("trace");
+
+    private static final TransportVersion SEARCH_RESPONSE_TRACE = TransportVersion.fromName("search_response_trace");
 
     private final SearchHits hits;
     private final InternalAggregations aggregations;
     private final Suggest suggest;
     private final SearchProfileResults profileResults;
+    @Nullable
+    private SearchTraceResult traceResult;
     private final boolean timedOut;
     private final Boolean terminatedEarly;
     private final int numReducePhases;
@@ -124,6 +129,11 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
         tookInMillis = in.readVLong();
         skippedShards = in.readVInt();
         pointInTimeId = in.readOptionalBytesReference();
+        if (in.getTransportVersion().supports(SEARCH_RESPONSE_TRACE)) {
+            this.traceResult = in.readOptionalWriteable(SearchTraceResult::new);
+        } else {
+            this.traceResult = null;
+        }
     }
 
     public SearchResponse(
@@ -214,6 +224,7 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
         this.aggregations = aggregations;
         this.suggest = suggest;
         this.profileResults = profileResults;
+        this.traceResult = null;
         this.timedOut = timedOut;
         this.terminatedEarly = terminatedEarly;
         this.numReducePhases = numReducePhases;
@@ -382,6 +393,21 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
     }
 
     /**
+     * Returns the trace result if tracing was enabled, or null otherwise.
+     */
+    @Nullable
+    public SearchTraceResult getTraceResult() {
+        return traceResult;
+    }
+
+    /**
+     * Sets the trace result. Called by the coordinator after building the final trace.
+     */
+    public void setTraceResult(@Nullable SearchTraceResult traceResult) {
+        this.traceResult = traceResult;
+    }
+
+    /**
      * Returns info about what clusters the search was executed against. Available only in responses obtained
      * from a Cross Cluster Search request, otherwise <code>null</code>
      * @see Clusters
@@ -409,6 +435,11 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
             aggregations == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(aggregations),
             suggest == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(suggest),
             profileResults == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(profileResults),
+            traceResult == null ? Collections.emptyIterator() : Iterators.single((ToXContent) (builder, p) -> {
+                builder.field(TRACE_FIELD.getPreferredName());
+                traceResult.toXContent(builder, p);
+                return builder;
+            }),
             wrapInObject ? ChunkedToXContentHelper.endObject() : Collections.emptyIterator()
         );
     }
@@ -465,6 +496,9 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
         out.writeVLong(tookInMillis);
         out.writeVInt(skippedShards);
         out.writeOptionalBytesReference(pointInTimeId);
+        if (out.getTransportVersion().supports(SEARCH_RESPONSE_TRACE)) {
+            out.writeOptionalWriteable(traceResult);
+        }
     }
 
     public Long getTimeRangeFilterFromMillis() {

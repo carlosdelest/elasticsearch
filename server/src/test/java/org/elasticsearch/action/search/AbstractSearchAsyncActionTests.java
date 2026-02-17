@@ -112,7 +112,8 @@ public class AbstractSearchAsyncActionTests extends ESTestCase {
             SearchResponse.Clusters.EMPTY,
             Mockito.mock(SearchResponseMetrics.class),
             Map.of(),
-            false
+            false,
+            SearchTracer.NOOP
         ) {
             @Override
             protected SearchPhase getNextPhase() {

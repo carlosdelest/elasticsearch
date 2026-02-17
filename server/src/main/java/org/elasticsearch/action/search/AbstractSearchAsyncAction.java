@@ -107,6 +107,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
     protected final SearchResponseMetrics searchResponseMetrics;
     protected final Map<String, Object> searchRequestAttributes;
     private final boolean isPitRelocationEnabled;
+    protected final SearchTracer tracer;
     protected long phaseStartTimeInNanos;
 
     // protected for tests
@@ -134,7 +135,8 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
         SearchResponse.Clusters clusters,
         SearchResponseMetrics searchResponseMetrics,
         Map<String, Object> searchRequestAttributes,
-        boolean pitRelocationEnabled
+        boolean pitRelocationEnabled,
+        SearchTracer tracer
     ) {
         super(name);
         this.namedWriteableRegistry = namedWriteableRegistry;
@@ -181,6 +183,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
         this.searchResponseMetrics = searchResponseMetrics;
         this.searchRequestAttributes = searchRequestAttributes;
         this.isPitRelocationEnabled = pitRelocationEnabled;
+        this.tracer = tracer;
     }
 
     protected void notifyListShards(
@@ -247,6 +250,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
 
     @Override
     protected final void run() {
+        tracer.startPhase(getName());
         phaseStartTimeInNanos = System.nanoTime();
         if (outstandingShards.get() == 0) {
             onPhaseDone();
@@ -522,6 +526,10 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
         assert result.getShardIndex() != -1 : "shard index is not set";
         assert result.getSearchShardTarget() != null : "search shard target must not be null";
         hasShardResponse.set(true);
+        if (result.queryResult() != null && result.queryResult().getShardTraceResult() != null) {
+            String shardId = result.getSearchShardTarget() != null ? result.getSearchShardTarget().toString() : "unknown";
+            tracer.attachShardResult(shardId, result.queryResult().getShardTraceResult());
+        }
         if (logger.isTraceEnabled()) {
             logger.trace("got first-phase result from {}", result != null ? result.getSearchShardTarget() : null);
         }
@@ -622,15 +630,17 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
         if (allowPartialResults == false && failures.length > 0) {
             raisePhaseFailure(new SearchPhaseExecutionException("", "Shard failures", null, failures));
         } else {
-            ActionListener.respondAndRelease(
-                listener,
-                buildSearchResponse(
-                    internalSearchResponse,
-                    failures,
-                    request.scroll() != null ? TransportSearchHelper.buildScrollId(queryResults, bigArrays.bytesRefRecycler()) : null,
-                    buildSearchContextId(failures)
-                )
+            SearchResponse response = buildSearchResponse(
+                internalSearchResponse,
+                failures,
+                request.scroll() != null ? TransportSearchHelper.buildScrollId(queryResults, bigArrays.bytesRefRecycler()) : null,
+                buildSearchContextId(failures)
             );
+            SearchTraceResult traceResult = tracer.buildResult();
+            if (traceResult != null) {
+                response.setTraceResult(traceResult);
+            }
+            ActionListener.respondAndRelease(listener, response);
         }
     }
 
@@ -772,6 +782,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
      */
     private void onPhaseDone() {  // as a tribute to @kimchy aka. finishHim()
         searchResponseMetrics.recordSearchPhaseDuration(getName(), System.nanoTime() - phaseStartTimeInNanos, searchRequestAttributes);
+        tracer.stopPhase(getName());
         executeNextPhase(getName(), this::getNextPhase);
     }
 

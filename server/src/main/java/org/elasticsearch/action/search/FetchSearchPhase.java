@@ -94,7 +94,9 @@ class FetchSearchPhase extends SearchPhase {
         assert this.reducedQueryPhase == null ^ this.resultConsumer == null;
         long phaseStartTimeInNanos = System.nanoTime();
         // depending on whether we executed the RankFeaturePhase we may or may not have the reduced query result computed already
+        context.tracer.startPhase("reduce");
         final var reducedQueryPhase = this.reducedQueryPhase == null ? resultConsumer.reduce() : this.reducedQueryPhase;
+        context.tracer.stopPhase("reduce");
         final int numShards = context.getNumShards();
         // Usually when there is a single shard, we force the search type QUERY_THEN_FETCH. But when there's kNN, we might
         // still use DFS_QUERY_THEN_FETCH, which does not perform the "query and fetch" optimization during the query phase.
@@ -270,7 +272,9 @@ class FetchSearchPhase extends SearchPhase {
         context.getSearchResponseMetrics()
             .recordSearchPhaseDuration(getName(), System.nanoTime() - phaseStartTimeInNanos, context.getSearchRequestAttributes());
         context.executeNextPhase(NAME, () -> {
+            context.tracer.startPhase("merge");
             var resp = SearchPhaseController.merge(context.getRequest().scroll() != null, reducedQueryPhase, fetchResultsArr);
+            context.tracer.stopPhase("merge");
             context.addReleasable(resp);
             return nextPhase(resp, searchPhaseShardResults);
         });

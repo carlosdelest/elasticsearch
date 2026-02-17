@@ -121,7 +121,8 @@ public class SearchAsyncActionTests extends ESTestCase {
             SearchResponse.Clusters.EMPTY,
             mock(SearchResponseMetrics.class),
             Map.of(),
-            false
+            false,
+            SearchTracer.NOOP
         ) {
 
             @Override
@@ -232,7 +233,8 @@ public class SearchAsyncActionTests extends ESTestCase {
                 SearchResponse.Clusters.EMPTY,
                 mock(SearchResponseMetrics.class),
                 Map.of(),
-                false
+                false,
+                SearchTracer.NOOP
             ) {
 
                 @Override
@@ -352,7 +354,8 @@ public class SearchAsyncActionTests extends ESTestCase {
                 SearchResponse.Clusters.EMPTY,
                 mock(SearchResponseMetrics.class),
                 Map.of(),
-                false
+                false,
+                SearchTracer.NOOP
             ) {
 
                 @Override
@@ -486,7 +489,8 @@ public class SearchAsyncActionTests extends ESTestCase {
                 SearchResponse.Clusters.EMPTY,
                 mock(SearchResponseMetrics.class),
                 Map.of(),
-                false
+                false,
+                SearchTracer.NOOP
             ) {
                 @Override
                 protected void executePhaseOnShard(
@@ -598,7 +602,8 @@ public class SearchAsyncActionTests extends ESTestCase {
                 SearchResponse.Clusters.EMPTY,
                 mock(SearchResponseMetrics.class),
                 Map.of(),
-                false
+                false,
+                SearchTracer.NOOP
             ) {
 
                 @Override
@@ -701,7 +706,8 @@ public class SearchAsyncActionTests extends ESTestCase {
             SearchResponse.Clusters.EMPTY,
             mock(SearchResponseMetrics.class),
             Map.of(),
-            false
+            false,
+            SearchTracer.NOOP
         ) {
 
             @Override

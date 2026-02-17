@@ -402,7 +402,8 @@ public class TransportOpenPointInTimeAction extends HandledTransportAction<OpenP
                 clusters,
                 searchResponseMetrics,
                 searchRequestAttributes,
-                false
+                false,
+                SearchTracer.NOOP
             ) {
                 @Override
                 protected void executePhaseOnShard(

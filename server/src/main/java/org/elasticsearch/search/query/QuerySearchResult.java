@@ -24,6 +24,7 @@ import org.elasticsearch.core.Releasables;
 import org.elasticsearch.core.SimpleRefCounted;
 import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.RescoreDocIds;
+import org.elasticsearch.action.search.SearchTraceResult;
 import org.elasticsearch.search.SearchPhaseResult;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.aggregations.InternalAggregation;
@@ -45,6 +46,7 @@ import static org.elasticsearch.common.lucene.Lucene.writeTopDocs;
 public final class QuerySearchResult extends SearchPhaseResult {
     private static final TransportVersion TIMESTAMP_RANGE_TELEMETRY = TransportVersion.fromName("timestamp_range_telemetry");
     private static final TransportVersion BATCHED_QUERY_PHASE_VERSION = TransportVersion.fromName("batched_query_phase_version");
+    private static final TransportVersion SEARCH_RESPONSE_TRACE = TransportVersion.fromName("search_response_trace");
 
     private int from;
     private int size;
@@ -81,6 +83,9 @@ public final class QuerySearchResult extends SearchPhaseResult {
 
     @Nullable
     private Long timeRangeFilterFromMillis;
+
+    @Nullable
+    private SearchTraceResult.ShardTraceResult shardTraceResult;
 
     public QuerySearchResult() {
         this(false);
@@ -459,6 +464,9 @@ public final class QuerySearchResult extends SearchPhaseResult {
             if (in.getTransportVersion().supports(TIMESTAMP_RANGE_TELEMETRY)) {
                 timeRangeFilterFromMillis = in.readOptionalLong();
             }
+            if (in.getTransportVersion().supports(SEARCH_RESPONSE_TRACE)) {
+                shardTraceResult = in.readOptionalWriteable(SearchTraceResult.ShardTraceResult::new);
+            }
             success = true;
         } finally {
             if (success == false) {
@@ -527,6 +535,9 @@ public final class QuerySearchResult extends SearchPhaseResult {
         if (out.getTransportVersion().supports(TIMESTAMP_RANGE_TELEMETRY)) {
             out.writeOptionalLong(timeRangeFilterFromMillis);
         }
+        if (out.getTransportVersion().supports(SEARCH_RESPONSE_TRACE)) {
+            out.writeOptionalWriteable(shardTraceResult);
+        }
     }
 
     @Nullable
@@ -585,5 +596,14 @@ public final class QuerySearchResult extends SearchPhaseResult {
 
     public void setTimeRangeFilterFromMillis(Long timeRangeFilterFromMillis) {
         this.timeRangeFilterFromMillis = timeRangeFilterFromMillis;
+    }
+
+    @Nullable
+    public SearchTraceResult.ShardTraceResult getShardTraceResult() {
+        return shardTraceResult;
+    }
+
+    public void setShardTraceResult(SearchTraceResult.ShardTraceResult shardTraceResult) {
+        this.shardTraceResult = shardTraceResult;
     }
 }

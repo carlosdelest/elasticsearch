@@ -53,7 +53,8 @@ final class SearchDfsQueryThenFetchAsyncAction extends AbstractSearchAsyncAction
         Client client,
         SearchResponseMetrics searchResponseMetrics,
         Map<String, Object> searchRequestAttributes,
-        boolean pitRelocationEnabled
+        boolean pitRelocationEnabled,
+        SearchTracer tracer
     ) {
         super(
             "dfs",
@@ -76,7 +77,8 @@ final class SearchDfsQueryThenFetchAsyncAction extends AbstractSearchAsyncAction
             clusters,
             searchResponseMetrics,
             searchRequestAttributes,
-            pitRelocationEnabled
+            pitRelocationEnabled,
+            tracer
         );
         this.queryPhaseResultConsumer = queryPhaseResultConsumer;
         addReleasable(queryPhaseResultConsumer);

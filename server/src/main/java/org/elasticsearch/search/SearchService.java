@@ -21,12 +21,15 @@ import org.elasticsearch.TransportVersion;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.ResolvedIndices;
+import org.elasticsearch.action.search.ActiveShardSearchTracer;
 import org.elasticsearch.action.search.CanMatchNodeRequest;
 import org.elasticsearch.action.search.CanMatchNodeResponse;
 import org.elasticsearch.action.search.OnlinePrewarmingService;
 import org.elasticsearch.action.search.SearchRequestAttributesExtractor;
 import org.elasticsearch.action.search.SearchShardTask;
+import org.elasticsearch.action.search.SearchTraceResult;
 import org.elasticsearch.action.search.SearchType;
+import org.elasticsearch.action.search.ShardSearchTracer;
 import org.elasticsearch.action.support.TransportActions;
 import org.elasticsearch.cluster.ProjectState;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver.ResolvedExpression;
@@ -919,13 +922,23 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
             Releasable ignored = readerContext.markAsUsed(getKeepAlive(request));
             SearchContext context = createContext(readerContext, request, task, ResultsType.QUERY, true)
         ) {
+            final ShardSearchTracer shardTracer;
+            if (request.isTrace()) {
+                var localNode = clusterService.localNode();
+                shardTracer = new ActiveShardSearchTracer();
+                shardTracer.setNodeAnchor(localNode.getId(), localNode.getName());
+            } else {
+                shardTracer = ShardSearchTracer.NOOP;
+            }
             tracer.startTrace("executeQueryPhase", Map.of());
             final long afterQueryTime;
             final long beforeQueryTime = System.nanoTime();
             var opsListener = context.indexShard().getSearchOperationListener();
             opsListener.onPreQueryPhase(context);
             try {
+                shardTracer.startSpan("shard_query");
                 loadOrExecuteQueryPhase(request, context);
+                shardTracer.stopSpan("shard_query");
                 if (context.queryResult().hasSearchContext() == false && readerContext.singleSession()) {
                     freeReaderContext(readerContext.id());
                 }
@@ -937,6 +950,10 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     opsListener.onFailedQueryPhase(context);
                 }
                 tracer.stopTrace(task);
+            }
+            SearchTraceResult.ShardTraceResult shardTraceResult = shardTracer.buildResult();
+            if (shardTraceResult != null) {
+                context.queryResult().setShardTraceResult(shardTraceResult);
             }
             if (request.numberOfShards() == 1 && (request.source() == null || request.source().rankBuilder() == null)) {
                 // we already have query results, but we can run fetch at the same time

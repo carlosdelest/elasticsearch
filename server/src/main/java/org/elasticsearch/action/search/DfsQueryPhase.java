@@ -73,6 +73,7 @@ class DfsQueryPhase extends SearchPhase {
     @SuppressWarnings("unchecked")
     @Override
     protected void run() {
+        context.tracer.startPhase(NAME);
         phaseStartTimeInNanos = System.nanoTime();
         List<DfsSearchResult> searchResults = (List<DfsSearchResult>) context.results.getAtomicArray().asList();
         AggregatedDfs dfs = aggregateDfs(searchResults);
@@ -135,6 +136,7 @@ class DfsQueryPhase extends SearchPhase {
     private void onFinish(AggregatedDfs dfs) {
         context.getSearchResponseMetrics()
             .recordSearchPhaseDuration(getName(), System.nanoTime() - phaseStartTimeInNanos, context.getSearchRequestAttributes());
+        context.tracer.stopPhase(NAME);
         context.executeNextPhase(NAME, () -> nextPhase(dfs));
     }
 

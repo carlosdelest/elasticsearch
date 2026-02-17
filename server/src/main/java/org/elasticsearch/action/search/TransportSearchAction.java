@@ -2071,6 +2071,13 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             );
             boolean success = false;
             try {
+                final SearchTracer tracer;
+                if (searchRequest.isTrace()) {
+                    var localNode = clusterState.nodes().getLocalNode();
+                    tracer = new ActiveSearchTracer(localNode.getId(), localNode.getName());
+                } else {
+                    tracer = SearchTracer.NOOP;
+                }
                 final AbstractSearchAsyncAction<?> searchPhase;
                 if (searchRequest.searchType() == DFS_QUERY_THEN_FETCH) {
                     searchPhase = new SearchDfsQueryThenFetchAsyncAction(
@@ -2093,7 +2100,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                         client,
                         searchResponseMetrics,
                         searchRequestAttributes,
-                        searchService.isPitRelocationEnabled()
+                        searchService.isPitRelocationEnabled(),
+                        tracer
                     );
                 } else {
                     assert searchRequest.searchType() == QUERY_THEN_FETCH : searchRequest.searchType();
@@ -2118,7 +2126,8 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
                         searchService.batchQueryPhase(),
                         searchService.isPitRelocationEnabled(),
                         searchResponseMetrics,
-                        searchRequestAttributes
+                        searchRequestAttributes,
+                        tracer
                     );
                 }
                 success = true;
