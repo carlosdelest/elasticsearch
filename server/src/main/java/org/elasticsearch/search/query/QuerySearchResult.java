@@ -596,6 +596,7 @@ public final class QuerySearchResult extends SearchPhaseResult {
         this.traceResults = traceResults;
     }
 
+    @Override
     public QueryTraceResults getTraceResults() {
         return traceResults;
     }

@@ -16,6 +16,7 @@ import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rank.feature.RankFeatureResult;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.transport.TransportResponse;
 
 import java.io.IOException;
@@ -122,6 +123,14 @@ public abstract class SearchPhaseResult extends TransportResponse {
 
     public void setRescoreDocIds(RescoreDocIds rescoreDocIds) {
         this.rescoreDocIds = rescoreDocIds;
+    }
+
+    /**
+     * Returns the trace results iff it's included in this response otherwise <code>null</code>
+     */
+    @Nullable
+    public QueryTraceResults getTraceResults() {
+        return null;
     }
 
     @Override

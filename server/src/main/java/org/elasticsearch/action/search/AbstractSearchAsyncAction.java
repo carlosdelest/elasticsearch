@@ -541,6 +541,10 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
         if (shardFailures != null) {
             shardFailures.set(result.getShardIndex(), null);
         }
+        // Merge trace results from shard into coordinator trace
+        if (result.getTraceResults() != null && tracer.isEnabled()) {
+            tracer.addChildTraceResults(result.getTraceResults());
+        }
         results.consumeResult(result, () -> {
             successfulOps.incrementAndGet();
             finishOneShard();

@@ -17,6 +17,7 @@ import org.elasticsearch.search.SearchPhaseResult;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.query.QuerySearchResult;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.transport.LeakTracker;
 
 import java.io.IOException;
@@ -77,6 +78,11 @@ public final class QueryFetchSearchResult extends SearchPhaseResult {
     @Override
     public FetchSearchResult fetchResult() {
         return fetchResult;
+    }
+
+    @Override
+    public QueryTraceResults getTraceResults() {
+        return queryResult.getTraceResults();
     }
 
     @Override
