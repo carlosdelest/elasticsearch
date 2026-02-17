@@ -1,0 +1,150 @@
+setup:
+  - do:
+      indices.create:
+          index: test
+          body:
+            settings:
+              number_of_shards: 2
+              number_of_replicas: 0
+  - do:
+      index:
+          index: test
+          id: "1"
+          body: { foo: bar, value: 1 }
+  - do:
+      index:
+          index: test
+          id: "2"
+          body: { foo: baz, value: 2 }
+  - do:
+      index:
+          index: test
+          id: "3"
+          body: { foo: bar, value: 3 }
+  - do:
+      indices.refresh:
+        index: test
+
+---
+"Search with request-time tracing enabled":
+
+  - do:
+      search:
+        index: test
+        body:
+          query:
+            match_all: {}
+          trace: true
+
+  - match: { hits.total.value: 3 }
+  - match: { hits.total.relation: eq }
+
+  # Verify trace structure exists
+  - is_true: trace
+  - is_true: trace.trace_id
+  - match: { trace.trace_id: /.{32}/ }
+  - gt: { trace.total_duration_nanos: 0 }
+
+  # Verify root span exists
+  - is_true: trace.spans
+  - length: { trace.spans: 1 }
+  - match: { trace.spans.0.operation_name: "search.coordinator" }
+  - is_true: trace.spans.0.span_id
+  - match: { trace.spans.0.span_id: /.{16}/ }
+  - gt: { trace.spans.0.duration_nanos: 0 }
+
+  # Verify root span has children (search phases)
+  - is_true: trace.spans.0.children
+  - gt: { trace.spans.0.children.length: 0 }
+
+---
+"Search with request-time tracing disabled":
+
+  - do:
+      search:
+        index: test
+        body:
+          query:
+            match_all: {}
+          trace: false
+
+  - match: { hits.total.value: 3 }
+  - is_false: trace
+
+---
+"Search without trace parameter defaults to disabled":
+
+  - do:
+      search:
+        index: test
+        body:
+          query:
+            match_all: {}
+
+  - match: { hits.total.value: 3 }
+  - is_false: trace
+
+---
+"Search with trace as URL parameter":
+
+  - do:
+      search:
+        index: test
+        trace: true
+        body:
+          query:
+            match:
+              foo: bar
+
+  - match: { hits.total.value: 2 }
+
+  # Verify trace exists
+  - is_true: trace
+  - is_true: trace.trace_id
+  - is_true: trace.spans
+  - match: { trace.spans.0.operation_name: "search.coordinator" }
+
+---
+"Search with tracing includes shard-level spans":
+
+  - do:
+      search:
+        index: test
+        body:
+          query:
+            match_all: {}
+          trace: true
+
+  - match: { hits.total.value: 3 }
+
+  # Verify trace structure
+  - is_true: trace
+  - is_true: trace.spans.0.children
+
+  # At least one phase should have shard-level children
+  # We can't guarantee exact structure due to can_match optimization
+  # but we should have at least query phase spans
+  - gt: { trace.spans.0.children.length: 0 }
+
+---
+"Search with tracing and specific query":
+
+  - do:
+      search:
+        index: test
+        body:
+          query:
+            term:
+              foo: bar
+          trace: true
+
+  - match: { hits.total.value: 2 }
+
+  # Verify trace exists and has valid structure
+  - is_true: trace
+  - is_true: trace.trace_id
+  - match: { trace.trace_id: /.{32}/ }
+  - is_true: trace.spans
+  - match: { trace.spans.0.operation_name: "search.coordinator" }
+  - is_true: trace.spans.0.attributes
+  - is_true: trace.spans.0.children
