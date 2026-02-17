@@ -9,9 +9,12 @@
 
 package org.elasticsearch.search.fetch;
 
+import org.elasticsearch.TransportVersion;
+import org.elasticsearch.action.search.SearchTraceResult;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.RefCounted;
 import org.elasticsearch.core.SimpleRefCounted;
 import org.elasticsearch.search.SearchHit;
@@ -26,6 +29,8 @@ import java.io.IOException;
 
 public final class FetchSearchResult extends SearchPhaseResult {
 
+    private static final TransportVersion SEARCH_RESPONSE_TRACE = TransportVersion.fromName("search_response_trace");
+
     private SearchHits hits;
 
     private transient long searchHitsSizeBytes = 0L;
@@ -34,6 +39,9 @@ public final class FetchSearchResult extends SearchPhaseResult {
     private transient int counter;
 
     private ProfileResult profileResult;
+
+    @Nullable
+    private SearchTraceResult.ShardTraceResult shardTraceResult;
 
     private final RefCounted refCounted = LeakTracker.wrap(new SimpleRefCounted());
 
@@ -48,6 +56,9 @@ public final class FetchSearchResult extends SearchPhaseResult {
         contextId = new ShardSearchContextId(in);
         hits = SearchHits.readFrom(in, true);
         profileResult = in.readOptionalWriteable(ProfileResult::new);
+        if (in.getTransportVersion().supports(SEARCH_RESPONSE_TRACE)) {
+            shardTraceResult = in.readOptionalWriteable(SearchTraceResult.ShardTraceResult::new);
+        }
     }
 
     @Override
@@ -56,6 +67,9 @@ public final class FetchSearchResult extends SearchPhaseResult {
         contextId.writeTo(out);
         hits.writeTo(out);
         out.writeOptionalWriteable(profileResult);
+        if (out.getTransportVersion().supports(SEARCH_RESPONSE_TRACE)) {
+            out.writeOptionalWriteable(shardTraceResult);
+        }
     }
 
     @Override
@@ -113,6 +127,15 @@ public final class FetchSearchResult extends SearchPhaseResult {
 
     public ProfileResult profileResult() {
         return profileResult;
+    }
+
+    @Nullable
+    public SearchTraceResult.ShardTraceResult getShardTraceResult() {
+        return shardTraceResult;
+    }
+
+    public void setShardTraceResult(SearchTraceResult.ShardTraceResult shardTraceResult) {
+        this.shardTraceResult = shardTraceResult;
     }
 
     @Override

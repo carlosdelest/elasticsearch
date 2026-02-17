@@ -951,10 +951,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                 }
                 tracer.stopTrace(task);
             }
-            SearchTraceResult.ShardTraceResult shardTraceResult = shardTracer.buildResult();
-            if (shardTraceResult != null) {
-                context.queryResult().setShardTraceResult(shardTraceResult);
-            }
+            SearchTraceResult.ShardTraceResult shardTraceResult;
             if (request.numberOfShards() == 1 && (request.source() == null || request.source().rankBuilder() == null)) {
                 // we already have query results, but we can run fetch at the same time
                 // in this case we reuse the search context across search and fetch phase, hence we need to clear the cancellation
@@ -969,8 +966,19 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     });
                 }
                 context.addFetchResult();
-                return executeFetchPhase(readerContext, context, afterQueryTime);
+                shardTracer.startSpan("shard_fetch");
+                QueryFetchSearchResult result = executeFetchPhase(readerContext, context, afterQueryTime);
+                shardTracer.stopSpan("shard_fetch");
+                shardTraceResult = shardTracer.buildResult();
+                if (shardTraceResult != null) {
+                    context.queryResult().setShardTraceResult(shardTraceResult);
+                }
+                return result;
             } else {
+                shardTraceResult = shardTracer.buildResult();
+                if (shardTraceResult != null) {
+                    context.queryResult().setShardTraceResult(shardTraceResult);
+                }
                 // Pass the rescoreDocIds to the queryResult to send them the coordinating node and receive them back in the fetch phase.
                 // We also pass the rescoreDocIds to the LegacyReaderContext in case the search state needs to stay in the data node.
                 final RescoreDocIds rescoreDocIds = context.rescoreDocIds();
@@ -1246,6 +1254,14 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         rewriteAndFetchShardRequest(readerContext.indexShard(), shardSearchRequest, listener.delegateFailure((l, rewritten) -> {
             runAsync(getExecutor(readerContext.indexShard()), () -> {
                 try (SearchContext searchContext = createContext(readerContext, rewritten, task, ResultsType.FETCH, false)) {
+                    final ShardSearchTracer shardTracer;
+                    if (rewritten.isTrace()) {
+                        var localNode = clusterService.localNode();
+                        shardTracer = new ActiveShardSearchTracer();
+                        shardTracer.setNodeAnchor(localNode.getId(), localNode.getName());
+                    } else {
+                        shardTracer = ShardSearchTracer.NOOP;
+                    }
                     if (request.lastEmittedDoc() != null) {
                         searchContext.scrollContext().lastEmittedDoc = request.lastEmittedDoc();
                     }
@@ -1255,7 +1271,9 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     var opsListener = searchContext.indexShard().getSearchOperationListener();
                     opsListener.onPreFetchPhase(searchContext);
                     try {
+                        shardTracer.startSpan("shard_fetch");
                         fetchPhase.execute(searchContext, request.docIds(), request.getRankDocks());
+                        shardTracer.stopSpan("shard_fetch");
                         if (readerContext.singleSession()) {
                             freeReaderContext(request.contextId());
                         }
@@ -1267,6 +1285,10 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                         }
                     }
                     var fetchResult = searchContext.fetchResult();
+                    SearchTraceResult.ShardTraceResult shardTraceResult = shardTracer.buildResult();
+                    if (shardTraceResult != null) {
+                        fetchResult.setShardTraceResult(shardTraceResult);
+                    }
                     // inc-ref fetch result because we close the SearchContext that references it in this try-with-resources block
                     fetchResult.incRef();
                     return fetchResult;

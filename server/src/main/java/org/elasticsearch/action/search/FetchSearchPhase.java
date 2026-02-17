@@ -93,6 +93,7 @@ class FetchSearchPhase extends SearchPhase {
     private void innerRun() throws Exception {
         assert this.reducedQueryPhase == null ^ this.resultConsumer == null;
         long phaseStartTimeInNanos = System.nanoTime();
+        context.tracer.startPhase("fetch");
         // depending on whether we executed the RankFeaturePhase we may or may not have the reduced query result computed already
         context.tracer.startPhase("reduce");
         final var reducedQueryPhase = this.reducedQueryPhase == null ? resultConsumer.reduce() : this.reducedQueryPhase;
@@ -218,6 +219,10 @@ class FetchSearchPhase extends SearchPhase {
             @Override
             public void innerOnResponse(FetchSearchResult result) {
                 try {
+                    if (result.getShardTraceResult() != null) {
+                        String shardId = shardTarget != null ? shardTarget.toString() : "unknown";
+                        context.tracer.attachShardResult(shardId, result.getShardTraceResult());
+                    }
                     progressListener.notifyFetchResult(shardIndex);
                     counter.onResult(result);
                 } catch (Exception e) {
@@ -275,6 +280,7 @@ class FetchSearchPhase extends SearchPhase {
             context.tracer.startPhase("merge");
             var resp = SearchPhaseController.merge(context.getRequest().scroll() != null, reducedQueryPhase, fetchResultsArr);
             context.tracer.stopPhase("merge");
+            context.tracer.stopPhase("fetch");
             context.addReleasable(resp);
             return nextPhase(resp, searchPhaseShardResults);
         });
