@@ -95,9 +95,7 @@ class FetchSearchPhase extends SearchPhase {
         long phaseStartTimeInNanos = System.nanoTime();
         context.tracer.startPhase("fetch");
         // depending on whether we executed the RankFeaturePhase we may or may not have the reduced query result computed already
-        context.tracer.startPhase("reduce");
         final var reducedQueryPhase = this.reducedQueryPhase == null ? resultConsumer.reduce() : this.reducedQueryPhase;
-        context.tracer.stopPhase("reduce");
         final int numShards = context.getNumShards();
         // Usually when there is a single shard, we force the search type QUERY_THEN_FETCH. But when there's kNN, we might
         // still use DFS_QUERY_THEN_FETCH, which does not perform the "query and fetch" optimization during the query phase.
@@ -223,6 +221,7 @@ class FetchSearchPhase extends SearchPhase {
                         String shardId = shardTarget != null ? shardTarget.toString() : "unknown";
                         context.tracer.attachShardResult(shardId, result.getShardTraceResult());
                     }
+                    context.tracer.stopPhase("fetch");
                     progressListener.notifyFetchResult(shardIndex);
                     counter.onResult(result);
                 } catch (Exception e) {
@@ -233,6 +232,7 @@ class FetchSearchPhase extends SearchPhase {
             @Override
             public void onFailure(Exception e) {
                 try {
+                    context.tracer.stopPhase("fetch");
                     logger.debug(() -> "[" + contextId + "] Failed to execute fetch phase", e);
                     progressListener.notifyFetchFailure(shardIndex, shardTarget, e);
                     counter.onFailure(shardIndex, shardTarget, e);
@@ -251,6 +251,7 @@ class FetchSearchPhase extends SearchPhase {
             listener.onFailure(e);
             return;
         }
+        context.tracer.startPhase("fetch");
         context.getSearchTransport()
             .sendExecuteFetch(
                 connection,
@@ -277,9 +278,7 @@ class FetchSearchPhase extends SearchPhase {
         context.getSearchResponseMetrics()
             .recordSearchPhaseDuration(getName(), System.nanoTime() - phaseStartTimeInNanos, context.getSearchRequestAttributes());
         context.executeNextPhase(NAME, () -> {
-            context.tracer.startPhase("merge");
             var resp = SearchPhaseController.merge(context.getRequest().scroll() != null, reducedQueryPhase, fetchResultsArr);
-            context.tracer.stopPhase("merge");
             context.tracer.stopPhase("fetch");
             context.addReleasable(resp);
             return nextPhase(resp, searchPhaseShardResults);
