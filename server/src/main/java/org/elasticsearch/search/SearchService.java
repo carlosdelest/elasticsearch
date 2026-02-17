@@ -133,6 +133,9 @@ import org.elasticsearch.search.suggest.Suggest;
 import org.elasticsearch.search.suggest.completion.CompletionSuggestion;
 import org.elasticsearch.tasks.CancellableTask;
 import org.elasticsearch.tasks.TaskCancelledException;
+import org.elasticsearch.telemetry.tracing.QueryTracer;
+import org.elasticsearch.telemetry.tracing.QueryTraceSpan;
+import org.elasticsearch.telemetry.tracing.Traceable;
 import org.elasticsearch.telemetry.tracing.Tracer;
 import org.elasticsearch.threadpool.Scheduler;
 import org.elasticsearch.threadpool.Scheduler.Cancellable;
@@ -685,6 +688,17 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
 
     private DfsSearchResult executeDfsPhase(ShardSearchRequest request, SearchShardTask task) throws IOException {
         ReaderContext readerContext = createOrGetReaderContext(request);
+
+        // Create QueryTracer from the trace parent context in the request
+        QueryTracer queryTracer = QueryTracer.fromParent(request.getTraceParentContext());
+        Traceable dfsSpan = null;
+        if (queryTracer.isEnabled()) {
+            dfsSpan = queryTracer.startSpan("shard.dfs", Map.of(
+                "shard_id", request.shardId().toString(),
+                "node", clusterService.localNode().getName()
+            ));
+        }
+
         try (@SuppressWarnings("unused") // withScope call is necessary to instrument search execution
         Releasable scope = tracer.withScope(task);
             Releasable ignored = readerContext.markAsUsed(getKeepAlive(request));
@@ -702,8 +716,17 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     opsListener.onFailedDfsPhase(context);
                 }
             }
-            return context.dfsResult();
+            DfsSearchResult result = context.dfsResult();
+            if (queryTracer.isEnabled()) {
+                queryTracer.endSpan(dfsSpan);
+                result.setTraceResults(queryTracer.getResults());
+            }
+            return result;
         } catch (Exception e) {
+            if (queryTracer.isEnabled() && dfsSpan != null) {
+                queryTracer.addError(dfsSpan, e);
+                queryTracer.endSpan(dfsSpan);
+            }
             logger.trace("Dfs phase failed", e);
             processFailure(readerContext, e);
             throw e;
@@ -914,6 +937,17 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
      */
     private SearchPhaseResult executeQueryPhase(ShardSearchRequest request, CancellableTask task) throws Exception {
         final ReaderContext readerContext = createOrGetReaderContext(request);
+
+        // Create QueryTracer from the trace parent context in the request
+        QueryTracer queryTracer = QueryTracer.fromParent(request.getTraceParentContext());
+        Traceable querySpan = null;
+        if (queryTracer.isEnabled()) {
+            querySpan = queryTracer.startSpan("shard.query", Map.of(
+                "shard_id", request.shardId().toString(),
+                "node", clusterService.localNode().getName()
+            ));
+        }
+
         try (
             Releasable scope = tracer.withScope(task);
             Releasable ignored = readerContext.markAsUsed(getKeepAlive(request));
@@ -952,6 +986,11 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     });
                 }
                 context.addFetchResult();
+                // Attach trace results to query result before executeFetchPhase
+                if (queryTracer.isEnabled()) {
+                    queryTracer.endSpan(querySpan);
+                    context.queryResult().setTraceResults(queryTracer.getResults());
+                }
                 return executeFetchPhase(readerContext, context, afterQueryTime);
             } else {
                 // Pass the rescoreDocIds to the queryResult to send them the coordinating node and receive them back in the fetch phase.
@@ -961,9 +1000,18 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                 readerContext.setRescoreDocIds(rescoreDocIds);
                 // inc-ref query result because we close the SearchContext that references it in this try-with-resources block
                 context.queryResult().incRef();
+                // Attach trace results to query result
+                if (queryTracer.isEnabled()) {
+                    queryTracer.endSpan(querySpan);
+                    context.queryResult().setTraceResults(queryTracer.getResults());
+                }
                 return context.queryResult();
             }
         } catch (Exception e) {
+            if (queryTracer.isEnabled() && querySpan != null) {
+                queryTracer.addError(querySpan, e);
+                queryTracer.endSpan(querySpan);
+            }
             // execution exception can happen while loading the cache, strip it
             if (e instanceof ExecutionException) {
                 e = (e.getCause() == null || e.getCause() instanceof Exception)
@@ -1226,6 +1274,17 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         final ReaderContext readerContext = findReaderContext(request.contextId(), request);
         final ShardSearchRequest shardSearchRequest = readerContext.getShardSearchRequest(request.getShardSearchRequest());
         final Releasable markAsUsed = readerContext.markAsUsed(getKeepAlive(shardSearchRequest));
+
+        // Create QueryTracer from the trace parent context in the shard search request
+        final QueryTracer queryTracer = QueryTracer.fromParent(shardSearchRequest.getTraceParentContext());
+        final Traceable[] fetchSpanHolder = new Traceable[1];
+        if (queryTracer.isEnabled()) {
+            fetchSpanHolder[0] = queryTracer.startSpan("shard.fetch", Map.of(
+                "shard_id", shardSearchRequest.shardId().toString(),
+                "node", clusterService.localNode().getName()
+            ));
+        }
+
         rewriteAndFetchShardRequest(readerContext.indexShard(), shardSearchRequest, listener.delegateFailure((l, rewritten) -> {
             runAsync(getExecutor(readerContext.indexShard()), () -> {
                 try (SearchContext searchContext = createContext(readerContext, rewritten, task, ResultsType.FETCH, false)) {
@@ -1252,8 +1311,17 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     var fetchResult = searchContext.fetchResult();
                     // inc-ref fetch result because we close the SearchContext that references it in this try-with-resources block
                     fetchResult.incRef();
+                    // Attach trace results to fetch result
+                    if (queryTracer.isEnabled()) {
+                        queryTracer.endSpan(fetchSpanHolder[0]);
+                        fetchResult.setTraceResults(queryTracer.getResults());
+                    }
                     return fetchResult;
                 } catch (Exception e) {
+                    if (queryTracer.isEnabled() && fetchSpanHolder[0] != null) {
+                        queryTracer.addError(fetchSpanHolder[0], e);
+                        queryTracer.endSpan(fetchSpanHolder[0]);
+                    }
                     assert TransportActions.isShardNotAvailableException(e) == false : new AssertionError(e);
                     // we handle the failure in the failure listener below
                     throw e;

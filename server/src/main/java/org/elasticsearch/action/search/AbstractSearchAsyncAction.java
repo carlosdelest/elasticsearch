@@ -844,7 +844,8 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
             shardIt.getClusterAlias(),
             shardIt.getSearchContextId(),
             shardIt.getSearchContextKeepAlive(),
-            shardIt.getSplitShardCountSummary()
+            shardIt.getSplitShardCountSummary(),
+            tracer.getTraceParentContext()
         );
         // if we already received a search result we can inform the shard that it
         // can return a null response if the request rewrites to match none rather

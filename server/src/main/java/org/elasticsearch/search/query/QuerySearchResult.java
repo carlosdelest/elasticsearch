@@ -35,6 +35,7 @@ import org.elasticsearch.search.profile.SearchProfileDfsPhaseResult;
 import org.elasticsearch.search.profile.SearchProfileQueryPhaseResult;
 import org.elasticsearch.search.rank.RankShardResult;
 import org.elasticsearch.search.suggest.Suggest;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.transport.LeakTracker;
 
 import java.io.IOException;
@@ -81,6 +82,8 @@ public final class QuerySearchResult extends SearchPhaseResult {
 
     @Nullable
     private Long timeRangeFilterFromMillis;
+
+    private QueryTraceResults traceResults;
 
     public QuerySearchResult() {
         this(false);
@@ -459,6 +462,7 @@ public final class QuerySearchResult extends SearchPhaseResult {
             if (in.getTransportVersion().supports(TIMESTAMP_RANGE_TELEMETRY)) {
                 timeRangeFilterFromMillis = in.readOptionalLong();
             }
+            traceResults = in.readOptionalWriteable(QueryTraceResults::new);
             success = true;
         } finally {
             if (success == false) {
@@ -527,6 +531,7 @@ public final class QuerySearchResult extends SearchPhaseResult {
         if (out.getTransportVersion().supports(TIMESTAMP_RANGE_TELEMETRY)) {
             out.writeOptionalLong(timeRangeFilterFromMillis);
         }
+        out.writeOptionalWriteable(traceResults);
     }
 
     @Nullable
@@ -585,5 +590,13 @@ public final class QuerySearchResult extends SearchPhaseResult {
 
     public void setTimeRangeFilterFromMillis(Long timeRangeFilterFromMillis) {
         this.timeRangeFilterFromMillis = timeRangeFilterFromMillis;
+    }
+
+    public void setTraceResults(QueryTraceResults traceResults) {
+        this.traceResults = traceResults;
+    }
+
+    public QueryTraceResults getTraceResults() {
+        return traceResults;
     }
 }

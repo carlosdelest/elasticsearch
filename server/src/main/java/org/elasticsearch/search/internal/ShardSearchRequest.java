@@ -49,6 +49,7 @@ import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
+import org.elasticsearch.telemetry.tracing.TraceParentContext;
 import org.elasticsearch.transport.AbstractTransportRequest;
 
 import java.io.IOException;
@@ -101,8 +102,17 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
      */
     private final SplitShardCountSummary splitShardCountSummary;
 
+    /**
+     * Trace parent context for distributed tracing across coordinator and data nodes.
+     */
+    private final TraceParentContext traceParentContext;
+
     public static final TransportVersion SHARD_SEARCH_REQUEST_RESHARD_SHARD_COUNT_SUMMARY = TransportVersion.fromName(
         "shard_search_request_reshard_shard_count_summary"
+    );
+
+    public static final TransportVersion SHARD_SEARCH_REQUEST_TRACE_CONTEXT = TransportVersion.fromName(
+        "shard_search_request_trace_context"
     );
 
     // Test only constructor.
@@ -133,6 +143,7 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         );
     }
 
+    // Constructor without trace context for backward compatibility
     public ShardSearchRequest(
         OriginalIndices originalIndices,
         SearchRequest searchRequest,
@@ -146,6 +157,38 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         ShardSearchContextId readerId,
         TimeValue keepAlive,
         SplitShardCountSummary splitShardCountSummary
+    ) {
+        this(
+            originalIndices,
+            searchRequest,
+            shardId,
+            shardRequestIndex,
+            numberOfShards,
+            aliasFilter,
+            indexBoost,
+            nowInMillis,
+            clusterAlias,
+            readerId,
+            keepAlive,
+            splitShardCountSummary,
+            TraceParentContext.NONE
+        );
+    }
+
+    public ShardSearchRequest(
+        OriginalIndices originalIndices,
+        SearchRequest searchRequest,
+        ShardId shardId,
+        int shardRequestIndex,
+        int numberOfShards,
+        AliasFilter aliasFilter,
+        float indexBoost,
+        long nowInMillis,
+        @Nullable String clusterAlias,
+        ShardSearchContextId readerId,
+        TimeValue keepAlive,
+        SplitShardCountSummary splitShardCountSummary,
+        TraceParentContext traceParentContext
     ) {
         this(
             originalIndices,
@@ -166,7 +209,8 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
             computeWaitForCheckpoint(searchRequest.getWaitForCheckpoints(), shardId, shardRequestIndex),
             searchRequest.getWaitForCheckpointsTimeout(),
             searchRequest.isForceSyntheticSource(),
-            splitShardCountSummary
+            splitShardCountSummary,
+            traceParentContext
         );
         // If allowPartialSearchResults is unset (ie null), the cluster-level default should have been substituted
         // at this stage. Any NPEs in the above are therefore an error in request preparation logic.
@@ -221,7 +265,8 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
             SequenceNumbers.UNASSIGNED_SEQ_NO,
             SearchService.NO_TIMEOUT,
             false,
-            splitShardCountSummary
+            splitShardCountSummary,
+            TraceParentContext.NONE
         );
     }
 
@@ -245,7 +290,8 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         long waitForCheckpoint,
         TimeValue waitForCheckpointsTimeout,
         boolean forceSyntheticSource,
-        SplitShardCountSummary splitShardCountSummary
+        SplitShardCountSummary splitShardCountSummary,
+        TraceParentContext traceParentContext
     ) {
         this.shardId = shardId;
         this.shardRequestIndex = shardRequestIndex;
@@ -268,6 +314,7 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         this.waitForCheckpointsTimeout = waitForCheckpointsTimeout;
         this.forceSyntheticSource = forceSyntheticSource;
         this.splitShardCountSummary = splitShardCountSummary;
+        this.traceParentContext = traceParentContext != null ? traceParentContext : TraceParentContext.NONE;
     }
 
     @SuppressWarnings("this-escape")
@@ -294,6 +341,7 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         this.waitForCheckpointsTimeout = clone.waitForCheckpointsTimeout;
         this.forceSyntheticSource = clone.forceSyntheticSource;
         this.splitShardCountSummary = clone.splitShardCountSummary;
+        this.traceParentContext = clone.traceParentContext;
     }
 
     public ShardSearchRequest(StreamInput in) throws IOException {
@@ -323,6 +371,12 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
             splitShardCountSummary = new SplitShardCountSummary(in);
         } else {
             splitShardCountSummary = SplitShardCountSummary.UNSET;
+        }
+
+        if (in.getTransportVersion().supports(SHARD_SEARCH_REQUEST_TRACE_CONTEXT)) {
+            traceParentContext = in.readOptionalWriteable(TraceParentContext::new);
+        } else {
+            traceParentContext = TraceParentContext.NONE;
         }
 
         originalIndices = OriginalIndices.readOriginalIndices(in);
@@ -364,6 +418,9 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         out.writeBoolean(forceSyntheticSource);
         if (out.getTransportVersion().supports(SHARD_SEARCH_REQUEST_RESHARD_SHARD_COUNT_SUMMARY)) {
             splitShardCountSummary.writeTo(out);
+        }
+        if (out.getTransportVersion().supports(SHARD_SEARCH_REQUEST_TRACE_CONTEXT)) {
+            out.writeOptionalWriteable(traceParentContext);
         }
     }
 
@@ -524,6 +581,16 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
 
     public SplitShardCountSummary getSplitShardCountSummary() {
         return splitShardCountSummary;
+    }
+
+    /**
+     * Returns the trace parent context for distributed tracing.
+     * This is used to create child tracers on data nodes that continue the trace from the coordinator.
+     *
+     * @return the trace parent context, or TraceParentContext.NONE if tracing is disabled
+     */
+    public TraceParentContext getTraceParentContext() {
+        return traceParentContext;
     }
 
     @Override

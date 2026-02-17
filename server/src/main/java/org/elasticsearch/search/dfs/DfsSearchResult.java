@@ -20,6 +20,7 @@ import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.search.profile.SearchProfileDfsPhaseResult;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -36,6 +37,7 @@ public final class DfsSearchResult extends SearchPhaseResult {
     private List<DfsKnnResults> knnResults;
     private int maxDoc;
     private SearchProfileDfsPhaseResult searchProfileDfsPhaseResult;
+    private QueryTraceResults traceResults;
 
     public DfsSearchResult(StreamInput in) throws IOException {
         contextId = new ShardSearchContextId(in);
@@ -55,6 +57,7 @@ public final class DfsSearchResult extends SearchPhaseResult {
         setShardSearchRequest(in.readOptionalWriteable(ShardSearchRequest::new));
         knnResults = in.readOptionalCollectionAsList(DfsKnnResults::new);
         searchProfileDfsPhaseResult = in.readOptionalWriteable(SearchProfileDfsPhaseResult::new);
+        traceResults = in.readOptionalWriteable(QueryTraceResults::new);
     }
 
     public DfsSearchResult(ShardSearchContextId contextId, SearchShardTarget shardTarget, ShardSearchRequest shardSearchRequest) {
@@ -113,6 +116,14 @@ public final class DfsSearchResult extends SearchPhaseResult {
         return searchProfileDfsPhaseResult;
     }
 
+    public void setTraceResults(QueryTraceResults traceResults) {
+        this.traceResults = traceResults;
+    }
+
+    public QueryTraceResults getTraceResults() {
+        return traceResults;
+    }
+
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         contextId.writeTo(out);
@@ -126,6 +137,7 @@ public final class DfsSearchResult extends SearchPhaseResult {
         out.writeOptionalWriteable(getShardSearchRequest());
         out.writeOptionalCollection(knnResults);
         out.writeOptionalWriteable(searchProfileDfsPhaseResult);
+        out.writeOptionalWriteable(traceResults);
     }
 
     public static void writeFieldStats(StreamOutput out, Map<String, CollectionStatistics> fieldStatistics) throws IOException {

@@ -20,6 +20,7 @@ import org.elasticsearch.search.SearchPhaseResult;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.profile.ProfileResult;
+import org.elasticsearch.telemetry.tracing.QueryTraceResults;
 import org.elasticsearch.transport.LeakTracker;
 
 import java.io.IOException;
@@ -35,6 +36,8 @@ public final class FetchSearchResult extends SearchPhaseResult {
 
     private ProfileResult profileResult;
 
+    private QueryTraceResults traceResults;
+
     private final RefCounted refCounted = LeakTracker.wrap(new SimpleRefCounted());
 
     public FetchSearchResult() {}
@@ -48,6 +51,7 @@ public final class FetchSearchResult extends SearchPhaseResult {
         contextId = new ShardSearchContextId(in);
         hits = SearchHits.readFrom(in, true);
         profileResult = in.readOptionalWriteable(ProfileResult::new);
+        traceResults = in.readOptionalWriteable(QueryTraceResults::new);
     }
 
     @Override
@@ -56,6 +60,7 @@ public final class FetchSearchResult extends SearchPhaseResult {
         contextId.writeTo(out);
         hits.writeTo(out);
         out.writeOptionalWriteable(profileResult);
+        out.writeOptionalWriteable(traceResults);
     }
 
     @Override
@@ -144,5 +149,13 @@ public final class FetchSearchResult extends SearchPhaseResult {
     @Override
     public boolean hasReferences() {
         return refCounted.hasReferences();
+    }
+
+    public void setTraceResults(QueryTraceResults traceResults) {
+        this.traceResults = traceResults;
+    }
+
+    public QueryTraceResults getTraceResults() {
+        return traceResults;
     }
 }
