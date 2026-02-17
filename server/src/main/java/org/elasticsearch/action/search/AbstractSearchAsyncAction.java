@@ -41,6 +41,7 @@ import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.telemetry.tracing.QueryTracer;
+import org.elasticsearch.telemetry.tracing.Traceable;
 import org.elasticsearch.transport.Transport;
 
 import java.util.ArrayList;
@@ -110,7 +111,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
     private final boolean isPitRelocationEnabled;
     protected long phaseStartTimeInNanos;
     protected final QueryTracer tracer;
-    private volatile String currentPhaseSpanId;
+    private volatile Traceable currentPhaseSpan;
 
     // protected for tests
     protected final SubscribableListener<Void> doneFuture = new SubscribableListener<>();
@@ -405,7 +406,7 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
     }
 
     private void executePhase(SearchPhase phase) {
-        currentPhaseSpanId = tracer.startSpan("search." + phase.getName().toLowerCase().replace(' ', '_'), Map.of());
+        currentPhaseSpan = tracer.startSpan("search." + phase.getName().toLowerCase().replace(' ', '_'), Map.of());
         try {
             phase.run();
         } catch (RuntimeException e) {
@@ -780,9 +781,9 @@ abstract class AbstractSearchAsyncAction<Result extends SearchPhaseResult> exten
      */
     private void onPhaseDone() {  // as a tribute to @kimchy aka. finishHim()
         searchResponseMetrics.recordSearchPhaseDuration(getName(), System.nanoTime() - phaseStartTimeInNanos, searchRequestAttributes);
-        if (currentPhaseSpanId != null) {
-            tracer.endSpan(currentPhaseSpanId);
-            currentPhaseSpanId = null;
+        if (currentPhaseSpan != null) {
+            tracer.endSpan(currentPhaseSpan);
+            currentPhaseSpan = null;
         }
         executeNextPhase(getName(), this::getNextPhase);
     }

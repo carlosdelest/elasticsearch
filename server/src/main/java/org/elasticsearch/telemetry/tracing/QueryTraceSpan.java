@@ -35,7 +35,7 @@ import java.util.Objects;
  *   <li>Rich attributes for contextual information</li>
  * </ul>
  */
-public class QueryTraceSpan implements Writeable, ToXContentObject {
+public class QueryTraceSpan implements Traceable, Writeable, ToXContentObject {
 
     private final String spanId;
     private final String operationName;
@@ -173,6 +173,7 @@ public class QueryTraceSpan implements Writeable, ToXContentObject {
     /**
      * @return the unique span identifier (16 hex characters)
      */
+    @Override
     public String getSpanId() {
         return spanId;
     }

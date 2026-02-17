@@ -97,6 +97,7 @@ import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.profile.SearchProfileResults;
 import org.elasticsearch.search.profile.SearchProfileShardResult;
 import org.elasticsearch.telemetry.tracing.QueryTracer;
+import org.elasticsearch.telemetry.tracing.Traceable;
 import org.elasticsearch.tasks.Task;
 import org.elasticsearch.tasks.TaskId;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -389,21 +390,21 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
         // Create tracer (real or noop)
         final SearchSourceBuilder source = original.source();
         final QueryTracer tracer = (source != null && source.trace()) ? new QueryTracer() : QueryTracer.NOOP;
-        tracer.startSpan("search.coordinator", Map.of(
+        final Traceable rootSpan = tracer.startSpan("search.coordinator", Map.of(
             "indices", String.join(",", original.indices()),
             "search_type", original.searchType() != null ? original.searchType().toString() : "QUERY_THEN_FETCH"
         ));
 
         // Wrap listener to capture trace results on completion
         ActionListener<SearchResponse> tracingListener = ActionListener.wrap(response -> {
-            tracer.endSpan(tracer.rootSpanId());
+            tracer.endSpan(rootSpan);
             if (tracer.isEnabled()) {
                 response.setTraceResults(tracer.getResults());
             }
             originalListener.onResponse(response);
         }, e -> {
             tracer.addCurrentError(e);
-            tracer.endSpan(tracer.rootSpanId());
+            tracer.endSpan(rootSpan);
             originalListener.onFailure(e);
         });
 

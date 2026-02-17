@@ -82,8 +82,8 @@ public class QueryTracer implements Tracer {
 
     @Override
     public void startTrace(TraceContext traceContext, Traceable traceable, String name, Map<String, Object> attributes) {
-        String spanId = this.traceContext.startSpan(name, attributes);
-        traceableToSpanId.put(traceable.getSpanId(), spanId);
+        QueryTraceSpan span = this.traceContext.startSpan(name, attributes);
+        traceableToSpanId.put(traceable.getSpanId(), span.getSpanId());
     }
 
     @Override
@@ -188,6 +188,13 @@ public class QueryTracer implements Tracer {
     }
 
     /**
+     * @return the root span as a Traceable, or null if no spans have been started
+     */
+    public Traceable rootSpan() {
+        return traceContext.getRootSpan();
+    }
+
+    /**
      * @return the underlying trace context
      */
     public QueryTraceContext getTraceContext() {
@@ -201,10 +208,19 @@ public class QueryTracer implements Tracer {
      *
      * @param operationName the name of the operation
      * @param attributes    initial attributes for the span
-     * @return the span ID for the newly created span
+     * @return the QueryTraceSpan object (which implements Traceable)
      */
-    public String startSpan(String operationName, Map<String, Object> attributes) {
+    public QueryTraceSpan startSpan(String operationName, Map<String, Object> attributes) {
         return traceContext.startSpan(operationName, attributes);
+    }
+
+    /**
+     * Ends a span by its Traceable reference.
+     *
+     * @param traceable the traceable span to end
+     */
+    public void endSpan(Traceable traceable) {
+        traceContext.endSpan(traceable);
     }
 
     /**
@@ -269,6 +285,7 @@ public class QueryTracer implements Tracer {
      */
     private static class NoopRequestTracer extends QueryTracer {
         private static final String NOOP_SPAN_ID = "";
+        private static final QueryTraceSpan NOOP_SPAN = new QueryTraceSpan(NOOP_SPAN_ID, "noop", 0L);
 
         NoopRequestTracer() {
             super(new QueryTraceContext());
@@ -340,8 +357,18 @@ public class QueryTracer implements Tracer {
         }
 
         @Override
-        public String startSpan(String operationName, Map<String, Object> attributes) {
-            return NOOP_SPAN_ID;
+        public Traceable rootSpan() {
+            return NOOP_SPAN;
+        }
+
+        @Override
+        public QueryTraceSpan startSpan(String operationName, Map<String, Object> attributes) {
+            return NOOP_SPAN;
+        }
+
+        @Override
+        public void endSpan(Traceable traceable) {
+            // no-op
         }
 
         @Override

@@ -97,9 +97,9 @@ public class QueryTraceContext {
      *
      * @param operationName the name of the operation
      * @param attributes    initial attributes for the span
-     * @return the span ID for the newly created span
+     * @return the QueryTraceSpan object (which implements Traceable)
      */
-    public synchronized String startSpan(String operationName, Map<String, Object> attributes) {
+    public synchronized QueryTraceSpan startSpan(String operationName, Map<String, Object> attributes) {
         String spanId = generateSpanId();
         long now = System.nanoTime();
 
@@ -124,7 +124,19 @@ public class QueryTraceContext {
         spanStack.push(span);
         spanMap.put(spanId, span);
 
-        return spanId;
+        return span;
+    }
+
+    /**
+     * Ends the span with the given Traceable.
+     *
+     * @param traceable the traceable span to end
+     * @throws IllegalStateException if the span is not found
+     */
+    public synchronized void endSpan(Traceable traceable) {
+        if (traceable != null) {
+            endSpan(traceable.getSpanId());
+        }
     }
 
     /**
@@ -233,6 +245,13 @@ public class QueryTraceContext {
      */
     public String getRootSpanId() {
         return rootSpan != null ? rootSpan.getSpanId() : null;
+    }
+
+    /**
+     * @return the root span as a Traceable, or null if no spans have been started
+     */
+    public QueryTraceSpan getRootSpan() {
+        return rootSpan;
     }
 
     /**
