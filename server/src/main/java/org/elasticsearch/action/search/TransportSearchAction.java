@@ -467,6 +467,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
         }
 
         ActionListener<SearchRequest> rewriteListener = originalListener.delegateFailureAndWrap((delegate, rewritten) -> {
+            task.getSearchTracer().stopPhase("coordinator_rewrite");
             if (ccsCheckCompatibility) {
                 checkCCSVersionCompatibility(rewritten);
             }
@@ -687,6 +688,15 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
         final boolean allowPartialSearchResults = original.allowPartialSearchResults() != null
             ? original.allowPartialSearchResults()
             : searchService.defaultAllowPartialSearchResults();
+        final SearchTracer searchTracer;
+        if (original.isTrace()) {
+            var localNode = clusterState.nodes().getLocalNode();
+            searchTracer = new ActiveSearchTracer(localNode.getId(), localNode.getName());
+        } else {
+            searchTracer = SearchTracer.NOOP;
+        }
+        task.setSearchTracer(searchTracer);
+        searchTracer.startPhase("coordinator_rewrite");
         Rewriteable.rewriteAndFetch(
             original,
             searchService.getRewriteContext(
@@ -2071,13 +2081,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             );
             boolean success = false;
             try {
-                final SearchTracer tracer;
-                if (searchRequest.isTrace()) {
-                    var localNode = clusterState.nodes().getLocalNode();
-                    tracer = new ActiveSearchTracer(localNode.getId(), localNode.getName());
-                } else {
-                    tracer = SearchTracer.NOOP;
-                }
+                final SearchTracer tracer = task.getSearchTracer();
                 final AbstractSearchAsyncAction<?> searchPhase;
                 if (searchRequest.searchType() == DFS_QUERY_THEN_FETCH) {
                     searchPhase = new SearchDfsQueryThenFetchAsyncAction(

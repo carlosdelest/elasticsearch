@@ -23,6 +23,7 @@ public class SearchTask extends CancellableTask {
     private final Supplier<String> descriptionSupplier;
     private SearchProgressListener progressListener = SearchProgressListener.NOOP;
     private Supplier<SearchResponseMerger> searchResponseMergerSupplier;  // used for CCS minimize_roundtrips=true
+    private SearchTracer searchTracer = SearchTracer.NOOP;
 
     public SearchTask(
         long id,
@@ -69,6 +70,20 @@ public class SearchTask extends CancellableTask {
      */
     public void setSearchResponseMergerSupplier(Supplier<SearchResponseMerger> supplier) {
         this.searchResponseMergerSupplier = supplier;
+    }
+
+    /**
+     * Attach a {@link SearchTracer} to this task.
+     */
+    public final void setSearchTracer(SearchTracer searchTracer) {
+        this.searchTracer = searchTracer;
+    }
+
+    /**
+     * Return the {@link SearchTracer} attached to this task.
+     */
+    public final SearchTracer getSearchTracer() {
+        return searchTracer;
     }
 
     /**
