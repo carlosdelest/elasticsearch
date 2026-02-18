@@ -247,6 +247,7 @@ function handleFile(e) {
 function clearAll() {
   document.getElementById('json-input').value = '';
   document.getElementById('error-container').innerHTML = '';
+  timelineRows = [];
   ['summary-section', 'timeline-section', 'detail-section'].forEach(function(id) {
     document.getElementById(id).classList.add('hidden');
   });
@@ -320,6 +321,7 @@ var nodeColorPalette = [
 /* ===== Global state ===== */
 var traceData = null;       // parsed trace object { nodes, spans }
 var flatSpans = [];          // flattened span list for rendering
+var timelineRows = [];       // grouped rows for timeline rendering
 var selectedSpanIdx = null;  // currently selected span index in flatSpans
 var nodeColorMap = {};       // nodeId -> color index
 
@@ -456,6 +458,126 @@ function buildNodeColorMap() {
   }
 }
 
+/* ===== Build grouped rows for timeline =====
+ *
+ * Within each parent span, children that share the same name are merged
+ * into a single visual row with multiple bars. This compresses the chart
+ * vertically (e.g. 3 shard_query spans become one row with 3 bars)
+ * while preserving the tree nesting structure.
+ *
+ * Each row object has:
+ *   - name: the shared span name
+ *   - depth: tree depth (for indentation)
+ *   - spanIndices: array of flatSpans indices that share this row
+ *   - childRows: indices into timelineRows for sub-rows
+ */
+function buildRows() {
+  timelineRows = [];
+  if (flatSpans.length === 0) return;
+  buildRowsForSpan(0, 0);
+}
+
+function buildRowsForSpan(spanIdx, depth) {
+  var span = flatSpans[spanIdx];
+  var rowIdx = timelineRows.length;
+  var row = {
+    rowIdx: rowIdx,
+    name: span.name,
+    depth: depth,
+    spanIndices: [spanIdx],
+    childRowIndices: []
+  };
+  timelineRows.push(row);
+
+  // Group children by name (preserving order of first occurrence)
+  var childGroups = [];     // array of { name, indices }
+  var childGroupMap = {};   // name -> index in childGroups
+  for (var c = 0; c < span.childIndices.length; c++) {
+    var childIdx = span.childIndices[c];
+    var child = flatSpans[childIdx];
+    if (childGroupMap.hasOwnProperty(child.name)) {
+      childGroups[childGroupMap[child.name]].indices.push(childIdx);
+    } else {
+      childGroupMap[child.name] = childGroups.length;
+      childGroups.push({ name: child.name, indices: [childIdx] });
+    }
+  }
+
+  // For each group, create rows
+  for (var g = 0; g < childGroups.length; g++) {
+    var group = childGroups[g];
+    if (group.indices.length === 1) {
+      // Single span in this group — recurse normally
+      var childRowIdx = buildRowsForSpan(group.indices[0], depth + 1);
+      row.childRowIndices.push(childRowIdx);
+    } else {
+      // Multiple spans with same name — create one merged row
+      var mergedRowIdx = timelineRows.length;
+      var mergedRow = {
+        rowIdx: mergedRowIdx,
+        name: group.name,
+        depth: depth + 1,
+        spanIndices: group.indices.slice(),
+        childRowIndices: []
+      };
+      timelineRows.push(mergedRow);
+      row.childRowIndices.push(mergedRowIdx);
+
+      // Recurse into each span's children, but those children become
+      // children of the merged row
+      for (var s = 0; s < group.indices.length; s++) {
+        var memberSpan = flatSpans[group.indices[s]];
+        for (var mc = 0; mc < memberSpan.childIndices.length; mc++) {
+          var grandchildIdx = memberSpan.childIndices[mc];
+          var grandchild = flatSpans[grandchildIdx];
+          // Check if this grandchild name is already a child group of
+          // the merged row — if so, add to it; otherwise create new
+          var found = false;
+          for (var cr = 0; cr < mergedRow.childRowIndices.length; cr++) {
+            var existingRow = timelineRows[mergedRow.childRowIndices[cr]];
+            if (existingRow.name === grandchild.name) {
+              existingRow.spanIndices.push(grandchildIdx);
+              // Also recurse grandchild's children
+              addDescendantRows(grandchildIdx, existingRow);
+              found = true;
+              break;
+            }
+          }
+          if (false === found) {
+            var gcRowIdx = buildRowsForSpan(grandchildIdx, depth + 2);
+            mergedRow.childRowIndices.push(gcRowIdx);
+          }
+        }
+      }
+    }
+  }
+
+  return rowIdx;
+}
+
+/* Add descendants of a span to an existing merged row's children */
+function addDescendantRows(spanIdx, parentRow) {
+  var span = flatSpans[spanIdx];
+  for (var c = 0; c < span.childIndices.length; c++) {
+    var childIdx = span.childIndices[c];
+    var child = flatSpans[childIdx];
+    var found = false;
+    for (var cr = 0; cr < parentRow.childRowIndices.length; cr++) {
+      var existingRow = timelineRows[parentRow.childRowIndices[cr]];
+      if (existingRow.name === child.name) {
+        existingRow.spanIndices.push(childIdx);
+        addDescendantRows(childIdx, existingRow);
+        found = true;
+        break;
+      }
+    }
+    if (false === found) {
+      var crIdx = buildRowsForSpan(childIdx, parentRow.depth + 1);
+      parentRow.childRowIndices.push(crIdx);
+    }
+  }
+}
+
 /* ===== Get node display name ===== */
 function getNodeName(nodeId) {
   if (!nodeId) return '-';
@@ -494,9 +616,11 @@ function analyze() {
 
     flatSpans = [];
     selectedSpanIdx = null;
+    timelineRows = [];
     flattenSpans(rootSpan, 0, -1);
     buildNodeColorMap();
     rebaseShardSpans();
+    buildRows();
     renderAll();
   } catch (e) {
     ['summary-section', 'timeline-section', 'detail-section'].forEach(function(id) {
@@ -592,7 +716,7 @@ function renderSummary() {
 
 /* ===== Timeline / Gantt Chart ===== */
 function renderTimeline() {
-  if (flatSpans.length === 0) {
+  if (timelineRows.length === 0) {
     document.getElementById('timeline-section').classList.add('hidden');
     return;
   }
@@ -625,7 +749,7 @@ function renderTimeline() {
   var barH = 24;
   var barGap = 4;
   var width = Math.max(700, chartEl.clientWidth) - margin.left - margin.right;
-  var height = flatSpans.length * (barH + barGap) + margin.top + margin.bottom;
+  var height = timelineRows.length * (barH + barGap) + margin.top + margin.bottom;
 
   var svg = d3.select(chartEl).append('svg')
     .attr('width', width + margin.left + margin.right)
@@ -639,56 +763,104 @@ function renderTimeline() {
   ticks.forEach(function(t) {
     g.append('line')
       .attr('x1', x(t)).attr('y1', 0)
-      .attr('x2', x(t)).attr('y2', flatSpans.length * (barH + barGap))
+      .attr('x2', x(t)).attr('y2', timelineRows.length * (barH + barGap))
       .attr('stroke', 'currentColor').attr('stroke-opacity', 0.1);
   });
 
-  // Draw spans
-  flatSpans.forEach(function(span, i) {
-    var y = i * (barH + barGap);
-    var x0 = x(span.startNanos);
-    var x1 = x(span.stopNanos);
-    var w = Math.max(2, x1 - x0);
-    var col = getSpanColor(span.name);
-    var indent = span.depth * indentSize;
+  // Draw rows
+  timelineRows.forEach(function(row, rowIndex) {
+    var y = rowIndex * (barH + barGap);
+    var col = getSpanColor(row.name);
+    var indent = row.depth * indentSize;
+    var isMerged = row.spanIndices.length > 1;
 
-    var rowGroup = g.append('g').attr('class', 'span-row').attr('data-idx', i);
+    var rowGroup = g.append('g').attr('class', 'span-row').attr('data-row', rowIndex);
 
-    // Node color background stripe (subtle)
-    if (span.nodeId && nodeColorMap[span.nodeId] != null) {
-      var nc = nodeColorPalette[nodeColorMap[span.nodeId]];
+    // Node color background stripe — use the first span's node for the stripe
+    var firstSpan = flatSpans[row.spanIndices[0]];
+    if (firstSpan.nodeId && nodeColorMap[firstSpan.nodeId] != null) {
+      var nc = nodeColorPalette[nodeColorMap[firstSpan.nodeId]];
       rowGroup.append('rect')
         .attr('x', -margin.left).attr('y', y - 1)
         .attr('width', width + margin.left + margin.right).attr('height', barH + 2)
         .attr('fill', nc.fill).attr('opacity', 0.5);
     }
 
-    // Span bar
-    rowGroup.append('rect')
-      .attr('class', 'span-bar')
-      .attr('x', x0).attr('y', y).attr('width', w).attr('height', barH)
-      .attr('fill', col.fill).attr('stroke', col.stroke).attr('stroke-width', 1).attr('rx', 3)
-      .attr('opacity', 0.85);
+    // Draw one bar per span in this row
+    row.spanIndices.forEach(function(spanIdx) {
+      var span = flatSpans[spanIdx];
+      var x0 = x(span.startNanos);
+      var x1 = x(span.stopNanos);
+      var w = Math.max(2, x1 - x0);
 
-    // Duration label on bar (if wide enough)
-    if (w > 60) {
-      rowGroup.append('text')
-        .attr('x', x0 + w / 2).attr('y', y + barH / 2)
-        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-        .attr('fill', col.text).attr('font-size', 10)
-        .style('pointer-events', 'none')
-        .text(fmtNanos(span.durationNanos));
+      var barGroup = rowGroup.append('g').attr('class', 'span-bar-group');
+
+      barGroup.append('rect')
+        .attr('class', 'span-bar')
+        .attr('x', x0).attr('y', y).attr('width', w).attr('height', barH)
+        .attr('fill', col.fill).attr('stroke', col.stroke).attr('stroke-width', 1).attr('rx', 3)
+        .attr('opacity', 0.85);
+
+      // Duration label on bar (if wide enough)
+      if (w > 60) {
+        barGroup.append('text')
+          .attr('x', x0 + w / 2).attr('y', y + barH / 2)
+          .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+          .attr('fill', col.text).attr('font-size', 10)
+          .style('pointer-events', 'none')
+          .text(fmtNanos(span.durationNanos));
+      }
+
+      // Shard label above bar for merged rows (if wide enough)
+      if (isMerged && span.shard && w > 30) {
+        barGroup.append('text')
+          .attr('x', x0 + w / 2).attr('y', y - 2)
+          .attr('text-anchor', 'middle').attr('dominant-baseline', 'auto')
+          .attr('fill', 'currentColor').attr('font-size', 8).attr('opacity', 0.5)
+          .style('pointer-events', 'none')
+          .text(span.shard);
+      }
+
+      // Click/hover for each individual bar targets its specific span
+      barGroup.style('cursor', 'pointer')
+        .on('click', function() { selectSpan(spanIdx); })
+        .on('mousemove', function(evt) {
+          var detailKeys = Object.keys(span.details);
+          var detailHtml = '';
+          if (detailKeys.length > 0) {
+            detailHtml = '<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">';
+            detailKeys.forEach(function(k) {
+              detailHtml += '<div class="tt-row"><span class="tt-label">' + escapeHtml(k) + ':</span><span>' +
+                escapeHtml(String(span.details[k])) + '</span></div>';
+            });
+            detailHtml += '</div>';
+          }
+          showTooltip(evt,
+            '<div class="tt-title">' + escapeHtml(span.name) + '</div>' +
+            (span.shard ? '<div class="tt-row"><span class="tt-label">Shard:</span><span>' + escapeHtml(span.shard) + '</span></div>' : '') +
+            (span.nodeId ? '<div class="tt-row"><span class="tt-label">Node:</span><span>' + escapeHtml(getNodeName(span.nodeId)) + '</span></div>' : '') +
+            '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + fmtNanos(span.durationNanos) + '</span></div>' +
+            '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtNanos(span.startNanos) + '</span></div>' +
+            '<div class="tt-row"><span class="tt-label">Stop:</span><span>' + fmtNanos(span.stopNanos) + '</span></div>' +
+            detailHtml
+          );
+        })
+        .on('mouseleave', hideTooltip);
+    });
+
+    // Row label (indented) — for merged rows, show count badge
+    var labelText = row.name;
+    if (isMerged) {
+      labelText += ' (' + row.spanIndices.length + ')';
+    } else {
+      var singleSpan = flatSpans[row.spanIndices[0]];
+      if (singleSpan.shard) labelText += ' [' + singleSpan.shard + ']';
+      else if (singleSpan.nodeId) labelText += ' @ ' + getNodeName(singleSpan.nodeId);
     }
 
-    // Row label (indented)
-    var labelParts = [span.name];
-    if (span.shard) labelParts.push('[' + span.shard + ']');
-    else if (span.nodeId) labelParts.push('@ ' + getNodeName(span.nodeId));
-    var label = labelParts.join(' ');
-
     // Tree connector lines
-    if (span.depth > 0) {
-      var connectorX = -margin.left + 8 + (span.depth - 1) * indentSize + indentSize / 2;
+    if (row.depth > 0) {
+      var connectorX = -margin.left + 8 + (row.depth - 1) * indentSize + indentSize / 2;
       rowGroup.append('line')
         .attr('x1', connectorX).attr('y1', y)
         .attr('x2', connectorX).attr('y2', y + barH / 2)
@@ -704,38 +876,13 @@ function renderTimeline() {
       .attr('text-anchor', 'start').attr('dominant-baseline', 'middle')
       .attr('fill', 'currentColor').attr('font-size', 11)
       .style('cursor', 'pointer')
-      .text(label.length > 28 ? label.slice(0, 26) + '..' : label);
-
-    // Click handler
-    rowGroup.style('cursor', 'pointer')
-      .on('click', function() { selectSpan(i); })
-      .on('mousemove', function(evt) {
-        var detailKeys = Object.keys(span.details);
-        var detailHtml = '';
-        if (detailKeys.length > 0) {
-          detailHtml = '<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">';
-          detailKeys.forEach(function(k) {
-            detailHtml += '<div class="tt-row"><span class="tt-label">' + escapeHtml(k) + ':</span><span>' +
-              escapeHtml(String(span.details[k])) + '</span></div>';
-          });
-          detailHtml += '</div>';
-        }
-        showTooltip(evt,
-          '<div class="tt-title">' + escapeHtml(span.name) + '</div>' +
-          (span.shard ? '<div class="tt-row"><span class="tt-label">Shard:</span><span>' + escapeHtml(span.shard) + '</span></div>' : '') +
-          (span.nodeId ? '<div class="tt-row"><span class="tt-label">Node:</span><span>' + escapeHtml(getNodeName(span.nodeId)) + '</span></div>' : '') +
-          '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + fmtNanos(span.durationNanos) + '</span></div>' +
-          '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtNanos(span.startNanos) + '</span></div>' +
-          '<div class="tt-row"><span class="tt-label">Stop:</span><span>' + fmtNanos(span.stopNanos) + '</span></div>' +
-          detailHtml
-        );
-      })
-      .on('mouseleave', hideTooltip);
+      .text(labelText.length > 32 ? labelText.slice(0, 30) + '..' : labelText)
+      .on('click', function() { selectSpan(row.spanIndices[0]); });
   });
 
   // X axis
   var xAxis = d3.axisBottom(x).ticks(8).tickFormat(function(d) { return fmtNanos(d - minNanos); });
-  g.append('g').attr('transform', 'translate(0,' + flatSpans.length * (barH + barGap) + ')')
+  g.append('g').attr('transform', 'translate(0,' + timelineRows.length * (barH + barGap) + ')')
     .call(xAxis).selectAll('text').attr('fill', 'currentColor');
   g.selectAll('.domain, .tick line').attr('stroke', 'currentColor');
 }
@@ -746,9 +893,14 @@ function selectSpan(idx) {
   var span = flatSpans[idx];
   document.getElementById('detail-section').classList.remove('hidden');
 
-  // Highlight selected row
+  // Highlight the row containing this span
   d3.selectAll('.span-row').classed('selected', false);
-  d3.select('.span-row[data-idx="' + idx + '"]').classed('selected', true);
+  for (var r = 0; r < timelineRows.length; r++) {
+    if (timelineRows[r].spanIndices.indexOf(idx) >= 0) {
+      d3.select('.span-row[data-row="' + r + '"]').classed('selected', true);
+      break;
+    }
+  }
 
   // Stats cards
   var pctOfTotal = flatSpans[0].durationNanos > 0
