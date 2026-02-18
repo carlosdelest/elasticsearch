@@ -119,6 +119,24 @@ public final class ActiveShardSearchTracer implements ShardSearchTracer {
     }
 
     @Override
+    public void attachSpan(TraceSpan span) {
+        if (false == anchorSet) {
+            return;
+        }
+        SpanBuilder parent = spanStack.peek();
+        if (parent != null) {
+            parent.children.add(span);
+        } else {
+            completedSpans.add(span);
+        }
+    }
+
+    @Override
+    public long getNanoAnchor() {
+        return nanoAnchor;
+    }
+
+    @Override
     @Nullable
     public SearchTraceResult.ShardTraceResult buildResult() {
         if (false == anchorSet) {

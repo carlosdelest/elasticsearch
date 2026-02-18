@@ -104,9 +104,15 @@ public final class ActiveSearchTracer implements SearchTracer {
             return;
         }
         // Register the shard's node anchor if not already present
-        nodeAnchors.putIfAbsent(result.getNodeId(), new SearchTraceResult.NodeAnchor(result.getNodeName(), result.getWallClockAnchorMillis()));
+        nodeAnchors.putIfAbsent(
+            result.getNodeId(),
+            new SearchTraceResult.NodeAnchor(result.getNodeName(), result.getWallClockAnchorMillis())
+        );
 
-        // Wrap shard spans as children of the current phase
+        // Attach shard spans as children of the current coordinator phase. The spans
+        // retain their original offsets relative to the data node's nano anchor — the
+        // visualization tool is responsible for rebasing them into the coordinator's
+        // timeline using the wall-clock anchors in the trace result.
         SpanBuilder currentPhase = spanStack.peek();
         if (currentPhase != null) {
             for (TraceSpan shardSpan : result.getSpans()) {

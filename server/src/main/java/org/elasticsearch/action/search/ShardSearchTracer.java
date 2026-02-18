@@ -50,6 +50,14 @@ public interface ShardSearchTracer extends Writeable {
         public void recordDetail(String key, Object value) {}
 
         @Override
+        public void attachSpan(TraceSpan span) {}
+
+        @Override
+        public long getNanoAnchor() {
+            return 0;
+        }
+
+        @Override
         @Nullable
         public SearchTraceResult.ShardTraceResult buildResult() {
             return null;
@@ -103,6 +111,25 @@ public interface ShardSearchTracer extends Writeable {
      * @param value the detail value
      */
     void recordDetail(String key, Object value);
+
+    /**
+     * Attach a pre-built {@link TraceSpan} as a child of the currently open span. This is used
+     * when timing is captured on a different thread (e.g. per-slice execution in concurrent search)
+     * and the span is constructed on the main thread after the work completes.
+     *
+     * @param span the pre-built span to attach
+     */
+    void attachSpan(TraceSpan span);
+
+    /**
+     * Returns the nano anchor used to compute span offsets. This allows external callers
+     * (e.g. concurrent slice timing in {@code ContextIndexSearcher}) to capture raw
+     * {@code System.nanoTime()} values and compute offsets relative to the same base.
+     * Returns 0 for the NOOP implementation.
+     *
+     * @return the nano anchor, or 0 if tracing is not active
+     */
+    long getNanoAnchor();
 
     /**
      * Build the final immutable shard trace result. Returns null if tracing produced no data.

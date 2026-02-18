@@ -1539,6 +1539,10 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
             parseSource(context, request.source(), includeAggregations);
             shardTracer.stopSpan("parse_source");
 
+            // Wire the shard tracer into the searcher so Lucene-level operations
+            // (rewrite, createWeight, per-slice execution) are traced.
+            context.searcher().setShardTracer(shardTracer);
+
             // if the from and size are still not set, default them
             if (context.from() == -1) {
                 context.from(DEFAULT_FROM);

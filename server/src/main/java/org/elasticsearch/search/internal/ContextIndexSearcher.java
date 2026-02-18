@@ -38,6 +38,8 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.automaton.ByteRunAutomaton;
+import org.elasticsearch.action.search.ShardSearchTracer;
+import org.elasticsearch.action.search.TraceSpan;
 import org.elasticsearch.common.lucene.search.BitsIterator;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.search.dfs.AggregatedDfs;
@@ -52,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
@@ -77,6 +80,8 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
 
     private AggregatedDfs aggregatedDfs;
     private QueryProfiler profiler;
+    private ShardSearchTracer shardTracer = ShardSearchTracer.NOOP;
+    private boolean inCreateWeight;
     private final MutableQueryTimeout cancellable;
 
     private final boolean hasExecutor;
@@ -167,6 +172,14 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
     }
 
     /**
+     * Set the shard-level search tracer for capturing Lucene-level timing spans.
+     * Must be called before query execution begins. Analogous to {@link #setProfiler(QueryProfiler)}.
+     */
+    public void setShardTracer(ShardSearchTracer shardTracer) {
+        this.shardTracer = shardTracer;
+    }
+
+    /**
      * Add a {@link Runnable} that will be run on a regular basis while accessing documents in the
      * DirectoryReader but also while collecting them and check for query cancellation or timeout.
      */
@@ -216,6 +229,7 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
          * Overriding allows us to customize this limit and take full control by using our own
          * visitor to ensure the query does not exceed our allowed limits.
          */
+        shardTracer.startSpan("lucene_rewrite");
         try {
             Query query = original;
             for (Query rewrittenQuery = query.rewrite(this); rewrittenQuery != query; rewrittenQuery = query.rewrite(this)) {
@@ -229,6 +243,7 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
         } catch (TooManyClauses e) {
             throw new IllegalArgumentException("Query rewrite failed: too many clauses", e);
         } finally {
+            shardTracer.stopSpan("lucene_rewrite");
             if (profiler != null) {
                 profiler.stopAndAddRewriteTime(rewriteTimer);
             }
@@ -237,23 +252,37 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
 
     @Override
     public Weight createWeight(Query query, ScoreMode scoreMode, float boost) throws IOException {
-        if (profiler != null) {
-            // createWeight() is called for each query in the tree, so we tell the queryProfiler
-            // each invocation so that it can build an internal representation of the query
-            // tree
-            QueryProfileBreakdown profile = profiler.getQueryBreakdown(query);
-            Timer timer = profile.getNewTimer(QueryTimingType.CREATE_WEIGHT);
-            timer.start();
-            final Weight weight;
-            try {
-                weight = query.createWeight(this, scoreMode, boost);
-            } finally {
-                timer.stop();
-                profiler.pollLastElement();
+        // Guard against recursive calls — only trace the top-level invocation.
+        // Lucene's composite queries call searcher.createWeight(subquery, ...) recursively.
+        boolean topLevel = false == inCreateWeight;
+        if (topLevel) {
+            inCreateWeight = true;
+            shardTracer.startSpan("create_weight");
+        }
+        try {
+            if (profiler != null) {
+                // createWeight() is called for each query in the tree, so we tell the queryProfiler
+                // each invocation so that it can build an internal representation of the query
+                // tree
+                QueryProfileBreakdown profile = profiler.getQueryBreakdown(query);
+                Timer timer = profile.getNewTimer(QueryTimingType.CREATE_WEIGHT);
+                timer.start();
+                final Weight weight;
+                try {
+                    weight = query.createWeight(this, scoreMode, boost);
+                } finally {
+                    timer.stop();
+                    profiler.pollLastElement();
+                }
+                return new ProfileWeight(query, weight, profile);
+            } else {
+                return super.createWeight(query, scoreMode, boost);
             }
-            return new ProfileWeight(query, weight, profile);
-        } else {
-            return super.createWeight(query, scoreMode, boost);
+        } finally {
+            if (topLevel) {
+                shardTracer.stopSpan("create_weight");
+                inCreateWeight = false;
+            }
         }
     }
 
@@ -358,15 +387,24 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
 
     /**
      * Same implementation as the default one in Lucene, with an additional call to postCollection in cased there are no segments.
-     * The rest is a plain copy from Lucene.
+     * The rest is a plain copy from Lucene, with added trace instrumentation for per-slice timing.
      */
     private <C extends Collector, T> T search(Weight weight, CollectorManager<C, T> collectorManager, C firstCollector) throws IOException {
         LeafSlice[] leafSlices = getSlices();
         if (leafSlices.length == 0) {
             assert leafContexts.isEmpty();
             doAggregationPostCollection(firstCollector);
-            return collectorManager.reduce(Collections.singletonList(firstCollector));
+            shardTracer.recordDetail("segments", 0);
+            shardTracer.recordDetail("slices", 0);
+            shardTracer.startSpan("collector_reduce");
+            try {
+                return collectorManager.reduce(Collections.singletonList(firstCollector));
+            } finally {
+                shardTracer.stopSpan("collector_reduce");
+            }
         } else {
+            shardTracer.recordDetail("segments", leafContexts.size());
+            shardTracer.recordDetail("slices", leafSlices.length);
             final List<C> collectors = new ArrayList<>(leafSlices.length);
             collectors.add(firstCollector);
             final ScoreMode scoreMode = firstCollector.scoreMode();
@@ -377,17 +415,54 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
                     throw new IllegalStateException("CollectorManager does not always produce collectors with the same score mode");
                 }
             }
+            // Capture per-slice timing. The callables run on different threads, so we cannot call
+            // shardTracer methods from them. Instead, each slice captures raw System.nanoTime()
+            // before/after, and we build TraceSpan objects on the main thread after invokeAll().
+            final long nanoAnchor = shardTracer.getNanoAnchor();
+            final long[] sliceStartNanos = new long[leafSlices.length];
+            final long[] sliceStopNanos = new long[leafSlices.length];
+            final int[] sliceSegmentCounts = new int[leafSlices.length];
             final List<Callable<C>> listTasks = new ArrayList<>(leafSlices.length);
             for (int i = 0; i < leafSlices.length; ++i) {
                 final LeafReaderContextPartition[] leaves = leafSlices[i].partitions;
                 final C collector = collectors.get(i);
+                final int sliceIndex = i;
+                sliceSegmentCounts[sliceIndex] = leaves.length;
                 listTasks.add(() -> {
-                    search(leaves, weight, collector);
-                    return collector;
+                    sliceStartNanos[sliceIndex] = System.nanoTime();
+                    try {
+                        search(leaves, weight, collector);
+                        return collector;
+                    } finally {
+                        sliceStopNanos[sliceIndex] = System.nanoTime();
+                    }
                 });
             }
             List<C> collectedCollectors = getTaskExecutor().invokeAll(listTasks);
-            return collectorManager.reduce(collectedCollectors);
+            // Build per-slice TraceSpan objects on the main thread and attach to the current span
+            for (int i = 0; i < leafSlices.length; i++) {
+                if (sliceStopNanos[i] > 0) {
+                    long startOffset = sliceStartNanos[i] - nanoAnchor;
+                    long stopOffset = sliceStopNanos[i] - nanoAnchor;
+                    shardTracer.attachSpan(
+                        new TraceSpan(
+                            "slice_" + i,
+                            null,
+                            null,
+                            startOffset,
+                            stopOffset,
+                            Map.of("segments", sliceSegmentCounts[i]),
+                            List.of()
+                        )
+                    );
+                }
+            }
+            shardTracer.startSpan("collector_reduce");
+            try {
+                return collectorManager.reduce(collectedCollectors);
+            } finally {
+                shardTracer.stopSpan("collector_reduce");
+            }
         }
     }
 

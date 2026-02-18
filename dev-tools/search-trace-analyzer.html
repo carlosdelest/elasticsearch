@@ -284,13 +284,22 @@ var spanColors = {
   shard_rewrite:        { fill: 'rgba(241,196,15,0.4)',    stroke: '#f1c40f', text: '#333' },
   shard_query:          { fill: 'rgba(74,144,217,0.5)',    stroke: '#4a90d9', text: '#fff' },
   shard_fetch:          { fill: 'rgba(155,89,182,0.5)',    stroke: '#9b59b6', text: '#fff' },
+  // Lucene-level phases (inside shard_query)
+  lucene_rewrite:       { fill: 'rgba(241,196,15,0.35)',   stroke: '#d4ac0d', text: '#333' },
+  create_weight:        { fill: 'rgba(52,152,219,0.45)',   stroke: '#2e86c1', text: '#fff' },
+  create_search_context:{ fill: 'rgba(149,165,166,0.5)',   stroke: '#95a5a6', text: '#fff' },
+  parse_source:         { fill: 'rgba(149,165,166,0.4)',   stroke: '#7f8c8d', text: '#fff' },
+  collector_reduce:     { fill: 'rgba(232,168,56,0.45)',   stroke: '#d4a017', text: '#fff' },
   // Default
   _default:             { fill: 'rgba(46,204,113,0.7)',    stroke: '#2ecc71', text: '#fff' }
 };
 
 function getSpanColor(name) {
   if (spanColors[name]) return spanColors[name];
-  // Check prefix matches
+  // Check prefix matches for slice spans (slice_0, slice_1, etc.)
+  if (name && name.indexOf('slice_') === 0) {
+    return { fill: 'rgba(46,204,113,0.5)', stroke: '#27ae60', text: '#fff' };
+  }
   if (name && name.indexOf('shard_') === 0) {
     return { fill: 'rgba(46,204,113,0.5)', stroke: '#2ecc71', text: '#fff' };
   }
@@ -341,24 +350,100 @@ function flattenSpans(span, depth, parentIdx) {
   return idx;
 }
 
-/* ===== Compute absolute times for multi-node alignment ===== */
-function computeAbsoluteTimes() {
-  var nodes = traceData.nodes || {};
+/* ===== Rebase shard spans into the coordinator timeline =====
+ *
+ * Shard spans arrive with nano offsets relative to their data node's
+ * System.nanoTime() anchor, which is incomparable with the coordinator's
+ * anchor. We detect "foreign" children of coordinator phases (spans whose
+ * node_id differs from their parent or whose shard field is set) and
+ * rebase each shard group so that its bounding box is centered within
+ * the parent coordinator phase's time extent.
+ *
+ * Internal relative timing between spans within the same shard group
+ * (e.g. shard_rewrite -> shard_query) is preserved exactly.
+ */
+function rebaseShardSpans() {
+  // Identify the coordinator node id from the root span
+  var coordNodeId = flatSpans.length > 0 ? flatSpans[0].nodeId : null;
+
+  // Walk every span that is a direct child of a coordinator phase
   for (var i = 0; i < flatSpans.length; i++) {
-    var span = flatSpans[i];
-    var anchor = 0;
-    if (span.nodeId && nodes[span.nodeId]) {
-      anchor = nodes[span.nodeId].wall_clock_anchor_millis || 0;
-    } else {
-      // Use first node anchor as fallback
-      var keys = Object.keys(nodes);
-      if (keys.length > 0) {
-        anchor = nodes[keys[0]].wall_clock_anchor_millis || 0;
+    var parent = flatSpans[i];
+    if (parent.childIndices.length === 0) continue;
+
+    // Only process coordinator-level phases (node_id matches coordinator
+    // or node_id is null). Shard spans themselves can have children but
+    // those are already in the same nano domain — no rebasing needed.
+    if (parent.nodeId !== coordNodeId && parent.nodeId != null) continue;
+
+    // Group foreign children by (nodeId + shard) key. A "foreign" child
+    // is one whose node_id differs from the coordinator or whose shard
+    // field is non-null.
+    var groups = {};
+    var hasShardChildren = false;
+    for (var c = 0; c < parent.childIndices.length; c++) {
+      var childIdx = parent.childIndices[c];
+      var child = flatSpans[childIdx];
+      var isForeign = (child.shard != null) ||
+                      (child.nodeId != null && child.nodeId !== coordNodeId);
+      if (false === isForeign) continue;
+
+      hasShardChildren = true;
+      var groupKey = (child.nodeId || '') + '|' + (child.shard || '');
+      if (false === groups.hasOwnProperty(groupKey)) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(childIdx);
+    }
+
+    if (false === hasShardChildren) continue;
+
+    // For each shard group, compute bounding box and center within parent
+    var parentStart = parent.startNanos;
+    var parentStop = parent.stopNanos;
+    var parentMid = (parentStart + parentStop) / 2;
+
+    var groupKeys = Object.keys(groups);
+    for (var g = 0; g < groupKeys.length; g++) {
+      var indices = groups[groupKeys[g]];
+      // Collect all spans in this group (including their descendants)
+      var allInGroup = collectDescendants(indices);
+
+      // Compute bounding box of top-level spans in the group
+      var minStart = Infinity, maxStop = -Infinity;
+      for (var s = 0; s < allInGroup.length; s++) {
+        var sp = flatSpans[allInGroup[s]];
+        if (sp.startNanos < minStart) minStart = sp.startNanos;
+        if (sp.stopNanos > maxStop) maxStop = sp.stopNanos;
+      }
+
+      var shardDuration = maxStop - minStart;
+      var delta = (parentMid - shardDuration / 2) - minStart;
+
+      // Apply delta to every span in the group (top-level + descendants)
+      for (var s = 0; s < allInGroup.length; s++) {
+        var sp = flatSpans[allInGroup[s]];
+        sp.startNanos += delta;
+        sp.stopNanos += delta;
+        // durationNanos stays the same (stop - start offset is unchanged)
       }
     }
-    span.absoluteStartMs = anchor + span.startNanos / 1e6;
-    span.absoluteStopMs = anchor + span.stopNanos / 1e6;
   }
+}
+
+/* Collect a set of span indices and all their descendants */
+function collectDescendants(indices) {
+  var result = [];
+  var stack = indices.slice();
+  while (stack.length > 0) {
+    var idx = stack.pop();
+    result.push(idx);
+    var children = flatSpans[idx].childIndices;
+    for (var i = 0; i < children.length; i++) {
+      stack.push(children[i]);
+    }
+  }
+  return result;
 }
 
 /* ===== Build node color map ===== */
@@ -411,7 +496,7 @@ function analyze() {
     selectedSpanIdx = null;
     flattenSpans(rootSpan, 0, -1);
     buildNodeColorMap();
-    computeAbsoluteTimes();
+    rebaseShardSpans();
     renderAll();
   } catch (e) {
     ['summary-section', 'timeline-section', 'detail-section'].forEach(function(id) {
@@ -735,7 +820,14 @@ function selectSpan(idx) {
   document.getElementById('detail-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-/* ===== Example Data ===== */
+/* ===== Example Data =====
+ * The example simulates a real multi-node trace where each data node's
+ * shard spans have nano offsets from a completely different System.nanoTime()
+ * origin. The coordinator uses offsets from 0, while data-1 spans start
+ * around 500_000_000_000 (500s into its JVM lifetime) and data-2 around
+ * 800_000_000_000. The rebase logic should center each shard group within
+ * its parent coordinator phase, making the Gantt chart readable.
+ */
 function loadExample() {
   var example = {
     "trace": {
@@ -775,60 +867,141 @@ function loadExample() {
                 "name": "shard_rewrite",
                 "node_id": "node_def456",
                 "shard": "my-index[0]",
-                "start_offset_nanos": 200000,
-                "stop_offset_nanos": 450000
+                "start_offset_nanos": 500000200000,
+                "stop_offset_nanos": 500000450000
               },
               {
                 "name": "shard_query",
                 "node_id": "node_def456",
                 "shard": "my-index[0]",
-                "start_offset_nanos": 500000,
-                "stop_offset_nanos": 18000000,
+                "start_offset_nanos": 500000500000,
+                "stop_offset_nanos": 500017500000,
                 "details": {
                   "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
                   "rewritten_query": "TermQuery(status:200)",
                   "total_hits": 12847,
                   "max_score": 1.0
-                }
+                },
+                "children": [
+                  {
+                    "name": "lucene_rewrite",
+                    "start_offset_nanos": 500000600000,
+                    "stop_offset_nanos": 500001100000
+                  },
+                  {
+                    "name": "create_weight",
+                    "start_offset_nanos": 500001150000,
+                    "stop_offset_nanos": 500001800000
+                  },
+                  {
+                    "name": "slice_0",
+                    "start_offset_nanos": 500001900000,
+                    "stop_offset_nanos": 500010500000,
+                    "details": { "segments": 3 }
+                  },
+                  {
+                    "name": "slice_1",
+                    "start_offset_nanos": 500001950000,
+                    "stop_offset_nanos": 500012200000,
+                    "details": { "segments": 2 }
+                  },
+                  {
+                    "name": "collector_reduce",
+                    "start_offset_nanos": 500012300000,
+                    "stop_offset_nanos": 500012800000
+                  }
+                ]
               },
               {
                 "name": "shard_rewrite",
                 "node_id": "node_ghi789",
                 "shard": "my-index[1]",
-                "start_offset_nanos": 250000,
-                "stop_offset_nanos": 550000
+                "start_offset_nanos": 800000250000,
+                "stop_offset_nanos": 800000550000
               },
               {
                 "name": "shard_query",
                 "node_id": "node_ghi789",
                 "shard": "my-index[1]",
-                "start_offset_nanos": 600000,
-                "stop_offset_nanos": 20000000,
+                "start_offset_nanos": 800000600000,
+                "stop_offset_nanos": 800019400000,
                 "details": {
                   "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
                   "rewritten_query": "TermQuery(status:200)",
                   "total_hits": 9421,
                   "max_score": 1.0
-                }
+                },
+                "children": [
+                  {
+                    "name": "lucene_rewrite",
+                    "start_offset_nanos": 800000700000,
+                    "stop_offset_nanos": 800001300000
+                  },
+                  {
+                    "name": "create_weight",
+                    "start_offset_nanos": 800001350000,
+                    "stop_offset_nanos": 800002100000
+                  },
+                  {
+                    "name": "slice_0",
+                    "start_offset_nanos": 800002200000,
+                    "stop_offset_nanos": 800015800000,
+                    "details": { "segments": 4 }
+                  },
+                  {
+                    "name": "collector_reduce",
+                    "start_offset_nanos": 800015900000,
+                    "stop_offset_nanos": 800016500000
+                  }
+                ]
               },
               {
                 "name": "shard_rewrite",
                 "node_id": "node_def456",
                 "shard": "my-index[2]",
-                "start_offset_nanos": 300000,
-                "stop_offset_nanos": 650000
+                "start_offset_nanos": 500020300000,
+                "stop_offset_nanos": 500020650000
               },
               {
                 "name": "shard_query",
                 "node_id": "node_def456",
                 "shard": "my-index[2]",
-                "start_offset_nanos": 700000,
-                "stop_offset_nanos": 15000000,
+                "start_offset_nanos": 500020700000,
+                "stop_offset_nanos": 500034700000,
                 "details": {
                   "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
                   "total_hits": 7832,
                   "max_score": 1.0
-                }
+                },
+                "children": [
+                  {
+                    "name": "lucene_rewrite",
+                    "start_offset_nanos": 500020800000,
+                    "stop_offset_nanos": 500021200000
+                  },
+                  {
+                    "name": "create_weight",
+                    "start_offset_nanos": 500021250000,
+                    "stop_offset_nanos": 500021900000
+                  },
+                  {
+                    "name": "slice_0",
+                    "start_offset_nanos": 500022000000,
+                    "stop_offset_nanos": 500031500000,
+                    "details": { "segments": 3 }
+                  },
+                  {
+                    "name": "slice_1",
+                    "start_offset_nanos": 500022100000,
+                    "stop_offset_nanos": 500029800000,
+                    "details": { "segments": 2 }
+                  },
+                  {
+                    "name": "collector_reduce",
+                    "start_offset_nanos": 500031600000,
+                    "stop_offset_nanos": 500032100000
+                  }
+                ]
               }
             ]
           },
@@ -848,15 +1021,15 @@ function loadExample() {
                 "name": "shard_rewrite",
                 "node_id": "node_def456",
                 "shard": "my-index[0]",
-                "start_offset_nanos": 27100000,
-                "stop_offset_nanos": 27400000
+                "start_offset_nanos": 500040100000,
+                "stop_offset_nanos": 500040400000
               },
               {
                 "name": "shard_fetch",
                 "node_id": "node_def456",
                 "shard": "my-index[0]",
-                "start_offset_nanos": 27500000,
-                "stop_offset_nanos": 34000000,
+                "start_offset_nanos": 500040500000,
+                "stop_offset_nanos": 500047000000,
                 "details": {
                   "fetched_docs": 5
                 }
@@ -865,15 +1038,15 @@ function loadExample() {
                 "name": "shard_rewrite",
                 "node_id": "node_ghi789",
                 "shard": "my-index[1]",
-                "start_offset_nanos": 27150000,
-                "stop_offset_nanos": 27500000
+                "start_offset_nanos": 800025150000,
+                "stop_offset_nanos": 800025500000
               },
               {
                 "name": "shard_fetch",
                 "node_id": "node_ghi789",
                 "shard": "my-index[1]",
-                "start_offset_nanos": 27600000,
-                "stop_offset_nanos": 35500000,
+                "start_offset_nanos": 800025600000,
+                "stop_offset_nanos": 800033500000,
                 "details": {
                   "fetched_docs": 3
                 }
@@ -882,15 +1055,15 @@ function loadExample() {
                 "name": "shard_rewrite",
                 "node_id": "node_def456",
                 "shard": "my-index[2]",
-                "start_offset_nanos": 27200000,
-                "stop_offset_nanos": 27600000
+                "start_offset_nanos": 500048200000,
+                "stop_offset_nanos": 500048600000
               },
               {
                 "name": "shard_fetch",
                 "node_id": "node_def456",
                 "shard": "my-index[2]",
-                "start_offset_nanos": 27700000,
-                "stop_offset_nanos": 33000000,
+                "start_offset_nanos": 500048700000,
+                "stop_offset_nanos": 500054000000,
                 "details": {
                   "fetched_docs": 2
                 }
