@@ -1304,8 +1304,8 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                 requestWithDefaultTimeout,
                 mock(SearchShardTask.class),
                 ResultsType.NONE,
-                randomBoolean()
-            )
+                randomBoolean(),
+                    shardTracer)
         ) {
             // the search context should inherit the default timeout
             assertThat(contextWithDefaultTimeout.timeout(), equalTo(TimeValue.timeValueSeconds(5)));
@@ -1331,8 +1331,8 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                 requestWithCustomTimeout,
                 mock(SearchShardTask.class),
                 ResultsType.NONE,
-                randomBoolean()
-            )
+                randomBoolean(),
+                    shardTracer)
         ) {
             // the search context should inherit the query timeout
             assertThat(context.timeout(), equalTo(TimeValue.timeValueSeconds(seconds)));
@@ -1370,7 +1370,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
         );
         try (
             ReaderContext reader = createReaderContext(indexService, indexShard);
-            SearchContext context = service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean())
+            SearchContext context = service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean(), shardTracer)
         ) {
             assertNotNull(context);
         }
@@ -1378,7 +1378,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
         searchSourceBuilder.docValueField("unmapped_field");
         try (
             ReaderContext reader = createReaderContext(indexService, indexShard);
-            SearchContext context = service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean())
+            SearchContext context = service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean(), shardTracer)
         ) {
             assertNotNull(context);
         }
@@ -1387,7 +1387,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
         try (ReaderContext reader = createReaderContext(indexService, indexShard)) {
             IllegalArgumentException ex = expectThrows(
                 IllegalArgumentException.class,
-                () -> service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean())
+                () -> service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean(), shardTracer)
             );
             assertEquals(
                 "Trying to retrieve too many docvalue_fields. Must be less than or equal to: [1] but was [2]. "
@@ -1433,8 +1433,8 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                     request,
                     mock(SearchShardTask.class),
                     ResultsType.NONE,
-                    randomBoolean()
-                )
+                    randomBoolean(),
+                        shardTracer)
             ) {
                 Collection<FieldAndFormat> fields = context.docValuesContext().fields();
                 assertThat(fields, containsInAnyOrder(new FieldAndFormat("field1", null), new FieldAndFormat("field2", null)));
@@ -1482,8 +1482,8 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                     request,
                     mock(SearchShardTask.class),
                     ResultsType.NONE,
-                    randomBoolean()
-                )
+                    randomBoolean(),
+                        shardTracer)
             ) {
                 assertNotNull(context);
             }
@@ -1493,7 +1493,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
             );
             IllegalArgumentException ex = expectThrows(
                 IllegalArgumentException.class,
-                () -> service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean())
+                () -> service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean(), shardTracer)
             );
             assertEquals(
                 "Trying to retrieve too many script_fields. Must be less than or equal to: ["
@@ -1534,7 +1534,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
         );
         try (
             ReaderContext reader = createReaderContext(indexService, indexShard);
-            SearchContext context = service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean())
+            SearchContext context = service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean(), shardTracer)
         ) {
             assertEquals(0, context.scriptFields().fields().size());
         }
@@ -1907,8 +1907,8 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                     shardRequest,
                     mock(SearchShardTask.class),
                     ResultsType.QUERY,
-                    true
-                )
+                    true,
+                        shardTracer)
             ) {
                 check.accept(context.aggregations().factories().context());
             }
@@ -2043,7 +2043,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
         try (ReaderContext reader = createReaderContext(indexService, indexService.getShard(shardId.id()))) {
             NullPointerException e = expectThrows(
                 NullPointerException.class,
-                () -> service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean())
+                () -> service.createContext(reader, request, mock(SearchShardTask.class), ResultsType.NONE, randomBoolean(), shardTracer)
             );
             assertEquals("expected", e.getMessage());
         }
@@ -2678,7 +2678,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
             SearchService service = getInstanceFromNode(SearchService.class);
             SearchShardTask task = new SearchShardTask(0, "type", "action", "description", null, emptyMap());
 
-            try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.DFS, randomBoolean())) {
+            try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.DFS, randomBoolean(), shardTracer)) {
                 assertTrue(searchContext.searcher().hasExecutor());
             }
 
@@ -2689,7 +2689,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                     .setPersistentSettings(Settings.builder().put(SEARCH_WORKER_THREADS_ENABLED.getKey(), false).build())
                     .get();
                 assertTrue(response.isAcknowledged());
-                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.DFS, randomBoolean())) {
+                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.DFS, randomBoolean(), shardTracer)) {
                     assertFalse(searchContext.searcher().hasExecutor());
                 }
             } finally {
@@ -2699,7 +2699,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                     .prepareUpdateSettings(TEST_REQUEST_TIMEOUT, TEST_REQUEST_TIMEOUT)
                     .setPersistentSettings(Settings.builder().putNull(SEARCH_WORKER_THREADS_ENABLED.getKey()).build())
                     .get();
-                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.DFS, randomBoolean())) {
+                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.DFS, randomBoolean(), shardTracer)) {
                     assertTrue(searchContext.searcher().hasExecutor());
                 }
             }
@@ -2744,7 +2744,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
         try (ReaderContext readerContext = createReaderContext(indexService, indexShard)) {
             SearchShardTask task = new SearchShardTask(0, "type", "action", "description", null, emptyMap());
             {
-                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.DFS, true)) {
+                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.DFS, true, shardTracer)) {
                     ContextIndexSearcher searcher = searchContext.searcher();
                     assertTrue(searcher.hasExecutor());
 
@@ -2774,7 +2774,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                 }
             }
             {
-                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.QUERY, true)) {
+                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.QUERY, true, shardTracer)) {
                     ContextIndexSearcher searcher = searchContext.searcher();
                     assertTrue(searcher.hasExecutor());
 
@@ -2804,7 +2804,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                 }
             }
             {
-                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.FETCH, true)) {
+                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.FETCH, true, shardTracer)) {
                     ContextIndexSearcher searcher = searchContext.searcher();
                     assertFalse(searcher.hasExecutor());
                     final long priorExecutorTaskCount = executor.getCompletedTaskCount();
@@ -2820,7 +2820,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                 }
             }
             {
-                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.NONE, true)) {
+                try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.NONE, true, shardTracer)) {
                     ContextIndexSearcher searcher = searchContext.searcher();
                     assertFalse(searcher.hasExecutor());
                     final long priorExecutorTaskCount = executor.getCompletedTaskCount();
@@ -2843,7 +2843,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                     .get();
                 assertTrue(response.isAcknowledged());
                 {
-                    try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.QUERY, true)) {
+                    try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.QUERY, true, shardTracer)) {
                         ContextIndexSearcher searcher = searchContext.searcher();
                         assertFalse(searcher.hasExecutor());
                         final long priorExecutorTaskCount = executor.getCompletedTaskCount();
@@ -2865,7 +2865,7 @@ public class SearchServiceSingleNodeTests extends ESSingleNodeTestCase {
                     .setPersistentSettings(Settings.builder().putNull(QUERY_PHASE_PARALLEL_COLLECTION_ENABLED.getKey()).build())
                     .get();
                 {
-                    try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.QUERY, true)) {
+                    try (SearchContext searchContext = service.createContext(readerContext, request, task, ResultsType.QUERY, true, shardTracer)) {
                         ContextIndexSearcher searcher = searchContext.searcher();
                         assertTrue(searcher.hasExecutor());
 

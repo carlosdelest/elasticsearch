@@ -692,7 +692,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         try (@SuppressWarnings("unused") // withScope call is necessary to instrument search execution
         Releasable scope = tracer.withScope(task);
             Releasable ignored = readerContext.markAsUsed(getKeepAlive(request));
-            SearchContext context = createContext(readerContext, request, task, ResultsType.DFS, false)
+            SearchContext context = createContext(readerContext, request, task, ResultsType.DFS, false, shardSearchTracer)
         ) {
             shardSearchTracer.startSpan("shard_dfs_phase");
             final long beforeQueryTime = System.nanoTime();
@@ -921,12 +921,14 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
      */
     private SearchPhaseResult executeQueryPhase(ShardSearchRequest request, CancellableTask task, ShardSearchTracer shardTracer)
         throws Exception {
+        shardTracer.startSpan("create_context");
         final ReaderContext readerContext = createOrGetReaderContext(request);
         try (
             Releasable scope = tracer.withScope(task);
             Releasable ignored = readerContext.markAsUsed(getKeepAlive(request));
-            SearchContext context = createContext(readerContext, request, task, ResultsType.QUERY, true)
+            SearchContext context = createContext(readerContext, request, task, ResultsType.QUERY, true, shardTracer)
         ) {
+            shardTracer.stopSpan("create_context");
             tracer.startTrace("executeQueryPhase", Map.of());
             shardTracer.startSpan("shard_query");
             final long afterQueryTime;
@@ -1012,7 +1014,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         );
         final Releasable markAsUsed = readerContext.markAsUsed(getKeepAlive(shardSearchRequest));
         runAsync(getExecutor(readerContext.indexShard()), () -> {
-            try (SearchContext searchContext = createContext(readerContext, shardSearchRequest, task, ResultsType.RANK_FEATURE, false)) {
+            try (SearchContext searchContext = createContext(readerContext, shardSearchRequest, task, ResultsType.RANK_FEATURE, false, ShardSearchTracer.NOOP)) {
                 int[] docIds = request.getDocIds();
                 if (docIds == null || docIds.length == 0) {
                     searchContext.rankFeatureResult().shardResult(EMPTY_RESULT);
@@ -1082,7 +1084,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         Executor executor = getExecutor(readerContext.indexShard());
         runAsync(executor, () -> {
             final ShardSearchRequest shardSearchRequest = readerContext.getShardSearchRequest(null);
-            try (SearchContext searchContext = createContext(readerContext, shardSearchRequest, task, ResultsType.QUERY, false);) {
+            try (SearchContext searchContext = createContext(readerContext, shardSearchRequest, task, ResultsType.QUERY, false, ShardSearchTracer.NOOP);) {
                 var opsListener = searchContext.indexShard().getSearchOperationListener();
                 final long beforeQueryTime = System.nanoTime();
                 opsListener.onPreQueryPhase(searchContext);
@@ -1140,8 +1142,10 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
             // fork the execution in the search thread pool
             Executor executor = getExecutor(readerContext.indexShard());
             runAsync(executor, () -> {
+                shardTracer.startSpan("create_context");
                 readerContext.setAggregatedDfs(request.dfs());
-                try (SearchContext searchContext = createContext(readerContext, shardSearchRequest, task, ResultsType.QUERY, true);) {
+                try (SearchContext searchContext = createContext(readerContext, shardSearchRequest, task, ResultsType.QUERY, true, shardTracer);) {
+                    shardTracer.stopSpan("create_context");
                     final QuerySearchResult queryResult;
                     var opsListener = searchContext.indexShard().getSearchOperationListener();
                     final long before = System.nanoTime();
@@ -1218,7 +1222,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
 
         runAsync(getExecutor(readerContext.indexShard()), () -> {
             final ShardSearchRequest shardSearchRequest = readerContext.getShardSearchRequest(null);
-            try (SearchContext searchContext = createContext(readerContext, shardSearchRequest, task, ResultsType.FETCH, false);) {
+            try (SearchContext searchContext = createContext(readerContext, shardSearchRequest, task, ResultsType.FETCH, false, ShardSearchTracer.NOOP);) {
                 var opsListener = readerContext.indexShard().getSearchOperationListener();
                 final long beforeQueryTime = System.nanoTime();
                 final long afterQueryTime;
@@ -1268,7 +1272,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         rewriteAndFetchShardRequest(readerContext.indexShard(), shardSearchRequest, listener.delegateFailure((l, rewritten) -> {
             shardTracer.stopSpan("shard_rewrite");
             runAsync(getExecutor(readerContext.indexShard()), () -> {
-                try (SearchContext searchContext = createContext(readerContext, rewritten, task, ResultsType.FETCH, false)) {
+                try (SearchContext searchContext = createContext(readerContext, rewritten, task, ResultsType.FETCH, false, shardTracer)) {
                     if (request.lastEmittedDoc() != null) {
                         searchContext.scrollContext().lastEmittedDoc = request.lastEmittedDoc();
                     }
@@ -1520,16 +1524,20 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         ShardSearchRequest request,
         CancellableTask task,
         ResultsType resultsType,
-        boolean includeAggregations
-    ) throws IOException {
+        boolean includeAggregations,
+        ShardSearchTracer shardTracer) throws IOException {
         checkCancelled(task);
+        shardTracer.startSpan("create_search_context");
         final DefaultSearchContext context = createSearchContext(readerContext, request, defaultSearchTimeout, resultsType);
         resultsType.addResultsObject(context);
+        shardTracer.stopSpan("create_search_context");
         try {
             if (request.scroll() != null) {
                 context.scrollContext().scroll = request.scroll();
             }
+            shardTracer.startSpan("parse_source");
             parseSource(context, request.source(), includeAggregations);
+            shardTracer.stopSpan("parse_source");
 
             // if the from and size are still not set, default them
             if (context.from() == -1) {

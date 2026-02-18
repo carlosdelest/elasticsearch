@@ -12,6 +12,7 @@ package org.elasticsearch.search;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.elasticsearch.action.search.OnlinePrewarmingService;
+import org.elasticsearch.action.search.ShardSearchTracer;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.core.TimeValue;
@@ -150,9 +151,9 @@ public class MockSearchService extends SearchService {
         ShardSearchRequest request,
         CancellableTask task,
         ResultsType resultsType,
-        boolean includeAggregations
-    ) throws IOException {
-        SearchContext searchContext = super.createContext(readerContext, request, task, resultsType, includeAggregations);
+        boolean includeAggregations,
+        ShardSearchTracer shardTracer) throws IOException {
+        SearchContext searchContext = super.createContext(readerContext, request, task, resultsType, includeAggregations, shardTracer);
         try {
             onCreateSearchContext.accept(searchContext);
         } catch (Exception e) {
