@@ -680,20 +680,20 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
             lifecycle
         );
         final IndexShard shard = getShard(request);
+        ShardSearchTracer shardSearchTracer = getShardSearchTracer(request);
         rewriteAndFetchShardRequest(shard, request, listener.delegateFailure((l, rewritten) -> {
             // fork the execution in the search thread pool
-            ensureAfterSeqNoRefreshed(shard, request, () -> executeDfsPhase(request, task), l);
-        }), "dfs_rewrite");
+            ensureAfterSeqNoRefreshed(shard, request, () -> executeDfsPhase(request, task, shardSearchTracer), l);
+        }), "dfs_rewrite", shardSearchTracer);
     }
 
-    private DfsSearchResult executeDfsPhase(ShardSearchRequest request, SearchShardTask task) throws IOException {
+    private DfsSearchResult executeDfsPhase(ShardSearchRequest request, SearchShardTask task, ShardSearchTracer shardSearchTracer) throws IOException {
         ReaderContext readerContext = createOrGetReaderContext(request);
         try (@SuppressWarnings("unused") // withScope call is necessary to instrument search execution
         Releasable scope = tracer.withScope(task);
             Releasable ignored = readerContext.markAsUsed(getKeepAlive(request));
             SearchContext context = createContext(readerContext, request, task, ResultsType.DFS, false)
         ) {
-            ShardSearchTracer shardSearchTracer = getShardSearchTracer(request);
             shardSearchTracer.startSpan("shard_dfs_phase");
             final long beforeQueryTime = System.nanoTime();
             var opsListener = context.indexShard().getSearchOperationListener();
@@ -766,7 +766,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                 // TODO: i think it makes sense to always do a canMatch here and
                 // return an empty response (not null response) in case canMatch is false?
                 ensureAfterSeqNoRefreshed(shard, orig, () -> executeQueryPhase(orig, task, shardTracer), l);
-            }), "query_rewrite"
+            }), "query_rewrite", shardTracer
         );
     }
 
@@ -1187,7 +1187,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
             if (isExecutorQueuedBeyondPrewarmingFactor(executor, prewarmingMaxPoolFactorThreshold) == false) {
                 onlinePrewarmingService.prewarm(readerContext.indexShard());
             }
-        }), "query_rewrite");
+        }), "query_rewrite", shardTracer);
     }
 
     private Executor getExecutor(IndexShard indexShard) {
@@ -1305,7 +1305,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     throw e;
                 }
             }, wrapFailureListener(releaseCircuitBreakerOnResponse(listener, result -> result), readerContext, markAsUsed));
-        }), "fetch_rewrite");
+        }), "fetch_rewrite", shardTracer);
     }
 
     private ShardSearchTracer getShardSearchTracer(ShardSearchRequest shardSearchRequest) {
@@ -2352,11 +2352,10 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
     }
 
     @SuppressWarnings("unchecked")
-    private void rewriteAndFetchShardRequest(IndexShard shard, ShardSearchRequest request, ActionListener<ShardSearchRequest> listener, String rewritePhase) {
+    private void rewriteAndFetchShardRequest(IndexShard shard, ShardSearchRequest request, ActionListener<ShardSearchRequest> listener, String rewritePhase, ShardSearchTracer shardSearchTracer) {
         // we also do rewrite on the coordinating node (TransportSearchService) but we also need to do it here.
         // AliasFilters and other things may need to be rewritten on the data node, but not per individual shard.
         // These are uncommon-cases, but we are very efficient doing the rewrite here.
-        ShardSearchTracer shardSearchTracer = getShardSearchTracer(request);
         shardSearchTracer.startSpan(rewritePhase);
         Rewriteable.rewriteAndFetch(
             request.getRewriteable(),
