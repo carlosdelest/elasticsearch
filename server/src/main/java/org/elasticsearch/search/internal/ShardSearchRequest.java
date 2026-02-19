@@ -173,7 +173,7 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
             searchRequest.getWaitForCheckpointsTimeout(),
             searchRequest.isForceSyntheticSource(),
             splitShardCountSummary,
-            searchRequest.isTrace()
+            searchRequest.source() != null && searchRequest.source().trace()
         );
         // If allowPartialSearchResults is unset (ie null), the cluster-level default should have been substituted
         // at this stage. Any NPEs in the above are therefore an error in request preparation logic.

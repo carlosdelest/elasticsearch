@@ -689,7 +689,7 @@ public class TransportSearchAction extends HandledTransportAction<SearchRequest,
             ? original.allowPartialSearchResults()
             : searchService.defaultAllowPartialSearchResults();
         final SearchTracer searchTracer;
-        if (original.isTrace()) {
+        if (source != null && source.trace()) {
             var localNode = clusterState.nodes().getLocalNode();
             searchTracer = new ActiveSearchTracer(localNode.getId(), localNode.getName());
         } else {

@@ -278,9 +278,6 @@ public class RestSearchAction extends BaseRestHandler {
         if (request.paramAsBoolean("force_synthetic_source", false)) {
             searchRequest.setForceSyntheticSource(true);
         }
-        if (request.paramAsBoolean("trace", false)) {
-            searchRequest.setTrace(true);
-        }
     }
 
     /**

@@ -122,6 +122,7 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
     public static final ParseField STATS_FIELD = new ParseField("stats");
     public static final ParseField EXT_FIELD = new ParseField("ext");
     public static final ParseField PROFILE_FIELD = new ParseField("profile");
+    public static final ParseField TRACE_FIELD = new ParseField("trace");
     public static final ParseField SEARCH_AFTER = new ParseField("search_after");
     public static final ParseField COLLAPSE = new ParseField("collapse");
     public static final ParseField SLICE = new ParseField("slice");
@@ -204,6 +205,8 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
 
     private boolean profile = false;
 
+    private boolean trace = false;
+
     private CollapseBuilder collapse = null;
 
     private PointInTimeBuilder pointInTimeBuilder = null;
@@ -261,6 +264,9 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
         seqNoAndPrimaryTerm = in.readOptionalBoolean();
         extBuilders = in.readNamedWriteableCollectionAsList(SearchExtBuilder.class);
         profile = in.readBoolean();
+        if (in.getTransportVersion().supports(SearchRequest.SEARCH_TRACE)) {
+            trace = in.readBoolean();
+        }
         searchAfterBuilder = in.readOptionalWriteable(SearchAfterBuilder::new);
         sliceBuilder = in.readOptionalWriteable(SliceBuilder::new);
         collapse = in.readOptionalWriteable(CollapseBuilder::new);
@@ -323,6 +329,9 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
         out.writeOptionalBoolean(seqNoAndPrimaryTerm);
         out.writeNamedWriteableCollection(extBuilders);
         out.writeBoolean(profile);
+        if (out.getTransportVersion().supports(SearchRequest.SEARCH_TRACE)) {
+            out.writeBoolean(trace);
+        }
         out.writeOptionalWriteable(searchAfterBuilder);
         out.writeOptionalWriteable(sliceBuilder);
         out.writeOptionalWriteable(collapse);
@@ -816,6 +825,21 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
     }
 
     /**
+     * Should the search capture detailed timing trace spans. Defaults to {@code false}
+     */
+    public SearchSourceBuilder trace(boolean trace) {
+        this.trace = trace;
+        return this;
+    }
+
+    /**
+     * Return whether to capture detailed timing trace spans for this search request.
+     */
+    public boolean trace() {
+        return trace;
+    }
+
+    /**
      * Gets the bytes representing the rescore builders for this request.
      */
     @SuppressWarnings("rawtypes")
@@ -1255,6 +1279,7 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
         rewrittenBuilder.knnSearch = knnSearch;
         rewrittenBuilder.rankBuilder = rankBuilder;
         rewrittenBuilder.profile = profile;
+        rewrittenBuilder.trace = trace;
         rewrittenBuilder.subSearchSourceBuilders = subSearchSourceBuilders;
         rewrittenBuilder.rescoreBuilders = rescoreBuilders;
         rewrittenBuilder.scriptFields = scriptFields;
@@ -1430,6 +1455,8 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
                     searchUsage.trackSectionUsage(SORT_FIELD.getPreferredName(), sorts.getLast().name());
                 } else if (PROFILE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     profile = parser.booleanValue();
+                } else if (TRACE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    trace = parser.booleanValue();
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -1773,6 +1800,10 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
 
         if (profile) {
             builder.field("profile", true);
+        }
+
+        if (trace) {
+            builder.field("trace", true);
         }
 
         if (fetchSourceContext != null) {
@@ -2155,6 +2186,7 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
             version,
             seqNoAndPrimaryTerm,
             profile,
+            trace,
             extBuilders,
             collapse,
             trackTotalHitsUpTo,
@@ -2201,6 +2233,7 @@ public final class SearchSourceBuilder implements Writeable, ToXContentObject, R
             && Objects.equals(version, other.version)
             && Objects.equals(seqNoAndPrimaryTerm, other.seqNoAndPrimaryTerm)
             && Objects.equals(profile, other.profile)
+            && Objects.equals(trace, other.trace)
             && Objects.equals(extBuilders, other.extBuilders)
             && Objects.equals(collapse, other.collapse)
             && Objects.equals(trackTotalHitsUpTo, other.trackTotalHitsUpTo)

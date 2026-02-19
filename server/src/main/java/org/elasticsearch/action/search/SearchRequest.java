@@ -121,13 +121,6 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
     @Nullable
     private String projectRouting;
 
-    /**
-     * Whether to capture detailed timing trace spans for this search request.
-     * When enabled, the response will include a {@link SearchTraceResult} with a span tree
-     * suitable for Gantt chart rendering.
-     */
-    private boolean trace = false;
-
     private static final TransportVersion SEARCH_PROJECT_ROUTING = TransportVersion.fromName("search_project_routing");
 
     public static final TransportVersion SEARCH_TRACE = TransportVersion.fromName("search_response_trace");
@@ -260,7 +253,6 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
         this.waitForCheckpointsTimeout = searchRequest.waitForCheckpointsTimeout;
         this.forceSyntheticSource = searchRequest.forceSyntheticSource;
         this.projectRouting = searchRequest.projectRouting;
-        this.trace = searchRequest.trace;
         this.resolvedIndexExpressions = searchRequest.resolvedIndexExpressions;
     }
 
@@ -304,11 +296,6 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
         } else {
             this.projectRouting = null;
         }
-        if (in.getTransportVersion().supports(SEARCH_TRACE)) {
-            this.trace = in.readBoolean();
-        } else {
-            this.trace = false;
-        }
     }
 
     @Override
@@ -347,9 +334,6 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
         out.writeBoolean(forceSyntheticSource);
         if (out.getTransportVersion().supports(SEARCH_PROJECT_ROUTING)) {
             out.writeOptionalString(this.projectRouting);
-        }
-        if (out.getTransportVersion().supports(SEARCH_TRACE)) {
-            out.writeBoolean(trace);
         }
     }
 
@@ -757,22 +741,6 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
      */
     public void setForceSyntheticSource(boolean forceSyntheticSource) {
         this.forceSyntheticSource = forceSyntheticSource;
-    }
-
-    /**
-     * Whether to capture detailed timing trace spans for this search request.
-     */
-    public boolean isTrace() {
-        return trace;
-    }
-
-    /**
-     * Whether to capture detailed timing trace spans for this search request.
-     * When enabled, the response will include a {@link SearchTraceResult} with a span tree
-     * suitable for Gantt chart rendering.
-     */
-    public void setTrace(boolean trace) {
-        this.trace = trace;
     }
 
     @Override
