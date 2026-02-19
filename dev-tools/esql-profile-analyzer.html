@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESQL Profile Analyzer</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --bg2: #16213e;
+  --bg3: #0f3460;
+  --text: #e0e0e0;
+  --text2: #a0a0b0;
+  --accent: #e94560;
+  --border: #2a2a4a;
+  --blue: #4a90d9;
+  --blue-light: #7ab3ef;
+  --orange: #e8a838;
+  --orange-light: #f0c878;
+  --purple: #9b59b6;
+  --purple-light: #c39bd3;
+  --green: #2ecc71;
+  --green-light: #82e0aa;
+  --red: #e74c3c;
+  --card-bg: #1e1e3a;
+  --hover: #2a2a5a;
+}
+.light {
+  --bg: #f5f5f5;
+  --bg2: #ffffff;
+  --bg3: #e8e8e8;
+  --text: #333333;
+  --text2: #666666;
+  --accent: #d63031;
+  --border: #cccccc;
+  --blue: #2980b9;
+  --blue-light: #85c1e9;
+  --orange: #d68910;
+  --orange-light: #f0c878;
+  --purple: #8e44ad;
+  --purple-light: #c39bd3;
+  --green: #27ae60;
+  --green-light: #82e0aa;
+  --red: #c0392b;
+  --card-bg: #ffffff;
+  --hover: #e8e8e8;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Menlo', 'Consolas', 'Monaco', monospace;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  font-size: 13px;
+}
+.container { max-width: 1400px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin-bottom: 16px; color: var(--accent); }
+h2 {
+  font-size: 15px; margin-bottom: 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  user-select: none;
+}
+h2 .toggle { font-size: 10px; transition: transform 0.2s; display: inline-block; }
+h2 .toggle.collapsed { transform: rotate(-90deg); }
+.section {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 16px; margin-bottom: 16px;
+}
+.section-body { overflow: hidden; }
+.section-body.collapsed { display: none; }
+.toolbar {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;
+}
+button {
+  background: var(--bg3); color: var(--text); border: 1px solid var(--border);
+  padding: 6px 14px; border-radius: 4px; cursor: pointer;
+  font-family: inherit; font-size: 12px;
+}
+button:hover { background: var(--hover); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { opacity: 0.85; }
+textarea {
+  width: 100%; height: 200px; background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 10px;
+  font-family: inherit; font-size: 12px; resize: vertical;
+}
+input[type="file"] { display: none; }
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px; margin-bottom: 12px;
+}
+.stat-card {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px;
+}
+.stat-card .label { font-size: 10px; color: var(--text2); text-transform: uppercase; }
+.stat-card .value { font-size: 16px; font-weight: bold; margin-top: 2px; }
+.badge {
+  display: inline-block; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 12px; padding: 2px 10px; font-size: 11px; margin-left: 8px;
+}
+table {
+  width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px;
+}
+th, td {
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border);
+}
+th { color: var(--text2); font-size: 10px; text-transform: uppercase; }
+tr:hover { background: var(--hover); }
+.chart-container { width: 100%; overflow-x: auto; }
+svg text { font-family: inherit; }
+.tooltip {
+  position: absolute; background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 10px; font-size: 11px; pointer-events: none;
+  z-index: 100; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  color: var(--text);
+}
+.tooltip .tt-title { font-weight: bold; margin-bottom: 4px; }
+.tooltip .tt-row { display: flex; justify-content: space-between; gap: 16px; }
+.tooltip .tt-label { color: var(--text2); }
+.plan-entry {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 4px; margin-bottom: 8px;
+}
+.plan-header {
+  padding: 10px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+}
+.plan-header:hover { background: var(--hover); }
+.plan-body { padding: 0 10px 10px; }
+.plan-body pre {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  padding: 10px; overflow-x: auto; font-size: 11px; white-space: pre-wrap;
+  word-break: break-all; max-height: 500px; overflow-y: auto; color: var(--text);
+}
+.plan-meta { display: flex; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+.plan-meta span { color: var(--text2); font-size: 11px; }
+.hidden { display: none; }
+.error-msg { color: var(--red); padding: 10px; background: var(--card-bg); border-radius: 4px; margin-top: 8px; }
+#detail-section { border: 2px solid var(--accent); }
+.sleeps-section { margin-top: 12px; }
+.sleeps-section h3 { font-size: 13px; margin-bottom: 6px; }
+.sort-controls { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+.sort-controls button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dual-bar-legend { display: flex; gap: 16px; margin: 4px 0 8px; font-size: 11px; align-items: center; }
+.dual-bar-legend .swatch {
+  width: 14px; height: 8px; border-radius: 2px; display: inline-block;
+  margin-right: 4px; vertical-align: middle;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <h1>ESQL Profile Analyzer</h1>
+    <button id="theme-toggle" onclick="toggleTheme()">Light Theme</button>
+  </div>
+
+  <!-- Input Section -->
+  <div class="section" id="input-section">
+    <h2 onclick="toggleSection('input')"><span class="toggle" id="input-toggle">&#9660;</span> Input</h2>
+    <div class="section-body" id="input-body">
+      <textarea id="json-input" placeholder="Paste ESQL profile JSON here (full response or just the profile object)..."></textarea>
+      <div class="toolbar">
+        <button class="primary" onclick="analyze()">Analyze</button>
+        <button onclick="loadExample()">Load Example</button>
+        <button onclick="document.getElementById('file-input').click()">Upload File</button>
+        <input type="file" id="file-input" accept=".json" onchange="handleFile(event)">
+        <button onclick="clearAll()">Clear</button>
+      </div>
+      <div id="error-container"></div>
+    </div>
+  </div>
+
+  <!-- Query Phases -->
+  <div class="section hidden" id="phases-section">
+    <h2 onclick="toggleSection('phases')"><span class="toggle" id="phases-toggle">&#9660;</span> Query Phases</h2>
+    <div class="section-body" id="phases-body">
+      <div id="phases-stats" class="stats-grid"></div>
+      <div class="chart-container" id="phases-chart"></div>
+    </div>
+  </div>
+
+  <!-- Driver Timeline -->
+  <div class="section hidden" id="drivers-section">
+    <h2 onclick="toggleSection('drivers')"><span class="toggle" id="drivers-toggle">&#9660;</span> Driver Timeline</h2>
+    <div class="section-body" id="drivers-body">
+      <div class="sort-controls" id="driver-sort"></div>
+      <div class="dual-bar-legend" id="driver-legend"></div>
+      <div class="chart-container" id="drivers-chart"></div>
+    </div>
+  </div>
+
+  <!-- Driver Detail -->
+  <div class="section hidden" id="detail-section">
+    <h2 onclick="toggleSection('detail')"><span class="toggle" id="detail-toggle">&#9660;</span> Driver Detail</h2>
+    <div class="section-body" id="detail-body">
+      <div id="detail-stats" class="stats-grid"></div>
+      <h3 style="margin:12px 0 4px;font-size:13px;">Operators</h3>
+      <div class="dual-bar-legend" id="op-bar-legend"></div>
+      <div class="chart-container" id="operator-chart"></div>
+      <div id="operator-table-container"></div>
+      <div id="sleeps-container" class="sleeps-section"></div>
+    </div>
+  </div>
+
+  <!-- Plans -->
+  <div class="section hidden" id="plans-section">
+    <h2 onclick="toggleSection('plans')"><span class="toggle" id="plans-toggle">&#9660;</span> Plans</h2>
+    <div class="section-body" id="plans-body">
+      <div id="plans-container"></div>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip hidden" id="tooltip"></div>
+
+<script>
+/* ===== Formatting helpers ===== */
+function fmtNanos(n) {
+  if (n == null) return '-';
+  if (n < 1000) return n + 'ns';
+  if (n < 1e6) return (n / 1e3).toFixed(1) + 'us';
+  if (n < 1e9) return (n / 1e6).toFixed(2) + 'ms';
+  return (n / 1e9).toFixed(3) + 's';
+}
+function fmtMillis(ms) {
+  if (ms == null) return '-';
+  if (ms < 1000) return ms + 'ms';
+  return (ms / 1000).toFixed(3) + 's';
+}
+function fmtNum(n) {
+  if (n == null) return '-';
+  return n.toLocaleString();
+}
+function fmtTime(epoch) {
+  if (epoch == null) return '-';
+  return new Date(epoch).toISOString().replace('T', ' ').replace('Z', '');
+}
+function fmtPct(ratio) {
+  if (ratio == null || isNaN(ratio)) return '-';
+  return (ratio * 100).toFixed(1) + '%';
+}
+
+/* ===== Theme toggle ===== */
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  document.getElementById('theme-toggle').textContent =
+    document.body.classList.contains('light') ? 'Dark Theme' : 'Light Theme';
+}
+
+/* ===== Section collapse ===== */
+function toggleSection(name) {
+  const body = document.getElementById(name + '-body');
+  const toggle = document.getElementById(name + '-toggle');
+  body.classList.toggle('collapsed');
+  toggle.classList.toggle('collapsed');
+}
+
+/* ===== File upload ===== */
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    document.getElementById('json-input').value = ev.target.result;
+    analyze();
+  };
+  reader.readAsText(file);
+}
+
+/* ===== Clear ===== */
+function clearAll() {
+  document.getElementById('json-input').value = '';
+  document.getElementById('error-container').innerHTML = '';
+  ['phases-section', 'drivers-section', 'detail-section', 'plans-section'].forEach(function(id) {
+    document.getElementById(id).classList.add('hidden');
+  });
+}
+
+/* ===== Operator timing extraction ===== */
+function getOperatorNanos(op) {
+  var s = op.status;
+  if (!s) return 0;
+  var total = 0;
+  if (s.process_nanos != null) total += s.process_nanos;
+  if (s.aggregation_nanos != null) total += s.aggregation_nanos;
+  if (s.aggregation_finish_nanos != null) total += s.aggregation_finish_nanos;
+  if (s.hash_nanos != null) total += s.hash_nanos;
+  if (s.emit_nanos != null) total += s.emit_nanos;
+  if (s.receive_nanos != null) total += s.receive_nanos;
+  return total;
+}
+
+function getOperatorTimingBreakdown(op) {
+  var s = op.status;
+  if (!s) return [];
+  var parts = [];
+  if (s.process_nanos != null) parts.push({ name: 'process', nanos: s.process_nanos });
+  if (s.hash_nanos != null) parts.push({ name: 'hash', nanos: s.hash_nanos });
+  if (s.aggregation_nanos != null) parts.push({ name: 'aggregation', nanos: s.aggregation_nanos });
+  if (s.aggregation_finish_nanos != null) parts.push({ name: 'agg_finish', nanos: s.aggregation_finish_nanos });
+  if (s.receive_nanos != null) parts.push({ name: 'receive', nanos: s.receive_nanos });
+  if (s.emit_nanos != null) parts.push({ name: 'emit', nanos: s.emit_nanos });
+  return parts;
+}
+
+function getOperatorRows(op) {
+  var s = op.status;
+  if (!s) return { in_: null, out: null };
+  return {
+    in_: s.rows_received != null ? s.rows_received : null,
+    out: s.rows_emitted != null ? s.rows_emitted : null
+  };
+}
+
+function getOperatorPages(op) {
+  var s = op.status;
+  if (!s) return { in_: null, out: null };
+  return {
+    in_: s.pages_received != null ? s.pages_received : (s.pages_processed != null ? s.pages_processed : null),
+    out: s.pages_emitted != null ? s.pages_emitted : null
+  };
+}
+
+/* ===== Color palettes ===== */
+var driverColors = {
+  data:        { wall: 'rgba(74,144,217,0.3)',  cpu: 'rgba(74,144,217,0.85)',  stroke: '#4a90d9' },
+  node_reduce: { wall: 'rgba(232,168,56,0.3)',  cpu: 'rgba(232,168,56,0.85)',  stroke: '#e8a838' },
+  final:       { wall: 'rgba(155,89,182,0.3)',   cpu: 'rgba(155,89,182,0.85)',  stroke: '#9b59b6' },
+  default_:    { wall: 'rgba(46,204,113,0.3)',   cpu: 'rgba(46,204,113,0.85)',  stroke: '#2ecc71' }
+};
+function getDriverColor(desc) {
+  if (!desc) return driverColors.default_;
+  var d = desc.toLowerCase();
+  if (d.indexOf('data') >= 0) return driverColors.data;
+  if (d.indexOf('node_reduce') >= 0) return driverColors.node_reduce;
+  if (d.indexOf('final') >= 0) return driverColors.final;
+  return driverColors.default_;
+}
+
+var opColors = [
+  { wall: 'rgba(46,204,113,0.3)',  cpu: 'rgba(46,204,113,0.85)',  stroke: '#2ecc71' },
+  { wall: 'rgba(74,144,217,0.3)',  cpu: 'rgba(74,144,217,0.85)',  stroke: '#4a90d9' },
+  { wall: 'rgba(232,168,56,0.3)',  cpu: 'rgba(232,168,56,0.85)',  stroke: '#e8a838' },
+  { wall: 'rgba(155,89,182,0.3)',  cpu: 'rgba(155,89,182,0.85)',  stroke: '#9b59b6' },
+  { wall: 'rgba(233,69,96,0.3)',   cpu: 'rgba(233,69,96,0.85)',   stroke: '#e94560' },
+  { wall: 'rgba(26,188,156,0.3)',  cpu: 'rgba(26,188,156,0.85)',  stroke: '#1abc9c' },
+  { wall: 'rgba(241,196,15,0.3)',  cpu: 'rgba(241,196,15,0.85)',  stroke: '#f1c40f' },
+  { wall: 'rgba(230,126,34,0.3)',  cpu: 'rgba(230,126,34,0.85)',  stroke: '#e67e22' }
+];
+
+/* ===== Tooltip ===== */
+var tooltipEl = document.getElementById('tooltip');
+function showTooltip(evt, html) {
+  tooltipEl.innerHTML = html;
+  tooltipEl.classList.remove('hidden');
+  var x = Math.min(evt.pageX + 12, window.innerWidth - 420);
+  var y = evt.pageY + 12;
+  tooltipEl.style.left = x + 'px';
+  tooltipEl.style.top = y + 'px';
+}
+function hideTooltip() { tooltipEl.classList.add('hidden'); }
+
+/* ===== Global state ===== */
+var profileData = null;
+var selectedDriverIdx = null;
+var currentSort = 'start';
+
+/* ===== Analyze ===== */
+function analyze() {
+  var raw = document.getElementById('json-input').value.trim();
+  var errEl = document.getElementById('error-container');
+  errEl.innerHTML = '';
+  if (!raw) return;
+  try {
+    var json = JSON.parse(raw);
+    if (json.profile) json = json.profile;
+    profileData = json;
+    selectedDriverIdx = null;
+    renderAll();
+  } catch (e) {
+    ['phases-section', 'drivers-section', 'detail-section', 'plans-section'].forEach(function(id) {
+      document.getElementById(id).classList.add('hidden');
+    });
+    errEl.innerHTML = '<div class="error-msg">JSON Parse Error: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderAll() {
+  renderPhases();
+  renderDriverTimeline();
+  document.getElementById('detail-section').classList.add('hidden');
+  renderPlans();
+}
+
+/* ===== Query Phases ===== */
+function renderPhases() {
+  var p = profileData;
+  var phaseNames = ['query', 'planning', 'parsing', 'preanalysis', 'dependency_resolution', 'analysis'];
+  var phases = [];
+  for (var i = 0; i < phaseNames.length; i++) {
+    var n = phaseNames[i];
+    if (p[n]) phases.push(Object.assign({ name: n }, p[n]));
+  }
+  if (phases.length === 0) {
+    document.getElementById('phases-section').classList.add('hidden');
+    return;
+  }
+  document.getElementById('phases-section').classList.remove('hidden');
+
+  // Stats cards
+  var statsHtml = '';
+  phases.forEach(function(ph) {
+    var dur = ph.took_millis != null ? fmtMillis(ph.took_millis) : fmtNanos(ph.took_nanos);
+    statsHtml += '<div class="stat-card"><div class="label">' + ph.name.replace(/_/g, ' ') +
+      '</div><div class="value">' + dur + '</div></div>';
+  });
+  if (p.field_caps_calls != null) {
+    statsHtml += '<div class="stat-card"><div class="label">field caps calls</div><div class="value">' +
+      p.field_caps_calls + '</div></div>';
+  }
+  document.getElementById('phases-stats').innerHTML = statsHtml;
+
+  // Gantt chart
+  var chartEl = document.getElementById('phases-chart');
+  chartEl.innerHTML = '';
+
+  var queryPhase = null;
+  var innerPhases = [];
+  phases.forEach(function(ph) {
+    if (ph.name === 'query') queryPhase = ph;
+    else innerPhases.push(ph);
+  });
+  if (innerPhases.length === 0 && !queryPhase) return;
+  var allPhases = queryPhase ? [queryPhase].concat(innerPhases) : innerPhases;
+  allPhases.sort(function(a, b) { return (a.start_millis || 0) - (b.start_millis || 0); });
+  var minStart = d3.min(allPhases, function(d) { return d.start_millis; });
+  var maxEnd = d3.max(allPhases, function(d) { return d.stop_millis; });
+
+  var margin = { top: 20, right: 30, bottom: 30, left: 170 };
+  var barH = 28;
+  var barGap = 6;
+  var width = Math.max(600, chartEl.clientWidth) - margin.left - margin.right;
+  var height = allPhases.length * (barH + barGap) + margin.top + margin.bottom;
+
+  var svg = d3.select(chartEl).append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height);
+  var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+  var x = d3.scaleLinear().domain([minStart, maxEnd]).range([0, width]);
+
+  var phaseColors = {
+    query: 'rgba(100,100,100,0.25)', planning: '#4a90d9', parsing: '#2ecc71',
+    preanalysis: '#e8a838', dependency_resolution: '#e94560', analysis: '#9b59b6'
+  };
+
+  allPhases.forEach(function(ph, i) {
+    var y = i * (barH + barGap);
+    var x0 = x(ph.start_millis);
+    var x1 = x(ph.stop_millis);
+    var w = Math.max(2, x1 - x0);
+
+    g.append('rect').attr('x', x0).attr('y', y).attr('width', w).attr('height', barH)
+      .attr('fill', phaseColors[ph.name] || '#888').attr('rx', 3)
+      .attr('opacity', ph.name === 'query' ? 0.3 : 0.8);
+
+    g.append('text').attr('x', -8).attr('y', y + barH / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .attr('fill', 'currentColor').attr('font-size', 11)
+      .text(ph.name.replace(/_/g, ' '));
+
+    var dur = ph.took_millis != null ? fmtMillis(ph.took_millis) : fmtNanos(ph.took_nanos);
+    if (w > 40) {
+      g.append('text').attr('x', x0 + w / 2).attr('y', y + barH / 2)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .attr('fill', '#fff').attr('font-size', 10).text(dur);
+    }
+  });
+
+  var xAxis = d3.axisBottom(x).ticks(6).tickFormat(function(d) { return fmtMillis(d - minStart); });
+  g.append('g').attr('transform', 'translate(0,' + allPhases.length * (barH + barGap) + ')')
+    .call(xAxis).selectAll('text').attr('fill', 'currentColor');
+  g.selectAll('.domain, .tick line').attr('stroke', 'currentColor');
+}
+
+/* ===== Driver Timeline ===== */
+function renderDriverTimeline() {
+  var drivers = profileData.drivers;
+  if (!drivers || drivers.length === 0) {
+    document.getElementById('drivers-section').classList.add('hidden');
+    return;
+  }
+  document.getElementById('drivers-section').classList.remove('hidden');
+
+  // Sort controls
+  var sortEl = document.getElementById('driver-sort');
+  var sorts = [
+    { key: 'start', label: 'Start Time' },
+    { key: 'wall', label: 'Wall Time' },
+    { key: 'cpu', label: 'CPU Time' },
+    { key: 'desc', label: 'Phase' }
+  ];
+  sortEl.innerHTML = '<span style="color:var(--text2);font-size:11px;">Sort:</span> ' +
+    sorts.map(function(s) {
+      return '<button class="' + (s.key === currentSort ? 'active' : '') +
+        '" onclick="sortDrivers(\'' + s.key + '\')">' + s.label + '</button>';
+    }).join('');
+
+  // Legend
+  document.getElementById('driver-legend').innerHTML =
+    '<span><span class="swatch" style="background:rgba(74,144,217,0.3);border:1px solid #4a90d9;"></span> Wall time</span>' +
+    '<span><span class="swatch" style="background:rgba(74,144,217,0.85);"></span> CPU time</span>';
+
+  // Sort drivers
+  var sorted = drivers.map(function(d, i) { return Object.assign({ _idx: i }, d); });
+  switch (currentSort) {
+    case 'wall': sorted.sort(function(a, b) { return (b.took_nanos || 0) - (a.took_nanos || 0); }); break;
+    case 'cpu':  sorted.sort(function(a, b) { return (b.cpu_nanos || 0) - (a.cpu_nanos || 0); }); break;
+    case 'desc': sorted.sort(function(a, b) { return (a.description || '').localeCompare(b.description || ''); }); break;
+    default:     sorted.sort(function(a, b) { return (a.start_millis || 0) - (b.start_millis || 0); }); break;
+  }
+
+  var chartEl = document.getElementById('drivers-chart');
+  chartEl.innerHTML = '';
+
+  var margin = { top: 10, right: 30, bottom: 30, left: 230 };
+  var barH = 26;
+  var cpuBarH = 14;
+  var gap = 8;
+  var width = Math.max(700, chartEl.clientWidth) - margin.left - margin.right;
+  var height = sorted.length * (barH + gap) + margin.top + margin.bottom;
+
+  var svg = d3.select(chartEl).append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height);
+  var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+  var minStart = d3.min(sorted, function(d) { return d.start_millis || 0; });
+  var maxEnd = d3.max(sorted, function(d) { return d.stop_millis || d.start_millis || 0; });
+  var x = d3.scaleLinear().domain([minStart, maxEnd || minStart + 1]).range([0, width]);
+
+  sorted.forEach(function(drv, i) {
+    var y = i * (barH + gap);
+    var col = getDriverColor(drv.description);
+    var x0 = x(drv.start_millis || minStart);
+    var wallW = Math.max(2, x(drv.stop_millis || drv.start_millis || minStart) - x0);
+    var cpuRatio = (drv.took_nanos && drv.cpu_nanos) ? drv.cpu_nanos / drv.took_nanos : 0;
+    var cpuW = Math.max(0, wallW * cpuRatio);
+
+    // Wall time bar (full height)
+    g.append('rect').attr('x', x0).attr('y', y).attr('width', wallW).attr('height', barH)
+      .attr('fill', col.wall).attr('stroke', col.stroke).attr('stroke-width', 1).attr('rx', 3)
+      .style('cursor', 'pointer')
+      .on('click', function() { selectDriver(drv._idx); })
+      .on('mousemove', function(evt) {
+        showTooltip(evt,
+          '<div class="tt-title">' + (drv.description || 'Driver ' + drv._idx) + '</div>' +
+          '<div class="tt-row"><span class="tt-label">Node:</span><span>' + (drv.node_name || '-') + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Cluster:</span><span>' + (drv.cluster_name || '-') + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Wall:</span><span>' + fmtNanos(drv.took_nanos) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">CPU:</span><span>' + fmtNanos(drv.cpu_nanos) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">CPU%:</span><span>' + fmtPct(cpuRatio) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Iterations:</span><span>' + fmtNum(drv.iterations) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Docs:</span><span>' + fmtNum(drv.documents_found) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Values:</span><span>' + fmtNum(drv.values_loaded) + '</span></div>'
+        );
+      })
+      .on('mouseleave', hideTooltip);
+
+    // CPU time bar (inner, shorter, centered)
+    if (cpuW > 0) {
+      g.append('rect').attr('x', x0).attr('y', y + (barH - cpuBarH) / 2)
+        .attr('width', cpuW).attr('height', cpuBarH)
+        .attr('fill', col.cpu).attr('rx', 2)
+        .style('pointer-events', 'none');
+    }
+
+    // Label
+    var label = (drv.description || 'Driver ' + drv._idx) +
+      (drv.node_name ? ' @ ' + drv.node_name : '');
+    g.append('text').attr('x', -8).attr('y', y + barH / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .attr('fill', 'currentColor').attr('font-size', 11)
+      .text(label.length > 34 ? label.slice(0, 32) + '..' : label)
+      .style('cursor', 'pointer')
+      .on('click', function() { selectDriver(drv._idx); });
+
+    // Duration label on bar
+    if (wallW > 90) {
+      g.append('text').attr('x', x0 + wallW - 4).attr('y', y + barH / 2)
+        .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+        .attr('fill', '#fff').attr('font-size', 10)
+        .style('pointer-events', 'none')
+        .text(fmtNanos(drv.took_nanos) + ' / ' + fmtNanos(drv.cpu_nanos) + ' cpu');
+    }
+  });
+
+  // X axis
+  var xAxis = d3.axisBottom(x).ticks(6).tickFormat(function(d) { return fmtMillis(d - minStart); });
+  g.append('g').attr('transform', 'translate(0,' + sorted.length * (barH + gap) + ')')
+    .call(xAxis).selectAll('text').attr('fill', 'currentColor');
+  g.selectAll('.domain, .tick line').attr('stroke', 'currentColor');
+}
+
+function sortDrivers(key) {
+  currentSort = key;
+  renderDriverTimeline();
+}
+
+/* ===== Select Driver -> Detail ===== */
+function selectDriver(idx) {
+  selectedDriverIdx = idx;
+  var drv = profileData.drivers[idx];
+  document.getElementById('detail-section').classList.remove('hidden');
+
+  var cpuRatio = (drv.took_nanos && drv.cpu_nanos) ? drv.cpu_nanos / drv.took_nanos : 0;
+
+  // Stats cards
+  document.getElementById('detail-stats').innerHTML =
+    '<div class="stat-card"><div class="label">Description</div><div class="value" style="font-size:13px;">' + (drv.description || '-') + '</div></div>' +
+    '<div class="stat-card"><div class="label">Node</div><div class="value" style="font-size:13px;">' + (drv.node_name || '-') + '</div></div>' +
+    '<div class="stat-card"><div class="label">Cluster</div><div class="value" style="font-size:13px;">' + (drv.cluster_name || '-') + '</div></div>' +
+    '<div class="stat-card"><div class="label">Start</div><div class="value" style="font-size:12px;">' + fmtTime(drv.start_millis) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Stop</div><div class="value" style="font-size:12px;">' + fmtTime(drv.stop_millis) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Wall Time</div><div class="value">' + fmtNanos(drv.took_nanos) + '</div></div>' +
+    '<div class="stat-card"><div class="label">CPU Time</div><div class="value">' + fmtNanos(drv.cpu_nanos) + '</div></div>' +
+    '<div class="stat-card"><div class="label">CPU %</div><div class="value">' + fmtPct(cpuRatio) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Iterations</div><div class="value">' + fmtNum(drv.iterations) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Documents</div><div class="value">' + fmtNum(drv.documents_found) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Values Loaded</div><div class="value">' + fmtNum(drv.values_loaded) + '</div></div>';
+
+  renderOperators(drv, cpuRatio);
+  renderSleeps(drv);
+
+  document.getElementById('detail-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ===== Operator Chart + Table ===== */
+function renderOperators(drv, cpuRatio) {
+  var ops = drv.operators || [];
+  var chartEl = document.getElementById('operator-chart');
+  var tableEl = document.getElementById('operator-table-container');
+  var legendEl = document.getElementById('op-bar-legend');
+
+  if (ops.length === 0) {
+    chartEl.innerHTML = '<div style="color:var(--text2);padding:8px;">No operators</div>';
+    tableEl.innerHTML = '';
+    legendEl.innerHTML = '';
+    return;
+  }
+
+  legendEl.innerHTML =
+    '<span><span class="swatch" style="background:rgba(46,204,113,0.3);border:1px solid #2ecc71;"></span> Wall time (process)</span>' +
+    '<span><span class="swatch" style="background:rgba(46,204,113,0.85);"></span> CPU time (estimated)</span>' +
+    '<span style="color:var(--text2);font-size:10px;margin-left:8px;">CPU est. = process time x driver CPU ratio (' + fmtPct(cpuRatio) + ')</span>';
+
+  chartEl.innerHTML = '';
+
+  var margin = { top: 10, right: 100, bottom: 20, left: 300 };
+  var barH = 22;
+  var cpuBarH = 12;
+  var gap = 6;
+  var containerW = chartEl.clientWidth || 800;
+  var width = Math.max(400, containerW - margin.left - margin.right);
+  var height = ops.length * (barH + gap) + margin.top + margin.bottom;
+
+  var maxNanos = d3.max(ops, function(d) { return getOperatorNanos(d); }) || 1;
+
+  var svg = d3.select(chartEl).append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height);
+  var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+  var x = d3.scaleLinear().domain([0, maxNanos]).range([0, width]);
+
+  ops.forEach(function(op, i) {
+    var y = i * (barH + gap);
+    var nanos = getOperatorNanos(op);
+    var wallW = Math.max(0, x(nanos));
+    var cpuNanos = nanos * cpuRatio;
+    var cpuW = Math.max(0, x(cpuNanos));
+    var col = opColors[i % opColors.length];
+
+    // Wall time bar (full height)
+    g.append('rect').attr('x', 0).attr('y', y)
+      .attr('width', Math.max(wallW, 1)).attr('height', barH)
+      .attr('fill', col.wall).attr('stroke', col.stroke).attr('stroke-width', 1).attr('rx', 3)
+      .on('mousemove', function(evt) {
+        var breakdown = getOperatorTimingBreakdown(op);
+        var breakdownHtml = breakdown.map(function(b) {
+          return '<div class="tt-row"><span class="tt-label">' + b.name + ':</span><span>' + fmtNanos(b.nanos) + '</span></div>';
+        }).join('');
+        showTooltip(evt,
+          '<div class="tt-title">' + escapeHtml(op.operator || 'Op ' + i) + '</div>' +
+          '<div class="tt-row"><span class="tt-label">Wall:</span><span>' + fmtNanos(nanos) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">CPU (est.):</span><span>' + fmtNanos(cpuNanos) + '</span></div>' +
+          breakdownHtml
+        );
+      })
+      .on('mouseleave', hideTooltip);
+
+    // CPU time bar (inner, shorter, centered)
+    if (cpuW > 0) {
+      g.append('rect').attr('x', 0).attr('y', y + (barH - cpuBarH) / 2)
+        .attr('width', cpuW).attr('height', cpuBarH)
+        .attr('fill', col.cpu).attr('rx', 2)
+        .style('pointer-events', 'none');
+    }
+
+    // Label (operator name)
+    var name = op.operator || 'Op ' + i;
+    var shortName = name.length > 42 ? name.slice(0, 40) + '..' : name;
+    g.append('text').attr('x', -8).attr('y', y + barH / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .attr('fill', 'currentColor').attr('font-size', 10)
+      .text(shortName);
+
+    // Duration label next to bar
+    g.append('text').attr('x', Math.max(wallW, 1) + 4).attr('y', y + barH / 2)
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', 'currentColor').attr('font-size', 10)
+      .style('pointer-events', 'none')
+      .text(fmtNanos(nanos));
+  });
+
+  // Operator table
+  var tableHtml = '<table><thead><tr>' +
+    '<th>#</th><th>Operator</th><th>Wall Time</th><th>CPU (est.)</th>' +
+    '<th>Pages In</th><th>Pages Out</th><th>Rows In</th><th>Rows Out</th><th>Details</th>' +
+    '</tr></thead><tbody>';
+
+  ops.forEach(function(op, i) {
+    var nanos = getOperatorNanos(op);
+    var cpuNanos = nanos * cpuRatio;
+    var pages = getOperatorPages(op);
+    var rows = getOperatorRows(op);
+    var breakdown = getOperatorTimingBreakdown(op);
+    var detailParts = [];
+    breakdown.forEach(function(b) { detailParts.push(b.name + ': ' + fmtNanos(b.nanos)); });
+    if (op.status) {
+      if (op.status.values_loaded != null) detailParts.push('vals: ' + fmtNum(op.status.values_loaded));
+      if (op.status.occupied_rows != null) detailParts.push('buffered: ' + fmtNum(op.status.occupied_rows));
+      if (op.status.total_slices != null) detailParts.push('slices: ' + (op.status.processed_slices || 0) + '/' + op.status.total_slices);
+      if (op.status.limit != null) detailParts.push('limit: ' + fmtNum(op.status.limit) + ', remaining: ' + fmtNum(op.status.limit_remaining));
+      if (op.status.pages_waiting != null) detailParts.push('waiting: ' + fmtNum(op.status.pages_waiting));
+      if (op.status.ram_bytes_used != null) detailParts.push('ram: ' + fmtNum(op.status.ram_bytes_used) + 'B');
+    }
+    var detailStr = detailParts.join(', ');
+
+    tableHtml += '<tr>' +
+      '<td>' + i + '</td>' +
+      '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' +
+        escapeHtml(op.operator || '') + '">' + escapeHtml(op.operator || '-') + '</td>' +
+      '<td>' + fmtNanos(nanos) + '</td>' +
+      '<td>' + fmtNanos(cpuNanos) + '</td>' +
+      '<td>' + fmtNum(pages.in_) + '</td>' +
+      '<td>' + fmtNum(pages.out) + '</td>' +
+      '<td>' + fmtNum(rows.in_) + '</td>' +
+      '<td>' + fmtNum(rows.out) + '</td>' +
+      '<td style="font-size:10px;color:var(--text2);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' +
+        escapeHtml(detailStr) + '">' + escapeHtml(detailStr || '-') + '</td>' +
+      '</tr>';
+  });
+  tableHtml += '</tbody></table>';
+  tableEl.innerHTML = tableHtml;
+}
+
+/* ===== Sleeps ===== */
+function renderSleeps(drv) {
+  var el = document.getElementById('sleeps-container');
+  if (!drv.sleeps) { el.innerHTML = ''; return; }
+
+  var sleeps = drv.sleeps;
+  var html = '<h3>Sleeps</h3>';
+
+  if (sleeps.counts && Object.keys(sleeps.counts).length > 0) {
+    html += '<div class="stats-grid" style="margin-top:6px;">';
+    for (var reason in sleeps.counts) {
+      if (sleeps.counts.hasOwnProperty(reason)) {
+        html += '<div class="stat-card"><div class="label">' + escapeHtml(reason) +
+          '</div><div class="value">' + fmtNum(sleeps.counts[reason]) + '</div></div>';
+      }
+    }
+    html += '</div>';
+  }
+
+  function renderSleepTable(label, items) {
+    if (!items || items.length === 0) return '';
+    var t = '<div style="margin-top:8px;"><strong style="font-size:11px;">' + label + '</strong>';
+    t += '<table><thead><tr><th>Reason</th><th>Thread</th><th>Sleep</th><th>Wake</th></tr></thead><tbody>';
+    items.forEach(function(s) {
+      t += '<tr>' +
+        '<td>' + escapeHtml(s.reason || '-') + '</td>' +
+        '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(s.thread_name || '-') + '</td>' +
+        '<td>' + fmtTime(s.sleep_millis) + '</td>' +
+        '<td>' + (s.wake_millis != null ? fmtTime(s.wake_millis) : '-') + '</td>' +
+        '</tr>';
+    });
+    t += '</tbody></table></div>';
+    return t;
+  }
+
+  html += renderSleepTable('First Sleeps', sleeps.first);
+  html += renderSleepTable('Last Sleeps', sleeps.last);
+
+  el.innerHTML = html;
+}
+
+/* ===== Plans ===== */
+function renderPlans() {
+  var plans = profileData.plans;
+  if (!plans || plans.length === 0) {
+    document.getElementById('plans-section').classList.add('hidden');
+    return;
+  }
+  document.getElementById('plans-section').classList.remove('hidden');
+
+  var html = '';
+  plans.forEach(function(plan, i) {
+    var id = 'plan-' + i;
+    html += '<div class="plan-entry">' +
+      '<div class="plan-header" onclick="togglePlan(\'' + id + '\', this)">' +
+      '<span class="toggle">&#9660;</span>' +
+      '<span>' + escapeHtml(plan.description || 'Plan ' + i) + '</span>' +
+      (plan.cluster_name ? '<span class="badge">' + escapeHtml(plan.cluster_name) + '</span>' : '') +
+      (plan.node_name ? '<span class="badge">' + escapeHtml(plan.node_name) + '</span>' : '') +
+      '</div>' +
+      '<div id="' + id + '" class="plan-body">' +
+      '<div class="plan-meta">' +
+      (plan.logical_optimization_nanos != null ? '<span>Logical opt: ' + fmtNanos(plan.logical_optimization_nanos) + '</span>' : '') +
+      (plan.physical_optimization_nanos != null ? '<span>Physical opt: ' + fmtNanos(plan.physical_optimization_nanos) + '</span>' : '') +
+      (plan.reduction_nanos != null ? '<span>Reduction: ' + fmtNanos(plan.reduction_nanos) + '</span>' : '') +
+      '</div>' +
+      '<pre>' + escapeHtml(plan.plan || 'No plan text available') + '</pre>' +
+      '</div></div>';
+  });
+  document.getElementById('plans-container').innerHTML = html;
+}
+
+function togglePlan(id, headerEl) {
+  var body = document.getElementById(id);
+  body.classList.toggle('hidden');
+  headerEl.querySelector('.toggle').classList.toggle('collapsed');
+}
+
+/* ===== Escape HTML ===== */
+function escapeHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ===== Example Data ===== */
+function loadExample() {
+  var example = {
+    "profile": {
+      "query": { "start_millis": 1700000000000, "stop_millis": 1700000000350, "took_millis": 350, "took_nanos": 350000000 },
+      "planning": { "start_millis": 1700000000000, "stop_millis": 1700000000050, "took_millis": 50, "took_nanos": 50000000 },
+      "parsing": { "start_millis": 1700000000000, "stop_millis": 1700000000010, "took_millis": 10, "took_nanos": 10000000 },
+      "preanalysis": { "start_millis": 1700000000010, "stop_millis": 1700000000015, "took_millis": 5, "took_nanos": 5000000 },
+      "dependency_resolution": { "start_millis": 1700000000015, "stop_millis": 1700000000025, "took_millis": 10, "took_nanos": 10000000 },
+      "analysis": { "start_millis": 1700000000025, "stop_millis": 1700000000050, "took_millis": 25, "took_nanos": 25000000 },
+      "field_caps_calls": 2,
+      "drivers": [
+        {
+          "description": "data",
+          "cluster_name": "production",
+          "node_name": "node-1",
+          "start_millis": 1700000000050,
+          "stop_millis": 1700000000250,
+          "took_nanos": 200000000,
+          "cpu_nanos": 150000000,
+          "iterations": 48,
+          "documents_found": 125000,
+          "values_loaded": 375000,
+          "operators": [
+            {
+              "operator": "LuceneSourceOperator[maxPageSize=4096, remainingDocs=125000]",
+              "status": {
+                "processed_slices": 4, "total_slices": 4, "slice_index": 3,
+                "process_nanos": 85000000, "pages_emitted": 31, "rows_emitted": 125000
+              }
+            },
+            {
+              "operator": "ValuesSourceReaderOperator[field=timestamp]",
+              "status": {
+                "process_nanos": 42000000, "pages_received": 31, "pages_emitted": 31,
+                "rows_received": 125000, "rows_emitted": 125000,
+                "values_loaded": 375000, "readers_built": { "timestamp": 4 }
+              }
+            },
+            {
+              "operator": "FilterOperator[predicate=GreaterThan]",
+              "status": {
+                "process_nanos": 18000000, "pages_processed": 31,
+                "rows_received": 125000, "rows_emitted": 50000
+              }
+            },
+            {
+              "operator": "ProjectOperator[projection=[0, 1]]",
+              "status": {
+                "process_nanos": 3000000, "pages_processed": 31,
+                "rows_received": 50000, "rows_emitted": 50000
+              }
+            },
+            {
+              "operator": "ExchangeSinkOperator",
+              "status": { "pages_received": 13, "rows_received": 50000 }
+            }
+          ],
+          "sleeps": {
+            "counts": { "BLOCKED_ON_DOWNSTREAM": 3, "WAITING_FOR_SLICES": 2 },
+            "first": [
+              { "reason": "BLOCKED_ON_DOWNSTREAM", "thread_name": "esql-worker-1", "sleep_millis": 1700000000100, "wake_millis": 1700000000115 },
+              { "reason": "WAITING_FOR_SLICES", "thread_name": "esql-worker-1", "sleep_millis": 1700000000120, "wake_millis": 1700000000125 }
+            ],
+            "last": [
+              { "reason": "BLOCKED_ON_DOWNSTREAM", "thread_name": "esql-worker-1", "sleep_millis": 1700000000230, "wake_millis": 1700000000235 }
+            ]
+          }
+        },
+        {
+          "description": "data",
+          "cluster_name": "production",
+          "node_name": "node-2",
+          "start_millis": 1700000000055,
+          "stop_millis": 1700000000220,
+          "took_nanos": 165000000,
+          "cpu_nanos": 130000000,
+          "iterations": 42,
+          "documents_found": 98000,
+          "values_loaded": 294000,
+          "operators": [
+            {
+              "operator": "LuceneSourceOperator[maxPageSize=4096, remainingDocs=98000]",
+              "status": {
+                "processed_slices": 3, "total_slices": 3, "slice_index": 2,
+                "process_nanos": 70000000, "pages_emitted": 24, "rows_emitted": 98000
+              }
+            },
+            {
+              "operator": "ValuesSourceReaderOperator[field=timestamp]",
+              "status": {
+                "process_nanos": 35000000, "pages_received": 24, "pages_emitted": 24,
+                "rows_received": 98000, "rows_emitted": 98000,
+                "values_loaded": 294000, "readers_built": { "timestamp": 3 }
+              }
+            },
+            {
+              "operator": "FilterOperator[predicate=GreaterThan]",
+              "status": {
+                "process_nanos": 14000000, "pages_processed": 24,
+                "rows_received": 98000, "rows_emitted": 40000
+              }
+            },
+            {
+              "operator": "ProjectOperator[projection=[0, 1]]",
+              "status": {
+                "process_nanos": 2500000, "pages_processed": 24,
+                "rows_received": 40000, "rows_emitted": 40000
+              }
+            },
+            {
+              "operator": "ExchangeSinkOperator",
+              "status": { "pages_received": 10, "rows_received": 40000 }
+            }
+          ],
+          "sleeps": {
+            "counts": { "BLOCKED_ON_DOWNSTREAM": 2 },
+            "first": [
+              { "reason": "BLOCKED_ON_DOWNSTREAM", "thread_name": "esql-worker-3", "sleep_millis": 1700000000110, "wake_millis": 1700000000120 }
+            ],
+            "last": [
+              { "reason": "BLOCKED_ON_DOWNSTREAM", "thread_name": "esql-worker-3", "sleep_millis": 1700000000200, "wake_millis": 1700000000210 }
+            ]
+          }
+        },
+        {
+          "description": "node_reduce",
+          "cluster_name": "production",
+          "node_name": "node-1",
+          "start_millis": 1700000000060,
+          "stop_millis": 1700000000280,
+          "took_nanos": 220000000,
+          "cpu_nanos": 95000000,
+          "iterations": 25,
+          "documents_found": 0,
+          "values_loaded": 0,
+          "operators": [
+            {
+              "operator": "ExchangeSourceOperator",
+              "status": { "pages_waiting": 0, "pages_emitted": 23, "rows_emitted": 90000 }
+            },
+            {
+              "operator": "HashAggregationOperator[mode=INITIAL, aggs=count]",
+              "status": {
+                "hash_nanos": 25000000, "aggregation_nanos": 38000000,
+                "emit_nanos": 5000000, "pages_processed": 23,
+                "rows_received": 90000, "rows_emitted": 1500, "emit_count": 1
+              }
+            },
+            {
+              "operator": "ExchangeSinkOperator",
+              "status": { "pages_received": 2, "rows_received": 1500 }
+            }
+          ],
+          "sleeps": {
+            "counts": { "WAITING_FOR_UPSTREAM": 8 },
+            "first": [
+              { "reason": "WAITING_FOR_UPSTREAM", "thread_name": "esql-worker-2", "sleep_millis": 1700000000070, "wake_millis": 1700000000090 }
+            ],
+            "last": [
+              { "reason": "WAITING_FOR_UPSTREAM", "thread_name": "esql-worker-2", "sleep_millis": 1700000000260, "wake_millis": 1700000000270 }
+            ]
+          }
+        },
+        {
+          "description": "final",
+          "cluster_name": "production",
+          "node_name": "node-1",
+          "start_millis": 1700000000070,
+          "stop_millis": 1700000000340,
+          "took_nanos": 270000000,
+          "cpu_nanos": 45000000,
+          "iterations": 12,
+          "documents_found": 0,
+          "values_loaded": 0,
+          "operators": [
+            {
+              "operator": "ExchangeSourceOperator",
+              "status": { "pages_waiting": 0, "pages_emitted": 2, "rows_emitted": 1500 }
+            },
+            {
+              "operator": "HashAggregationOperator[mode=FINAL, aggs=count]",
+              "status": {
+                "hash_nanos": 3000000, "aggregation_nanos": 8000000,
+                "emit_nanos": 1500000, "pages_processed": 2,
+                "rows_received": 1500, "rows_emitted": 500, "emit_count": 1
+              }
+            },
+            {
+              "operator": "TopNOperator[count=100]",
+              "status": {
+                "receive_nanos": 4000000, "emit_nanos": 2000000,
+                "occupied_rows": 100, "ram_bytes_used": 32768,
+                "pages_received": 1, "pages_emitted": 1,
+                "rows_received": 500, "rows_emitted": 100
+              }
+            },
+            {
+              "operator": "ProjectOperator[projection=[0, 1, 2]]",
+              "status": {
+                "process_nanos": 500000, "pages_processed": 1,
+                "rows_received": 100, "rows_emitted": 100
+              }
+            },
+            {
+              "operator": "LimitOperator[limit=100]",
+              "status": {
+                "limit": 100, "limit_remaining": 0, "pages_processed": 1,
+                "rows_received": 100, "rows_emitted": 100
+              }
+            },
+            {
+              "operator": "OutputOperator[]",
+              "status": null
+            }
+          ],
+          "sleeps": {
+            "counts": { "WAITING_FOR_UPSTREAM": 15 },
+            "first": [
+              { "reason": "WAITING_FOR_UPSTREAM", "thread_name": "esql-worker-4", "sleep_millis": 1700000000075, "wake_millis": 1700000000100 }
+            ],
+            "last": [
+              { "reason": "WAITING_FOR_UPSTREAM", "thread_name": "esql-worker-4", "sleep_millis": 1700000000320, "wake_millis": 1700000000330 }
+            ]
+          }
+        }
+      ],
+      "plans": [
+        {
+          "description": "coordinator",
+          "cluster_name": "production",
+          "node_name": "node-1",
+          "plan": "FragmentExec[query=from logs | where @timestamp > now() - 1h | stats count(*) by host | sort count desc | limit 100]\n\\_LimitExec[limit=100]\n  \\_TopNExec[order=[count DESC], limit=100]\n    \\_AggregateExec[FINAL,[host],[count(*)]]\n      \\_ExchangeExec[GATHER]\n        \\_AggregateExec[INITIAL,[host],[count(*)]]\n          \\_FilterExec[@timestamp > now() - 1h]\n            \\_FieldExtractExec[host, @timestamp]\n              \\_EsQueryExec[index=logs]",
+          "logical_optimization_nanos": 5000000,
+          "physical_optimization_nanos": 12000000
+        },
+        {
+          "description": "data node-1",
+          "cluster_name": "production",
+          "node_name": "node-1",
+          "plan": "AggregateExec[INITIAL,[host],[count(*)]]\n\\_FilterExec[@timestamp > now() - 1h]\n  \\_FieldExtractExec[host, @timestamp]\n    \\_EsQueryExec[index=logs, shards=[logs][0-3]]",
+          "physical_optimization_nanos": 3000000
+        },
+        {
+          "description": "data node-2",
+          "cluster_name": "production",
+          "node_name": "node-2",
+          "plan": "AggregateExec[INITIAL,[host],[count(*)]]\n\\_FilterExec[@timestamp > now() - 1h]\n  \\_FieldExtractExec[host, @timestamp]\n    \\_EsQueryExec[index=logs, shards=[logs][4-6]]",
+          "physical_optimization_nanos": 2800000
+        }
+      ]
+    }
+  };
+  document.getElementById('json-input').value = JSON.stringify(example, null, 2);
+  analyze();
+}
+</script>
+</body>
+</html>
