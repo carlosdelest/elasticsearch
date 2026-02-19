@@ -614,13 +614,38 @@ function renderQueryTimeline() {
       })
       .on('mouseleave', hideTooltip);
 
-    // CPU time bar (inner, shorter, centered)
-    if (cpuW > 0) {
-      g.append('rect').attr('x', x0).attr('y', y + (driverBarH - driverCpuBarH) / 2)
-        .attr('width', cpuW).attr('height', driverCpuBarH)
-        .attr('fill', col.cpu).attr('rx', 2)
-        .style('pointer-events', 'none');
-    }
+    // --- Calculate CPU distribution ---
+    var allSleeps = (drv.sleeps ? (drv.sleeps.first || []).concat(drv.sleeps.last || []) : []);
+    var totalSleepMillis = d3.sum(allSleeps, function(s) {
+      return (s.wake_millis && s.sleep_millis) ? (s.wake_millis - s.sleep_millis) : 0;
+    });
+    var driverDurationMillis = (drv.stop_millis || drv.start_millis) - drv.start_millis;
+    var activeMillis = Math.max(0, driverDurationMillis - totalSleepMillis);
+    var cpuMillis = (drv.cpu_nanos || 0) / 1e6;
+    var cpuDensity = activeMillis > 1 ? Math.min(1.0, cpuMillis / activeMillis) : 0;
+
+    // --- Draw CPU segments in active periods ---
+    var activeSegments = getActiveSegments(drv);
+    activeSegments.forEach(function(segment) {
+        if (segment.end > segment.start) {
+            var segmentDuration = segment.end - segment.start;
+            var cpuInSegment = segmentDuration * cpuDensity;
+            var cpuX0 = x(segment.start - queryStartTime);
+            var cpuX1 = x(segment.start + cpuInSegment - queryStartTime);
+            var cpuW = Math.max(0, cpuX1 - cpuX0);
+
+            if (cpuW > 0) {
+                g.append('rect')
+                    .attr('x', cpuX0)
+                    .attr('y', y + (driverBarH - driverCpuBarH) / 2)
+                    .attr('width', cpuW)
+                    .attr('height', driverCpuBarH)
+                    .attr('fill', col.cpu)
+                    .attr('rx', 2)
+                    .style('pointer-events', 'none');
+            }
+        }
+    });
 
     // --- Sleep segments ---
     if (drv.sleeps) {
@@ -926,6 +951,40 @@ function escapeHtml(s) {
   if (!s) return '';
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+
+/* ===== Helper to get active time segments ===== */
+function getActiveSegments(driver) {
+  var start = driver.start_millis;
+  var end = driver.stop_millis;
+  if (!driver.sleeps || (!driver.sleeps.first && !driver.sleeps.last)) {
+    return (start != null && end != null) ? [{ start: start, end: end }] : [];
+  }
+  var allSleeps = (driver.sleeps.first || []).concat(driver.sleeps.last || []);
+  if (allSleeps.length === 0) {
+    return (start != null && end != null) ? [{ start: start, end: end }] : [];
+  }
+
+  allSleeps.sort(function(a, b) { return a.sleep_millis - b.sleep_millis; });
+
+  var activeSegments = [];
+  var lastEnd = start;
+
+  allSleeps.forEach(function(sleep) {
+    if (sleep.sleep_millis != null && sleep.wake_millis != null) {
+      if (sleep.sleep_millis > lastEnd) {
+        activeSegments.push({ start: lastEnd, end: sleep.sleep_millis });
+      }
+      lastEnd = Math.max(lastEnd, sleep.wake_millis);
+    }
+  });
+
+  if (lastEnd < end) {
+    activeSegments.push({ start: lastEnd, end: end });
+  }
+
+  return activeSegments;
+}
+
 
 /* ===== Example Data ===== */
 function loadExample() {
