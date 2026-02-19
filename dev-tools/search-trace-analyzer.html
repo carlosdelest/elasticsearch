@@ -161,6 +161,33 @@ svg text { font-family: inherit; }
 .span-row { cursor: pointer; }
 .span-row:hover rect.span-bar { opacity: 1; }
 .span-row.selected rect.span-bar { stroke-width: 2; }
+
+/* Tab styles */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.tab-button {
+  padding: 8px 16px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+}
+.tab-button.active {
+  color: var(--text);
+  border-bottom: 2px solid var(--accent);
+}
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+}
 </style>
 </head>
 <body>
@@ -170,26 +197,17 @@ svg text { font-family: inherit; }
     <button id="theme-toggle" onclick="toggleTheme()">Light Theme</button>
   </div>
 
-  <!-- Input Section -->
-  <div class="section" id="input-section">
-    <h2 onclick="toggleSection('input')"><span class="toggle" id="input-toggle">&#9660;</span> Input</h2>
-    <div class="section-body" id="input-body">
-      <textarea id="json-input" placeholder="Paste search trace JSON here (full _search response or just the trace object)..."></textarea>
-      <div class="toolbar">
-        <button class="primary" onclick="analyze()">Analyze</button>
-        <button onclick="loadExample()">Load Example</button>
-        <button onclick="document.getElementById('file-input').click()">Upload File</button>
-        <input type="file" id="file-input" accept=".json" onchange="handleFile(event)">
-        <button onclick="clearAll()">Clear</button>
-      </div>
-      <div id="error-container"></div>
-    </div>
   </div>
 
-  <!-- Live Query Section -->
-  <div class="section" id="live-query-section">
-    <h2 onclick="toggleSection('live-query')"><span class="toggle" id="live-query-toggle">&#9660;</span> Live Query</h2>
-    <div class="section-body" id="live-query-body">
+  <!-- Input Section -->
+  <div class="section" id="input-section">
+    <div class="tab-bar">
+      <button class="tab-button active" onclick="showTab('live')">Live Query</button>
+      <button class="tab-button" onclick="showTab('paste')">Paste JSON</button>
+    </div>
+
+    <!-- Live Query Tab -->
+    <div class="tab-content active" id="tab-live">
       <div class="live-query-grid">
         <div>
           <label for="es-url">Elasticsearch URL</label>
@@ -212,13 +230,21 @@ svg text { font-family: inherit; }
       <div class="toolbar">
         <button class="primary" onclick="runLiveQuery()">Run Query</button>
       </div>
-      <div class="cors-note">
-        <strong>Note:</strong> For this to work, your Elasticsearch instance must be configured for CORS. Add these lines to your <code>elasticsearch.yml</code> and restart the node:
-        <pre><code>http.cors.enabled: true
-http.cors.allow-origin: "*"</code></pre>
-        For security, you can replace <code>"*"</code> with the specific origin serving this file.
+    </div>
+
+    <!-- Paste JSON Tab -->
+    <div class="tab-content" id="tab-paste">
+      <textarea id="json-input" placeholder="Paste search trace JSON here (full _search response or just the trace object)..."></textarea>
+      <div class="toolbar">
+        <button class="primary" onclick="analyze()">Analyze</button>
+        <button onclick="loadExample()">Load Example</button>
+        <button onclick="document.getElementById('file-input').click()">Upload File</button>
+        <input type="file" id="file-input" accept=".json" onchange="handleFile(event)">
+        <button onclick="clearAll()">Clear</button>
       </div>
     </div>
+
+    <div id="error-container"></div>
   </div>
 
   <!-- Summary Stats -->
@@ -330,6 +356,18 @@ function showTooltip(evt, html) {
   tooltipEl.style.top = y + 'px';
 }
 function hideTooltip() { tooltipEl.classList.add('hidden'); }
+
+/* ===== Tabs ===== */
+function showTab(tabName) {
+  document.querySelectorAll('.tab-content').forEach(function(el) {
+    el.classList.remove('active');
+  });
+  document.querySelectorAll('.tab-button').forEach(function(el) {
+    el.classList.remove('active');
+  });
+  document.getElementById('tab-' + tabName).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
 
 /* ===== Live Query ===== */
 async function runLiveQuery() {
@@ -1449,6 +1487,14 @@ function loadExample() {
   document.getElementById('json-input').value = JSON.stringify(example, null, 2);
   analyze();
 }
+
+// Set initial state on load
+document.addEventListener('DOMContentLoaded', function() {
+  showTab('live');
+  // Hack to get the button reference for the first call
+  var liveButton = document.querySelector('.tab-button[onclick*="live"]');
+  liveButton.classList.add('active');
+});
 </script>
 </body>
 </html>
