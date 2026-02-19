@@ -693,7 +693,7 @@ function selectDriver(idx) {
     '<div class="stat-card"><div class="label">Values Loaded</div><div class="value">' + fmtNum(drv.values_loaded) + '</div></div>';
 
   renderOperators(drv, cpuRatio);
-  renderSleeps(drv);
+  renderSleeps(drv, queryStartTime);
 
   document.getElementById('detail-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -829,7 +829,7 @@ function renderOperators(drv, cpuRatio) {
 }
 
 /* ===== Sleeps ===== */
-function renderSleeps(drv) {
+function renderSleeps(drv, queryStartTime) {
   var el = document.getElementById('sleeps-container');
   if (!drv.sleeps) { el.innerHTML = ''; return; }
 
@@ -850,13 +850,15 @@ function renderSleeps(drv) {
   function renderSleepTable(label, items) {
     if (!items || items.length === 0) return '';
     var t = '<div style="margin-top:8px;"><strong style="font-size:11px;">' + label + '</strong>';
-    t += '<table><thead><tr><th>Reason</th><th>Thread</th><th>Sleep</th><th>Wake</th></tr></thead><tbody>';
+    t += '<table><thead><tr><th>Reason</th><th>Thread</th><th>Sleep (relative)</th><th>Wake (relative)</th><th>Duration</th></tr></thead><tbody>';
     items.forEach(function(s) {
+      var dur = s.wake_millis != null ? s.wake_millis - s.sleep_millis : null;
       t += '<tr>' +
         '<td>' + escapeHtml(s.reason || '-') + '</td>' +
         '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(s.thread_name || '-') + '</td>' +
-        '<td>' + fmtTime(s.sleep_millis) + '</td>' +
-        '<td>' + (s.wake_millis != null ? fmtTime(s.wake_millis) : '-') + '</td>' +
+        '<td>' + fmtMillis(s.sleep_millis - queryStartTime) + '</td>' +
+        '<td>' + (s.wake_millis != null ? fmtMillis(s.wake_millis - queryStartTime) : '-') + '</td>' +
+        '<td>' + (dur != null ? fmtMillis(dur) : '-') + '</td>' +
         '</tr>';
     });
     t += '</tbody></table></div>';
