@@ -931,6 +931,9 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
             shardTracer.stopSpan("create_context");
             tracer.startTrace("executeQueryPhase", Map.of());
             shardTracer.startSpan("shard_query");
+            if (context.query() != null) {
+                shardTracer.recordDetail("query", context.query().toString());
+            }
             final long afterQueryTime;
             final long beforeQueryTime = System.nanoTime();
             var opsListener = context.indexShard().getSearchOperationListener();
@@ -1151,6 +1154,9 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     final long before = System.nanoTime();
                     opsListener.onPreQueryPhase(searchContext);
                     shardTracer.startSpan("shard_query");
+                    if (searchContext.query() != null) {
+                        shardTracer.recordDetail("query", searchContext.query().toString());
+                    }
                     try {
                         searchContext.searcher().setAggregatedDfs(request.dfs());
                         QueryPhase.execute(searchContext);
