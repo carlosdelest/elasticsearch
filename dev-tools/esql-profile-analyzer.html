@@ -172,22 +172,12 @@ svg text { font-family: inherit; }
     </div>
   </div>
 
-  <!-- Query Phases -->
+  <!-- Query Timeline (phases + drivers unified) -->
   <div class="section hidden" id="phases-section">
-    <h2 onclick="toggleSection('phases')"><span class="toggle" id="phases-toggle">&#9660;</span> Query Phases</h2>
+    <h2 onclick="toggleSection('phases')"><span class="toggle" id="phases-toggle">&#9660;</span> Query Timeline</h2>
     <div class="section-body" id="phases-body">
       <div id="phases-stats" class="stats-grid"></div>
       <div class="chart-container" id="phases-chart"></div>
-    </div>
-  </div>
-
-  <!-- Driver Timeline -->
-  <div class="section hidden" id="drivers-section">
-    <h2 onclick="toggleSection('drivers')"><span class="toggle" id="drivers-toggle">&#9660;</span> Driver Timeline</h2>
-    <div class="section-body" id="drivers-body">
-      <div class="sort-controls" id="driver-sort"></div>
-      <div class="dual-bar-legend" id="driver-legend"></div>
-      <div class="chart-container" id="drivers-chart"></div>
     </div>
   </div>
 
@@ -273,7 +263,7 @@ function handleFile(e) {
 function clearAll() {
   document.getElementById('json-input').value = '';
   document.getElementById('error-container').innerHTML = '';
-  ['phases-section', 'drivers-section', 'detail-section', 'plans-section'].forEach(function(id) {
+  ['phases-section', 'detail-section', 'plans-section'].forEach(function(id) {
     document.getElementById(id).classList.add('hidden');
   });
 }
@@ -380,7 +370,7 @@ function analyze() {
     selectedDriverIdx = null;
     renderAll();
   } catch (e) {
-    ['phases-section', 'drivers-section', 'detail-section', 'plans-section'].forEach(function(id) {
+    ['phases-section', 'detail-section', 'plans-section'].forEach(function(id) {
       document.getElementById(id).classList.add('hidden');
     });
     errEl.innerHTML = '<div class="error-msg">JSON Parse Error: ' + escapeHtml(e.message) + '</div>';
@@ -388,22 +378,37 @@ function analyze() {
 }
 
 function renderAll() {
-  renderPhases();
-  renderDriverTimeline();
+  renderQueryTimeline();
   document.getElementById('detail-section').classList.add('hidden');
   renderPlans();
 }
 
-/* ===== Query Phases ===== */
-function renderPhases() {
+/* ===== Unified Query Timeline (phases + drivers) ===== */
+function renderQueryTimeline() {
   var p = profileData;
-  var phaseNames = ['query', 'planning', 'parsing', 'preanalysis', 'dependency_resolution', 'analysis'];
+
+  // Collect planning phases
+  var phaseNames = ['planning', 'parsing', 'preanalysis', 'dependency_resolution', 'analysis'];
   var phases = [];
   for (var i = 0; i < phaseNames.length; i++) {
     var n = phaseNames[i];
     if (p[n]) phases.push(Object.assign({ name: n }, p[n]));
   }
-  if (phases.length === 0) {
+  phases.sort(function(a, b) {
+    var dt = (a.start_millis || 0) - (b.start_millis || 0);
+    if (dt !== 0) return dt;
+    // planning envelope sorts before its sub-phases when start_millis ties
+    if (a.name === 'planning') return -1;
+    if (b.name === 'planning') return 1;
+    return 0;
+  });
+
+  var queryPhase = p.query ? Object.assign({ name: 'query' }, p.query) : null;
+  var drivers = p.drivers || [];
+  var hasPhases = phases.length > 0 || queryPhase;
+  var hasDrivers = drivers.length > 0;
+
+  if (!hasPhases && !hasDrivers) {
     document.getElementById('phases-section').classList.add('hidden');
     return;
   }
@@ -411,6 +416,10 @@ function renderPhases() {
 
   // Stats cards
   var statsHtml = '';
+  if (queryPhase) {
+    var qDur = queryPhase.took_millis != null ? fmtMillis(queryPhase.took_millis) : fmtNanos(queryPhase.took_nanos);
+    statsHtml += '<div class="stat-card"><div class="label">total query</div><div class="value">' + qDur + '</div></div>';
+  }
   phases.forEach(function(ph) {
     var dur = ph.took_millis != null ? fmtMillis(ph.took_millis) : fmtNanos(ph.took_nanos);
     statsHtml += '<div class="stat-card"><div class="label">' + ph.name.replace(/_/g, ' ') +
@@ -420,98 +429,13 @@ function renderPhases() {
     statsHtml += '<div class="stat-card"><div class="label">field caps calls</div><div class="value">' +
       p.field_caps_calls + '</div></div>';
   }
-  document.getElementById('phases-stats').innerHTML = statsHtml;
-
-  // Gantt chart
-  var chartEl = document.getElementById('phases-chart');
-  chartEl.innerHTML = '';
-
-  var queryPhase = null;
-  var innerPhases = [];
-  phases.forEach(function(ph) {
-    if (ph.name === 'query') queryPhase = ph;
-    else innerPhases.push(ph);
-  });
-  if (innerPhases.length === 0 && !queryPhase) return;
-  var allPhases = queryPhase ? [queryPhase].concat(innerPhases) : innerPhases;
-  allPhases.sort(function(a, b) { return (a.start_millis || 0) - (b.start_millis || 0); });
-  var minStart = d3.min(allPhases, function(d) { return d.start_millis; });
-  var maxEnd = d3.max(allPhases, function(d) { return d.stop_millis; });
-
-  var margin = { top: 20, right: 30, bottom: 30, left: 170 };
-  var barH = 28;
-  var barGap = 6;
-  var width = Math.max(600, chartEl.clientWidth) - margin.left - margin.right;
-  var height = allPhases.length * (barH + barGap) + margin.top + margin.bottom;
-
-  var svg = d3.select(chartEl).append('svg')
-    .attr('width', width + margin.left + margin.right)
-    .attr('height', height);
-  var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
-
-  var x = d3.scaleLinear().domain([minStart, maxEnd]).range([0, width]);
-
-  var phaseColors = {
-    query: 'rgba(100,100,100,0.25)', planning: '#4a90d9', parsing: '#2ecc71',
-    preanalysis: '#e8a838', dependency_resolution: '#e94560', analysis: '#9b59b6'
-  };
-
-  allPhases.forEach(function(ph, i) {
-    var y = i * (barH + barGap);
-    var x0 = x(ph.start_millis);
-    var x1 = x(ph.stop_millis);
-    var w = Math.max(2, x1 - x0);
-
-    g.append('rect').attr('x', x0).attr('y', y).attr('width', w).attr('height', barH)
-      .attr('fill', phaseColors[ph.name] || '#888').attr('rx', 3)
-      .attr('opacity', ph.name === 'query' ? 0.3 : 0.8);
-
-    g.append('text').attr('x', -8).attr('y', y + barH / 2)
-      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
-      .attr('fill', 'currentColor').attr('font-size', 11)
-      .text(ph.name.replace(/_/g, ' '));
-
-    var dur = ph.took_millis != null ? fmtMillis(ph.took_millis) : fmtNanos(ph.took_nanos);
-    if (w > 40) {
-      g.append('text').attr('x', x0 + w / 2).attr('y', y + barH / 2)
-        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-        .attr('fill', '#fff').attr('font-size', 10).text(dur);
-    }
-  });
-
-  var xAxis = d3.axisBottom(x).ticks(6).tickFormat(function(d) { return fmtMillis(d - minStart); });
-  g.append('g').attr('transform', 'translate(0,' + allPhases.length * (barH + barGap) + ')')
-    .call(xAxis).selectAll('text').attr('fill', 'currentColor');
-  g.selectAll('.domain, .tick line').attr('stroke', 'currentColor');
-}
-
-/* ===== Driver Timeline ===== */
-function renderDriverTimeline() {
-  var drivers = profileData.drivers;
-  if (!drivers || drivers.length === 0) {
-    document.getElementById('drivers-section').classList.add('hidden');
-    return;
+  if (hasDrivers) {
+    var totalWall = d3.max(drivers, function(d) { return d.took_nanos || 0; }) || 0;
+    var totalCpu = d3.sum(drivers, function(d) { return d.cpu_nanos || 0; });
+    statsHtml += '<div class="stat-card"><div class="label">drivers</div><div class="value">' + drivers.length + '</div></div>';
+    statsHtml += '<div class="stat-card"><div class="label">total driver cpu</div><div class="value">' + fmtNanos(totalCpu) + '</div></div>';
   }
-  document.getElementById('drivers-section').classList.remove('hidden');
-
-  // Sort controls
-  var sortEl = document.getElementById('driver-sort');
-  var sorts = [
-    { key: 'start', label: 'Start Time' },
-    { key: 'wall', label: 'Wall Time' },
-    { key: 'cpu', label: 'CPU Time' },
-    { key: 'desc', label: 'Phase' }
-  ];
-  sortEl.innerHTML = '<span style="color:var(--text2);font-size:11px;">Sort:</span> ' +
-    sorts.map(function(s) {
-      return '<button class="' + (s.key === currentSort ? 'active' : '') +
-        '" onclick="sortDrivers(\'' + s.key + '\')">' + s.label + '</button>';
-    }).join('');
-
-  // Legend
-  document.getElementById('driver-legend').innerHTML =
-    '<span><span class="swatch" style="background:rgba(74,144,217,0.3);border:1px solid #4a90d9;"></span> Wall time</span>' +
-    '<span><span class="swatch" style="background:rgba(74,144,217,0.85);"></span> CPU time</span>';
+  document.getElementById('phases-stats').innerHTML = statsHtml;
 
   // Sort drivers
   var sorted = drivers.map(function(d, i) { return Object.assign({ _idx: i }, d); });
@@ -522,35 +446,140 @@ function renderDriverTimeline() {
     default:     sorted.sort(function(a, b) { return (a.start_millis || 0) - (b.start_millis || 0); }); break;
   }
 
-  var chartEl = document.getElementById('drivers-chart');
+  // Compute unified time range
+  var allTimes = [];
+  if (queryPhase) { allTimes.push(queryPhase.start_millis, queryPhase.stop_millis); }
+  phases.forEach(function(ph) { allTimes.push(ph.start_millis, ph.stop_millis); });
+  sorted.forEach(function(d) { allTimes.push(d.start_millis, d.stop_millis); });
+  var minStart = d3.min(allTimes) || 0;
+  var maxEnd = d3.max(allTimes) || minStart + 1;
+
+  // Layout dimensions
+  var chartEl = document.getElementById('phases-chart');
   chartEl.innerHTML = '';
 
   var margin = { top: 10, right: 30, bottom: 30, left: 230 };
-  var barH = 26;
-  var cpuBarH = 14;
-  var gap = 8;
+  var phaseBarH = 24;
+  var phaseGap = 5;
+  var driverBarH = 26;
+  var driverCpuBarH = 14;
+  var driverGap = 8;
+  var separatorH = 20;
+
+  var phaseRowCount = phases.length;
+  var phasesH = phaseRowCount * (phaseBarH + phaseGap);
+  var driversH = sorted.length * (driverBarH + driverGap);
+  var totalH = margin.top + phasesH +
+    (hasPhases && hasDrivers ? separatorH : 0) +
+    driversH + margin.bottom;
+
   var width = Math.max(700, chartEl.clientWidth) - margin.left - margin.right;
-  var height = sorted.length * (barH + gap) + margin.top + margin.bottom;
 
   var svg = d3.select(chartEl).append('svg')
     .attr('width', width + margin.left + margin.right)
-    .attr('height', height);
+    .attr('height', totalH);
   var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
-  var minStart = d3.min(sorted, function(d) { return d.start_millis || 0; });
-  var maxEnd = d3.max(sorted, function(d) { return d.stop_millis || d.start_millis || 0; });
-  var x = d3.scaleLinear().domain([minStart, maxEnd || minStart + 1]).range([0, width]);
+  var x = d3.scaleLinear().domain([minStart, maxEnd]).range([0, width]);
 
+  // --- Query envelope (full-height background) ---
+  if (queryPhase) {
+    var envX0 = x(queryPhase.start_millis);
+    var envW = Math.max(2, x(queryPhase.stop_millis) - envX0);
+    var envH = totalH - margin.top - margin.bottom;
+    g.append('rect').attr('x', envX0).attr('y', 0)
+      .attr('width', envW).attr('height', envH)
+      .attr('fill', 'rgba(100,100,100,0.12)').attr('rx', 4);
+    // Query label at top-left inside envelope
+    g.append('text').attr('x', envX0 + 4).attr('y', -2)
+      .attr('fill', 'currentColor').attr('font-size', 9)
+      .attr('opacity', 0.5).text('query (' +
+        (queryPhase.took_millis != null ? fmtMillis(queryPhase.took_millis) : fmtNanos(queryPhase.took_nanos)) + ')');
+  }
+
+  // --- Phase rows ---
+  var phaseColors = {
+    planning: '#4a90d9', parsing: '#2ecc71', preanalysis: '#e8a838',
+    dependency_resolution: '#e94560', analysis: '#9b59b6'
+  };
+
+  phases.forEach(function(ph, i) {
+    var y = i * (phaseBarH + phaseGap);
+    var x0 = x(ph.start_millis);
+    var x1 = x(ph.stop_millis);
+    var w = Math.max(2, x1 - x0);
+
+    g.append('rect').attr('x', x0).attr('y', y).attr('width', w).attr('height', phaseBarH)
+      .attr('fill', phaseColors[ph.name] || '#888').attr('rx', 3).attr('opacity', 0.8)
+      .on('mousemove', function(evt) {
+        var dur = ph.took_millis != null ? fmtMillis(ph.took_millis) : fmtNanos(ph.took_nanos);
+        showTooltip(evt,
+          '<div class="tt-title">' + ph.name.replace(/_/g, ' ') + '</div>' +
+          '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + dur + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtTime(ph.start_millis) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Stop:</span><span>' + fmtTime(ph.stop_millis) + '</span></div>'
+        );
+      })
+      .on('mouseleave', hideTooltip);
+
+    g.append('text').attr('x', -8).attr('y', y + phaseBarH / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .attr('fill', 'currentColor').attr('font-size', 11)
+      .text(ph.name.replace(/_/g, ' '));
+
+    var dur = ph.took_millis != null ? fmtMillis(ph.took_millis) : fmtNanos(ph.took_nanos);
+    if (w > 40) {
+      g.append('text').attr('x', x0 + w / 2).attr('y', y + phaseBarH / 2)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .attr('fill', '#fff').attr('font-size', 10).text(dur);
+    }
+  });
+
+  // --- Separator ---
+  var driverStartY = phasesH;
+  if (hasPhases && hasDrivers) {
+    var sepY = phasesH + separatorH / 2;
+    g.append('line').attr('x1', 0).attr('y1', sepY).attr('x2', width).attr('y2', sepY)
+      .attr('stroke', 'currentColor').attr('stroke-width', 1)
+      .attr('stroke-dasharray', '4,4').attr('opacity', 0.3);
+    // Sort controls and legend rendered as foreignObject
+    var sortHtml = '<span style="color:var(--text2);font-size:10px;margin-right:6px;">Drivers sort:</span>';
+    var sorts = [
+      { key: 'start', label: 'Start' }, { key: 'wall', label: 'Wall' },
+      { key: 'cpu', label: 'CPU' }, { key: 'desc', label: 'Phase' }
+    ];
+    sorts.forEach(function(s) {
+      var cls = s.key === currentSort ? 'active' : '';
+      sortHtml += '<button class="' + cls + '" onclick="sortDrivers(\'' + s.key + '\')" style="padding:2px 8px;font-size:10px;margin-right:3px;">' + s.label + '</button>';
+    });
+    sortHtml += '<span style="margin-left:12px;font-size:10px;color:var(--text2);">';
+    sortHtml += '<span style="display:inline-block;width:12px;height:7px;border-radius:2px;background:rgba(74,144,217,0.3);border:1px solid #4a90d9;vertical-align:middle;margin-right:3px;"></span>Wall ';
+    sortHtml += '<span style="display:inline-block;width:12px;height:7px;border-radius:2px;background:rgba(74,144,217,0.85);vertical-align:middle;margin-right:3px;margin-left:6px;"></span>CPU';
+    sortHtml += '</span>';
+
+    var fo = g.append('foreignObject')
+      .attr('x', -margin.left + 8).attr('y', phasesH + 1)
+      .attr('width', width + margin.left + margin.right - 16).attr('height', separatorH - 2);
+    fo.append('xhtml:div')
+      .attr('xmlns', 'http://www.w3.org/1999/xhtml')
+      .style('display', 'flex').style('align-items', 'center')
+      .style('height', '100%').style('font-family', 'inherit')
+      .html(sortHtml);
+
+    driverStartY = phasesH + separatorH;
+  }
+
+  // --- Driver rows ---
   sorted.forEach(function(drv, i) {
-    var y = i * (barH + gap);
+    var y = driverStartY + i * (driverBarH + driverGap);
     var col = getDriverColor(drv.description);
     var x0 = x(drv.start_millis || minStart);
     var wallW = Math.max(2, x(drv.stop_millis || drv.start_millis || minStart) - x0);
     var cpuRatio = (drv.took_nanos && drv.cpu_nanos) ? drv.cpu_nanos / drv.took_nanos : 0;
     var cpuW = Math.max(0, wallW * cpuRatio);
 
-    // Wall time bar (full height)
-    g.append('rect').attr('x', x0).attr('y', y).attr('width', wallW).attr('height', barH)
+    // Wall time bar
+    g.append('rect').attr('x', x0).attr('y', y).attr('width', wallW).attr('height', driverBarH)
       .attr('fill', col.wall).attr('stroke', col.stroke).attr('stroke-width', 1).attr('rx', 3)
       .style('cursor', 'pointer')
       .on('click', function() { selectDriver(drv._idx); })
@@ -571,8 +600,8 @@ function renderDriverTimeline() {
 
     // CPU time bar (inner, shorter, centered)
     if (cpuW > 0) {
-      g.append('rect').attr('x', x0).attr('y', y + (barH - cpuBarH) / 2)
-        .attr('width', cpuW).attr('height', cpuBarH)
+      g.append('rect').attr('x', x0).attr('y', y + (driverBarH - driverCpuBarH) / 2)
+        .attr('width', cpuW).attr('height', driverCpuBarH)
         .attr('fill', col.cpu).attr('rx', 2)
         .style('pointer-events', 'none');
     }
@@ -580,7 +609,7 @@ function renderDriverTimeline() {
     // Label
     var label = (drv.description || 'Driver ' + drv._idx) +
       (drv.node_name ? ' @ ' + drv.node_name : '');
-    g.append('text').attr('x', -8).attr('y', y + barH / 2)
+    g.append('text').attr('x', -8).attr('y', y + driverBarH / 2)
       .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
       .attr('fill', 'currentColor').attr('font-size', 11)
       .text(label.length > 34 ? label.slice(0, 32) + '..' : label)
@@ -589,7 +618,7 @@ function renderDriverTimeline() {
 
     // Duration label on bar
     if (wallW > 90) {
-      g.append('text').attr('x', x0 + wallW - 4).attr('y', y + barH / 2)
+      g.append('text').attr('x', x0 + wallW - 4).attr('y', y + driverBarH / 2)
         .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
         .attr('fill', '#fff').attr('font-size', 10)
         .style('pointer-events', 'none')
@@ -597,16 +626,17 @@ function renderDriverTimeline() {
     }
   });
 
-  // X axis
-  var xAxis = d3.axisBottom(x).ticks(6).tickFormat(function(d) { return fmtMillis(d - minStart); });
-  g.append('g').attr('transform', 'translate(0,' + sorted.length * (barH + gap) + ')')
+  // --- X axis ---
+  var axisY = driverStartY + sorted.length * (driverBarH + driverGap);
+  var xAxis = d3.axisBottom(x).ticks(8).tickFormat(function(d) { return fmtMillis(d - minStart); });
+  g.append('g').attr('transform', 'translate(0,' + axisY + ')')
     .call(xAxis).selectAll('text').attr('fill', 'currentColor');
   g.selectAll('.domain, .tick line').attr('stroke', 'currentColor');
 }
 
 function sortDrivers(key) {
   currentSort = key;
-  renderDriverTimeline();
+  renderQueryTimeline();
 }
 
 /* ===== Select Driver -> Detail ===== */
