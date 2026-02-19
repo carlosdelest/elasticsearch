@@ -396,6 +396,7 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
             doAggregationPostCollection(firstCollector);
             shardTracer.recordDetail("segments", 0);
             shardTracer.recordDetail("slices", 0);
+            shardTracer.recordDetail("max_docs", 0);
             shardTracer.startSpan("collector_reduce");
             try {
                 return collectorManager.reduce(Collections.singletonList(firstCollector));
@@ -422,12 +423,18 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
             final long[] sliceStartNanos = new long[leafSlices.length];
             final long[] sliceStopNanos = new long[leafSlices.length];
             final int[] sliceSegmentCounts = new int[leafSlices.length];
+            final int[] sliceMaxDocs = new int[leafSlices.length];
             final List<Callable<C>> listTasks = new ArrayList<>(leafSlices.length);
             for (int i = 0; i < leafSlices.length; ++i) {
                 final LeafReaderContextPartition[] leaves = leafSlices[i].partitions;
                 final C collector = collectors.get(i);
                 final int sliceIndex = i;
                 sliceSegmentCounts[sliceIndex] = leaves.length;
+                int maxDocs = 0;
+                for (LeafReaderContextPartition leaf : leaves) {
+                    maxDocs += leaf.ctx.reader().maxDoc();
+                }
+                sliceMaxDocs[sliceIndex] = maxDocs;
                 listTasks.add(() -> {
                     sliceStartNanos[sliceIndex] = System.nanoTime();
                     try {
@@ -439,6 +446,12 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
                 });
             }
             List<C> collectedCollectors = getTaskExecutor().invokeAll(listTasks);
+            // Record total max_docs across all slices
+            int totalMaxDocs = 0;
+            for (int maxDocCount : sliceMaxDocs) {
+                totalMaxDocs += maxDocCount;
+            }
+            shardTracer.recordDetail("max_docs", totalMaxDocs);
             // Build per-slice TraceSpan objects on the main thread and attach to the current span
             for (int i = 0; i < leafSlices.length; i++) {
                 if (sliceStopNanos[i] > 0) {
@@ -451,7 +464,7 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
                             null,
                             startOffset,
                             stopOffset,
-                            Map.of("segments", sliceSegmentCounts[i]),
+                            Map.of("segments", sliceSegmentCounts[i], "max_docs", sliceMaxDocs[i]),
                             List.of()
                         )
                     );
