@@ -291,16 +291,16 @@ var spanColors = {
   create_search_context:{ fill: 'rgba(149,165,166,0.5)',   stroke: '#95a5a6', text: '#fff' },
   parse_source:         { fill: 'rgba(149,165,166,0.4)',   stroke: '#7f8c8d', text: '#fff' },
   collector_reduce:     { fill: 'rgba(232,168,56,0.45)',   stroke: '#d4a017', text: '#fff' },
+  slice:                { fill: 'rgba(46,204,113,0.5)',    stroke: '#27ae60', text: '#fff' },
+  // Shard sub-phases
+  create_context:       { fill: 'rgba(149,165,166,0.45)',  stroke: '#95a5a6', text: '#fff' },
+  query_rewrite:        { fill: 'rgba(241,196,15,0.35)',   stroke: '#d4ac0d', text: '#333' },
   // Default
   _default:             { fill: 'rgba(46,204,113,0.7)',    stroke: '#2ecc71', text: '#fff' }
 };
 
 function getSpanColor(name) {
   if (spanColors[name]) return spanColors[name];
-  // Check prefix matches for slice spans (slice_0, slice_1, etc.)
-  if (name && name.indexOf('slice_') === 0) {
-    return { fill: 'rgba(46,204,113,0.5)', stroke: '#27ae60', text: '#fff' };
-  }
   if (name && name.indexOf('shard_') === 0) {
     return { fill: 'rgba(46,204,113,0.5)', stroke: '#2ecc71', text: '#fff' };
   }
@@ -531,41 +531,85 @@ function buildRowsForSpan(spanIdx, depth) {
       var childRowIdx = buildRowsForSpan(group.indices[0], depth + 1);
       row.childRowIndices.push(childRowIdx);
     } else {
-      // Multiple spans with same name — create one merged row
-      var mergedRowIdx = timelineRows.length;
-      var mergedRow = {
-        rowIdx: mergedRowIdx,
-        name: group.name,
-        depth: depth + 1,
-        spanIndices: group.indices.slice(),
-        childRowIndices: []
-      };
-      timelineRows.push(mergedRow);
-      row.childRowIndices.push(mergedRowIdx);
+      // Multiple spans with the same name.
+      // Pack into lanes: if they all fit in one lane (no overlaps)
+      // we show a single merged row; if they overlap we create one
+      // row per lane so parallel execution is clearly visible.
+      var lanes = packIntoLanes(group.indices);
 
-      // Recurse into each span's children, but those children become
-      // children of the merged row
-      for (var s = 0; s < group.indices.length; s++) {
-        var memberSpan = flatSpans[group.indices[s]];
-        for (var mc = 0; mc < memberSpan.childIndices.length; mc++) {
-          var grandchildIdx = memberSpan.childIndices[mc];
-          var grandchild = flatSpans[grandchildIdx];
-          // Check if this grandchild name is already a child group of
-          // the merged row — if so, add to it; otherwise create new
-          var found = false;
-          for (var cr = 0; cr < mergedRow.childRowIndices.length; cr++) {
-            var existingRow = timelineRows[mergedRow.childRowIndices[cr]];
-            if (existingRow.name === grandchild.name) {
-              existingRow.spanIndices.push(grandchildIdx);
-              // Also recurse grandchild's children
-              addDescendantRows(grandchildIdx, existingRow);
-              found = true;
-              break;
+      if (lanes.length === 1) {
+        // No overlaps — single merged row with all bars
+        var mergedRowIdx = timelineRows.length;
+        var mergedRow = {
+          rowIdx: mergedRowIdx,
+          name: group.name,
+          depth: depth + 1,
+          spanIndices: group.indices.slice(),
+          childRowIndices: []
+        };
+        timelineRows.push(mergedRow);
+        row.childRowIndices.push(mergedRowIdx);
+
+        // Recurse into each span's children
+        for (var s = 0; s < group.indices.length; s++) {
+          var memberSpan = flatSpans[group.indices[s]];
+          for (var mc = 0; mc < memberSpan.childIndices.length; mc++) {
+            var grandchildIdx = memberSpan.childIndices[mc];
+            var grandchild = flatSpans[grandchildIdx];
+            var found = false;
+            for (var cr = 0; cr < mergedRow.childRowIndices.length; cr++) {
+              var existingRow = timelineRows[mergedRow.childRowIndices[cr]];
+              if (existingRow.name === grandchild.name) {
+                existingRow.spanIndices.push(grandchildIdx);
+                addDescendantRows(grandchildIdx, existingRow);
+                found = true;
+                break;
+              }
+            }
+            if (false === found) {
+              var gcRowIdx = buildRowsForSpan(grandchildIdx, depth + 2);
+              mergedRow.childRowIndices.push(gcRowIdx);
             }
           }
-          if (false === found) {
-            var gcRowIdx = buildRowsForSpan(grandchildIdx, depth + 2);
-            mergedRow.childRowIndices.push(gcRowIdx);
+        }
+      } else {
+        // Overlapping spans — one row per lane
+        for (var li = 0; li < lanes.length; li++) {
+          var lane = lanes[li];
+          var laneRowIdx = timelineRows.length;
+          var laneRow = {
+            rowIdx: laneRowIdx,
+            name: group.name,
+            depth: depth + 1,
+            spanIndices: lane.slice(),
+            childRowIndices: [],
+            laneIndex: li,
+            laneCount: lanes.length
+          };
+          timelineRows.push(laneRow);
+          row.childRowIndices.push(laneRowIdx);
+
+          // Recurse children of every span in this lane
+          for (var ls = 0; ls < lane.length; ls++) {
+            var laneSpan = flatSpans[lane[ls]];
+            for (var lc = 0; lc < laneSpan.childIndices.length; lc++) {
+              var gcIdx = laneSpan.childIndices[lc];
+              var gc = flatSpans[gcIdx];
+              var found2 = false;
+              for (var cr2 = 0; cr2 < laneRow.childRowIndices.length; cr2++) {
+                var existingRow2 = timelineRows[laneRow.childRowIndices[cr2]];
+                if (existingRow2.name === gc.name) {
+                  existingRow2.spanIndices.push(gcIdx);
+                  addDescendantRows(gcIdx, existingRow2);
+                  found2 = true;
+                  break;
+                }
+              }
+              if (false === found2) {
+                var gcRowIdx2 = buildRowsForSpan(gcIdx, depth + 2);
+                laneRow.childRowIndices.push(gcRowIdx2);
+              }
+            }
           }
         }
       }
@@ -573,6 +617,36 @@ function buildRowsForSpan(spanIdx, depth) {
   }
 
   return rowIdx;
+}
+
+/**
+ * Pack an array of span indices into non-overlapping "lanes".
+ * Spans are sorted by start time, then greedily assigned to the first
+ * lane whose last span ends before the current span starts.
+ * Returns an array of lanes, where each lane is an array of span indices.
+ */
+function packIntoLanes(spanIndices) {
+  var sorted = spanIndices.slice().sort(function(a, b) {
+    return flatSpans[a].startNanos - flatSpans[b].startNanos;
+  });
+  var lanes = [];
+  for (var i = 0; i < sorted.length; i++) {
+    var idx = sorted[i];
+    var span = flatSpans[idx];
+    var placed = false;
+    for (var l = 0; l < lanes.length; l++) {
+      var lastIdx = lanes[l][lanes[l].length - 1];
+      if (span.startNanos >= flatSpans[lastIdx].stopNanos) {
+        lanes[l].push(idx);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      lanes.push([idx]);
+    }
+  }
+  return lanes;
 }
 
 /* Add descendants of a span to an existing merged row's children */
@@ -868,9 +942,13 @@ function renderTimeline() {
         .on('mouseleave', hideTooltip);
     });
 
-    // Row label (indented) — for merged rows, show count badge
+    // Row label (indented) — for merged/lane rows, show context
     var labelText = row.name;
-    if (isMerged) {
+    if (row.laneCount != null) {
+      // Lane row from overlap splitting
+      labelText += ' [' + (row.laneIndex + 1) + '/' + row.laneCount + ']';
+      if (row.spanIndices.length > 1) labelText += ' (' + row.spanIndices.length + ')';
+    } else if (isMerged) {
       labelText += ' (' + row.spanIndices.length + ')';
     } else {
       var singleSpan = flatSpans[row.spanIndices[0]];
@@ -1066,13 +1144,13 @@ function loadExample() {
                     "duration_nanos": 650000
                   },
                   {
-                    "name": "slice_0",
+                    "name": "slice",
                     "start_offset_nanos": 500001900000,
                     "duration_nanos": 8600000,
                     "details": { "segments": 3 }
                   },
                   {
-                    "name": "slice_1",
+                    "name": "slice",
                     "start_offset_nanos": 500001950000,
                     "duration_nanos": 10250000,
                     "details": { "segments": 2 }
@@ -1115,7 +1193,7 @@ function loadExample() {
                     "duration_nanos": 750000
                   },
                   {
-                    "name": "slice_0",
+                    "name": "slice",
                     "start_offset_nanos": 800002200000,
                     "duration_nanos": 13600000,
                     "details": { "segments": 4 }
@@ -1157,13 +1235,13 @@ function loadExample() {
                     "duration_nanos": 650000
                   },
                   {
-                    "name": "slice_0",
+                    "name": "slice",
                     "start_offset_nanos": 500022000000,
                     "duration_nanos": 9500000,
                     "details": { "segments": 3 }
                   },
                   {
-                    "name": "slice_1",
+                    "name": "slice",
                     "start_offset_nanos": 500022100000,
                     "duration_nanos": 7700000,
                     "details": { "segments": 2 }
