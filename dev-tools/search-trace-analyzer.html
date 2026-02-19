@@ -87,10 +87,35 @@ button:hover { background: var(--hover); }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.primary:hover { opacity: 0.85; }
 textarea {
-  width: 100%; height: 200px; background: var(--card-bg); color: var(--text);
+  width: 100%;
   border: 1px solid var(--border); border-radius: 4px; padding: 10px;
   font-family: inherit; font-size: 12px; resize: vertical;
+  background: var(--card-bg); color: var(--text);
 }
+#json-input { height: 200px; }
+#dsl-input { height: 120px; margin-top: 12px; }
+
+.live-query-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.live-query-grid label {
+  display: block; font-size: 10px; color: var(--text2); margin-bottom: 2px;
+}
+.live-query-grid input {
+  width: 100%;
+  background: var(--card-bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px;
+  font-family: inherit; font-size: 12px;
+}
+.cors-note {
+  font-size: 11px; color: var(--text2);
+  margin-top: 12px; padding: 10px;
+  background: var(--bg3); border-radius: 4px;
+}
+.cors-note code { font-family: inherit; }
+.cors-note pre { margin-top: 4px; }
+
 input[type="file"] { display: none; }
 .stats-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -158,6 +183,41 @@ svg text { font-family: inherit; }
         <button onclick="clearAll()">Clear</button>
       </div>
       <div id="error-container"></div>
+    </div>
+  </div>
+
+  <!-- Live Query Section -->
+  <div class="section" id="live-query-section">
+    <h2 onclick="toggleSection('live-query')"><span class="toggle" id="live-query-toggle">&#9660;</span> Live Query</h2>
+    <div class="section-body" id="live-query-body">
+      <div class="live-query-grid">
+        <div>
+          <label for="es-url">Elasticsearch URL</label>
+          <input type="text" id="es-url" value="http://localhost:9200">
+        </div>
+        <div>
+          <label for="es-index">Index</label>
+          <input type="text" id="es-index" placeholder="my-index,other-index">
+        </div>
+        <div>
+          <label for="es-user">Username</label>
+          <input type="text" id="es-user" value="elastic-admin">
+        </div>
+        <div>
+          <label for="es-pass">Password</label>
+          <input type="password" id="es-pass" value="elastic-password">
+        </div>
+      </div>
+      <textarea id="dsl-input" placeholder="Enter search query body (DSL) here... e.g. { "query": { "match_all": {} } }"></textarea>
+      <div class="toolbar">
+        <button class="primary" onclick="runLiveQuery()">Run Query</button>
+      </div>
+      <div class="cors-note">
+        <strong>Note:</strong> For this to work, your Elasticsearch instance must be configured for CORS. Add these lines to your <code>elasticsearch.yml</code> and restart the node:
+        <pre><code>http.cors.enabled: true
+http.cors.allow-origin: "*"</code></pre>
+        For security, you can replace <code>"*"</code> with the specific origin serving this file.
+      </div>
     </div>
   </div>
 
@@ -270,6 +330,62 @@ function showTooltip(evt, html) {
   tooltipEl.style.top = y + 'px';
 }
 function hideTooltip() { tooltipEl.classList.add('hidden'); }
+
+/* ===== Live Query ===== */
+async function runLiveQuery() {
+  var errEl = document.getElementById('error-container');
+  errEl.innerHTML = '';
+  var url = document.getElementById('es-url').value.trim();
+  var index = document.getElementById('es-index').value.trim();
+  var user = document.getElementById('es-user').value;
+  var pass = document.getElementById('es-pass').value;
+  var dsl = document.getElementById('dsl-input').value;
+
+  if (!url || !index || !dsl) {
+    errEl.innerHTML = '<div class="error-msg">URL, Index, and Query Body are required.</div>';
+    return;
+  }
+
+  var searchUrl = url + '/' + index + '/_search';
+  var body;
+  try {
+    body = JSON.parse(dsl);
+  } catch(e) {
+    errEl.innerHTML = '<div class="error-msg">Invalid JSON in Query Body: ' + escapeHtml(e.message) + '</div>';
+    return;
+  }
+
+  // Inject trace=true
+  body.trace = true;
+
+  try {
+    var headers = { 'Content-Type': 'application/json' };
+    if (user && pass) {
+      headers['Authorization'] = 'Basic ' + btoa(user + ':' + pass);
+    }
+
+    var response = await fetch(searchUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(body)
+    });
+
+    var resultJson = await response.json();
+
+    if (!response.ok) {
+      var errorBody = JSON.stringify(resultJson, null, 2);
+      throw new Error('HTTP ' + response.status + ' ' + response.statusText + ':<br><pre>' + escapeHtml(errorBody) + '</pre>');
+    }
+
+    // Success! Paste the result into the main input and analyze it.
+    document.getElementById('json-input').value = JSON.stringify(resultJson, null, 2);
+    analyze();
+
+  } catch (e) {
+    var errorMsg = 'Failed to fetch from Elasticsearch. Check the URL and ensure CORS is enabled on the server.<br>Error: ' + e.message;
+    errEl.innerHTML = '<div class="error-msg">' + errorMsg + '</div>';
+  }
+}
 
 /* ===== Color palettes ===== */
 var spanColors = {
