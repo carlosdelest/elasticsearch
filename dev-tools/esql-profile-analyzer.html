@@ -555,6 +555,7 @@ function renderQueryTimeline() {
     sortHtml += '<span style="margin-left:12px;font-size:10px;color:var(--text2);">';
     sortHtml += '<span style="display:inline-block;width:12px;height:7px;border-radius:2px;background:rgba(74,144,217,0.3);border:1px solid #4a90d9;vertical-align:middle;margin-right:3px;"></span>Wall ';
     sortHtml += '<span style="display:inline-block;width:12px;height:7px;border-radius:2px;background:rgba(74,144,217,0.85);vertical-align:middle;margin-right:3px;margin-left:6px;"></span>CPU';
+    sortHtml += '<span style="display:inline-block;width:12px;height:7px;border-radius:2px;background:rgba(231,76,60,0.5);border:1px solid #e74c3c;vertical-align:middle;margin-right:3px;margin-left:6px;"></span>Sleep';
     sortHtml += '</span>';
 
     var fo = g.append('foreignObject')
@@ -604,6 +605,32 @@ function renderQueryTimeline() {
         .attr('width', cpuW).attr('height', driverCpuBarH)
         .attr('fill', col.cpu).attr('rx', 2)
         .style('pointer-events', 'none');
+    }
+
+    // --- Sleep segments ---
+    if (drv.sleeps) {
+      var allSleeps = (drv.sleeps.first || []).concat(drv.sleeps.last || []);
+      allSleeps.forEach(function(sleep) {
+        if (sleep.sleep_millis != null && sleep.wake_millis != null) {
+          var sleepX0 = x(sleep.sleep_millis);
+          var sleepW = Math.max(1, x(sleep.wake_millis) - sleepX0);
+          g.append('rect').attr('x', sleepX0).attr('y', y).attr('width', sleepW).attr('height', driverBarH)
+            .attr('fill', 'rgba(231, 76, 60, 0.5)') // semi-transparent red
+            .attr('stroke', '#c0392b')
+            .style('pointer-events', 'auto')
+            .on('mousemove', function(evt) {
+              var dur = sleep.wake_millis - sleep.sleep_millis;
+              showTooltip(evt,
+                '<div class="tt-title">Sleep: ' + escapeHtml(sleep.reason || 'Unknown') + '</div>' +
+                '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + fmtMillis(dur) + '</span></div>' +
+                '<div class="tt-row"><span class="tt-label">Thread:</span><span>' + escapeHtml(sleep.thread_name || '-') + '</span></div>' +
+                '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtTime(sleep.sleep_millis) + '</span></div>' +
+                '<div class="tt-row"><span class="tt-label">End:</span><span>' + fmtTime(sleep.wake_millis) + '</span></div>'
+              );
+            })
+            .on('mouseleave', hideTooltip);
+        }
+      });
     }
 
     // Label
