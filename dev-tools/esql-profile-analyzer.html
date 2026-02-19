@@ -453,6 +453,7 @@ function renderQueryTimeline() {
   sorted.forEach(function(d) { allTimes.push(d.start_millis, d.stop_millis); });
   var minStart = d3.min(allTimes) || 0;
   var maxEnd = d3.max(allTimes) || minStart + 1;
+  var queryStartTime = (queryPhase || {start_millis: minStart}).start_millis;
 
   // Layout dimensions
   var chartEl = document.getElementById('phases-chart');
@@ -480,11 +481,11 @@ function renderQueryTimeline() {
     .attr('height', totalH);
   var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
-  var x = d3.scaleLinear().domain([minStart, maxEnd]).range([0, width]);
+  var x = d3.scaleLinear().domain([0, maxEnd - queryStartTime]).range([0, width]);
 
   // --- Query envelope (full-height background) ---
   if (queryPhase) {
-    var envX0 = x(queryPhase.start_millis);
+    var envX0 = x(queryPhase.start_millis - queryStartTime);
     var envW = Math.max(2, x(queryPhase.stop_millis) - envX0);
     var envH = totalH - margin.top - margin.bottom;
     g.append('rect').attr('x', envX0).attr('y', 0)
@@ -505,8 +506,8 @@ function renderQueryTimeline() {
 
   phases.forEach(function(ph, i) {
     var y = i * (phaseBarH + phaseGap);
-    var x0 = x(ph.start_millis);
-    var x1 = x(ph.stop_millis);
+    var x0 = x(ph.start_millis - queryStartTime);
+    var x1 = x(ph.stop_millis - queryStartTime);
     var w = Math.max(2, x1 - x0);
 
     g.append('rect').attr('x', x0).attr('y', y).attr('width', w).attr('height', phaseBarH)
@@ -516,8 +517,8 @@ function renderQueryTimeline() {
         showTooltip(evt,
           '<div class="tt-title">' + ph.name.replace(/_/g, ' ') + '</div>' +
           '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + dur + '</span></div>' +
-          '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtTime(ph.start_millis) + '</span></div>' +
-          '<div class="tt-row"><span class="tt-label">Stop:</span><span>' + fmtTime(ph.stop_millis) + '</span></div>'
+          '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtMillis(ph.start_millis - queryStartTime) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Stop:</span><span>' + fmtMillis(ph.stop_millis - queryStartTime) + '</span></div>'
         );
       })
       .on('mouseleave', hideTooltip);
@@ -574,8 +575,9 @@ function renderQueryTimeline() {
   sorted.forEach(function(drv, i) {
     var y = driverStartY + i * (driverBarH + driverGap);
     var col = getDriverColor(drv.description);
-    var x0 = x(drv.start_millis || minStart);
-    var wallW = Math.max(2, x(drv.stop_millis || drv.start_millis || minStart) - x0);
+    var x0 = x((drv.start_millis || queryStartTime) - queryStartTime);
+    var x1 = x((drv.stop_millis || drv.start_millis || queryStartTime) - queryStartTime);
+    var wallW = Math.max(2, x1 - x0);
     var cpuRatio = (drv.took_nanos && drv.cpu_nanos) ? drv.cpu_nanos / drv.took_nanos : 0;
     var cpuW = Math.max(0, wallW * cpuRatio);
 
@@ -612,8 +614,9 @@ function renderQueryTimeline() {
       var allSleeps = (drv.sleeps.first || []).concat(drv.sleeps.last || []);
       allSleeps.forEach(function(sleep) {
         if (sleep.sleep_millis != null && sleep.wake_millis != null) {
-          var sleepX0 = x(sleep.sleep_millis);
-          var sleepW = Math.max(1, x(sleep.wake_millis) - sleepX0);
+          var sleepX0 = x(sleep.sleep_millis - queryStartTime);
+          var sleepX1 = x(sleep.wake_millis - queryStartTime);
+          var sleepW = Math.max(1, sleepX1 - sleepX0);
           g.append('rect').attr('x', sleepX0).attr('y', y).attr('width', sleepW).attr('height', driverBarH)
             .attr('fill', 'rgba(231, 76, 60, 0.5)') // semi-transparent red
             .attr('stroke', '#c0392b')
@@ -624,8 +627,8 @@ function renderQueryTimeline() {
                 '<div class="tt-title">Sleep: ' + escapeHtml(sleep.reason || 'Unknown') + '</div>' +
                 '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + fmtMillis(dur) + '</span></div>' +
                 '<div class="tt-row"><span class="tt-label">Thread:</span><span>' + escapeHtml(sleep.thread_name || '-') + '</span></div>' +
-                '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtTime(sleep.sleep_millis) + '</span></div>' +
-                '<div class="tt-row"><span class="tt-label">End:</span><span>' + fmtTime(sleep.wake_millis) + '</span></div>'
+                '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtMillis(sleep.sleep_millis - queryStartTime) + '</span></div>' +
+                '<div class="tt-row"><span class="tt-label">End:</span><span>' + fmtMillis(sleep.wake_millis - queryStartTime) + '</span></div>'
               );
             })
             .on('mouseleave', hideTooltip);
@@ -655,7 +658,7 @@ function renderQueryTimeline() {
 
   // --- X axis ---
   var axisY = driverStartY + sorted.length * (driverBarH + driverGap);
-  var xAxis = d3.axisBottom(x).ticks(8).tickFormat(function(d) { return fmtMillis(d - minStart); });
+  var xAxis = d3.axisBottom(x).ticks(8).tickFormat(function(d) { return fmtMillis(d); });
   g.append('g').attr('transform', 'translate(0,' + axisY + ')')
     .call(xAxis).selectAll('text').attr('fill', 'currentColor');
   g.selectAll('.domain, .tick line').attr('stroke', 'currentColor');
@@ -672,6 +675,7 @@ function selectDriver(idx) {
   var drv = profileData.drivers[idx];
   document.getElementById('detail-section').classList.remove('hidden');
 
+  var queryStartTime = (profileData.query || {start_millis: 0}).start_millis;
   var cpuRatio = (drv.took_nanos && drv.cpu_nanos) ? drv.cpu_nanos / drv.took_nanos : 0;
 
   // Stats cards
@@ -679,8 +683,8 @@ function selectDriver(idx) {
     '<div class="stat-card"><div class="label">Description</div><div class="value" style="font-size:13px;">' + (drv.description || '-') + '</div></div>' +
     '<div class="stat-card"><div class="label">Node</div><div class="value" style="font-size:13px;">' + (drv.node_name || '-') + '</div></div>' +
     '<div class="stat-card"><div class="label">Cluster</div><div class="value" style="font-size:13px;">' + (drv.cluster_name || '-') + '</div></div>' +
-    '<div class="stat-card"><div class="label">Start</div><div class="value" style="font-size:12px;">' + fmtTime(drv.start_millis) + '</div></div>' +
-    '<div class="stat-card"><div class="label">Stop</div><div class="value" style="font-size:12px;">' + fmtTime(drv.stop_millis) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Start (relative)</div><div class="value" style="font-size:12px;">' + fmtMillis(drv.start_millis - queryStartTime) + '</div></div>' +
+    '<div class="stat-card"><div class="label">Stop (relative)</div><div class="value" style="font-size:12px;">' + fmtMillis(drv.stop_millis - queryStartTime) + '</div></div>' +
     '<div class="stat-card"><div class="label">Wall Time</div><div class="value">' + fmtNanos(drv.took_nanos) + '</div></div>' +
     '<div class="stat-card"><div class="label">CPU Time</div><div class="value">' + fmtNanos(drv.cpu_nanos) + '</div></div>' +
     '<div class="stat-card"><div class="label">CPU %</div><div class="value">' + fmtPct(cpuRatio) + '</div></div>' +
