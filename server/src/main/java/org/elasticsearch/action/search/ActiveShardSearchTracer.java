@@ -179,7 +179,15 @@ public final class ActiveShardSearchTracer implements ShardSearchTracer {
         }
 
         TraceSpan build() {
-            return new TraceSpan(name, null, null, startOffsetNanos, stopOffsetNanos, Map.copyOf(details), List.copyOf(children));
+            return new TraceSpan(
+                name,
+                null,
+                null,
+                startOffsetNanos,
+                stopOffsetNanos - startOffsetNanos,
+                Map.copyOf(details),
+                List.copyOf(children)
+            );
         }
     }
 }

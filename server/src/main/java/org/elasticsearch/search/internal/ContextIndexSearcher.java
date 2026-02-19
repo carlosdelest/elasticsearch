@@ -463,7 +463,7 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
                             null,
                             null,
                             startOffset,
-                            stopOffset,
+                            stopOffset - startOffset,
                             Map.of("segments", sliceSegmentCounts[i], "max_docs", sliceMaxDocs[i]),
                             List.of()
                         )

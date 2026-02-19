@@ -109,14 +109,14 @@ public final class ActiveSearchTracer implements SearchTracer {
             new SearchTraceResult.NodeAnchor(result.getNodeName(), result.getWallClockAnchorMillis())
         );
 
-        // Attach shard spans as children of the current coordinator phase. The spans
-        // retain their original offsets relative to the data node's nano anchor — the
-        // visualization tool is responsible for rebasing them into the coordinator's
-        // timeline using the wall-clock anchors in the trace result.
+        // Attach shard spans as children of the current coordinator phase. Tag each
+        // top-level shard span with the data node's ID and the shard identifier so the
+        // visualization tool can detect them as "foreign" spans and rebase their timing
+        // from the data node's nano anchor into the coordinator's timeline.
         SpanBuilder currentPhase = spanStack.peek();
         if (currentPhase != null) {
             for (TraceSpan shardSpan : result.getSpans()) {
-                currentPhase.children.add(shardSpan);
+                currentPhase.children.add(shardSpan.withNodeAndShard(result.getNodeId(), shard));
             }
         }
     }
@@ -182,7 +182,15 @@ public final class ActiveSearchTracer implements SearchTracer {
         }
 
         TraceSpan build() {
-            return new TraceSpan(name, nodeId, shard, startOffsetNanos, stopOffsetNanos, Map.copyOf(details), List.copyOf(children));
+            return new TraceSpan(
+                name,
+                nodeId,
+                shard,
+                startOffsetNanos,
+                stopOffsetNanos - startOffsetNanos,
+                Map.copyOf(details),
+                List.copyOf(children)
+            );
         }
     }
 }

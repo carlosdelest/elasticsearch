@@ -38,7 +38,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
     static final ParseField NODE_ID_FIELD = new ParseField("node_id");
     static final ParseField SHARD_FIELD = new ParseField("shard");
     static final ParseField START_OFFSET_NANOS_FIELD = new ParseField("start_offset_nanos");
-    static final ParseField STOP_OFFSET_NANOS_FIELD = new ParseField("stop_offset_nanos");
+    static final ParseField DURATION_NANOS_FIELD = new ParseField("duration_nanos");
     static final ParseField DETAILS_FIELD = new ParseField("details");
     static final ParseField CHILDREN_FIELD = new ParseField("children");
 
@@ -46,7 +46,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
     private final String nodeId;
     private final String shard;
     private final long startOffsetNanos;
-    private final long stopOffsetNanos;
+    private final long durationNanos;
     private final Map<String, Object> details;
     private final List<TraceSpan> children;
 
@@ -57,7 +57,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
      * @param nodeId           the node where this span executed, or null for spans that inherit the parent's node
      * @param shard            the shard identifier (e.g. "[node2][idx][0]"), or null for non-shard spans
      * @param startOffsetNanos offset in nanoseconds from the per-node nano anchor when this span started
-     * @param stopOffsetNanos  offset in nanoseconds from the per-node nano anchor when this span stopped
+     * @param durationNanos    duration of this span in nanoseconds
      * @param details          additional key-value details (e.g. query text, slice count, docs fetched)
      * @param children         child spans nested under this span
      */
@@ -66,7 +66,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
         String nodeId,
         String shard,
         long startOffsetNanos,
-        long stopOffsetNanos,
+        long durationNanos,
         Map<String, Object> details,
         List<TraceSpan> children
     ) {
@@ -74,7 +74,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
         this.nodeId = nodeId;
         this.shard = shard;
         this.startOffsetNanos = startOffsetNanos;
-        this.stopOffsetNanos = stopOffsetNanos;
+        this.durationNanos = durationNanos;
         this.details = details == null ? Map.of() : details;
         this.children = children == null ? List.of() : children;
     }
@@ -87,7 +87,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
         this.nodeId = in.readOptionalString();
         this.shard = in.readOptionalString();
         this.startOffsetNanos = in.readVLong();
-        this.stopOffsetNanos = in.readVLong();
+        this.durationNanos = in.readVLong();
         this.details = in.readMap(StreamInput::readGenericValue);
         this.children = in.readCollectionAsList(TraceSpan::new);
     }
@@ -98,7 +98,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
         out.writeOptionalString(nodeId);
         out.writeOptionalString(shard);
         out.writeVLong(startOffsetNanos);
-        out.writeVLong(stopOffsetNanos);
+        out.writeVLong(durationNanos);
         out.writeMap(details, StreamOutput::writeGenericValue);
         out.writeCollection(children);
     }
@@ -114,7 +114,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
             builder.field(SHARD_FIELD.getPreferredName(), shard);
         }
         builder.field(START_OFFSET_NANOS_FIELD.getPreferredName(), startOffsetNanos);
-        builder.field(STOP_OFFSET_NANOS_FIELD.getPreferredName(), stopOffsetNanos);
+        builder.field(DURATION_NANOS_FIELD.getPreferredName(), durationNanos);
         if (false == details.isEmpty()) {
             builder.field(DETAILS_FIELD.getPreferredName(), details);
         }
@@ -144,8 +144,8 @@ public final class TraceSpan implements Writeable, ToXContentObject {
         return startOffsetNanos;
     }
 
-    public long getStopOffsetNanos() {
-        return stopOffsetNanos;
+    public long getDurationNanos() {
+        return durationNanos;
     }
 
     public Map<String, Object> getDetails() {
@@ -156,13 +156,22 @@ public final class TraceSpan implements Writeable, ToXContentObject {
         return children;
     }
 
+    /**
+     * Returns a copy of this span with the given node ID and shard, preserving all other fields.
+     * Used by the coordinator to tag shard-level spans (which are built without node/shard info
+     * on the data node) with their origin before inserting them into the coordinator span tree.
+     */
+    TraceSpan withNodeAndShard(String nodeId, String shard) {
+        return new TraceSpan(name, nodeId, shard, startOffsetNanos, durationNanos, details, children);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         TraceSpan that = (TraceSpan) o;
         return startOffsetNanos == that.startOffsetNanos
-            && stopOffsetNanos == that.stopOffsetNanos
+            && durationNanos == that.durationNanos
             && Objects.equals(name, that.name)
             && Objects.equals(nodeId, that.nodeId)
             && Objects.equals(shard, that.shard)
@@ -172,7 +181,7 @@ public final class TraceSpan implements Writeable, ToXContentObject {
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, nodeId, shard, startOffsetNanos, stopOffsetNanos, details, children);
+        return Objects.hash(name, nodeId, shard, startOffsetNanos, durationNanos, details, children);
     }
 
     @Override

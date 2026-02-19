@@ -336,8 +336,8 @@ function flattenSpans(span, depth, parentIdx) {
     nodeId: span.node_id || null,
     shard: span.shard || null,
     startNanos: span.start_offset_nanos || 0,
-    stopNanos: span.stop_offset_nanos || 0,
-    durationNanos: (span.stop_offset_nanos || 0) - (span.start_offset_nanos || 0),
+    durationNanos: span.duration_nanos || 0,
+    stopNanos: (span.start_offset_nanos || 0) + (span.duration_nanos || 0),
     details: span.details || {},
     children: [],
     childIndices: [],
@@ -356,13 +356,19 @@ function flattenSpans(span, depth, parentIdx) {
  *
  * Shard spans arrive with nano offsets relative to their data node's
  * System.nanoTime() anchor, which is incomparable with the coordinator's
- * anchor. We detect "foreign" children of coordinator phases (spans whose
- * node_id differs from their parent or whose shard field is set) and
- * rebase each shard group so that its bounding box is centered within
- * the parent coordinator phase's time extent.
+ * anchor even on a single-node cluster (the shard tracer captures its
+ * own nanoTime anchor independently).
  *
- * Internal relative timing between spans within the same shard group
- * (e.g. shard_rewrite -> shard_query) is preserved exactly.
+ * We detect "foreign" children of coordinator phases via two signals:
+ *   1. Identity: node_id differs from coordinator or shard field is set.
+ *   2. Timing: a child's time range falls outside the parent's bounds,
+ *      indicating it was recorded against a different nano anchor. When
+ *      any untagged child is outside bounds, ALL untagged children are
+ *      treated as foreign (they share the same shard nano domain).
+ *
+ * Foreign children are grouped by (nodeId + shard) and rebased so the
+ * group aligns to the start of the parent coordinator phase. Internal
+ * relative timing within a group is preserved exactly.
  */
 function rebaseShardSpans() {
   // Identify the coordinator node id from the root span
@@ -378,16 +384,37 @@ function rebaseShardSpans() {
     // those are already in the same nano domain — no rebasing needed.
     if (parent.nodeId !== coordNodeId && parent.nodeId != null) continue;
 
-    // Group foreign children by (nodeId + shard) key. A "foreign" child
-    // is one whose node_id differs from the coordinator or whose shard
-    // field is non-null.
+    var parentStart = parent.startNanos;
+    var parentStop = parent.stopNanos;
+
+    // First pass: detect children with explicit foreign identity, and
+    // check whether any untagged child falls outside parent bounds.
+    var anyUntaggedOutside = false;
+    for (var c = 0; c < parent.childIndices.length; c++) {
+      var child = flatSpans[parent.childIndices[c]];
+      var hasIdentity = (child.shard != null) ||
+                        (child.nodeId != null && child.nodeId !== coordNodeId);
+      if (false === hasIdentity) {
+        if (child.startNanos < parentStart || child.stopNanos > parentStop) {
+          anyUntaggedOutside = true;
+          break;
+        }
+      }
+    }
+
+    // Second pass: group foreign children by (nodeId + shard).
+    // A child is foreign if it has identity tags, or if it is untagged
+    // and at least one untagged sibling fell outside the parent bounds
+    // (meaning all untagged children share a different nano domain).
     var groups = {};
     var hasShardChildren = false;
     for (var c = 0; c < parent.childIndices.length; c++) {
       var childIdx = parent.childIndices[c];
       var child = flatSpans[childIdx];
-      var isForeign = (child.shard != null) ||
-                      (child.nodeId != null && child.nodeId !== coordNodeId);
+      var hasIdentity = (child.shard != null) ||
+                        (child.nodeId != null && child.nodeId !== coordNodeId);
+      var isForeign = hasIdentity ||
+                      (anyUntaggedOutside && child.nodeId == null && child.shard == null);
       if (false === isForeign) continue;
 
       hasShardChildren = true;
@@ -400,34 +427,27 @@ function rebaseShardSpans() {
 
     if (false === hasShardChildren) continue;
 
-    // For each shard group, compute bounding box and center within parent
-    var parentStart = parent.startNanos;
-    var parentStop = parent.stopNanos;
-    var parentMid = (parentStart + parentStop) / 2;
-
+    // For each shard group, align to the start of the parent coordinator phase
     var groupKeys = Object.keys(groups);
     for (var g = 0; g < groupKeys.length; g++) {
       var indices = groups[groupKeys[g]];
       // Collect all spans in this group (including their descendants)
       var allInGroup = collectDescendants(indices);
 
-      // Compute bounding box of top-level spans in the group
-      var minStart = Infinity, maxStop = -Infinity;
+      // Compute minimum start across all spans in the group
+      var minStart = Infinity;
       for (var s = 0; s < allInGroup.length; s++) {
         var sp = flatSpans[allInGroup[s]];
         if (sp.startNanos < minStart) minStart = sp.startNanos;
-        if (sp.stopNanos > maxStop) maxStop = sp.stopNanos;
       }
 
-      var shardDuration = maxStop - minStart;
-      var delta = (parentMid - shardDuration / 2) - minStart;
+      var delta = parentStart - minStart;
 
       // Apply delta to every span in the group (top-level + descendants)
       for (var s = 0; s < allInGroup.length; s++) {
         var sp = flatSpans[allInGroup[s]];
         sp.startNanos += delta;
         sp.stopNanos += delta;
-        // durationNanos stays the same (stop - start offset is unchanged)
       }
     }
   }
@@ -1001,33 +1021,33 @@ function loadExample() {
         "name": "search",
         "node_id": "node_abc123",
         "start_offset_nanos": 0,
-        "stop_offset_nanos": 42000000,
+        "duration_nanos": 42000000,
         "children": [
           {
             "name": "coordinator_rewrite",
             "node_id": "node_abc123",
             "start_offset_nanos": 10000,
-            "stop_offset_nanos": 80000
+            "duration_nanos": 70000
           },
           {
             "name": "query",
             "node_id": "node_abc123",
             "start_offset_nanos": 100000,
-            "stop_offset_nanos": 25000000,
+            "duration_nanos": 24900000,
             "children": [
               {
                 "name": "shard_rewrite",
                 "node_id": "node_def456",
                 "shard": "my-index[0]",
                 "start_offset_nanos": 500000200000,
-                "stop_offset_nanos": 500000450000
+                "duration_nanos": 250000
               },
               {
                 "name": "shard_query",
                 "node_id": "node_def456",
                 "shard": "my-index[0]",
                 "start_offset_nanos": 500000500000,
-                "stop_offset_nanos": 500017500000,
+                "duration_nanos": 17000000,
                 "details": {
                   "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
                   "rewritten_query": "TermQuery(status:200)",
@@ -1038,29 +1058,29 @@ function loadExample() {
                   {
                     "name": "lucene_rewrite",
                     "start_offset_nanos": 500000600000,
-                    "stop_offset_nanos": 500001100000
+                    "duration_nanos": 500000
                   },
                   {
                     "name": "create_weight",
                     "start_offset_nanos": 500001150000,
-                    "stop_offset_nanos": 500001800000
+                    "duration_nanos": 650000
                   },
                   {
                     "name": "slice_0",
                     "start_offset_nanos": 500001900000,
-                    "stop_offset_nanos": 500010500000,
+                    "duration_nanos": 8600000,
                     "details": { "segments": 3 }
                   },
                   {
                     "name": "slice_1",
                     "start_offset_nanos": 500001950000,
-                    "stop_offset_nanos": 500012200000,
+                    "duration_nanos": 10250000,
                     "details": { "segments": 2 }
                   },
                   {
                     "name": "collector_reduce",
                     "start_offset_nanos": 500012300000,
-                    "stop_offset_nanos": 500012800000
+                    "duration_nanos": 500000
                   }
                 ]
               },
@@ -1069,14 +1089,14 @@ function loadExample() {
                 "node_id": "node_ghi789",
                 "shard": "my-index[1]",
                 "start_offset_nanos": 800000250000,
-                "stop_offset_nanos": 800000550000
+                "duration_nanos": 300000
               },
               {
                 "name": "shard_query",
                 "node_id": "node_ghi789",
                 "shard": "my-index[1]",
                 "start_offset_nanos": 800000600000,
-                "stop_offset_nanos": 800019400000,
+                "duration_nanos": 18800000,
                 "details": {
                   "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
                   "rewritten_query": "TermQuery(status:200)",
@@ -1087,23 +1107,23 @@ function loadExample() {
                   {
                     "name": "lucene_rewrite",
                     "start_offset_nanos": 800000700000,
-                    "stop_offset_nanos": 800001300000
+                    "duration_nanos": 600000
                   },
                   {
                     "name": "create_weight",
                     "start_offset_nanos": 800001350000,
-                    "stop_offset_nanos": 800002100000
+                    "duration_nanos": 750000
                   },
                   {
                     "name": "slice_0",
                     "start_offset_nanos": 800002200000,
-                    "stop_offset_nanos": 800015800000,
+                    "duration_nanos": 13600000,
                     "details": { "segments": 4 }
                   },
                   {
                     "name": "collector_reduce",
                     "start_offset_nanos": 800015900000,
-                    "stop_offset_nanos": 800016500000
+                    "duration_nanos": 600000
                   }
                 ]
               },
@@ -1112,14 +1132,14 @@ function loadExample() {
                 "node_id": "node_def456",
                 "shard": "my-index[2]",
                 "start_offset_nanos": 500020300000,
-                "stop_offset_nanos": 500020650000
+                "duration_nanos": 350000
               },
               {
                 "name": "shard_query",
                 "node_id": "node_def456",
                 "shard": "my-index[2]",
                 "start_offset_nanos": 500020700000,
-                "stop_offset_nanos": 500034700000,
+                "duration_nanos": 14000000,
                 "details": {
                   "query": "BooleanQuery(+TermQuery(status:200) +IndexOrDocValuesQuery(PointRangeQuery(field=@timestamp)))",
                   "total_hits": 7832,
@@ -1129,29 +1149,29 @@ function loadExample() {
                   {
                     "name": "lucene_rewrite",
                     "start_offset_nanos": 500020800000,
-                    "stop_offset_nanos": 500021200000
+                    "duration_nanos": 400000
                   },
                   {
                     "name": "create_weight",
                     "start_offset_nanos": 500021250000,
-                    "stop_offset_nanos": 500021900000
+                    "duration_nanos": 650000
                   },
                   {
                     "name": "slice_0",
                     "start_offset_nanos": 500022000000,
-                    "stop_offset_nanos": 500031500000,
+                    "duration_nanos": 9500000,
                     "details": { "segments": 3 }
                   },
                   {
                     "name": "slice_1",
                     "start_offset_nanos": 500022100000,
-                    "stop_offset_nanos": 500029800000,
+                    "duration_nanos": 7700000,
                     "details": { "segments": 2 }
                   },
                   {
                     "name": "collector_reduce",
                     "start_offset_nanos": 500031600000,
-                    "stop_offset_nanos": 500032100000
+                    "duration_nanos": 500000
                   }
                 ]
               }
@@ -1161,27 +1181,27 @@ function loadExample() {
             "name": "fetch",
             "node_id": "node_abc123",
             "start_offset_nanos": 25500000,
-            "stop_offset_nanos": 41000000,
+            "duration_nanos": 15500000,
             "children": [
               {
                 "name": "reduce",
                 "node_id": "node_abc123",
                 "start_offset_nanos": 25500000,
-                "stop_offset_nanos": 27000000
+                "duration_nanos": 1500000
               },
               {
                 "name": "shard_rewrite",
                 "node_id": "node_def456",
                 "shard": "my-index[0]",
                 "start_offset_nanos": 500040100000,
-                "stop_offset_nanos": 500040400000
+                "duration_nanos": 300000
               },
               {
                 "name": "shard_fetch",
                 "node_id": "node_def456",
                 "shard": "my-index[0]",
                 "start_offset_nanos": 500040500000,
-                "stop_offset_nanos": 500047000000,
+                "duration_nanos": 6500000,
                 "details": {
                   "fetched_docs": 5
                 }
@@ -1191,14 +1211,14 @@ function loadExample() {
                 "node_id": "node_ghi789",
                 "shard": "my-index[1]",
                 "start_offset_nanos": 800025150000,
-                "stop_offset_nanos": 800025500000
+                "duration_nanos": 350000
               },
               {
                 "name": "shard_fetch",
                 "node_id": "node_ghi789",
                 "shard": "my-index[1]",
                 "start_offset_nanos": 800025600000,
-                "stop_offset_nanos": 800033500000,
+                "duration_nanos": 7900000,
                 "details": {
                   "fetched_docs": 3
                 }
@@ -1208,14 +1228,14 @@ function loadExample() {
                 "node_id": "node_def456",
                 "shard": "my-index[2]",
                 "start_offset_nanos": 500048200000,
-                "stop_offset_nanos": 500048600000
+                "duration_nanos": 400000
               },
               {
                 "name": "shard_fetch",
                 "node_id": "node_def456",
                 "shard": "my-index[2]",
                 "start_offset_nanos": 500048700000,
-                "stop_offset_nanos": 500054000000,
+                "duration_nanos": 5300000,
                 "details": {
                   "fetched_docs": 2
                 }
@@ -1224,7 +1244,7 @@ function loadExample() {
                 "name": "merge",
                 "node_id": "node_abc123",
                 "start_offset_nanos": 36000000,
-                "stop_offset_nanos": 40500000
+                "duration_nanos": 4500000
               }
             ]
           }

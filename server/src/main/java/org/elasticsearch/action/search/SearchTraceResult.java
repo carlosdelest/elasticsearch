@@ -29,7 +29,7 @@ import java.util.Objects;
  * <p>The output is designed for Gantt chart rendering. Each node has a wall-clock anchor
  * (milliseconds) paired with a nano anchor. All spans on that node use nanosecond offsets
  * from the nano anchor. The Gantt consumer aligns nodes using their wall-clock anchors
- * and positions each span at {@code [anchorMillis + startOffsetNanos/1e6, anchorMillis + stopOffsetNanos/1e6]}.
+ * and positions each span at {@code [anchorMillis + startOffsetNanos/1e6, anchorMillis + (startOffsetNanos + durationNanos)/1e6]}.
  */
 public final class SearchTraceResult implements Writeable, ToXContentObject {
 
