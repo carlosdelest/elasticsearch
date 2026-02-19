@@ -459,7 +459,7 @@ public class ContextIndexSearcher extends IndexSearcher implements Releasable {
                     long stopOffset = sliceStopNanos[i] - nanoAnchor;
                     shardTracer.attachSpan(
                         new TraceSpan(
-                            "slice_" + i,
+                            "slice",
                             null,
                             null,
                             startOffset,
