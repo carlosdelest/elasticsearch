@@ -384,7 +384,7 @@ async function runLiveQuery() {
     return;
   }
 
-  var searchUrl = url + '/' + index + '/_search';
+  var searchUrl = url + '/' + index + '/_search?request_cache=false';
   var body;
   try {
     body = JSON.parse(dsl);
