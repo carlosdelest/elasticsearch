@@ -245,11 +245,13 @@ public class PlannerUtils {
 
             // Logical optimization
             boolean profilingEnabled = planTimeProfile != null;
-            long logicalStartNanos = profilingEnabled ? System.nanoTime() : 0;
+            if (profilingEnabled) {
+                planTimeProfile.logicalOptimization().start();
+            }
             LogicalPlan optimizedFragment = logicalOptimizer.localOptimize(f.fragment());
             PhysicalPlan physicalFragment = LocalMapper.INSTANCE.map(optimizedFragment);
             if (profilingEnabled) {
-                planTimeProfile.addLogicalOptimizationPlanTime(System.nanoTime() - logicalStartNanos);
+                planTimeProfile.logicalOptimization().stop();
             }
             QueryBuilder filter = f.esFilter();
             if (filter != null) {
@@ -260,10 +262,12 @@ public class PlannerUtils {
             }
 
             // Physical optimization
-            long physicalStartNanos = profilingEnabled ? System.nanoTime() : 0;
+            if (profilingEnabled) {
+                planTimeProfile.physicalOptimization().start();
+            }
             var localOptimized = physicalOptimizer.localOptimize(physicalFragment);
             if (profilingEnabled) {
-                planTimeProfile.addPhysicalOptimizationPlanTime(System.nanoTime() - physicalStartNanos);
+                planTimeProfile.physicalOptimization().stop();
             }
 
             return EstimatesRowSize.estimateRowSize(f.estimatedRowSize(), localOptimized);

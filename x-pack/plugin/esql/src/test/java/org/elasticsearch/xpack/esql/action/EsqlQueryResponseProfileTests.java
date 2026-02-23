@@ -10,6 +10,7 @@ package org.elasticsearch.xpack.esql.action;
 import org.elasticsearch.TransportVersion;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.time.TimeSpan;
 import org.elasticsearch.compute.operator.AbstractPageMappingOperator;
 import org.elasticsearch.compute.operator.DriverProfile;
 import org.elasticsearch.compute.operator.DriverSleeps;
@@ -83,7 +84,13 @@ public class EsqlQueryResponseProfileTests extends AbstractWireSerializingTestCa
     }
 
     private static PlanTimeProfile randomPlanTimeProfile() {
-        return randomBoolean() ? null : new PlanTimeProfile(randomNonNegativeLong(), randomNonNegativeLong(), randomNonNegativeLong());
+        return randomBoolean() ? null : new PlanTimeProfile(randomTimeSpan(), randomTimeSpan(), randomTimeSpan());
+    }
+
+    private static TimeSpan randomTimeSpan() {
+        return randomBoolean()
+            ? new TimeSpan(randomNonNegativeLong(), randomNonNegativeLong(), randomNonNegativeLong(), randomNonNegativeLong())
+            : null;
     }
 
     private static OperatorStatus randomOperatorStatus() {

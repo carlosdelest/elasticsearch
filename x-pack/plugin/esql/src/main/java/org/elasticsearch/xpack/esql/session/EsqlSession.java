@@ -17,6 +17,7 @@ import org.elasticsearch.action.support.SubscribableListener;
 import org.elasticsearch.cluster.metadata.ProjectMetadata;
 import org.elasticsearch.common.TriConsumer;
 import org.elasticsearch.common.collect.Iterators;
+import org.elasticsearch.common.time.TimeSpanMarker;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.BlockFactory;
@@ -43,7 +44,6 @@ import org.elasticsearch.transport.RemoteClusterService;
 import org.elasticsearch.xpack.esql.VerificationException;
 import org.elasticsearch.xpack.esql.action.EsqlExecutionInfo;
 import org.elasticsearch.xpack.esql.action.EsqlQueryRequest;
-import org.elasticsearch.xpack.esql.action.TimeSpanMarker;
 import org.elasticsearch.xpack.esql.analysis.Analyzer;
 import org.elasticsearch.xpack.esql.analysis.AnalyzerContext;
 import org.elasticsearch.xpack.esql.analysis.AnalyzerSettings;
@@ -1256,10 +1256,12 @@ public class EsqlSession {
         if (logicalPlan.preOptimized() == false) {
             throw new IllegalStateException("Expected pre-optimized plan");
         }
-        long start = planTimeProfile == null ? 0L : System.nanoTime();
+        if (planTimeProfile != null) {
+            planTimeProfile.logicalOptimization().start();
+        }
         var plan = logicalPlanOptimizer.optimize(logicalPlan);
         if (planTimeProfile != null) {
-            planTimeProfile.addLogicalOptimizationPlanTime(System.nanoTime() - start);
+            planTimeProfile.logicalOptimization().stop();
         }
         LOGGER.debug("Optimized logicalPlan plan:\n{}", plan);
         return plan;
@@ -1271,10 +1273,12 @@ public class EsqlSession {
         PlanTimeProfile planTimeProfile,
         ActionListener<LogicalPlan> listener
     ) {
-        long start = planTimeProfile == null ? 0L : System.nanoTime();
+        if (planTimeProfile != null) {
+            planTimeProfile.logicalOptimization().start();
+        }
         logicalPlanPreOptimizer.preOptimize(logicalPlan, listener.delegateResponse((l, e) -> { l.onFailure(e); }).map(plan -> {
             if (planTimeProfile != null) {
-                planTimeProfile.addLogicalOptimizationPlanTime(System.nanoTime() - start);
+                planTimeProfile.logicalOptimization().stop();
             }
             return plan;
         }));
@@ -1296,12 +1300,14 @@ public class EsqlSession {
         PhysicalPlanOptimizer physicalPlanOptimizer,
         PlanTimeProfile planTimeProfile
     ) {
-        long start = planTimeProfile == null ? 0L : System.nanoTime();
+        if (planTimeProfile != null) {
+            planTimeProfile.physicalOptimization().start();
+        }
         var plan = physicalPlanOptimizer.optimize(
             physicalPlan(new Versioned<>(optimizedPlan, physicalPlanOptimizer.context().minimumVersion()))
         );
         if (planTimeProfile != null) {
-            planTimeProfile.addPhysicalOptimizationPlanTime(System.nanoTime() - start);
+            planTimeProfile.physicalOptimization().stop();
         }
         LOGGER.debug("Optimized physical plan:\n{}", plan);
         return plan;
