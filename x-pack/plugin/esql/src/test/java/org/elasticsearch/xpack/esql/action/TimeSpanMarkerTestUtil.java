@@ -7,6 +7,9 @@
 
 package org.elasticsearch.xpack.esql.action;
 
+import org.elasticsearch.common.time.TimeSpan;
+import org.elasticsearch.common.time.TimeSpanMarker;
+
 public class TimeSpanMarkerTestUtil {
 
     public static void setTimespan(TimeSpanMarker timeSpanMarker, long timeSpanMs) {

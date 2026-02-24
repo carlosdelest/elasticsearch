@@ -797,10 +797,15 @@ public class ComputeService {
         boolean reduceNodeLateMaterialization,
         PlanTimeProfile planTimeProfile
     ) {
-        long startTime = planTimeProfile == null ? 0 : System.nanoTime();
+        if (planTimeProfile != null) {
+            planTimeProfile.reduction().start();
+        }
         PhysicalPlan source = new ExchangeSourceExec(originalPlan.source(), originalPlan.output(), originalPlan.isIntermediateAgg());
         ReductionPlan defaultResult = new ReductionPlan(originalPlan.replaceChild(source), originalPlan, LocalPhysicalOptimization.ENABLED);
         if (reduceNodeLateMaterialization == false && runNodeLevelReduction == false) {
+            if (planTimeProfile != null) {
+                planTimeProfile.reduction().stop();
+            }
             return defaultResult;
         }
 
@@ -826,7 +831,7 @@ public class ComputeService {
             default -> defaultResult;
         };
         if (planTimeProfile != null) {
-            planTimeProfile.addReductionPlanNanos(System.nanoTime() - startTime);
+            planTimeProfile.reduction().stop();
         }
         return reductionPlan;
     }

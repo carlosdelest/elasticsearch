@@ -7,77 +7,137 @@
 
 package org.elasticsearch.compute.operator;
 
+import org.elasticsearch.TransportVersion;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.time.TimeSpan;
+import org.elasticsearch.common.time.TimeSpanMarker;
 import org.elasticsearch.xcontent.ToXContentObject;
 import org.elasticsearch.xcontent.XContentBuilder;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 /**
  * Profile information for plan optimization phases.
- * Captures timing information for logical and physical optimization steps.
- *
+ * Captures timing information for logical and physical optimization steps,
+ * including start and stop timestamps for each phase.
  */
 public final class PlanTimeProfile implements Writeable, ToXContentObject {
-    private long reductionPlanNanos;
-    private long logicalOptimizationNanos;
-    private long physicalOptimizationNanos;
+
+    public static final String LOGICAL_OPTIMIZATION = "logical_optimization";
+    public static final String PHYSICAL_OPTIMIZATION = "physical_optimization";
+    public static final String REDUCTION = "reduction";
+
+    private static final TransportVersion PLAN_TIME_PROFILE_TIMESPAN = TransportVersion.fromName("plan_time_profile_timespan");
+
+    /** Time span for logical plan optimization */
+    private final TimeSpanMarker logicalOptimizationMarker;
+    /** Time span for physical plan optimization */
+    private final TimeSpanMarker physicalOptimizationMarker;
+    /** Time span for reduction plan building */
+    private final TimeSpanMarker reductionMarker;
 
     /**
-     * @param logicalOptimizationNanos  Time spent on local logical plan optimization (in nanoseconds)
-     * @param physicalOptimizationNanos Time spent on local physical plan optimization (in nanoseconds)
-     * @param reductionPlanNanos Time spent on reduction plan for node_reduce phase (in nanoseconds)
+     * Creates a new empty profile for production use. Call {@link #logicalOptimization()},
+     * {@link #physicalOptimization()}, or {@link #reduction()} to get markers, then
+     * use {@link TimeSpanMarker#start()} and {@link TimeSpanMarker#stop()} around each phase.
      */
-    public PlanTimeProfile(long logicalOptimizationNanos, long physicalOptimizationNanos, long reductionPlanNanos) {
-        this.logicalOptimizationNanos = logicalOptimizationNanos;
-        this.physicalOptimizationNanos = physicalOptimizationNanos;
-        this.reductionPlanNanos = reductionPlanNanos;
-    }
-
     public PlanTimeProfile() {
-        this.logicalOptimizationNanos = 0L;
-        this.physicalOptimizationNanos = 0L;
-        this.reductionPlanNanos = 0L;
+        this(null, null, null);
     }
 
-    public PlanTimeProfile(StreamInput in) throws IOException {
-        this(in.readVLong(), in.readVLong(), in.readVLong());
+    /**
+     * Creates a profile with pre-existing time spans. Used for deserialization and testing.
+     *
+     * @param logicalOptimization  time span for logical optimization, or null if not measured
+     * @param physicalOptimization time span for physical optimization, or null if not measured
+     * @param reduction            time span for reduction plan, or null if not measured
+     */
+    public PlanTimeProfile(TimeSpan logicalOptimization, TimeSpan physicalOptimization, TimeSpan reduction) {
+        this.logicalOptimizationMarker = new TimeSpanMarker(LOGICAL_OPTIMIZATION, true, logicalOptimization);
+        this.physicalOptimizationMarker = new TimeSpanMarker(PHYSICAL_OPTIMIZATION, true, physicalOptimization);
+        this.reductionMarker = new TimeSpanMarker(REDUCTION, false, reduction);
+    }
+
+    public static PlanTimeProfile readFrom(StreamInput in) throws IOException {
+        if (in.getTransportVersion().supports(PLAN_TIME_PROFILE_TIMESPAN)) {
+            return new PlanTimeProfile(
+                in.readOptionalWriteable(TimeSpan::readFrom),
+                in.readOptionalWriteable(TimeSpan::readFrom),
+                in.readOptionalWriteable(TimeSpan::readFrom)
+            );
+        } else {
+            // Backwards compat: read old VLong durations, convert to TimeSpan with zero start
+            long logical = in.readVLong();
+            long physical = in.readVLong();
+            long reduction = in.readVLong();
+            return new PlanTimeProfile(
+                logical > 0 ? new TimeSpan(0, 0, 0, logical) : null,
+                physical > 0 ? new TimeSpan(0, 0, 0, physical) : null,
+                reduction > 0 ? new TimeSpan(0, 0, 0, reduction) : null
+            );
+        }
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(logicalOptimizationNanos);
-        out.writeVLong(physicalOptimizationNanos);
-        out.writeVLong(reductionPlanNanos);
+        if (out.getTransportVersion().supports(PLAN_TIME_PROFILE_TIMESPAN)) {
+            out.writeOptionalWriteable(logicalOptimizationMarker.timeSpan());
+            out.writeOptionalWriteable(physicalOptimizationMarker.timeSpan());
+            out.writeOptionalWriteable(reductionMarker.timeSpan());
+        } else {
+            // Backwards compat: write durations as VLongs
+            out.writeVLong(durationNanos(logicalOptimizationMarker));
+            out.writeVLong(durationNanos(physicalOptimizationMarker));
+            out.writeVLong(durationNanos(reductionMarker));
+        }
+    }
+
+    private static long durationNanos(TimeSpanMarker marker) {
+        TimeSpan span = marker.timeSpan();
+        return span != null ? span.durationInNanos() : 0L;
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (logicalOptimizationNanos > 0) {
-            builder.field("logical_optimization_nanos", logicalOptimizationNanos);
-        }
-        if (physicalOptimizationNanos > 0) {
-            builder.field("physical_optimization_nanos", physicalOptimizationNanos);
-        }
-        if (reductionPlanNanos > 0) {
-            builder.field("reduction_nanos", physicalOptimizationNanos);
+        for (TimeSpanMarker marker : timeSpanMarkers()) {
+            if (marker.timeSpan() != null) {
+                builder.field(marker.name(), marker.timeSpan());
+            }
         }
         return builder;
     }
 
-    public void addLogicalOptimizationPlanTime(long logicalOptimizationPlanTime) {
-        this.logicalOptimizationNanos = this.logicalOptimizationNanos + logicalOptimizationPlanTime;
+    /**
+     * Marker for logical plan optimization timing. Use {@link TimeSpanMarker#start()} and
+     * {@link TimeSpanMarker#stop()} to capture the time span.
+     */
+    public TimeSpanMarker logicalOptimization() {
+        return logicalOptimizationMarker;
     }
 
-    public void addPhysicalOptimizationPlanTime(long physicalOptimizationPlanTime) {
-        this.physicalOptimizationNanos = this.physicalOptimizationNanos + physicalOptimizationPlanTime;
+    /**
+     * Marker for physical plan optimization timing. Use {@link TimeSpanMarker#start()} and
+     * {@link TimeSpanMarker#stop()} to capture the time span.
+     */
+    public TimeSpanMarker physicalOptimization() {
+        return physicalOptimizationMarker;
     }
 
-    public void addReductionPlanNanos(long reductionPlanNanos) {
-        this.reductionPlanNanos = this.reductionPlanNanos + reductionPlanNanos;
+    /**
+     * Marker for reduction plan building timing. Use {@link TimeSpanMarker#start()} and
+     * {@link TimeSpanMarker#stop()} to capture the time span.
+     */
+    public TimeSpanMarker reduction() {
+        return reductionMarker;
+    }
+
+    public Collection<TimeSpanMarker> timeSpanMarkers() {
+        return List.of(logicalOptimizationMarker, physicalOptimizationMarker, reductionMarker);
     }
 
     @Override
@@ -85,28 +145,25 @@ public final class PlanTimeProfile implements Writeable, ToXContentObject {
         if (obj == this) return true;
         if (obj == null || obj.getClass() != this.getClass()) return false;
         var that = (PlanTimeProfile) obj;
-        return this.logicalOptimizationNanos == that.logicalOptimizationNanos
-            && this.physicalOptimizationNanos == that.physicalOptimizationNanos
-            && this.reductionPlanNanos == that.reductionPlanNanos;
+        return Objects.equals(logicalOptimizationMarker, that.logicalOptimizationMarker)
+            && Objects.equals(physicalOptimizationMarker, that.physicalOptimizationMarker)
+            && Objects.equals(reductionMarker, that.reductionMarker);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(logicalOptimizationNanos, physicalOptimizationNanos, reductionPlanNanos);
+        return Objects.hash(logicalOptimizationMarker, physicalOptimizationMarker, reductionMarker);
     }
 
     @Override
     public String toString() {
         return "PlanTimeProfile["
-            + "logicalOptimizationNanos="
-            + logicalOptimizationNanos
-            + ", "
-            + "physicalOptimizationNanos="
-            + physicalOptimizationNanos
-            + ", "
-            + "reductionPlanNanos="
-            + reductionPlanNanos
+            + "logicalOptimization="
+            + logicalOptimizationMarker
+            + ", physicalOptimization="
+            + physicalOptimizationMarker
+            + ", reduction="
+            + reductionMarker
             + ']';
     }
-
 }

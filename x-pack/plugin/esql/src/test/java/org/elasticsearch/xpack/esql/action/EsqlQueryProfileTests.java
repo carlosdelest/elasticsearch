@@ -8,6 +8,7 @@
 package org.elasticsearch.xpack.esql.action;
 
 import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.time.TimeSpan;
 import org.elasticsearch.test.AbstractWireSerializingTestCase;
 
 import java.io.IOException;

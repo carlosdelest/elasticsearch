@@ -12,6 +12,7 @@ import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.support.PlainActionFuture;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
+import org.elasticsearch.common.time.TimeSpan;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.compute.operator.DriverCompletionInfo;
 import org.elasticsearch.compute.operator.DriverProfile;
@@ -95,7 +96,13 @@ public class ComputeListenerTests extends ESTestCase {
     }
 
     private PlanTimeProfile randomPlanTimeProfile() {
-        return randomBoolean() ? null : new PlanTimeProfile(randomNonNegativeLong(), randomNonNegativeLong(), randomNonNegativeLong());
+        return randomBoolean() ? null : new PlanTimeProfile(randomTimeSpan(), randomTimeSpan(), randomTimeSpan());
+    }
+
+    private static TimeSpan randomTimeSpan() {
+        return randomBoolean()
+            ? new TimeSpan(randomNonNegativeLong(), randomNonNegativeLong(), randomNonNegativeLong(), randomNonNegativeLong())
+            : null;
     }
 
     public void testEmpty() {

@@ -524,12 +524,39 @@ function renderQueryTimeline() {
     return 0;
   });
 
+  // Collect plan optimization phases (logical_optimization, physical_optimization, reduction)
+  var optimizationPhaseKeys = [
+    { key: 'logical_optimization', label: 'logical opt' },
+    { key: 'physical_optimization', label: 'physical opt' },
+    { key: 'reduction', label: 'reduction' }
+  ];
+  var optPhases = [];
+  var plans = p.plans || [];
+  plans.forEach(function(plan) {
+    var planDesc = plan.description || 'plan';
+    optimizationPhaseKeys.forEach(function(pk) {
+      var span = plan[pk.key];
+      if (span && typeof span === 'object' && span.start_millis != null) {
+        optPhases.push({
+          name: pk.key,
+          label: planDesc + ': ' + pk.label,
+          start_millis: span.start_millis,
+          stop_millis: span.stop_millis,
+          took_millis: span.took_millis,
+          took_nanos: span.took_nanos
+        });
+      }
+    });
+  });
+  optPhases.sort(function(a, b) { return (a.start_millis || 0) - (b.start_millis || 0); });
+
   var queryPhase = p.query ? Object.assign({ name: 'query' }, p.query) : null;
   var drivers = p.drivers || [];
   var hasPhases = phases.length > 0 || queryPhase;
+  var hasOptPhases = optPhases.length > 0;
   var hasDrivers = drivers.length > 0;
 
-  if (!hasPhases && !hasDrivers) {
+  if (!hasPhases && !hasOptPhases && !hasDrivers) {
     document.getElementById('phases-section').classList.add('hidden');
     return;
   }
@@ -571,6 +598,7 @@ function renderQueryTimeline() {
   var allTimes = [];
   if (queryPhase) { allTimes.push(queryPhase.start_millis, queryPhase.stop_millis); }
   phases.forEach(function(ph) { allTimes.push(ph.start_millis, ph.stop_millis); });
+  optPhases.forEach(function(op) { allTimes.push(op.start_millis, op.stop_millis); });
   sorted.forEach(function(d) { allTimes.push(d.start_millis, d.stop_millis); });
   var minStart = d3.min(allTimes) || 0;
   var maxEnd = d3.max(allTimes) || minStart + 1;
@@ -590,9 +618,11 @@ function renderQueryTimeline() {
 
   var phaseRowCount = phases.length;
   var phasesH = phaseRowCount * (phaseBarH + phaseGap);
+  var optPhasesH = optPhases.length * (phaseBarH + phaseGap);
   var driversH = sorted.length * (driverBarH + driverGap);
-  var totalH = margin.top + phasesH +
-    (hasPhases && hasDrivers ? separatorH : 0) +
+  var optSepH = (hasPhases || hasOptPhases) && hasOptPhases && hasPhases ? separatorH : 0;
+  var driverSepH = (hasPhases || hasOptPhases) && hasDrivers ? separatorH : 0;
+  var totalH = margin.top + phasesH + optSepH + optPhasesH + driverSepH +
     driversH + margin.bottom;
 
   var width = Math.max(700, chartEl.clientWidth) - margin.left - margin.right;
@@ -670,11 +700,63 @@ function renderQueryTimeline() {
     }
   });
 
-  // --- Separator ---
-  var driverStartY = phasesH;
-  if (hasPhases && hasDrivers) {
+  // --- Separator between planning and optimization phases ---
+  var optStartY = phasesH;
+  if (hasPhases && hasOptPhases) {
     var sepY = phasesH + separatorH / 2;
     g.append('line').attr('x1', 0).attr('y1', sepY).attr('x2', width).attr('y2', sepY)
+      .attr('stroke', 'currentColor').attr('stroke-width', 1)
+      .attr('stroke-dasharray', '4,4').attr('opacity', 0.3);
+    g.append('text').attr('x', -margin.left + 8).attr('y', sepY + 1)
+      .attr('fill', 'currentColor').attr('font-size', 9).attr('dominant-baseline', 'middle')
+      .attr('opacity', 0.5).text('plan optimizations');
+    optStartY = phasesH + separatorH;
+  }
+
+  // --- Plan optimization phase rows ---
+  var optColors = {
+    logical_optimization: '#3b82f6',
+    physical_optimization: '#f59e0b',
+    reduction: '#8b5cf6'
+  };
+
+  optPhases.forEach(function(op, i) {
+    var y = optStartY + i * (phaseBarH + phaseGap);
+    var x0 = x(op.start_millis - queryStartTime);
+    var x1 = x(op.stop_millis - queryStartTime);
+    var w = Math.max(2, x1 - x0);
+
+    g.append('rect').attr('x', x0).attr('y', y).attr('width', w).attr('height', phaseBarH)
+      .attr('fill', optColors[op.name] || '#888').attr('rx', 3).attr('opacity', 0.8)
+      .on('mousemove', function(evt) {
+        var dur = op.took_nanos != null ? fmtNanos(op.took_nanos) : fmtMillis(op.took_millis);
+        showTooltip(evt,
+          '<div class="tt-title">' + escapeHtml(op.label) + '</div>' +
+          '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + dur + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Start:</span><span>' + fmtMillis(op.start_millis - queryStartTime) + '</span></div>' +
+          '<div class="tt-row"><span class="tt-label">Stop:</span><span>' + fmtMillis(op.stop_millis - queryStartTime) + '</span></div>'
+        );
+      })
+      .on('mouseleave', hideTooltip);
+
+    g.append('text').attr('x', -8).attr('y', y + phaseBarH / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .attr('fill', 'currentColor').attr('font-size', 11)
+      .text(op.label.length > 30 ? op.label.slice(0, 28) + '..' : op.label);
+
+    var dur = op.took_nanos != null ? fmtNanos(op.took_nanos) : fmtMillis(op.took_millis);
+    if (w > 40) {
+      g.append('text').attr('x', x0 + w / 2).attr('y', y + phaseBarH / 2)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+        .attr('fill', '#fff').attr('font-size', 10).text(dur);
+    }
+  });
+
+  // --- Separator between phases and drivers ---
+  var driverStartY = optStartY + optPhasesH;
+  if ((hasPhases || hasOptPhases) && hasDrivers) {
+    var sepY2 = driverStartY + separatorH / 2;
+    g.append('line').attr('x1', 0).attr('y1', sepY2).attr('x2', width).attr('y2', sepY2)
       .attr('stroke', 'currentColor').attr('stroke-width', 1)
       .attr('stroke-dasharray', '4,4').attr('opacity', 0.3);
     // Sort controls and legend rendered as foreignObject
@@ -694,7 +776,7 @@ function renderQueryTimeline() {
     sortHtml += '</span>';
 
     var fo = g.append('foreignObject')
-      .attr('x', -margin.left + 8).attr('y', phasesH + 1)
+      .attr('x', -margin.left + 8).attr('y', driverStartY + 1)
       .attr('width', width + margin.left + margin.right - 16).attr('height', separatorH - 2);
     fo.append('xhtml:div')
       .attr('xmlns', 'http://www.w3.org/1999/xhtml')
@@ -702,7 +784,7 @@ function renderQueryTimeline() {
       .style('height', '100%').style('font-family', 'inherit')
       .html(sortHtml);
 
-    driverStartY = phasesH + separatorH;
+    driverStartY = driverStartY + separatorH;
   }
 
   // --- Driver rows ---
@@ -1044,37 +1126,66 @@ function renderPlans() {
     var id = 'plan-' + i;
 
     // --- Prepare timing data ---
+    // New TimeSpan format: each phase is an object with start_millis, stop_millis, took_millis, took_nanos
+    var phaseKeys = [
+      { key: 'logical_optimization', name: 'Logical Opt', color: 'var(--blue)' },
+      { key: 'physical_optimization', name: 'Physical Opt', color: 'var(--orange)' },
+      { key: 'reduction', name: 'Reduction', color: 'var(--purple)' }
+    ];
     var phases = [];
-    if (plan.logical && plan.logical.start_millis) { // New format
-      if (plan.logical) phases.push({ name: 'Logical', color: 'var(--blue)', start: plan.logical.start_time_millis, nanos: plan.logical.took_nanos });
-      if (plan.physical) phases.push({ name: 'Physical', color: 'var(--orange)', start: plan.physical.start_time_millis, nanos: plan.physical.took_nanos });
-      if (plan.node_reduce) phases.push({ name: 'Reduction', color: 'var(--purple)', start: plan.node_reduce.start_time_millis, nanos: plan.node_reduce.took_nanos });
-    } else { // Old format
-      // Cannot draw gantt without start times, so just show text
-    }
+    phaseKeys.forEach(function(pk) {
+      var span = plan[pk.key];
+      if (span && typeof span === 'object' && span.start_millis != null) {
+        phases.push({
+          name: pk.name,
+          color: pk.color,
+          startMillis: span.start_millis,
+          stopMillis: span.stop_millis,
+          tookNanos: span.took_nanos,
+          tookMillis: span.took_millis
+        });
+      }
+    });
 
     var metaHtml = '';
     if (phases.length > 0) {
-      var minStart = d3.min(phases, p => p.start);
-      var maxEnd = d3.max(phases, p => p.start + p.nanos / 1e6);
+      var minStart = d3.min(phases, function(p) { return p.startMillis; });
+      var maxEnd = d3.max(phases, function(p) { return p.stopMillis; });
       var totalDur = maxEnd - minStart;
 
       metaHtml += '<span>Total Duration: ' + fmtMillis(totalDur) + '</span>';
       metaHtml += '<div class="plan-gantt-container">';
 
       phases.forEach(function(p) {
-        var left = ((p.start - minStart) / totalDur) * 100;
-        var width = (p.nanos / 1e6 / totalDur) * 100;
+        var left = totalDur > 0 ? ((p.startMillis - minStart) / totalDur) * 100 : 0;
+        var width = totalDur > 0 ? ((p.stopMillis - p.startMillis) / totalDur) * 100 : 100;
+        width = Math.max(width, 1); // minimum visible width
+        var durStr = p.tookNanos != null ? fmtNanos(p.tookNanos) : fmtMillis(p.tookMillis);
+        var startStr = fmtTime(p.startMillis);
+        var stopStr = fmtTime(p.stopMillis);
         metaHtml += '<div class="plan-gantt-bar" style="left:' + left + '%;width:' + width + '%;background-color:' + p.color + ';" ' +
-                    'onmousemove="showTooltip(event, \'<div class=&quot;tt-title&quot;>' + p.name + ' Opt.</div><div class=&quot;tt-row&quot;><span class=&quot;tt-label&quot;>Duration:</span><span>' + fmtNanos(p.nanos) + '</span></div>\')" ' +
+                    'onmousemove="showTooltip(event, \'<div class=&quot;tt-title&quot;>' + p.name + '</div>' +
+                    '<div class=&quot;tt-row&quot;><span class=&quot;tt-label&quot;>Duration:</span><span>' + durStr + '</span></div>' +
+                    '<div class=&quot;tt-row&quot;><span class=&quot;tt-label&quot;>Start:</span><span>' + escapeHtml(startStr) + '</span></div>' +
+                    '<div class=&quot;tt-row&quot;><span class=&quot;tt-label&quot;>Stop:</span><span>' + escapeHtml(stopStr) + '</span></div>\')" ' +
                     'onmouseleave="hideTooltip()"></div>';
       });
       metaHtml += '</div>';
 
-    } else { // Fallback for old data
-        metaHtml += (plan.logical_optimization_nanos != null ? '<span>Logical opt: ' + fmtNanos(plan.logical_optimization_nanos) + '</span>' : '');
-        metaHtml += (plan.physical_optimization_nanos != null ? '<span>Physical opt: ' + fmtNanos(plan.physical_optimization_nanos) + '</span>' : '');
-        metaHtml += (plan.reduction_nanos != null ? '<span>Reduction: ' + fmtNanos(plan.reduction_nanos) + '</span>' : '');
+      // Legend for plan phases
+      metaHtml += '<div style="display:flex;gap:12px;margin-top:4px;font-size:10px;color:var(--text2);">';
+      phases.forEach(function(p) {
+        var durStr = p.tookNanos != null ? fmtNanos(p.tookNanos) : fmtMillis(p.tookMillis);
+        metaHtml += '<span><span style="display:inline-block;width:10px;height:6px;border-radius:2px;background:' + p.color + ';vertical-align:middle;margin-right:3px;"></span>' +
+                    p.name + ': ' + durStr + '</span>';
+      });
+      metaHtml += '</div>';
+
+    } else {
+      // Fallback for old flat-field data (logical_optimization_nanos, physical_optimization_nanos, reduction_nanos)
+      metaHtml += (plan.logical_optimization_nanos != null ? '<span>Logical opt: ' + fmtNanos(plan.logical_optimization_nanos) + '</span>' : '');
+      metaHtml += (plan.physical_optimization_nanos != null ? '<span>Physical opt: ' + fmtNanos(plan.physical_optimization_nanos) + '</span>' : '');
+      metaHtml += (plan.reduction_nanos != null ? '<span>Reduction: ' + fmtNanos(plan.reduction_nanos) + '</span>' : '');
     }
 
 
@@ -1372,22 +1483,23 @@ function loadExample() {
           "cluster_name": "production",
           "node_name": "node-1",
           "plan": "FragmentExec[query=from logs | where @timestamp > now() - 1h | stats count(*) by host | sort count desc | limit 100]\n\\_LimitExec[limit=100]\n  \\_TopNExec[order=[count DESC], limit=100]\n    \\_AggregateExec[FINAL,[host],[count(*)]]\n      \\_ExchangeExec[GATHER]\n        \\_AggregateExec[INITIAL,[host],[count(*)]]\n          \\_FilterExec[@timestamp > now() - 1h]\n            \\_FieldExtractExec[host, @timestamp]\n              \\_EsQueryExec[index=logs]",
-          "logical_optimization_nanos": 5000000,
-          "physical_optimization_nanos": 12000000
+          "logical_optimization": { "start_millis": 1700000000002, "stop_millis": 1700000000007, "took_millis": 5, "took_nanos": 5000000 },
+          "physical_optimization": { "start_millis": 1700000000007, "stop_millis": 1700000000019, "took_millis": 12, "took_nanos": 12000000 },
+          "reduction": { "start_millis": 1700000000019, "stop_millis": 1700000000022, "took_millis": 3, "took_nanos": 3000000 }
         },
         {
           "description": "data node-1",
           "cluster_name": "production",
           "node_name": "node-1",
           "plan": "AggregateExec[INITIAL,[host],[count(*)]]\n\\_FilterExec[@timestamp > now() - 1h]\n  \\_FieldExtractExec[host, @timestamp]\n    \\_EsQueryExec[index=logs, shards=[logs][0-3]]",
-          "physical_optimization_nanos": 3000000
+          "physical_optimization": { "start_millis": 1700000000050, "stop_millis": 1700000000053, "took_millis": 3, "took_nanos": 3000000 }
         },
         {
           "description": "data node-2",
           "cluster_name": "production",
           "node_name": "node-2",
           "plan": "AggregateExec[INITIAL,[host],[count(*)]]\n\\_FilterExec[@timestamp > now() - 1h]\n  \\_FieldExtractExec[host, @timestamp]\n    \\_EsQueryExec[index=logs, shards=[logs][4-6]]",
-          "physical_optimization_nanos": 2800000
+          "physical_optimization": { "start_millis": 1700000000055, "stop_millis": 1700000000058, "took_millis": 3, "took_nanos": 2800000 }
         }
       ]
     }
