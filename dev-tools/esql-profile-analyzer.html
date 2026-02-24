@@ -1044,37 +1044,66 @@ function renderPlans() {
     var id = 'plan-' + i;
 
     // --- Prepare timing data ---
+    // New TimeSpan format: each phase is an object with start_millis, stop_millis, took_millis, took_nanos
+    var phaseKeys = [
+      { key: 'logical_optimization', name: 'Logical Opt', color: 'var(--blue)' },
+      { key: 'physical_optimization', name: 'Physical Opt', color: 'var(--orange)' },
+      { key: 'reduction', name: 'Reduction', color: 'var(--purple)' }
+    ];
     var phases = [];
-    if (plan.logical && plan.logical.start_millis) { // New format
-      if (plan.logical) phases.push({ name: 'Logical', color: 'var(--blue)', start: plan.logical.start_time_millis, nanos: plan.logical.took_nanos });
-      if (plan.physical) phases.push({ name: 'Physical', color: 'var(--orange)', start: plan.physical.start_time_millis, nanos: plan.physical.took_nanos });
-      if (plan.node_reduce) phases.push({ name: 'Reduction', color: 'var(--purple)', start: plan.node_reduce.start_time_millis, nanos: plan.node_reduce.took_nanos });
-    } else { // Old format
-      // Cannot draw gantt without start times, so just show text
-    }
+    phaseKeys.forEach(function(pk) {
+      var span = plan[pk.key];
+      if (span && typeof span === 'object' && span.start_millis != null) {
+        phases.push({
+          name: pk.name,
+          color: pk.color,
+          startMillis: span.start_millis,
+          stopMillis: span.stop_millis,
+          tookNanos: span.took_nanos,
+          tookMillis: span.took_millis
+        });
+      }
+    });
 
     var metaHtml = '';
     if (phases.length > 0) {
-      var minStart = d3.min(phases, p => p.start);
-      var maxEnd = d3.max(phases, p => p.start + p.nanos / 1e6);
+      var minStart = d3.min(phases, function(p) { return p.startMillis; });
+      var maxEnd = d3.max(phases, function(p) { return p.stopMillis; });
       var totalDur = maxEnd - minStart;
 
       metaHtml += '<span>Total Duration: ' + fmtMillis(totalDur) + '</span>';
       metaHtml += '<div class="plan-gantt-container">';
 
       phases.forEach(function(p) {
-        var left = ((p.start - minStart) / totalDur) * 100;
-        var width = (p.nanos / 1e6 / totalDur) * 100;
+        var left = totalDur > 0 ? ((p.startMillis - minStart) / totalDur) * 100 : 0;
+        var width = totalDur > 0 ? ((p.stopMillis - p.startMillis) / totalDur) * 100 : 100;
+        width = Math.max(width, 1); // minimum visible width
+        var durStr = p.tookNanos != null ? fmtNanos(p.tookNanos) : fmtMillis(p.tookMillis);
+        var startStr = fmtTime(p.startMillis);
+        var stopStr = fmtTime(p.stopMillis);
         metaHtml += '<div class="plan-gantt-bar" style="left:' + left + '%;width:' + width + '%;background-color:' + p.color + ';" ' +
-                    'onmousemove="showTooltip(event, \'<div class=&quot;tt-title&quot;>' + p.name + ' Opt.</div><div class=&quot;tt-row&quot;><span class=&quot;tt-label&quot;>Duration:</span><span>' + fmtNanos(p.nanos) + '</span></div>\')" ' +
+                    'onmousemove="showTooltip(event, \'<div class=&quot;tt-title&quot;>' + p.name + '</div>' +
+                    '<div class=&quot;tt-row&quot;><span class=&quot;tt-label&quot;>Duration:</span><span>' + durStr + '</span></div>' +
+                    '<div class=&quot;tt-row&quot;><span class=&quot;tt-label&quot;>Start:</span><span>' + escapeHtml(startStr) + '</span></div>' +
+                    '<div class=&quot;tt-row&quot;><span class=&quot;tt-label&quot;>Stop:</span><span>' + escapeHtml(stopStr) + '</span></div>\')" ' +
                     'onmouseleave="hideTooltip()"></div>';
       });
       metaHtml += '</div>';
 
-    } else { // Fallback for old data
-        metaHtml += (plan.logical_optimization_nanos != null ? '<span>Logical opt: ' + fmtNanos(plan.logical_optimization_nanos) + '</span>' : '');
-        metaHtml += (plan.physical_optimization_nanos != null ? '<span>Physical opt: ' + fmtNanos(plan.physical_optimization_nanos) + '</span>' : '');
-        metaHtml += (plan.reduction_nanos != null ? '<span>Reduction: ' + fmtNanos(plan.reduction_nanos) + '</span>' : '');
+      // Legend for plan phases
+      metaHtml += '<div style="display:flex;gap:12px;margin-top:4px;font-size:10px;color:var(--text2);">';
+      phases.forEach(function(p) {
+        var durStr = p.tookNanos != null ? fmtNanos(p.tookNanos) : fmtMillis(p.tookMillis);
+        metaHtml += '<span><span style="display:inline-block;width:10px;height:6px;border-radius:2px;background:' + p.color + ';vertical-align:middle;margin-right:3px;"></span>' +
+                    p.name + ': ' + durStr + '</span>';
+      });
+      metaHtml += '</div>';
+
+    } else {
+      // Fallback for old flat-field data (logical_optimization_nanos, physical_optimization_nanos, reduction_nanos)
+      metaHtml += (plan.logical_optimization_nanos != null ? '<span>Logical opt: ' + fmtNanos(plan.logical_optimization_nanos) + '</span>' : '');
+      metaHtml += (plan.physical_optimization_nanos != null ? '<span>Physical opt: ' + fmtNanos(plan.physical_optimization_nanos) + '</span>' : '');
+      metaHtml += (plan.reduction_nanos != null ? '<span>Reduction: ' + fmtNanos(plan.reduction_nanos) + '</span>' : '');
     }
 
 
@@ -1372,22 +1401,22 @@ function loadExample() {
           "cluster_name": "production",
           "node_name": "node-1",
           "plan": "FragmentExec[query=from logs | where @timestamp > now() - 1h | stats count(*) by host | sort count desc | limit 100]\n\\_LimitExec[limit=100]\n  \\_TopNExec[order=[count DESC], limit=100]\n    \\_AggregateExec[FINAL,[host],[count(*)]]\n      \\_ExchangeExec[GATHER]\n        \\_AggregateExec[INITIAL,[host],[count(*)]]\n          \\_FilterExec[@timestamp > now() - 1h]\n            \\_FieldExtractExec[host, @timestamp]\n              \\_EsQueryExec[index=logs]",
-          "logical_optimization_nanos": 5000000,
-          "physical_optimization_nanos": 12000000
+          "logical_optimization": { "start_millis": 1700000000002, "stop_millis": 1700000000007, "took_millis": 5, "took_nanos": 5000000 },
+          "physical_optimization": { "start_millis": 1700000000007, "stop_millis": 1700000000019, "took_millis": 12, "took_nanos": 12000000 }
         },
         {
           "description": "data node-1",
           "cluster_name": "production",
           "node_name": "node-1",
           "plan": "AggregateExec[INITIAL,[host],[count(*)]]\n\\_FilterExec[@timestamp > now() - 1h]\n  \\_FieldExtractExec[host, @timestamp]\n    \\_EsQueryExec[index=logs, shards=[logs][0-3]]",
-          "physical_optimization_nanos": 3000000
+          "physical_optimization": { "start_millis": 1700000000050, "stop_millis": 1700000000053, "took_millis": 3, "took_nanos": 3000000 }
         },
         {
           "description": "data node-2",
           "cluster_name": "production",
           "node_name": "node-2",
           "plan": "AggregateExec[INITIAL,[host],[count(*)]]\n\\_FilterExec[@timestamp > now() - 1h]\n  \\_FieldExtractExec[host, @timestamp]\n    \\_EsQueryExec[index=logs, shards=[logs][4-6]]",
-          "physical_optimization_nanos": 2800000
+          "physical_optimization": { "start_millis": 1700000000055, "stop_millis": 1700000000058, "took_millis": 3, "took_nanos": 2800000 }
         }
       ]
     }
