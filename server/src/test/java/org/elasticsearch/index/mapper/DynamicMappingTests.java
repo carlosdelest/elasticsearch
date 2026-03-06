@@ -1019,6 +1019,36 @@ public class DynamicMappingTests extends MapperServiceTestCase {
         assertThat(((FieldMapper) parent.getMapper("mapsToDenseVector")).fieldType().typeName(), equalTo("dense_vector"));
     }
 
+    public void testDynamicTemplatePreservedForObjectSubfieldsArrayField() throws IOException {
+        MapperService mapperService = createMapperService(topMapping(b -> {
+            b.field("numeric_detection", true);
+            b.startArray("dynamic_templates");
+            {
+                b.startObject();
+                {
+                    b.startObject("floats_stay_float");
+                    {
+                        b.field("match_mapping_type", "double");
+                        b.startObject("mapping").field("type", "float").endObject();
+                    }
+                    b.endObject();
+                }
+                b.endObject();
+            }
+            b.endArray();
+        }));
+
+        double[] floatArray = Randomness.get().doubles(MIN_DIMS_FOR_DYNAMIC_FLOAT_MAPPING, 0.0, 5.0).toArray();
+        ParsedDocument parsedDoc = mapperService.documentMapper().parse(source(b -> {
+            b.startObject("parent_object");
+            b.field("my_vector", floatArray);
+            b.endObject();
+        }));
+        mergeDynamicUpdate(mapperService, parsedDoc.dynamicMappingsUpdate());
+
+        assertThat(mapperService.fieldType("parent_object.my_vector").typeName(), equalTo("float"));
+    }
+
     public void testStringArraysAreText() throws IOException {
         DocumentMapper mapper = createDocumentMapper(topMapping(b -> b.field("numeric_detection", true)));
         BytesReference source = BytesReference.bytes(
