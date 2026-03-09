@@ -8,6 +8,7 @@
 package org.elasticsearch.compute.lucene.read;
 
 import org.apache.lucene.index.LeafReaderContext;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.compute.data.Block;
 import org.elasticsearch.compute.data.DocVector;
 import org.elasticsearch.core.Nullable;
@@ -17,9 +18,12 @@ import org.elasticsearch.index.fieldvisitor.StoredFieldLoader;
 import org.elasticsearch.index.mapper.BlockLoader;
 import org.elasticsearch.index.mapper.BlockLoaderStoredFieldsFromLeafLoader;
 import org.elasticsearch.index.mapper.SourceLoader;
+import org.elasticsearch.index.mapper.StreamingMultiFieldSourceReader;
 import org.elasticsearch.logging.LogManager;
 import org.elasticsearch.logging.Logger;
 import org.elasticsearch.search.fetch.StoredFieldsSpec;
+import org.elasticsearch.search.lookup.Source;
+import org.elasticsearch.xcontent.XContentType;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -140,6 +144,30 @@ class ValuesFromSingleReader extends ValuesReader {
         ValuesReaderDocs docs,
         int offset
     ) throws IOException {
+        // Classify row-stride readers: those that support streaming source extraction vs. the rest
+        List<RowStrideReaderWork> streamingWorks = new ArrayList<>();
+        List<RowStrideReaderWork> regularWorks = new ArrayList<>();
+        for (RowStrideReaderWork work : rowStrideReaders) {
+            if (work.loader().sourceFieldExtractor() != null) {
+                streamingWorks.add(work);
+            } else {
+                regularWorks.add(work);
+            }
+        }
+        boolean useStreaming = streamingWorks.isEmpty() == false;
+
+        // Pre-build the streaming Target list once (reused per document)
+        List<StreamingMultiFieldSourceReader.Target> streamingTargets = null;
+        if (useStreaming) {
+            streamingTargets = new ArrayList<>(streamingWorks.size());
+            for (RowStrideReaderWork work : streamingWorks) {
+                BlockLoader.SourceFieldExtractor extractor = work.loader().sourceFieldExtractor();
+                streamingTargets.add(
+                    new StreamingMultiFieldSourceReader.Target(extractor.sourcePaths(), work.builder(), extractor)
+                );
+            }
+        }
+
         SourceLoader sourceLoader = null;
         ValuesSourceReaderOperator.ShardContext shardContext = operator.shardContexts.get(shard);
         if (storedFieldsSpec.requiresSource()) {
@@ -156,9 +184,19 @@ class ValuesFromSingleReader extends ValuesReader {
         while (p < docs.count() && estimated < jumboBytes) {
             int doc = docs.get(p++);
             storedFields.advanceTo(doc);
-            for (RowStrideReaderWork work : rowStrideReaders) {
+
+            if (useStreaming) {
+                // Single streaming parse fills all streaming-capable builders
+                Source source = storedFields.source();
+                BytesReference sourceBytes = source != null ? source.internalSourceRef() : null;
+                XContentType contentType = source != null ? source.sourceContentType() : XContentType.JSON;
+                StreamingMultiFieldSourceReader.read(sourceBytes, contentType, streamingTargets);
+            }
+
+            for (RowStrideReaderWork work : regularWorks) {
                 work.read(doc, storedFields);
             }
+
             operator.trackSourceBytesAndRelease(storedFields);
             estimated = estimatedRamBytesUsed(rowStrideReaders);
             log.trace("{}: bytes loaded {}/{}", p, estimated, jumboBytes);

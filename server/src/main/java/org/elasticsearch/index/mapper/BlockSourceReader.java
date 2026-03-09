@@ -29,6 +29,7 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Loads values from {@code _source}. This whole process is very slow and cast-tastic,
@@ -217,6 +218,42 @@ public abstract class BlockSourceReader implements BlockLoader.RowStrideReader {
         @Override
         protected String name() {
             return "Bytes";
+        }
+
+        @Override
+        public SourceFieldExtractor sourceFieldExtractor() {
+            if (fetcher instanceof SourceValueFetcher svf) {
+                return new BytesRefSourceFieldExtractor(svf.sourcePaths());
+            }
+            return null;
+        }
+    }
+
+    /**
+     * {@link BlockLoader.SourceFieldExtractor} for text/keyword fields that appends
+     * raw string tokens as UTF-8 {@link BytesRef} values.
+     */
+    private static class BytesRefSourceFieldExtractor implements BlockLoader.SourceFieldExtractor {
+        private final Set<String> paths;
+        private final BytesRef scratch = new BytesRef();
+
+        BytesRefSourceFieldExtractor(Set<String> paths) {
+            this.paths = paths;
+        }
+
+        @Override
+        public Set<String> sourcePaths() {
+            return paths;
+        }
+
+        @Override
+        public void appendRawValue(String rawValue, BlockLoader.Builder builder) {
+            ((BlockLoader.BytesRefBuilder) builder).appendBytesRef(toBytesRef(scratch, rawValue));
+        }
+
+        @Override
+        public void appendNull(BlockLoader.Builder builder) {
+            builder.appendNull();
         }
     }
 

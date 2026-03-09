@@ -62,6 +62,11 @@ public abstract class SourceValueFetcher implements ValueFetcher {
         this.ignoredSourceFormat = ignoredSourceFormat;
     }
 
+    /** Returns the set of source paths this fetcher reads from. */
+    public Set<String> sourcePaths() {
+        return sourcePaths;
+    }
+
     @Override
     public List<Object> fetchValues(Source source, int doc, List<Object> ignoredValues) {
         ArrayList<Object> values = new ArrayList<>();

@@ -33,6 +33,7 @@ import org.elasticsearch.search.lookup.Source;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Loads values from a chunk of lucene documents into a "Block" for the compute engine.
@@ -340,6 +341,35 @@ public interface BlockLoader {
          * If the stored fields are not loaded yet, the block loader might avoid loading them when not needed.
          */
         boolean loaded();
+    }
+
+    /**
+     * Returns non-null if this loader supports streaming multi-field source extraction.
+     * Loaders that can participate in {@link StreamingMultiFieldSourceReader} override
+     * this to return an extractor; all others return {@code null} (the default).
+     */
+    @Nullable
+    default SourceFieldExtractor sourceFieldExtractor() {
+        return null;
+    }
+
+    /**
+     * Interface for loaders that support streaming multi-field source extraction.
+     * Used by {@link StreamingMultiFieldSourceReader} to extract multiple fields
+     * from {@code _source} in a single streaming JSON parse.
+     */
+    interface SourceFieldExtractor {
+        /** Source paths this field reads (dot-notation, e.g. {@code "user.name"}). */
+        Set<String> sourcePaths();
+
+        /**
+         * Append a raw string value (already extracted from the streaming parser) to the builder.
+         * For text fields this is the UTF-8 string token text.
+         */
+        void appendRawValue(String rawValue, Builder builder);
+
+        /** Append null for documents where the field is absent. */
+        void appendNull(Builder builder);
     }
 
     /**
