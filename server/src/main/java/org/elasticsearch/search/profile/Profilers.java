@@ -9,67 +9,33 @@
 
 package org.elasticsearch.search.profile;
 
-import org.elasticsearch.search.fetch.FetchProfiler;
-import org.elasticsearch.search.internal.ContextIndexSearcher;
-import org.elasticsearch.search.profile.aggregation.AggregationProfileShardResult;
+import org.elasticsearch.search.fetch.FetchPhase;
 import org.elasticsearch.search.profile.aggregation.AggregationProfiler;
 import org.elasticsearch.search.profile.dfs.DfsProfiler;
-import org.elasticsearch.search.profile.query.QueryProfileShardResult;
+import org.elasticsearch.search.profile.query.CollectorResult;
 import org.elasticsearch.search.profile.query.QueryProfiler;
 
-import java.util.Collections;
+/** Abstraction over all profilers for a single search request. */
+public interface Profilers {
 
-/** Wrapper around all the profilers that makes management easier. */
-public final class Profilers {
+    /** Returns {@code true} when full Lucene instrumentation is enabled (ProfileWeight / ProfileScorer). */
+    boolean isDetailed();
 
-    private final QueryProfiler queryProfiler;
-    private final AggregationProfiler aggProfiler = new AggregationProfiler();
-    private DfsProfiler dfsProfiler;
+    QueryProfiler getCurrentQueryProfiler();
 
-    public Profilers(ContextIndexSearcher searcher) {
-        this.queryProfiler = new QueryProfiler();
-        searcher.setProfiler(this.queryProfiler);
-    }
+    AggregationProfiler getAggregationProfiler();
 
-    /**
-     * Get the profiler for the query we are currently processing.
-     */
-    public QueryProfiler getCurrentQueryProfiler() {
-        return queryProfiler;
-    }
+    DfsProfiler getDfsProfiler();
 
-    public AggregationProfiler getAggregationProfiler() {
-        return aggProfiler;
-    }
+    void onDfsPhaseComplete(long nanos);
 
-    /**
-     * Build a profiler for the dfs phase or get the existing one.
-     */
-    public DfsProfiler getDfsProfiler() {
-        if (dfsProfiler == null) {
-            dfsProfiler = new DfsProfiler();
-        }
-        return dfsProfiler;
-    }
+    void onQueryPhaseComplete(long nanos);
 
-    /**
-     * Build a profiler for the fetch phase.
-     */
-    public static FetchProfiler startProfilingFetchPhase() {
-        return new FetchProfiler();
-    }
+    void onQueryCollectorResult(CollectorResult result);
 
-    /**
-     * Build the results for the query phase.
-     */
-    public SearchProfileQueryPhaseResult buildQueryPhaseResults() {
-        QueryProfileShardResult result = new QueryProfileShardResult(
-            queryProfiler.getTree(),
-            queryProfiler.getRewriteTime(),
-            queryProfiler.getCollectorResult(),
-            null
-        );
-        AggregationProfileShardResult aggResults = new AggregationProfileShardResult(aggProfiler.getTree());
-        return new SearchProfileQueryPhaseResult(Collections.singletonList(result), aggResults);
-    }
+    FetchPhase.Profiler startProfilingFetchPhase();
+
+    SearchProfileDfsPhaseResult buildDfsPhaseResult();
+
+    SearchProfileQueryPhaseResult buildQueryPhaseResults();
 }

@@ -28,6 +28,7 @@ import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.SubSearchContext;
 import org.elasticsearch.search.lookup.Source;
 import org.elasticsearch.search.profile.Profilers;
+import org.elasticsearch.search.profile.TimingProfiler;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -101,7 +102,7 @@ public final class InnerHitsContext {
 
         @Override
         public Profilers getProfilers() {
-            return null;
+            return new TimingProfiler();
         }
 
         @Override

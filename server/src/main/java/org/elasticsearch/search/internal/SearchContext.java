@@ -371,7 +371,7 @@ public abstract class SearchContext implements Releasable {
     public abstract void addFetchResult();
 
     /**
-     * Return a handle over the profilers for the current search request, or {@code null} if profiling is not enabled.
+     * Return a handle over the profilers for the current search request. Never {@code null}.
      */
     public abstract Profilers getProfilers();
 

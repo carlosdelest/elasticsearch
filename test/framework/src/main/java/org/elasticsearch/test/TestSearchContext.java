@@ -45,6 +45,7 @@ import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.search.lookup.SourceFilter;
 import org.elasticsearch.search.profile.Profilers;
+import org.elasticsearch.search.profile.TimingProfiler;
 import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rank.context.QueryPhaseRankShardContext;
 import org.elasticsearch.search.rank.feature.RankFeatureResult;
@@ -500,7 +501,7 @@ public class TestSearchContext extends SearchContext {
 
     @Override
     public Profilers getProfilers() {
-        return null; // no profiling
+        return new TimingProfiler();
     }
 
     @Override

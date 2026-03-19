@@ -114,7 +114,9 @@ import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.search.internal.SubSearchContext;
 import org.elasticsearch.search.lookup.SearchLookup;
+import org.elasticsearch.search.profile.DetailedProfiler;
 import org.elasticsearch.search.profile.Profilers;
+import org.elasticsearch.search.profile.TimingProfiler;
 import org.elasticsearch.search.query.QueryPhase;
 import org.elasticsearch.search.query.QuerySearchRequest;
 import org.elasticsearch.search.query.QuerySearchResult;
@@ -1745,9 +1747,10 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         if (source.minScore() != null) {
             context.minimumScore(source.minScore());
         }
-        if (source.profile()) {
-            context.setProfilers(new Profilers(context.searcher()));
-        }
+        Profilers profilers = source.profile()
+            ? new DetailedProfiler(context.searcher())
+            : new TimingProfiler();
+        context.setProfilers(profilers);
         if (source.timeout() != null) {
             context.timeout(source.timeout());
         }
@@ -1765,7 +1768,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                  * delay reading it until the aggs ask for it.
                  */
                 () -> context.rewrittenQuery() == null ? Queries.ALL_DOCS_INSTANCE : context.rewrittenQuery(),
-                context.getProfilers() == null ? null : context.getProfilers().getAggregationProfiler(),
+                context.getProfilers().getAggregationProfiler(),
                 multiBucketConsumerService.getLimit(),
                 () -> new SubSearchContext(context).parsedQuery(context.parsedQuery()).fetchFieldsContext(context.fetchFieldsContext()),
                 context.bitsetFilterCache(),

@@ -35,7 +35,6 @@ import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.lookup.Source;
 import org.elasticsearch.search.lookup.SourceProvider;
 import org.elasticsearch.search.profile.ProfileResult;
-import org.elasticsearch.search.profile.Profilers;
 import org.elasticsearch.search.profile.Timer;
 import org.elasticsearch.search.rank.RankDoc;
 import org.elasticsearch.search.rank.RankDocShardInfo;
@@ -95,10 +94,9 @@ public final class FetchPhase {
             return;
         }
 
-        Profiler profiler = context.getProfilers() == null
-            || (context.request().source() != null && context.request().source().rankBuilder() != null)
-                ? Profiler.NOOP
-                : Profilers.startProfilingFetchPhase();
+        Profiler profiler = context.request().source() != null && context.request().source().rankBuilder() != null
+            ? Profiler.NOOP
+            : context.getProfilers().startProfilingFetchPhase();
         SearchHits hits = null;
         long searchHitsBytesSize = 0L;
         try {
@@ -469,7 +467,7 @@ public final class FetchPhase {
         return new HitContext(nestedHit, subReaderContext, nestedInfo.doc(), childFieldLoader.storedFields(), nestedSource, rankDoc);
     }
 
-    interface Profiler {
+    public interface Profiler {
         ProfileResult finish();
 
         FetchSubPhaseProcessor profile(String type, String description, FetchSubPhaseProcessor processor);

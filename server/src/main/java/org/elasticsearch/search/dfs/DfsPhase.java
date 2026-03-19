@@ -62,9 +62,7 @@ public class DfsPhase {
             collectStatistics(context);
             executeKnnVectorQuery(context);
 
-            if (context.getProfilers() != null) {
-                context.dfsResult().profileResult(context.getProfilers().getDfsProfiler().buildDfsPhaseResults());
-            }
+            context.dfsResult().profileResult(context.getProfilers().getDfsProfiler().buildDfsPhaseResults());
         } catch (SearchTimeoutException e) {
             throw e;
         } catch (Exception e) {
@@ -73,7 +71,7 @@ public class DfsPhase {
     }
 
     private static void collectStatistics(SearchContext context) throws IOException {
-        final DfsProfiler profiler = context.getProfilers() == null ? null : context.getProfilers().getDfsProfiler();
+        final DfsProfiler profiler = context.getProfilers().getDfsProfiler();
 
         Map<String, CollectionStatistics> fieldStatistics = new HashMap<>();
         Map<Term, TermStatistics> stats = new HashMap<>();
@@ -118,9 +116,7 @@ public class DfsPhase {
             }
         };
 
-        if (profiler != null) {
-            profiler.start();
-        }
+        profiler.start();
 
         try {
             Timer timer = maybeStartTimer(profiler, DfsTimingType.CREATE_WEIGHT);
@@ -153,9 +149,7 @@ public class DfsPhase {
                 }
             }
         } finally {
-            if (profiler != null) {
-                profiler.stop();
-            }
+            profiler.stop();
         }
 
         Term[] terms = stats.keySet().toArray(new Term[0]);

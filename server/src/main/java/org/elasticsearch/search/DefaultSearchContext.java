@@ -71,6 +71,7 @@ import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.search.lookup.SourceFilter;
 import org.elasticsearch.search.profile.Profilers;
+import org.elasticsearch.search.profile.TimingProfiler;
 import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rank.context.QueryPhaseRankShardContext;
 import org.elasticsearch.search.rank.feature.RankFeatureResult;
@@ -154,7 +155,7 @@ final class DefaultSearchContext extends SearchContext {
     private SearchHighlightContext highlight;
     private SuggestionSearchContext suggest;
     private List<RescoreContext> rescore;
-    private Profilers profilers;
+    private Profilers profilers = new TimingProfiler();
 
     private final Map<String, SearchExtBuilder> searchExtBuilders = new HashMap<>();
     private final SearchExecutionContext searchExecutionContext;

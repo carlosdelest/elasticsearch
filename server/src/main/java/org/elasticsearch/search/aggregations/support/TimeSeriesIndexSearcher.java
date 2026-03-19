@@ -152,7 +152,7 @@ public class TimeSeriesIndexSearcher {
     }
 
     public void setProfiler(SearchContext context) {
-        if ((context.getProfilers() != null) && (context.getProfilers().getCurrentQueryProfiler() != null)) {
+        if (context.getProfilers().getCurrentQueryProfiler() != null) {
             searcher.setProfiler(context.getProfilers().getCurrentQueryProfiler());
         }
     }

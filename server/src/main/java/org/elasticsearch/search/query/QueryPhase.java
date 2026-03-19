@@ -145,9 +145,7 @@ public class QueryPhase {
 
         RescorePhase.execute(searchContext);
         SuggestPhase.execute(searchContext);
-        if (searchContext.getProfilers() != null) {
-            searchContext.queryResult().profileResults(searchContext.getProfilers().buildQueryPhaseResults());
-        }
+        searchContext.queryResult().profileResults(searchContext.getProfilers().buildQueryPhaseResults());
     }
 
     /**
@@ -215,9 +213,7 @@ public class QueryPhase {
 
                 QueryPhaseResult queryPhaseResult = searcher.search(query, collectorManager);
 
-                if (searchContext.getProfilers() != null) {
-                    searchContext.getProfilers().getCurrentQueryProfiler().setCollectorResult(queryPhaseResult.collectorResult());
-                }
+                searchContext.getProfilers().onQueryCollectorResult(queryPhaseResult.collectorResult());
                 queryResult.topDocs(queryPhaseResult.topDocsAndMaxScore(), queryPhaseResult.sortValueFormats());
 
                 if (searcher.timeExceeded()) {
