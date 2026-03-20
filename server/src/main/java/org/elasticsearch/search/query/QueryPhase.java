@@ -141,10 +141,12 @@ public class QueryPhase {
         // here to make sure it happens during the QUERY phase
         AggregationPhase.preProcess(searchContext);
 
+        final long queryStart = System.nanoTime();
         addCollectorsAndSearch(searchContext, searchContext.getSearchExecutionContext().getTimeRangeFilterFromMillis());
-
         RescorePhase.execute(searchContext);
         SuggestPhase.execute(searchContext);
+        searchContext.getProfilers().setQueryPhaseNanos(System.nanoTime() - queryStart);
+
         searchContext.queryResult().profileResults(searchContext.getProfilers().buildQueryPhaseResults());
     }
 

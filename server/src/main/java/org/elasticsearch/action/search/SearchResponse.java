@@ -33,6 +33,7 @@ import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.aggregations.InternalAggregations;
 import org.elasticsearch.search.profile.SearchProfileResults;
 import org.elasticsearch.search.profile.SearchProfileShardResult;
+import org.elasticsearch.search.profile.SearchTimingMetricsResults;
 import org.elasticsearch.search.suggest.Suggest;
 import org.elasticsearch.transport.LeakTracker;
 import org.elasticsearch.transport.RemoteClusterAware;
@@ -73,10 +74,14 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
     public static final ParseField TERMINATED_EARLY = new ParseField("terminated_early");
     public static final ParseField NUM_REDUCE_PHASES = new ParseField("num_reduce_phases");
 
+    private static final TransportVersion TIMING_METRICS_RESPONSE_VERSION = TransportVersion.fromName("timing_metrics");
+
     private final SearchHits hits;
     private final InternalAggregations aggregations;
     private final Suggest suggest;
     private final SearchProfileResults profileResults;
+    @Nullable
+    private SearchTimingMetricsResults timingMetricsResults;
     private final boolean timedOut;
     private final Boolean terminatedEarly;
     private final int numReducePhases;
@@ -113,6 +118,11 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
         this.timedOut = in.readBoolean();
         this.terminatedEarly = in.readOptionalBoolean();
         this.profileResults = in.readOptionalWriteable(SearchProfileResults::new);
+        if (in.getTransportVersion().supports(TIMING_METRICS_RESPONSE_VERSION)) {
+            this.timingMetricsResults = in.readOptionalWriteable(SearchTimingMetricsResults::new);
+        } else {
+            this.timingMetricsResults = null;
+        }
         this.numReducePhases = in.readVInt();
         totalShards = in.readVInt();
         successfulShards = in.readVInt();
@@ -198,6 +208,7 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
             searchResponseSections.transferTopHitsToRelease()
         );
         this.timeRangeFilterFromMillis = searchResponseSections.timeRangeFilterFromMillis;
+        this.timingMetricsResults = searchResponseSections.timingMetricsResults;
     }
 
     public SearchResponse(
@@ -437,6 +448,7 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
             aggregations == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(aggregations),
             suggest == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(suggest),
             profileResults == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(profileResults),
+            timingMetricsResults == null ? Collections.emptyIterator() : ChunkedToXContentHelper.chunk(timingMetricsResults),
             wrapInObject ? ChunkedToXContentHelper.endObject() : Collections.emptyIterator()
         );
     }
@@ -480,6 +492,9 @@ public class SearchResponse extends ActionResponse implements ChunkedToXContentO
         out.writeBoolean(timedOut);
         out.writeOptionalBoolean(terminatedEarly);
         out.writeOptionalWriteable(profileResults);
+        if (out.getTransportVersion().supports(TIMING_METRICS_RESPONSE_VERSION)) {
+            out.writeOptionalWriteable(timingMetricsResults);
+        }
         out.writeVInt(numReducePhases);
         out.writeVInt(totalShards);
         out.writeVInt(successfulShards);

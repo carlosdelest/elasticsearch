@@ -285,6 +285,9 @@ public class RestSearchAction extends BaseRestHandler {
         if (request.paramAsBoolean("force_synthetic_source", false)) {
             searchRequest.setForceSyntheticSource(true);
         }
+        if (request.hasParam("timing_metrics")) {
+            searchRequest.timingMetrics(request.paramAsBoolean("timing_metrics", false));
+        }
     }
 
     /**

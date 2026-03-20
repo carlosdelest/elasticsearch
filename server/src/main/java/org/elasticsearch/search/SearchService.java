@@ -117,6 +117,7 @@ import org.elasticsearch.search.internal.SubSearchContext;
 import org.elasticsearch.search.lookup.SearchLookup;
 import org.elasticsearch.search.profile.DetailedProfiler;
 import org.elasticsearch.search.profile.Profilers;
+import org.elasticsearch.search.profile.SearchShardTimingMetrics;
 import org.elasticsearch.search.profile.TimingProfiler;
 import org.elasticsearch.search.query.QueryPhase;
 import org.elasticsearch.search.query.QuerySearchRequest;
@@ -952,8 +953,11 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                     });
                 }
                 context.addFetchResult();
-                return executeFetchPhase(readerContext, context, afterQueryTime);
+                QueryFetchSearchResult queryFetchResult = executeFetchPhase(readerContext, context, afterQueryTime);
+                addTimingMetrics(request, context);
+                return queryFetchResult;
             } else {
+                addTimingMetrics(request, context);
                 // Pass the rescoreDocIds to the queryResult to send them the coordinating node and receive them back in the fetch phase.
                 // We also pass the rescoreDocIds to the LegacyReaderContext in case the search state needs to stay in the data node.
                 final RescoreDocIds rescoreDocIds = context.rescoreDocIds();
@@ -973,6 +977,15 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
             logger.trace("Query phase failed", e);
             processFailure(readerContext, e);
             throw e;
+        }
+    }
+
+    private static void addTimingMetrics(ShardSearchRequest request, SearchContext context) {
+        if (request.timingMetrics()) {
+            SearchShardTimingMetrics metrics = context.getProfilers().buildTimingMetrics();
+            if (metrics != null) {
+                context.queryResult().timingMetrics(metrics);
+            }
         }
     }
 

@@ -44,6 +44,8 @@ import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.profile.SearchProfileQueryPhaseResult;
 import org.elasticsearch.search.profile.SearchProfileResults;
 import org.elasticsearch.search.profile.SearchProfileResultsBuilder;
+import org.elasticsearch.search.profile.SearchShardTimingMetrics;
+import org.elasticsearch.search.profile.SearchTimingMetricsResults;
 import org.elasticsearch.search.query.QuerySearchResult;
 import org.elasticsearch.search.rank.RankDoc;
 import org.elasticsearch.search.rank.context.QueryPhaseRankCoordinatorContext;
@@ -392,12 +394,14 @@ public final class SearchPhaseController {
                 0,
                 true,
                 null,
+                null,
                 null
             );
         }
         final List<QuerySearchResult> nonNullResults = new ArrayList<>();
         boolean hasSuggest = false;
         boolean hasProfileResults = false;
+        boolean hasTimingMetrics = false;
         for (SearchPhaseResult queryResult : queryResults) {
             var res = queryResult.queryResult();
             if (res.isNull()) {
@@ -405,6 +409,7 @@ public final class SearchPhaseController {
             }
             hasSuggest |= res.suggest() != null;
             hasProfileResults |= res.hasProfileResults();
+            hasTimingMetrics |= res.timingMetrics() != null;
             nonNullResults.add(res);
         }
         validateMergeSortValueFormats(nonNullResults);
@@ -417,6 +422,9 @@ public final class SearchPhaseController {
         // count the total (we use the query result provider here, since we might not get any hits (we scrolled past them))
         final Map<String, List<Suggestion<?>>> groupedSuggestions = hasSuggest ? new HashMap<>() : Collections.emptyMap();
         final Map<String, SearchProfileQueryPhaseResult> profileShardResults = hasProfileResults
+            ? Maps.newMapWithExpectedSize(nonNullResults.size())
+            : Collections.emptyMap();
+        final Map<String, SearchShardTimingMetrics> timingMetricsShardResults = hasTimingMetrics
             ? Maps.newMapWithExpectedSize(nonNullResults.size())
             : Collections.emptyMap();
         int from = 0;
@@ -453,6 +461,9 @@ public final class SearchPhaseController {
             assert bufferedTopDocs.isEmpty() || result.hasConsumedTopDocs() : "firstResult has no aggs but we got non null buffered aggs?";
             if (hasProfileResults) {
                 profileShardResults.put(result.getSearchShardTarget().toString(), result.consumeProfileResult());
+            }
+            if (hasTimingMetrics && result.timingMetrics() != null) {
+                timingMetricsShardResults.put(result.getSearchShardTarget().toString(), result.timingMetrics());
             }
         }
         final Suggest reducedSuggest = groupedSuggestions.isEmpty() ? null : new Suggest(Suggest.reduce(groupedSuggestions));
@@ -497,7 +508,8 @@ public final class SearchPhaseController {
             from,
             false,
             timeRangeFilterFromMillis,
-            topHitsToRelease
+            topHitsToRelease,
+            timingMetricsShardResults.isEmpty() ? null : timingMetricsShardResults
         );
     }
 
@@ -583,7 +595,9 @@ public final class SearchPhaseController {
         boolean isEmptyResult,
         Long timeRangeFilterFromMillis,
         // SearchHits from top_hits aggs for release by SearchResponse (may be null)
-        @Nullable List<SearchHits> topHitsToRelease
+        @Nullable List<SearchHits> topHitsToRelease,
+        // per-shard timing metrics (null when timing_metrics was not requested)
+        @Nullable Map<String, SearchShardTimingMetrics> timingMetricsShardResults
     ) {
 
         public ReducedQueryPhase {
@@ -597,6 +611,9 @@ public final class SearchPhaseController {
          * @see #merge(boolean, ReducedQueryPhase, AtomicArray)
          */
         public SearchResponseSections buildResponse(SearchHits hits, Collection<? extends SearchPhaseResult> fetchResults) {
+            SearchTimingMetricsResults timingMetrics = timingMetricsShardResults == null || timingMetricsShardResults.isEmpty()
+                ? null
+                : new SearchTimingMetricsResults(timingMetricsShardResults);
             return new SearchResponseSections(
                 hits,
                 aggregations,
@@ -606,7 +623,8 @@ public final class SearchPhaseController {
                 buildSearchProfileResults(fetchResults),
                 numReducePhases,
                 timeRangeFilterFromMillis,
-                topHitsToRelease
+                topHitsToRelease,
+                timingMetrics
             );
         }
 

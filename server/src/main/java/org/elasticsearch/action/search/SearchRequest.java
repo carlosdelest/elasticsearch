@@ -68,6 +68,8 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
         "re_remove_min_compatible_shard_node"
     );
 
+    private static final TransportVersion TIMING_METRICS_VERSION = TransportVersion.fromName("timing_metrics");
+
     private final String localClusterAlias;
     private final long absoluteStartMillis;
     private final boolean finalReduce;
@@ -117,6 +119,8 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
      * enabling synthetic source natively in the index.
      */
     private boolean forceSyntheticSource = false;
+
+    private boolean timingMetrics = false;
 
     @Nullable
     private String projectRouting;
@@ -250,6 +254,7 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
         this.waitForCheckpoints = searchRequest.waitForCheckpoints;
         this.waitForCheckpointsTimeout = searchRequest.waitForCheckpointsTimeout;
         this.forceSyntheticSource = searchRequest.forceSyntheticSource;
+        this.timingMetrics = searchRequest.timingMetrics;
         this.projectRouting = searchRequest.projectRouting;
         this.resolvedIndexExpressions = searchRequest.resolvedIndexExpressions;
     }
@@ -294,6 +299,9 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
         } else {
             this.projectRouting = null;
         }
+        if (in.getTransportVersion().supports(TIMING_METRICS_VERSION)) {
+            this.timingMetrics = in.readBoolean();
+        }
     }
 
     @Override
@@ -332,6 +340,9 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
         out.writeBoolean(forceSyntheticSource);
         if (out.getTransportVersion().supports(SEARCH_PROJECT_ROUTING)) {
             out.writeOptionalString(this.projectRouting);
+        }
+        if (out.getTransportVersion().supports(TIMING_METRICS_VERSION)) {
+            out.writeBoolean(timingMetrics);
         }
     }
 
@@ -739,6 +750,22 @@ public class SearchRequest extends LegacyActionRequest implements IndicesRequest
      */
     public void setForceSyntheticSource(boolean forceSyntheticSource) {
         this.forceSyntheticSource = forceSyntheticSource;
+    }
+
+    /**
+     * Returns {@code true} if the response should include per-shard phase timings under a
+     * {@code "timing_metrics"} top-level field.
+     */
+    public boolean timingMetrics() {
+        return timingMetrics;
+    }
+
+    /**
+     * Sets whether the response should include per-shard phase timings.
+     */
+    public SearchRequest timingMetrics(boolean timingMetrics) {
+        this.timingMetrics = timingMetrics;
+        return this;
     }
 
     @Override

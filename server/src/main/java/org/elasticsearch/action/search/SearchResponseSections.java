@@ -15,6 +15,7 @@ import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.aggregations.InternalAggregations;
 import org.elasticsearch.search.profile.SearchProfileResults;
 import org.elasticsearch.search.profile.SearchProfileShardResult;
+import org.elasticsearch.search.profile.SearchTimingMetricsResults;
 import org.elasticsearch.search.suggest.Suggest;
 
 import java.util.Collections;
@@ -55,6 +56,8 @@ public class SearchResponseSections implements Releasable {
     protected final Boolean terminatedEarly;
     protected final int numReducePhases;
     protected final Long timeRangeFilterFromMillis;
+    @Nullable
+    protected final SearchTimingMetricsResults timingMetricsResults;
     // List of top_hits SearchHits to release; cleared when transferred to SearchResponse so close() does not release
     private List<SearchHits> topHitsToRelease;
 
@@ -68,7 +71,7 @@ public class SearchResponseSections implements Releasable {
         int numReducePhases,
         Long timeRangeFilterFromMillis
     ) {
-        this(hits, aggregations, suggest, timedOut, terminatedEarly, profileResults, numReducePhases, timeRangeFilterFromMillis, null);
+        this(hits, aggregations, suggest, timedOut, terminatedEarly, profileResults, numReducePhases, timeRangeFilterFromMillis, null, null);
     }
 
     public SearchResponseSections(
@@ -82,6 +85,32 @@ public class SearchResponseSections implements Releasable {
         Long timeRangeFilterFromMillis,
         @Nullable List<SearchHits> topHitsToRelease
     ) {
+        this(
+            hits,
+            aggregations,
+            suggest,
+            timedOut,
+            terminatedEarly,
+            profileResults,
+            numReducePhases,
+            timeRangeFilterFromMillis,
+            topHitsToRelease,
+            null
+        );
+    }
+
+    public SearchResponseSections(
+        SearchHits hits,
+        InternalAggregations aggregations,
+        Suggest suggest,
+        boolean timedOut,
+        Boolean terminatedEarly,
+        SearchProfileResults profileResults,
+        int numReducePhases,
+        Long timeRangeFilterFromMillis,
+        @Nullable List<SearchHits> topHitsToRelease,
+        @Nullable SearchTimingMetricsResults timingMetricsResults
+    ) {
         this.hits = hits;
         this.aggregations = aggregations;
         this.suggest = suggest;
@@ -91,6 +120,7 @@ public class SearchResponseSections implements Releasable {
         this.numReducePhases = numReducePhases;
         this.timeRangeFilterFromMillis = timeRangeFilterFromMillis;
         this.topHitsToRelease = topHitsToRelease;
+        this.timingMetricsResults = timingMetricsResults;
     }
 
     /**

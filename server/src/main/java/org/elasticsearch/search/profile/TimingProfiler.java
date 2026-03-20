@@ -35,8 +35,11 @@ import java.util.Map;
  */
 public final class TimingProfiler implements Profilers {
 
+    private static final SearchProfileDfsPhaseResult EMPTY_DFS_PHASE_RESULT = new SearchProfileDfsPhaseResult(null, null);
+
     private long dfsPhaseNanos = -1;
     private long queryPhaseNanos = -1;
+    private long fetchPhaseNanos = -1;
 
     @Override
     public boolean isDetailed() {
@@ -69,6 +72,25 @@ public final class TimingProfiler implements Profilers {
     }
 
     @Override
+    public void setQueryPhaseNanos(long nanos) {
+        this.queryPhaseNanos = nanos;
+    }
+
+    @Override
+    public SearchShardTimingMetrics buildTimingMetrics() {
+        SearchShardTimingMetrics.PhaseTimingMetrics dfsMetrics = dfsPhaseNanos >= 0
+            ? new SearchShardTimingMetrics.PhaseTimingMetrics(dfsPhaseNanos)
+            : null;
+        SearchShardTimingMetrics.PhaseTimingMetrics queryMetrics = new SearchShardTimingMetrics.PhaseTimingMetrics(
+            queryPhaseNanos >= 0 ? queryPhaseNanos : 0
+        );
+        SearchShardTimingMetrics.PhaseTimingMetrics fetchMetrics = fetchPhaseNanos >= 0
+            ? new SearchShardTimingMetrics.PhaseTimingMetrics(fetchPhaseNanos)
+            : null;
+        return new SearchShardTimingMetrics(dfsMetrics, queryMetrics, fetchMetrics);
+    }
+
+    @Override
     public SearchProfileQueryPhaseResult buildQueryPhaseResults() {
         ProfileResult queryResult = new ProfileResult(
             "query",
@@ -97,13 +119,14 @@ public final class TimingProfiler implements Profilers {
     }
 
     /** Lightweight fetch profiler: records only start/end wall-clock time for the entire fetch phase. */
-    private static class TimingFetchProfiler implements FetchPhase.Profiler {
+    private class TimingFetchProfiler implements FetchPhase.Profiler {
 
         private final long startNanos = System.nanoTime();
 
         @Override
         public ProfileResult finish() {
             long elapsed = System.nanoTime() - startNanos;
+            fetchPhaseNanos = elapsed;
             return new ProfileResult(
                 "fetch",
                 "fetch phase execution",
@@ -138,13 +161,10 @@ public final class TimingProfiler implements Profilers {
     /**
      * A no-op {@link DfsProfiler} used by timing profilers so that the DFS profiler is never
      * {@code null} and the existing null-checks in statistics collection are preserved without change.
+     * When the DFS phase completes ({@link #stop()} is called), the elapsed nanos are stored back
+     * in the outer {@link TimingProfiler}.
      */
-    private static class TimingDfsProfiler extends DfsProfiler {
-
-        private static final SearchProfileDfsPhaseResult EMPTY_SEARCH_PROFILE_DFS_PHASE_RESULT = new SearchProfileDfsPhaseResult(
-            null,
-            null
-        );
+    private class TimingDfsProfiler extends DfsProfiler {
 
         private Timer timer = new Timer();
 
@@ -156,6 +176,7 @@ public final class TimingProfiler implements Profilers {
         @Override
         public void stop() {
             timer.stop();
+            dfsPhaseNanos = timer.getApproximateTiming();
         }
 
         @Override
@@ -170,7 +191,7 @@ public final class TimingProfiler implements Profilers {
 
         @Override
         public SearchProfileDfsPhaseResult buildDfsPhaseResults() {
-            return EMPTY_SEARCH_PROFILE_DFS_PHASE_RESULT;
+            return EMPTY_DFS_PHASE_RESULT;
         }
-    };
+    }
 }

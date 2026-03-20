@@ -105,6 +105,10 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         "shard_search_request_reshard_shard_count_summary"
     );
 
+    private static final TransportVersion TIMING_METRICS_VERSION = TransportVersion.fromName("timing_metrics");
+
+    private boolean timingMetrics;
+
     // Test only constructor.
     public ShardSearchRequest(
         OriginalIndices originalIndices,
@@ -171,6 +175,7 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         // If allowPartialSearchResults is unset (ie null), the cluster-level default should have been substituted
         // at this stage. Any NPEs in the above are therefore an error in request preparation logic.
         assert searchRequest.allowPartialSearchResults() != null;
+        this.timingMetrics = searchRequest.timingMetrics();
     }
 
     private static final long[] EMPTY_LONG_ARRAY = new long[0];
@@ -294,6 +299,7 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         this.waitForCheckpointsTimeout = clone.waitForCheckpointsTimeout;
         this.forceSyntheticSource = clone.forceSyntheticSource;
         this.splitShardCountSummary = clone.splitShardCountSummary;
+        this.timingMetrics = clone.timingMetrics;
     }
 
     public ShardSearchRequest(StreamInput in) throws IOException {
@@ -323,6 +329,9 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
             splitShardCountSummary = new SplitShardCountSummary(in);
         } else {
             splitShardCountSummary = SplitShardCountSummary.UNSET;
+        }
+        if (in.getTransportVersion().supports(TIMING_METRICS_VERSION)) {
+            timingMetrics = in.readBoolean();
         }
 
         originalIndices = OriginalIndices.readOriginalIndices(in);
@@ -364,6 +373,9 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
         out.writeBoolean(forceSyntheticSource);
         if (out.getTransportVersion().supports(SHARD_SEARCH_REQUEST_RESHARD_SHARD_COUNT_SUMMARY)) {
             splitShardCountSummary.writeTo(out);
+        }
+        if (out.getTransportVersion().supports(TIMING_METRICS_VERSION) && asKey == false) {
+            out.writeBoolean(timingMetrics);
         }
     }
 
@@ -663,5 +675,13 @@ public class ShardSearchRequest extends AbstractTransportRequest implements Indi
      */
     public boolean isForceSyntheticSource() {
         return forceSyntheticSource;
+    }
+
+    /**
+     * Returns {@code true} if the search response should include per-shard phase timings under a
+     * {@code "timing_metrics"} top-level field.
+     */
+    public boolean timingMetrics() {
+        return timingMetrics;
     }
 }

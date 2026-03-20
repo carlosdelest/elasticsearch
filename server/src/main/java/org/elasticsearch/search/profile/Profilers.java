@@ -9,6 +9,7 @@
 
 package org.elasticsearch.search.profile;
 
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.search.fetch.FetchPhase;
 import org.elasticsearch.search.profile.aggregation.AggregationProfiler;
 import org.elasticsearch.search.profile.dfs.DfsProfiler;
@@ -32,4 +33,16 @@ public interface Profilers {
     FetchPhase.Profiler startProfilingFetchPhase();
 
     SearchProfileQueryPhaseResult buildQueryPhaseResults();
+
+    /** Called by {@code QueryPhase} after execution to record the total wall-clock elapsed time. */
+    default void setQueryPhaseNanos(long nanos) {}
+
+    /**
+     * Returns per-shard timing metrics, or {@code null} if this profiler does not support
+     * lightweight timing (e.g. {@link DetailedProfiler} defers timing to the profile itself).
+     */
+    @Nullable
+    default SearchShardTimingMetrics buildTimingMetrics() {
+        return null;
+    }
 }

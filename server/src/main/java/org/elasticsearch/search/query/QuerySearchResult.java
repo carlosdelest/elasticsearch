@@ -34,6 +34,7 @@ import org.elasticsearch.search.internal.ShardSearchContextId;
 import org.elasticsearch.search.internal.ShardSearchRequest;
 import org.elasticsearch.search.profile.SearchProfileDfsPhaseResult;
 import org.elasticsearch.search.profile.SearchProfileQueryPhaseResult;
+import org.elasticsearch.search.profile.SearchShardTimingMetrics;
 import org.elasticsearch.search.rank.RankShardResult;
 import org.elasticsearch.search.suggest.Suggest;
 import org.elasticsearch.transport.LeakTracker;
@@ -48,6 +49,7 @@ import static org.elasticsearch.common.lucene.Lucene.writeTopDocs;
 public final class QuerySearchResult extends SearchPhaseResult {
     private static final TransportVersion TIMESTAMP_RANGE_TELEMETRY = TransportVersion.fromName("timestamp_range_telemetry");
     private static final TransportVersion BATCHED_QUERY_PHASE_VERSION = TransportVersion.fromName("batched_query_phase_version");
+    private static final TransportVersion TIMING_METRICS_VERSION = TransportVersion.fromName("timing_metrics");
 
     private int from;
     private int size;
@@ -75,6 +77,9 @@ public final class QuerySearchResult extends SearchPhaseResult {
     private int nodeQueueSize = -1;
 
     private boolean reduced;
+
+    @Nullable
+    private SearchShardTimingMetrics timingMetrics;
 
     private final boolean isNull;
 
@@ -407,6 +412,15 @@ public final class QuerySearchResult extends SearchPhaseResult {
         return this;
     }
 
+    @Nullable
+    public SearchShardTimingMetrics timingMetrics() {
+        return timingMetrics;
+    }
+
+    public void timingMetrics(SearchShardTimingMetrics timingMetrics) {
+        this.timingMetrics = timingMetrics;
+    }
+
     /**
      * Returns <code>true</code> if this result has any suggest score docs
      */
@@ -470,6 +484,9 @@ public final class QuerySearchResult extends SearchPhaseResult {
             }
             if (in.getTransportVersion().supports(TIMESTAMP_RANGE_TELEMETRY)) {
                 timeRangeFilterFromMillis = in.readOptionalLong();
+            }
+            if (in.getTransportVersion().supports(TIMING_METRICS_VERSION)) {
+                timingMetrics = in.readOptionalWriteable(SearchShardTimingMetrics::new);
             }
             success = true;
         } finally {
@@ -538,6 +555,9 @@ public final class QuerySearchResult extends SearchPhaseResult {
         }
         if (out.getTransportVersion().supports(TIMESTAMP_RANGE_TELEMETRY)) {
             out.writeOptionalLong(timeRangeFilterFromMillis);
+        }
+        if (out.getTransportVersion().supports(TIMING_METRICS_VERSION)) {
+            out.writeOptionalWriteable(timingMetrics);
         }
     }
 
