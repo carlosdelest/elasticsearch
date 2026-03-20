@@ -147,7 +147,9 @@ public class QueryPhase {
         SuggestPhase.execute(searchContext);
         searchContext.getProfilers().setQueryPhaseNanos(System.nanoTime() - queryStart);
 
-        searchContext.queryResult().profileResults(searchContext.getProfilers().buildQueryPhaseResults());
+        if (searchContext.getProfilers().isDetailed()) {
+            searchContext.queryResult().profileResults(searchContext.getProfilers().buildQueryPhaseResults());
+        }
     }
 
     /**

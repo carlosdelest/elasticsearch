@@ -109,7 +109,7 @@ public final class FetchPhase {
                 ProfileResult profileResult = profiler.finish();
                 // Only set the shardResults if building search hits was successful
                 if (hits != null) {
-                    context.fetchResult().shardResult(hits, profileResult);
+                    context.fetchResult().shardResult(hits, context.getProfilers().isDetailed() ? profileResult : null);
                     context.fetchResult().setSearchHitsSizeBytes(searchHitsBytesSize);
                     hits = null;
                 } else {
