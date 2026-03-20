@@ -59,16 +59,6 @@ public final class TimingProfiler implements Profilers {
     }
 
     @Override
-    public void onDfsPhaseComplete(long nanos) {
-        this.dfsPhaseNanos = nanos;
-    }
-
-    @Override
-    public void onQueryPhaseComplete(long nanos) {
-        this.queryPhaseNanos = nanos;
-    }
-
-    @Override
     public void onQueryCollectorResult(CollectorResult result) {
         // no-op: lightweight profiling does not track collector details
     }
@@ -76,19 +66,6 @@ public final class TimingProfiler implements Profilers {
     @Override
     public FetchPhase.Profiler startProfilingFetchPhase() {
         return new TimingFetchProfiler();
-    }
-
-    @Override
-    public SearchProfileDfsPhaseResult buildDfsPhaseResult() {
-        ProfileResult result = new ProfileResult(
-            "dfs",
-            "distributed frequency statistics",
-            Map.of("time_in_nanos", dfsPhaseNanos),
-            Map.of(),
-            dfsPhaseNanos,
-            List.of()
-        );
-        return new SearchProfileDfsPhaseResult(result, null);
     }
 
     @Override
@@ -164,6 +141,11 @@ public final class TimingProfiler implements Profilers {
      */
     private static class TimingDfsProfiler extends DfsProfiler {
 
+        private static final SearchProfileDfsPhaseResult EMPTY_SEARCH_PROFILE_DFS_PHASE_RESULT = new SearchProfileDfsPhaseResult(
+            null,
+            null
+        );
+
         private Timer timer = new Timer();
 
         @Override
@@ -188,7 +170,7 @@ public final class TimingProfiler implements Profilers {
 
         @Override
         public SearchProfileDfsPhaseResult buildDfsPhaseResults() {
-            return new SearchProfileDfsPhaseResult(null, null);
+            return EMPTY_SEARCH_PROFILE_DFS_PHASE_RESULT;
         }
     };
 }

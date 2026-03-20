@@ -245,7 +245,7 @@ public class DfsPhase {
             Integer.MAX_VALUE
         );
         final TopDocs topDocs;
-        if (profilers == null) {
+        if (profilers.isDetailed() == false) {
             topDocs = searcher.search(knnQuery, topDocsCollectorManager);
         } else {
             QueryProfiler knnProfiler = profilers.getDfsProfiler().addQueryProfiler();
@@ -264,9 +264,7 @@ public class DfsPhase {
             knnProfiler.setCollectorResult(ipcm.getCollectorTree());
         }
         // Set profiler back after running KNN searches
-        if (profilers != null) {
-            searcher.setProfiler(profilers.getCurrentQueryProfiler());
-        }
+        searcher.setProfiler(profilers.getCurrentQueryProfiler());
         return new DfsKnnResults(nestedPath, topDocs.scoreDocs);
     }
 }

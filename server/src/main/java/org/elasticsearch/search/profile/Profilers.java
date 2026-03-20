@@ -27,15 +27,9 @@ public interface Profilers {
 
     DfsProfiler getDfsProfiler();
 
-    void onDfsPhaseComplete(long nanos);
-
-    void onQueryPhaseComplete(long nanos);
-
     void onQueryCollectorResult(CollectorResult result);
 
     FetchPhase.Profiler startProfilingFetchPhase();
-
-    SearchProfileDfsPhaseResult buildDfsPhaseResult();
 
     SearchProfileQueryPhaseResult buildQueryPhaseResults();
 }

@@ -59,16 +59,6 @@ public final class DetailedProfiler implements Profilers {
     }
 
     @Override
-    public void onDfsPhaseComplete(long nanos) {
-        // DfsProfiler tracks sub-timings internally; no wall-clock total needed here
-    }
-
-    @Override
-    public void onQueryPhaseComplete(long nanos) {
-        // QueryProfiler tracks sub-timings internally; no wall-clock total needed here
-    }
-
-    @Override
     public void onQueryCollectorResult(CollectorResult result) {
         queryProfiler.setCollectorResult(result);
     }
@@ -77,11 +67,6 @@ public final class DetailedProfiler implements Profilers {
     @Override
     public FetchPhase.Profiler startProfilingFetchPhase() {
         return new FetchProfiler();
-    }
-
-    @Override
-    public SearchProfileDfsPhaseResult buildDfsPhaseResult() {
-        return getDfsProfiler().buildDfsPhaseResults();
     }
 
     /** Build the results for the query phase. */
