@@ -54,6 +54,7 @@ import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.EsRejectedExecutionException;
 import org.elasticsearch.core.Booleans;
 import org.elasticsearch.core.IOUtils;
+import org.elasticsearch.core.Nullable;
 import org.elasticsearch.core.RefCounted;
 import org.elasticsearch.core.Releasable;
 import org.elasticsearch.core.Releasables;
@@ -145,6 +146,7 @@ import org.elasticsearch.transport.Transports;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -407,7 +409,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         this.scriptService = scriptService;
         this.bigArrays = bigArrays;
         this.fetchPhase = fetchPhase;
-        circuitBreaker = circuitBreakerService.getBreaker(CircuitBreaker.REQUEST);
+        this.circuitBreaker = circuitBreakerService.getBreaker(CircuitBreaker.REQUEST);
         this.multiBucketConsumerService = new MultiBucketConsumerService(clusterService, settings, circuitBreaker);
         this.executorSelector = executorSelector;
         this.tracer = tracer;
@@ -1465,6 +1467,10 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
         checkCancelled(task);
         final DefaultSearchContext context = createSearchContext(readerContext, request, defaultSearchTimeout, resultsType);
         resultsType.addResultsObject(context);
+
+        // Release the memory used for query construction once the search context is closed.
+        context.addReleasable(context.getSearchExecutionContext()::releaseQueryConstructionMemory);
+
         try {
             if (request.scroll() != null) {
                 context.scrollContext().scroll = request.scroll();
@@ -1498,6 +1504,7 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
             // Use ResultsType.QUERY so that the created search context can execute queries correctly.
             DefaultSearchContext searchContext = createSearchContext(readerContext, request, timeout, ResultsType.QUERY);
             searchContext.addReleasable(readerContext.markAsUsed(0L));
+            searchContext.addReleasable(searchContext.getSearchExecutionContext()::releaseQueryConstructionMemory);
             return searchContext;
         }
     }
@@ -1529,18 +1536,24 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
                 resultsType,
                 enableQueryPhaseParallelCollection,
                 minimumDocsPerSlice,
-                memoryAccountingBufferSize
+                memoryAccountingBufferSize,
+                circuitBreaker
             );
             // we clone the query shard context here just for rewriting otherwise we
             // might end up with incorrect state since we are using now() or script services
             // during rewrite and normalized / evaluate templates etc.
             SearchExecutionContext context = new SearchExecutionContext(searchContext.getSearchExecutionContext());
+
             Rewriteable.rewrite(request.getRewriteable(), context, true);
+            assert context.getQueryConstructionMemoryUsed() == 0
+                : "rewrite phase should not build queries; found " + context.getQueryConstructionMemoryUsed() + " bytes tracked";
+
             if (context.getTimeRangeFilterFromMillis() != null) {
                 // range queries may get rewritten to match_all or a range with open bounds. Rewriting in that case is the only place
                 // where we parse the date and set it to the context. We need to propagate it back from the clone into the original context
                 searchContext.getSearchExecutionContext().setTimeRangeFilterFromMillis(context.getTimeRangeFilterFromMillis());
             }
+
             assert searchContext.getSearchExecutionContext().isCacheable();
             success = true;
         } finally {
@@ -2372,26 +2385,29 @@ public class SearchService extends AbstractLifecycleComponent implements IndexEv
     public AggregationReduceContext.Builder aggReduceContextBuilder(Supplier<Boolean> isCanceled, AggregatorFactories.Builder aggs) {
         return new AggregationReduceContext.Builder() {
             @Override
-            public AggregationReduceContext forPartialReduction() {
+            public AggregationReduceContext forPartialReduction(@Nullable Collection<SearchHits> topHitsToRelease) {
                 return new AggregationReduceContext.ForPartial(
                     bigArrays,
                     scriptService,
                     isCanceled,
                     aggs,
-                    multiBucketConsumerService.createForPartial()
+                    multiBucketConsumerService.createForPartial(),
+                    topHitsToRelease
                 );
             }
 
             @Override
-            public AggregationReduceContext forFinalReduction() {
+            public AggregationReduceContext forFinalReduction(@Nullable Collection<SearchHits> topHitsToRelease) {
                 return new AggregationReduceContext.ForFinal(
                     bigArrays,
                     scriptService,
                     isCanceled,
                     aggs,
-                    multiBucketConsumerService.createForFinal()
+                    multiBucketConsumerService.createForFinal(),
+                    topHitsToRelease
                 );
             }
         };
     }
+
 }

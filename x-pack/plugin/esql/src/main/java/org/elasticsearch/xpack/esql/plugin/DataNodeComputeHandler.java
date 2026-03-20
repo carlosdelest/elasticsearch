@@ -59,6 +59,7 @@ import org.elasticsearch.xpack.esql.planner.PlanConcurrencyCalculator;
 import org.elasticsearch.xpack.esql.planner.PlannerSettings;
 import org.elasticsearch.xpack.esql.planner.PlannerUtils;
 import org.elasticsearch.xpack.esql.session.Configuration;
+import org.elasticsearch.xpack.esql.stats.SearchStats;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -261,74 +262,78 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         int nodesWithSplits = 0;
         AtomicInteger failedNodes = new AtomicInteger(0);
 
-        for (Map.Entry<String, List<ExternalSplit>> entry : distributionPlan.nodeAssignments().entrySet()) {
-            String nodeId = entry.getKey();
-            List<ExternalSplit> nodeSplits = entry.getValue();
-            if (nodeSplits.isEmpty()) {
-                continue;
-            }
-            nodesWithSplits++;
+        final var keepAlive = new ExchangeSourceLinkKeepAlive(exchangeSource);
+        try {
+            for (Map.Entry<String, List<ExternalSplit>> entry : distributionPlan.nodeAssignments().entrySet()) {
+                String nodeId = entry.getKey();
+                List<ExternalSplit> nodeSplits = entry.getValue();
+                if (nodeSplits.isEmpty()) {
+                    continue;
+                }
+                nodesWithSplits++;
 
-            DiscoveryNode node = clusterService.state().nodes().get(nodeId);
-            if (node == null) {
-                var nodeError = new IllegalStateException(
-                    "node [" + nodeId + "] assigned [" + nodeSplits.size() + "] external splits not found in cluster state"
-                );
-                if (allowPartial) {
+                DiscoveryNode node = clusterService.state().nodes().get(nodeId);
+                if (node == null) {
+                    var nodeError = new IllegalStateException(
+                        "node [" + nodeId + "] assigned [" + nodeSplits.size() + "] external splits not found in cluster state"
+                    );
+                    if (allowPartial) {
+                        LOGGER.warn(
+                            "node [{}] assigned {} external splits is no longer in the cluster state; skipping (partial results enabled)",
+                            nodeId,
+                            nodeSplits.size()
+                        );
+                        failedNodes.incrementAndGet();
+                        parentComputeListener.acquireCompute().onResponse(DriverCompletionInfo.EMPTY);
+                        continue;
+                    }
                     LOGGER.warn(
-                        "node [{}] assigned {} external splits is no longer in the cluster state; skipping (partial results enabled)",
+                        "node [{}] assigned {} external splits is no longer in the cluster state; failing external distribution",
                         nodeId,
                         nodeSplits.size()
                     );
-                    failedNodes.incrementAndGet();
-                    parentComputeListener.acquireCompute().onResponse(DriverCompletionInfo.EMPTY);
-                    continue;
+                    parentComputeListener.acquireCompute().onFailure(nodeError);
+                    return;
                 }
-                LOGGER.warn(
-                    "node [{}] assigned {} external splits is no longer in the cluster state; failing external distribution",
-                    nodeId,
-                    nodeSplits.size()
-                );
-                parentComputeListener.acquireCompute().onFailure(nodeError);
-                return;
-            }
 
-            final Transport.Connection connection;
-            try {
-                connection = transportService.getConnection(node);
-            } catch (Exception e) {
-                if (allowPartial) {
+                final Transport.Connection connection;
+                try {
+                    connection = transportService.getConnection(node);
+                } catch (Exception e) {
+                    if (allowPartial) {
+                        LOGGER.warn(
+                            "failed to connect to node [{}] ({}) for external source execution with {} splits; skipping (partial results)",
+                            nodeId,
+                            node.getName(),
+                            nodeSplits.size(),
+                            e
+                        );
+                        failedNodes.incrementAndGet();
+                        parentComputeListener.acquireCompute().onResponse(DriverCompletionInfo.EMPTY);
+                        continue;
+                    }
                     LOGGER.warn(
-                        "failed to connect to node [{}] ({}) for external source execution with {} splits; skipping (partial results)",
+                        "failed to connect to node [{}] ({}) for external source execution with {} splits",
                         nodeId,
                         node.getName(),
                         nodeSplits.size(),
                         e
                     );
-                    failedNodes.incrementAndGet();
-                    parentComputeListener.acquireCompute().onResponse(DriverCompletionInfo.EMPTY);
-                    continue;
+                    parentComputeListener.acquireCompute().onFailure(e);
+                    return;
                 }
-                LOGGER.warn(
-                    "failed to connect to node [{}] ({}) for external source execution with {} splits",
-                    nodeId,
-                    node.getName(),
-                    nodeSplits.size(),
-                    e
-                );
-                parentComputeListener.acquireCompute().onFailure(e);
-                return;
-            }
 
-            sentAny = true;
-            var childSessionId = computeService.newChildSession(sessionId);
-            ExchangeService.openExchange(
-                transportService,
-                connection,
-                childSessionId,
-                queryPragmas.exchangeBufferSize(),
-                esqlExecutor,
-                parentComputeListener.acquireAvoid().delegateFailureAndWrap((l, unused) -> {
+                sentAny = true;
+                var childSessionId = computeService.newChildSession(sessionId);
+                keepAlive.track();
+                final AtomicBoolean nodeDone = new AtomicBoolean(false);
+                final Runnable finishNode = () -> {
+                    if (nodeDone.compareAndSet(false, true)) {
+                        keepAlive.done();
+                    }
+                };
+                ActionListener<Void> openExchangeListener = parentComputeListener.acquireAvoid().delegateFailureAndWrap((l, unused) -> {
+                    l = ActionListener.runAfter(l, finishNode);
                     final Runnable onGroupFailure;
                     final CancellableTask groupTask;
                     if (allowPartial) {
@@ -382,24 +387,89 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                             computeListener.acquireAvoid()
                         );
                     }
-                })
-            );
-        }
-        if (sentAny == false) {
-            if (failedNodes.get() > 0 && failedNodes.get() >= nodesWithSplits) {
-                parentComputeListener.acquireCompute()
-                    .onFailure(
-                        new IllegalStateException(
-                            "all [" + failedNodes.get() + "] nodes assigned external splits failed; cannot serve partial results"
-                        )
+                });
+                ActionListener<Void> openExchangeListenerWithNodeCompletion = ActionListener.wrap(r -> {
+                    try {
+                        openExchangeListener.onResponse(r);
+                    } catch (Exception e) {
+                        try {
+                            openExchangeListener.onFailure(e);
+                        } finally {
+                            finishNode.run();
+                        }
+                    }
+                }, e -> {
+                    try {
+                        openExchangeListener.onFailure(e);
+                    } finally {
+                        finishNode.run();
+                    }
+                });
+                try {
+                    ExchangeService.openExchange(
+                        transportService,
+                        connection,
+                        childSessionId,
+                        queryPragmas.exchangeBufferSize(),
+                        esqlExecutor,
+                        openExchangeListenerWithNodeCompletion
                     );
-            } else {
-                parentComputeListener.acquireCompute().onResponse(DriverCompletionInfo.EMPTY);
+                } catch (Exception e) {
+                    openExchangeListenerWithNodeCompletion.onFailure(e);
+                    return;
+                }
             }
+            if (sentAny == false) {
+                if (failedNodes.get() > 0 && failedNodes.get() >= nodesWithSplits) {
+                    parentComputeListener.acquireCompute()
+                        .onFailure(
+                            new IllegalStateException(
+                                "all [" + failedNodes.get() + "] nodes assigned external splits failed; cannot serve partial results"
+                            )
+                        );
+                } else {
+                    parentComputeListener.acquireCompute().onResponse(DriverCompletionInfo.EMPTY);
+                }
+            }
+        } finally {
+            keepAlive.done();
         }
     }
 
     private static final Logger LOGGER = LogManager.getLogger(DataNodeComputeHandler.class);
+
+    /**
+     * Keeps an {@link ExchangeSourceHandler} from completing while external distribution is being wired up.
+     * <p>
+     * The external distribution path links sinks asynchronously (after {@code openExchange} completes).
+     * We hold an "empty sink" reference across that async gap so the coordinator does not observe an
+     * exchange that finishes before data-node tasks have registered their remote sinks.
+     */
+    private static final class ExchangeSourceLinkKeepAlive {
+        private final Releasable keepAlive;
+        private final AtomicInteger pending = new AtomicInteger(1);
+        private final AtomicBoolean closed = new AtomicBoolean(false);
+
+        ExchangeSourceLinkKeepAlive(ExchangeSourceHandler exchangeSource) {
+            this.keepAlive = exchangeSource.addEmptySink();
+        }
+
+        void track() {
+            pending.incrementAndGet();
+        }
+
+        void done() {
+            if (pending.decrementAndGet() == 0) {
+                close();
+            }
+        }
+
+        private void close() {
+            if (closed.compareAndSet(false, true)) {
+                keepAlive.close();
+            }
+        }
+    }
 
     private class DataNodeRequestExecutor {
         private final EsqlFlags flags;
@@ -802,16 +872,25 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
         ExchangeSinkExec sinkExec = (ExchangeSinkExec) request.plan();
         Configuration configuration = request.configuration();
         final String sessionId = request.sessionId();
+        EsqlFlags flags = computeService.createFlags();
+        PlannerSettings plannerSettings = computeService.plannerSettings().get();
 
-        // Inject external splits into the ExternalSourceExec within the plan
-        PhysicalPlan planWithSplits = sinkExec.child()
-            .transformUp(ExternalSourceExec.class, exec -> exec.withSplits(request.externalSplits()));
-        ExchangeSinkExec updatedSinkExec = new ExchangeSinkExec(
-            sinkExec.source(),
-            sinkExec.output(),
-            sinkExec.isIntermediateAgg(),
-            planWithSplits
+        // Run localPlan() to expand FragmentExec(ExternalRelation) -> ExternalSourceExec
+        // This runs LocalLogicalPlanOptimizer, LocalMapper, and LocalPhysicalPlanOptimizer
+        // (including filter pushdown via FilterPushdownRegistry)
+        PhysicalPlan expandedPlan = PlannerUtils.localPlan(
+            plannerSettings,
+            flags,
+            configuration,
+            configuration.newFoldContext(),
+            sinkExec,
+            SearchStats.EMPTY,
+            computeService.filterPushdownRegistry(),
+            planTimeProfile
         );
+
+        // Inject external splits into the ExternalSourceExec created by localPlan()
+        PhysicalPlan planWithSplits = expandedPlan.transformUp(ExternalSourceExec.class, exec -> exec.withSplits(request.externalSplits()));
 
         try (
             ComputeListener computeListener = new ComputeListener(
@@ -821,13 +900,15 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
             )
         ) {
             var parentListener = computeListener.acquireAvoid();
+            final ActionListener<DriverCompletionInfo> driverCompletionListener = ActionListener.notifyOnce(
+                computeListener.acquireCompute()
+            );
             try {
                 var externalSink = exchangeService.getSinkHandler(sessionId);
                 String internalSessionId = sessionId + "[n]";
                 task.addListener(
                     () -> { exchangeService.finishSinkHandler(sessionId, new TaskCancelledException(task.getReasonCancelled())); }
                 );
-                EsqlFlags flags = computeService.createFlags();
 
                 var computeContext = new ComputeContext(
                     internalSessionId,
@@ -843,14 +924,14 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                 computeService.runCompute(
                     task,
                     computeContext,
-                    updatedSinkExec,
-                    computeService.plannerSettings().get(),
-                    LocalPhysicalOptimization.ENABLED,
+                    planWithSplits,
+                    plannerSettings,
+                    LocalPhysicalOptimization.DISABLED,
                     planTimeProfile,
                     ActionListener.wrap(resp -> {
                         externalSink.addCompletionListener(ActionListener.running(() -> {
                             exchangeService.finishSinkHandler(sessionId, null);
-                            computeListener.acquireCompute().onResponse(resp);
+                            driverCompletionListener.onResponse(resp);
                         }));
                     }, e -> {
                         LOGGER.warn(
@@ -861,7 +942,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                             e
                         );
                         exchangeService.finishSinkHandler(sessionId, e);
-                        computeListener.acquireCompute().onFailure(e);
+                        driverCompletionListener.onFailure(e);
                     })
                 );
                 parentListener.onResponse(null);
@@ -873,6 +954,7 @@ final class DataNodeComputeHandler implements TransportRequestHandler<DataNodeRe
                     e
                 );
                 exchangeService.finishSinkHandler(sessionId, e);
+                driverCompletionListener.onFailure(e);
                 parentListener.onFailure(e);
             }
         }
